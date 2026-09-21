@@ -1,0 +1,2486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>billnaw POS</title>
+    <meta name="description" content="billnaw point-of-sale terminal with billing, customer loyalty directory, AI-driven WhatsApp marketing, table management, KOT, expense tracking, and reporting.">
+    <meta property="og:title" content="billnaw POS">
+    <meta property="og:description" content="billnaw point-of-sale terminal with billing, customer loyalty directory, AI-driven WhatsApp marketing, table management, KOT, expense tracking, and reporting.">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#F5EFEB">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 🔑 ACTIVATION OVERLAY -->
+    <div id="activationOverlay" class="modal-overlay" style="display: none;">
+        <div class="auth-box">
+            <div class="modal-header">
+                <h2>Activate Terminal License</h2>
+                <p>Connect your terminal to cloud sync.</p>
+            </div>
+            <input type="text" id="activationKeyInput" class="key-input" placeholder="BONGBHOJ-TERMINAL">
+            <button class="btn btn-full" style="width: 100%; padding: 14px; font-size: 15px; background: var(--primary);" onclick="activateSoftware()">Verify & Activate</button>
+        </div>
+    </div>
+
+    <!-- 🔒 LOGIN OVERLAY -->
+    <div id="loginOverlay" class="modal-overlay" style="display: none;">
+        <div class="auth-box" style="max-width: 440px;">
+            <div class="modal-header">
+                <h2>Terminal Login</h2>
+                <p>Store: <strong id="loginShopNameDisplay" style="color: var(--primary);">billnaw</strong></p>
+            </div>
+            
+            <div style="text-align: left; margin-bottom: 8px;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Select Staff Member</label>
+            </div>
+            <div id="loginStaffPicker" class="staff-grid-picker">
+                <!-- Rendered dynamically -->
+            </div>
+
+            <div style="margin-top: 10px; text-align: left;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Enter 4-Digit PIN</label>
+                <input type="password" id="staffLoginPinInput" class="pin-input" placeholder="••••" inputmode="numeric" maxlength="4" style="margin-top: 5px;">
+            </div>
+
+            <button class="btn" style="width: 100%; padding: 14px; font-size: 15px; background: var(--primary); margin-top: 10px; border-radius: 12px;" onclick="confirmStaffLogin()">🔓 Login to Terminal</button>
+            <button class="btn btn-outline" style="width: 100%; padding: 10px; font-size: 13px; margin-top: 8px; border-radius: 12px;" onclick="quickStaffLoginAsSelected()">⚡ Quick Staff Login (POS Mode)</button>
+        </div>
+    </div>
+
+    <!-- ➕ RECORD EXPENSE MODAL -->
+    <div id="quickExpenseModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 440px;">
+            <div class="modal-header">
+                <h2 id="quickExpenseModalTitle">➕ Record Expense</h2>
+                <p>Log market supplies, raw materials, wages, or cafe overheads.</p>
+            </div>
+            <input type="hidden" id="quickExpenseEditId">
+            <div class="form-group">
+                <label>Expense Name / Vendor *</label>
+                <input type="text" id="quickExpenseNameInput" placeholder="e.g. Fresh Milk, Coffee Beans, Vegetables">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                    <label>Amount (₹) *</label>
+                    <input type="number" id="quickExpenseCostInput" placeholder="0.00" inputmode="decimal" step="0.01" style="font-size: 16px; font-weight: 700; color: var(--danger);">
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="quickExpenseCategoryInput">
+                        <option value="Supplies">Supplies & Ingredients</option>
+                        <option value="Dairy">Milk & Dairy</option>
+                        <option value="Vegetables">Vegetables & Meat</option>
+                        <option value="Packaging">Packaging & Disposables</option>
+                        <option value="Utilities">Utilities & Fuel</option>
+                        <option value="Wages">Staff Daily Wages</option>
+                        <option value="Other">Other Expenses</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Paid Via</label>
+                <select id="quickExpensePaymentModeInput">
+                    <option value="Cash">Cash Drawer</option>
+                    <option value="UPI">UPI / Online</option>
+                    <option value="Bank">Bank Account</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="closeQuickExpenseModal()">Cancel</button>
+                <button type="button" id="saveQuickExpenseBtn" class="btn btn-danger" style="flex: 2;" onclick="saveQuickExpense()">💾 Save Expense</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🍔 MENU ITEM MODAL -->
+    <div id="menuItemModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header"><h2 id="menuFormTitle">Add New Menu Item</h2></div>
+            
+            <!-- Media & Photo Sourcing Toggles -->
+            <div style="margin-bottom: 14px; background: #FAF7F4; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 8px;">Dish Photo & Media Source</label>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <img id="newItemImagePreview" src="" style="width: 68px; height: 68px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); display: none; flex-shrink: 0;">
+                    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+                            <button type="button" class="btn btn-outline" style="padding: 6px 4px; font-size: 11px; border-radius: 8px;" onclick="document.getElementById('newItemImageInput').click()" title="Upload from Device">
+                                📁 Manual
+                            </button>
+                            <button type="button" class="btn" style="padding: 6px 4px; font-size: 11px; background: var(--milk-choc); color: #fff; border: none; border-radius: 8px;" onclick="generateAIImage()" id="btnGenerateAI" title="Generate with AI">
+                                ✨ AI Photo
+                            </button>
+                            <button type="button" class="btn btn-outline" style="padding: 6px 4px; font-size: 11px; border-radius: 8px;" onclick="importFromPlatformModal()" title="Import from Swiggy / Zomato">
+                                🌐 Platform
+                            </button>
+                        </div>
+                        <input type="file" id="newItemImageInput" accept="image/*" style="display: none;" onchange="handleItemImageUpload(event)">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Item Name & Predefined Portion Size Chips -->
+            <div class="form-group" style="margin-bottom: 8px;">
+                <label>Item Name *</label>
+                <input type="text" id="newItemName" placeholder="E.g., Special Kolkata Biryani">
+            </div>
+
+            <!-- Portion Size Chips -->
+            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-muted);">Portion:</span>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPortionChip('Regular')">Regular</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPortionChip('Half')">Half</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPortionChip('Full')">Full</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPortionChip('250g')">250g</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPortionChip('500g')">500g</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPortionChip('1kg')">1kg</button>
+            </div>
+
+            <div class="form-group"><label>Category</label><select id="newItemCategory"></select></div>
+
+            <div style="display: flex; gap: 12px; margin-bottom: 6px;">
+                <div class="form-group" style="flex: 1; margin-bottom: 4px;">
+                    <label>Rate / Price (₹) *</label>
+                    <input type="number" id="newItemPrice" placeholder="0.00" inputmode="decimal" step="0.01">
+                </div>
+                <div class="form-group" style="flex: 1; margin-bottom: 4px;">
+                    <label>Item GST Rate (%)</label>
+                    <input type="number" id="newItemGst" placeholder="0" value="0" inputmode="decimal">
+                </div>
+            </div>
+
+            <!-- Quick Price Chips -->
+            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-muted);">Quick Price:</span>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPriceChip(50)">₹50</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPriceChip(100)">₹100</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPriceChip(150)">₹150</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPriceChip(200)">₹200</button>
+                <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="applyPriceChip(350)">₹350</button>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center; background: #FAF7F4; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                <input type="checkbox" id="newItemTrackStock" onchange="document.getElementById('newItemStock').style.display = this.checked ? 'block' : 'none'" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                <label for="newItemTrackStock" style="margin:0; font-size: 13px; cursor:pointer; color: var(--text-dark); font-weight: 700;">Track Stock?</label>
+                <input type="number" id="newItemStock" placeholder="Qty" style="flex: 1; display: none; max-width: 90px; padding: 8px; border: 1px solid var(--border); border-radius: 8px;">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="document.getElementById('menuItemModal').style.display='none'">Cancel</button>
+                <button id="addMenuBtn" class="btn" style="flex: 2; background: var(--primary);" onclick="addMenuItem()">💾 Save Item</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 👨‍🍳 KOT MODAL -->
+    <div id="kotModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 350px; text-align: center;">
+            <h2 style="color: var(--warning); margin-bottom: 8px;">👨‍🍳 Kitchen Ticket</h2>
+            <p style="color: var(--text-dark); margin-bottom: 20px; font-weight: 500;">Send Table <span id="kotTableNoDisplay" style="font-size: 20px; font-weight: 800;"></span> to kitchen printer?</p>
+            <div class="modal-actions" style="margin-top: 0;">
+                <button class="btn btn-outline" onclick="document.getElementById('kotModal').style.display='none'">Cancel</button>
+                <button class="btn btn-warning" style="flex: 2; font-size: 15px;" onclick="printKitchenTicket()">🖨️ Print KOT</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🤖 AI PRE-CONVERSION NOTIFICATION MODAL -->
+    <div id="aiPreConvertModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 480px;">
+            <div class="modal-header">
+                <div>
+                    <h2 style="color: var(--primary); display: flex; align-items: center; gap: 8px;">
+                        <span>🤖</span> Google Gemini AI Primary Engine
+                    </h2>
+                    <p style="margin-top: 4px;">Menu Digitization & Visual Extraction Status</p>
+                </div>
+                <button type="button" class="modal-close-btn" onclick="closeAiPreConvertModal()">✕</button>
+            </div>
+
+            <div style="background: #FFF8E1; border: 1px solid #FFE082; border-left: 4px solid #FFA000; border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+                <div style="font-weight: 700; color: #B78103; font-size: 13px; margin-bottom: 4px;">⚠️ Gemini AI Key Required for Vision OCR</div>
+                <p id="aiPreConvertMsg" style="font-size: 12px; color: var(--text-dark); margin: 0; line-height: 1.5;">
+                    Google Gemini AI is your primary engine for high-accuracy menu OCR, automated dish photography prompts, and layout intelligence. An active API key is currently not detected or unauthenticated.
+                </p>
+            </div>
+
+            <div style="background: #FAF7F4; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 16px; font-size: 12px; color: var(--text-dark);">
+                <div style="font-weight: 700; margin-bottom: 6px; color: var(--primary);">Choose how you would like to proceed:</div>
+                <ul style="margin: 0; padding-left: 18px; line-height: 1.5; color: var(--text-muted);">
+                    <li><strong style="color: var(--text-dark);">Configure Gemini Key:</strong> Connect your Gemini API key for automated vision OCR and culinary prompts.</li>
+                    <li><strong style="color: var(--text-dark);">Smart Layout Parser:</strong> Extract menu items using the built-in document text layout parser without AI vision.</li>
+                </ul>
+            </div>
+
+            <div class="modal-actions" style="flex-direction: column; gap: 10px;">
+                <button type="button" class="btn" style="width: 100%; background: var(--primary); color: #fff; font-weight: 700; padding: 11px;" onclick="handlePreConvertConfigureKey()">
+                    ⚙️ Configure Gemini API Key
+                </button>
+                <button type="button" class="btn btn-outline" style="width: 100%; padding: 10px; font-weight: 600;" onclick="handlePreConvertProceedFallback()">
+                    📄 Continue with Smart Layout Parser
+                </button>
+                <button type="button" style="background: none; border: none; font-size: 12px; color: var(--text-muted); cursor: pointer; padding: 4px; text-decoration: underline;" onclick="closeAiPreConvertModal()">
+                    Cancel Upload
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🤖 AI MENU OCR REVIEW MODAL -->
+    <div id="aiPreviewModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 680px;">
+            <div class="modal-header">
+                <div>
+                    <h2>🤖 AI Menu Review & Correction</h2>
+                    <p>Review Item Names, Rates (prices), and Dish Photos before importing into your menu.</p>
+                </div>
+                <button type="button" class="modal-close-btn" onclick="closeAiPreviewModal()">✕</button>
+            </div>
+
+            <!-- Compact Scanned Menu Document Preview for easy cross-reference -->
+            <div id="aiUploadedMenuPreviewBar" class="ai-uploaded-doc-preview" style="display: none;">
+                <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                    <img id="aiUploadedMenuThumb" src="" alt="Scanned Menu" onclick="openAiMenuZoomModal()" title="Click to view full original document">
+                    <div style="min-width: 0;">
+                        <div style="font-size: 12px; font-weight: 700; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Scanned Menu Document</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">Compact reference • Tap image to zoom</div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 8px; white-space: nowrap;" onclick="openAiMenuZoomModal()">
+                    🔍 View Full
+                </button>
+            </div>
+
+            <div id="aiPreviewStoreNotice" style="background: rgba(125,79,66,0.08); border-left: 4px solid var(--milk-choc); padding: 8px 12px; border-radius: 8px; font-size: 11px; margin-bottom: 10px; color: var(--primary); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                <span>💡 <strong>Store GST:</strong> Items track Rate. Tax is computed as <strong id="aiPreviewGstModeLabel">Prices Include GST (5%)</strong>.</span>
+                <span id="aiPreviewItemCountBadge" style="font-weight: 700; background: var(--bg-surface); padding: 2px 8px; border-radius: 12px; border: 1px solid var(--border); font-size: 11px;">0 Items</span>
+            </div>
+
+            <div id="aiPreviewItemsContainer" style="flex: 1; overflow-y: auto; max-height: 52vh; padding-right: 4px; display: flex; flex-direction: column; gap: 8px;">
+                <!-- Populated dynamically -->
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); flex-wrap: wrap; gap: 8px;">
+                <button type="button" class="btn btn-outline" style="padding: 8px 14px; font-size: 12px; border-radius: 10px;" onclick="addManualPendingAiItem()">
+                    ➕ Add Missing Item
+                </button>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-outline" style="padding: 8px 14px; font-size: 12px; border-radius: 10px;" onclick="closeAiPreviewModal()">Cancel</button>
+                    <button type="button" id="btnConfirmAiImport" class="btn btn-success" style="padding: 8px 18px; font-size: 12px; font-weight: 700; border-radius: 10px;" onclick="confirmAiImport()">
+                        ✅ Confirm & Import
+                    </button>
+                </div>
+            </div>
+            <input type="file" id="aiItemImageUploader" accept="image/*" style="display: none;" onchange="handleAiItemImageSelected(event)">
+            <datalist id="knownCategoriesList"></datalist>
+        </div>
+    </div>
+
+    <!-- 🔍 SCANNED MENU DOCUMENT ZOOM MODAL -->
+    <div id="aiMenuZoomModal" class="modal-overlay" style="display: none; z-index: 1000005;" onclick="closeAiMenuZoomModal()">
+        <div class="modal-box" style="max-width: 90vw; width: auto; max-height: 90vh; padding: 14px; background: var(--bg-surface); text-align: center;" onclick="event.stopPropagation()">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="font-size: 14px; margin: 0; color: var(--primary);">📄 Scanned Menu Document</h3>
+                <button type="button" class="modal-close-btn" onclick="closeAiMenuZoomModal()">✕</button>
+            </div>
+            <div style="overflow: auto; max-height: 75vh; border-radius: 8px;">
+                <img id="aiMenuZoomImg" src="" alt="Full Scanned Menu" style="max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: 6px;">
+            </div>
+        </div>
+    </div>
+
+    <!-- 👥 CUSTOMER MODAL -->
+    <div id="customerModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 440px;">
+            <div class="modal-header">
+                <h2 id="customerModalTitle">➕ Add Customer</h2>
+                <p>Store customer profile and contact info for instant checkout.</p>
+            </div>
+            <input type="hidden" id="customerEditId">
+            <div class="form-group">
+                <label>Full Name *</label>
+                <input type="text" id="custNameInput" placeholder="e.g. Suman Roy">
+            </div>
+            <div class="form-group">
+                <label>Phone Number *</label>
+                <input type="tel" id="custPhoneInput" placeholder="e.g. 9830123456" inputmode="tel" maxlength="15">
+            </div>
+            <div class="form-group">
+                <label>Notes / Preferences (Optional)</label>
+                <input type="text" id="custNotesInput" placeholder="e.g. Sugar-free chai, corner table regular">
+            </div>
+            <div class="form-group">
+                <label>Loyalty Points</label>
+                <input type="number" id="custPointsInput" placeholder="0" value="0" inputmode="numeric">
+            </div>
+            <div class="form-group">
+                <label>Special Customer Discount (%) (Optional)</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="number" id="custDiscountInput" placeholder="0" min="0" max="100" step="1" value="0" style="width: 100px; font-weight: 700;">
+                    <span style="font-weight: 700; color: var(--text-muted);">%</span>
+                    <span style="font-size: 11px; color: var(--text-muted);">VIP auto-discount on billing</span>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="closeCustomerModal()">Cancel</button>
+                <button type="button" class="btn btn-success" style="flex: 2;" onclick="saveCustomer()">💾 Save Customer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         💬 CUSTOMER ACTION & MARKETING HUB MODAL (POPUP ON CUSTOMER CLICK)
+         Provides: History, Bill, Edit, Delete, Send WhatsApp or Text Message
+    ============================================================ -->
+    <div id="customerActionHubModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 540px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+                <div>
+                    <h2 id="cActionModalName" style="margin: 0; font-size: 18px; font-weight: 800; color: var(--primary);">Customer Profile</h2>
+                    <p id="cActionModalSub" style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-muted);">Manage customer, view bills, or dispatch WhatsApp / text</p>
+                </div>
+                <button type="button" class="modal-close-btn" onclick="closeCustomerActionHub()">✕</button>
+            </div>
+
+            <div style="overflow-y: auto; flex: 1; padding: 12px 0 4px 0;">
+                <!-- Customer Quick Profile Badge -->
+                <div style="background: #FAF7F4; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div id="cActionAvatar" class="customer-avatar" style="width: 44px; height: 44px; font-size: 16px;">CU</div>
+                        <div>
+                            <div id="cActionName" style="font-weight: 800; font-size: 16px; color: var(--text-dark);">Customer Name</div>
+                            <div id="cActionPhone" style="font-size: 13px; font-family: monospace; color: var(--text-muted); font-weight: 600;">+91 9830000000</div>
+                            <div id="cActionNotes" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;"></div>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span id="cActionTierBadge" class="cust-badge tier-gold">⭐ Gold</span>
+                        <div id="cActionPoints" style="font-size: 12px; font-weight: 700; color: var(--warning); margin-top: 3px;">🪙 0 pts</div>
+                        <div id="cActionSpend" style="font-size: 11px; color: var(--success); font-weight: 700; margin-top: 2px;">Spent: ₹0.00</div>
+                    </div>
+                </div>
+
+                <!-- 4 Quick Actions (History, Bill, Edit, Delete) -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px;">
+                    <button type="button" class="btn btn-outline" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 4px;" onclick="handleCustomerHubAction('history')" title="View Purchase & Order History">
+                        <span style="font-size: 18px;">📜</span>
+                        <strong>History</strong>
+                    </button>
+                    <button type="button" class="btn btn-outline" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 4px;" onclick="handleCustomerHubAction('bill')" title="Start Order & Bill for this Customer">
+                        <span style="font-size: 18px;">🛒</span>
+                        <strong>Bill</strong>
+                    </button>
+                    <button type="button" class="btn btn-outline" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 4px;" onclick="handleCustomerHubAction('edit')" title="Edit Profile Details">
+                        <span style="font-size: 18px;">✏️</span>
+                        <strong>Edit</strong>
+                    </button>
+                    <button type="button" class="btn btn-danger" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 4px; background: #C55335;" onclick="handleCustomerHubAction('delete')" title="Delete Customer">
+                        <span style="font-size: 18px;">🗑️</span>
+                        <strong>Delete</strong>
+                    </button>
+                </div>
+
+                <!-- Section: Send WhatsApp or Text Message -->
+                <div style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 18px;">💬</span>
+                            <strong style="font-size: 14px; color: var(--primary);">Send WhatsApp or Text Message</strong>
+                        </div>
+                        <div style="display: flex; gap: 4px;">
+                            <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 10px;" onclick="applySingleCustomerTemplate('welcome')">Welcome</button>
+                            <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 10px;" onclick="applySingleCustomerTemplate('discount')">15% Offer</button>
+                            <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 10px;" onclick="applySingleCustomerTemplate('points')">Points</button>
+                        </div>
+                    </div>
+
+                    <textarea id="cActionMessageInput" rows="5" class="form-group" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; line-height: 1.45; font-family: inherit; resize: vertical; margin-bottom: 12px;" placeholder="Type customized message..."></textarea>
+
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-success" style="flex: 1; border-radius: 10px; justify-content: center;" onclick="sendCustomerWhatsAppDirect()">
+                            💬 Send via WhatsApp
+                        </button>
+                        <button type="button" class="btn btn-outline" style="flex: 1; border-radius: 10px; justify-content: center;" onclick="sendCustomerTextSMSDirect()">
+                            📱 Send Text / SMS
+                        </button>
+                        <button type="button" class="btn btn-outline" style="padding: 10px 14px; border-radius: 10px;" onclick="copyCustomerDirectMessage()" title="Copy Message">
+                            📋
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📜 CUSTOMER HISTORY & LOYALTY TIMELINE MODAL -->
+    <div id="customerHistoryModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 580px; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="text-align: left; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <div id="custHistAvatar" class="customer-avatar" style="width: 42px; height: 42px; font-size: 16px;">CR</div>
+                        <div>
+                            <h2 id="custHistName" style="margin: 0; font-size: 18px; color: var(--primary);">Customer Name</h2>
+                            <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+                                <span id="custHistPhone" style="font-size: 12px; color: var(--text-muted); font-family: monospace;">-</span>
+                                <span id="custHistTier" class="cust-badge tier-bronze">Bronze Tier</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="modal-close-btn" onclick="document.getElementById('customerHistoryModal').style.display='none'">✕</button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; width: 100%;">
+                    <div style="background: var(--bg-surface); padding: 10px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                        <div style="font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Total Visits</div>
+                        <div id="custHistVisits" style="font-size: 18px; font-weight: 800; color: var(--primary); margin-top: 2px;">0</div>
+                    </div>
+                    <div style="background: var(--bg-surface); padding: 10px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                        <div style="font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Total Spend</div>
+                        <div id="custHistTotalSpend" style="font-size: 18px; font-weight: 800; color: var(--success); margin-top: 2px;">₹0</div>
+                    </div>
+                    <div style="background: var(--bg-surface); padding: 10px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                        <div style="font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Loyalty Points</div>
+                        <div id="custHistPoints" style="font-size: 18px; font-weight: 800; color: var(--warning); margin-top: 2px;">0 pts</div>
+                    </div>
+                </div>
+                <div id="custHistNotes" style="margin-top: 10px; font-size: 12px; color: var(--text-dark); background: #FAF3EC; padding: 6px 10px; border-radius: 6px; display: none; width: 100%;"></div>
+            </div>
+
+            <div style="flex: 1; overflow-y: auto; padding: 14px 0;">
+                <h4 style="margin: 0 0 10px 0; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Billing Timeline</h4>
+                <div id="custHistTimeline" style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- Dynamically rendered past orders -->
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('customerHistoryModal').style.display='none'">Close</button>
+                <button type="button" class="btn btn-success" style="flex: 2;" onclick="startOrderForCustomerFromHistory()">🛒 Start Bill For This Customer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🏷️ QUICK DISCOUNT MODAL -->
+    <div id="quickDiscountModal" class="modal-overlay" style="display: none; z-index: 1000003;">
+        <div class="modal-box" style="max-width: 460px;">
+            <div class="modal-header">
+                <div>
+                    <h2 style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px;"><span>🏷️</span> Quick Discount</h2>
+                    <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Apply percentage or flat discount to Table <span id="discountModalTableNo" style="font-weight: 700; color: var(--primary);">1</span>.</p>
+                </div>
+                <button type="button" class="modal-close-btn" onclick="closeQuickDiscountModal()">✕</button>
+            </div>
+
+            <!-- Discount Type Switcher -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+                <button type="button" id="discountTypePercentBtn" class="btn active" style="padding: 10px 6px; font-weight: 700; border-radius: 10px; font-size: 13px;" onclick="setDiscountModalType('percent')">
+                    % Percentage Discount
+                </button>
+                <button type="button" id="discountTypeFixedBtn" class="btn btn-outline" style="padding: 10px 6px; font-weight: 700; border-radius: 10px; font-size: 13px;" onclick="setDiscountModalType('fixed')">
+                    ₹ Flat Cash (₹)
+                </button>
+            </div>
+
+            <!-- Quick Preset Pills -->
+            <div style="margin-bottom: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Quick Presets</div>
+                <div id="discountPresetPillsContainer" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <!-- Rendered dynamically -->
+                </div>
+            </div>
+
+            <!-- Custom Value Input -->
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label id="discountCustomInputLabel" style="font-weight: 700; font-size: 12px;">Discount Percentage (%)</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="number" id="discountCustomValInput" placeholder="0" min="0" step="any" style="font-size: 20px; font-weight: 800; padding: 10px 14px; flex: 1; border-radius: 10px;" oninput="onDiscountInputChanged()">
+                    <span id="discountInputSuffix" style="font-size: 18px; font-weight: 800; color: var(--primary); min-width: 25px;">%</span>
+                </div>
+            </div>
+
+            <!-- Reason / Promo Trigger -->
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label style="font-weight: 700; font-size: 12px;">Discount Reason / Customer Trigger</label>
+                <select id="discountReasonSelect" onchange="onDiscountReasonSelected(this.value)" style="padding: 10px; font-size: 13px; font-weight: 600; margin-bottom: 6px; border-radius: 10px;">
+                    <option value="Regular Customer">Regular / Loyalty Customer</option>
+                    <option value="VIP Courtesy">VIP / Owner Courtesy</option>
+                    <option value="Happy Hour">Happy Hour Special</option>
+                    <option value="Festival Offer">Festival / Seasonal Offer</option>
+                    <option value="Order Delay Courtesy">Order Delay / Service Courtesy</option>
+                    <option value="Staff Family">Staff / Partner Discount</option>
+                    <option value="custom">Other / Custom Reason...</option>
+                </select>
+                <input type="text" id="discountCustomReasonInput" placeholder="Specify custom reason..." style="display: none; font-size: 12px; margin-top: 4px; border-radius: 8px;">
+            </div>
+
+            <!-- Live Calculation Preview Card -->
+            <div style="background: #FAF7F4; border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dark); margin-bottom: 4px;">
+                    <span>Gross Bill Amount:</span>
+                    <span id="discountPreviewGross" style="font-weight: 600;">₹0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--success); font-weight: 700; margin-bottom: 4px;">
+                    <span>Discount Applied:</span>
+                    <span id="discountPreviewAmt">-₹0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: var(--primary); border-top: 1px dashed var(--border); padding-top: 6px; margin-top: 4px;">
+                    <span>Net Payable Total:</span>
+                    <span id="discountPreviewNet">₹0.00</span>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="display: flex; gap: 8px;">
+                <button type="button" id="btnRemoveDiscountInModal" class="btn btn-danger" style="display: none;" onclick="removeQuickDiscount(); closeQuickDiscountModal();">🗑️ Remove</button>
+                <button type="button" class="btn btn-outline" style="flex: 1;" onclick="closeQuickDiscountModal()">Cancel</button>
+                <button type="button" class="btn btn-success" style="flex: 2; font-weight: 800;" onclick="applyQuickDiscount()">✅ Apply Discount</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 💳 CHECKOUT MODAL -->
+    <div id="checkoutModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div>
+                    <h2>Complete Payment</h2>
+                    <p>Table <span id="checkoutTableNoDisplay"></span> • <span id="checkoutTotalItems"></span> Items</p>
+                </div>
+                <button class="modal-close-btn" onclick="document.getElementById('checkoutModal').style.display='none'">✕</button>
+            </div>
+            <div class="huge-total">₹<span id="checkoutTotal">0</span></div>
+
+            <!-- Discount Breakdown in Checkout -->
+            <div id="checkoutDiscountBreakdown" style="display: none; background: rgba(44, 110, 59, 0.08); border: 1px solid rgba(44, 110, 59, 0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--text-dark); margin-bottom: 3px;">
+                    <span>Gross Subtotal:</span>
+                    <span id="checkoutGrossSubtotal" style="font-weight: 600;">₹0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; color: var(--success); font-weight: 700;">
+                    <span id="checkoutDiscountLabel">🏷️ Discount (10%):</span>
+                    <span id="checkoutDiscountAmt">-₹0.00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted); margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(44, 110, 59, 0.2);">
+                    <span id="checkoutGstNote">Includes GST</span>
+                    <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; border-radius: 6px;" onclick="openQuickDiscountModal()">🏷️ Edit Discount</button>
+                </div>
+            </div>
+            <div id="checkoutAddDiscountPrompt" style="text-align: right; margin-bottom: 8px;">
+                <button type="button" style="background: none; border: none; color: var(--primary); font-weight: 700; font-size: 12px; cursor: pointer; text-decoration: underline;" onclick="openQuickDiscountModal()">🏷️ Add Quick Discount</button>
+            </div>
+            
+            <div class="form-group">
+                <label>Order Type</label>
+                <select id="checkoutOrderType">
+                    <option value="Dine-In">🍽️ Dine-In</option>
+                    <option value="Takeaway">🛍️ Takeaway / Pickup</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Payment Method</label>
+                <div class="pay-options">
+                    <button class="pay-btn selected" onclick="selectPayment('Cash', 'checkout')" id="btnPayCash">💵 Cash</button>
+                    <button class="pay-btn" onclick="selectPayment('UPI', 'checkout')" id="btnPayUPI">📱 UPI</button>
+                    <button class="pay-btn" onclick="selectPayment('Card', 'checkout')" id="btnPayCard">💳 Card</button>
+                </div>
+                <input type="hidden" id="selectedPaymentMode" value="Cash">
+            </div>
+            <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <label style="margin: 0;">Customer (Quick Select / Search)</label>
+                    <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;" onclick="quickAddNewCustomerFromCheckout()">➕ New</button>
+                </div>
+                <select id="checkoutCustomerSelect" onchange="onCheckoutCustomerSelect(this.value)" style="margin-bottom: 6px;">
+                    <option value="">-- Quick Select Existing Customer --</option>
+                </select>
+                <input type="text" id="checkoutCustomerName" placeholder="Or enter Customer Name / Phone" oninput="onCheckoutCustomerTyped(this.value)">
+                <input type="hidden" id="checkoutCustomerId" value="">
+                <div id="checkoutLoyaltyBadge" style="display: none; margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; background: #FAF3ED; color: var(--milk-choc); border: 1px dashed var(--border);"></div>
+            </div>
+            <div class="form-group">
+                <label>Biller (Opt)</label>
+                <input type="text" id="checkoutBillerName" placeholder="Staff Name">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="document.getElementById('checkoutModal').style.display='none'">Cancel</button>
+                <button class="btn btn-success" style="flex: 2; font-size: 16px;" onclick="confirmCheckout()">🖨️ Pay & Print</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✏️ EDIT ORDER MODAL -->
+    <div id="editOrderModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>Edit Bill #<span id="editBillNoDisplay"></span></h2>
+                <button class="modal-close-btn" onclick="document.getElementById('editOrderModal').style.display='none'">✕</button>
+            </div>
+            <input type="hidden" id="editOrderId">
+            <div class="form-group">
+                <label>Order Type</label>
+                <select id="editOrderType"><option value="Dine-In">Dine-In</option><option value="Takeaway">🛍️ Takeaway</option></select>
+            </div>
+            <div class="form-group">
+                <label>Payment Method</label>
+                <div class="pay-options">
+                    <button class="pay-btn" onclick="selectPayment('Cash', 'edit')" id="editBtnPayCash">💵 Cash</button>
+                    <button class="pay-btn" onclick="selectPayment('UPI', 'edit')" id="editBtnPayUPI">📱 UPI</button>
+                    <button class="pay-btn" onclick="selectPayment('Card', 'edit')" id="editBtnPayCard">💳 Card</button>
+                </div>
+                <input type="hidden" id="editSelectedPaymentMode">
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <div class="form-group" style="flex: 1;"><label>Customer Name</label><input type="text" id="editCustomerName"></div>
+                <div class="form-group" style="flex: 1;"><label>Biller Name</label><input type="text" id="editBillerName"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="document.getElementById('editOrderModal').style.display='none'">Cancel</button>
+                <button class="btn" style="flex: 2; background: var(--primary);" onclick="saveEditedOrder()">💾 Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 👥 STAFF MEMBER MODAL -->
+    <div id="staffModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2 id="staffModalTitle">Add Staff Member</h2>
+                <button class="modal-close-btn" onclick="closeStaffModal()">✕</button>
+            </div>
+            <input type="hidden" id="staffIdInput">
+            <div class="form-group">
+                <label>Staff Full Name *</label>
+                <input type="text" id="staffNameInput" placeholder="e.g. Rahul Sen">
+            </div>
+            <div class="form-group">
+                <label>Store Role *</label>
+                <select id="staffRoleInput">
+                    <option value="Cashier">Cashier (Billing & Orders)</option>
+                    <option value="Manager">Manager (Reports & Inventory)</option>
+                    <option value="Waiter">Waiter / Server (Table Orders & KOT)</option>
+                    <option value="Kitchen">Kitchen Chef (KOT Display)</option>
+                    <option value="Admin">Admin (Full System Access)</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Phone Number</label>
+                    <input type="tel" id="staffPhoneInput" placeholder="9830000000">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>4-Digit PIN *</label>
+                    <input type="password" id="staffPinInput" placeholder="1234" maxlength="4" inputmode="numeric">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <select id="staffStatusInput">
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeStaffModal()">Cancel</button>
+                <button class="btn" style="flex: 2; background: var(--primary);" onclick="saveStaffMember()">💾 Save Staff Member</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔄 SWITCH / CONNECT EXISTING SHOP MODAL -->
+    <div id="switchStoreModal" class="modal-overlay" style="display: none;">
+        <div class="auth-box" style="max-width: 440px;">
+            <div class="modal-header">
+                <h2>Connect / Switch Shop</h2>
+                <button class="modal-close-btn" onclick="document.getElementById('switchStoreModal').style.display='none'">✕</button>
+            </div>
+            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">Enter your Shop Store Code to sync data from Firestore.</p>
+            <div class="form-group" style="text-align: left;">
+                <label style="font-weight: 700; font-size: 11px;">Shop Store Code / Client ID</label>
+                <input type="text" id="targetStoreCodeInput" placeholder="e.g. BONGBHOJ-TERMINAL" style="font-family: monospace; font-size: 15px; text-transform: uppercase; font-weight: 700;">
+            </div>
+            <div style="background: rgba(46, 125, 50, 0.08); border-radius: 10px; padding: 10px; font-size: 11px; color: var(--success); text-align: left; margin-bottom: 15px; border: 1px dashed var(--success);">
+                ✓ Real-time Firestore database: <strong style="font-family: monospace; word-break: break-all;">ai-studio-billnawcafepos-3ac17879-08c8-4e15-9a3d-a965f7d92fda</strong>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-outline" style="flex: 1;" onclick="document.getElementById('switchStoreModal').style.display='none'">Cancel</button>
+                <button class="btn" style="flex: 2; background: var(--primary);" onclick="confirmSwitchShopCode()">Connect & Sync</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 👤 STAFF QUICK SWITCH MODAL -->
+    <div id="staffSwitchModal" class="modal-overlay" style="display: none;">
+        <div class="auth-box" style="max-width: 420px;">
+            <div class="modal-header">
+                <h2>Switch Active Staff</h2>
+                <button class="modal-close-btn" onclick="document.getElementById('staffSwitchModal').style.display='none'">✕</button>
+            </div>
+            <div id="quickSwitchStaffList" class="staff-grid-picker"></div>
+            <div class="form-group" style="text-align: left; margin-top: 10px;">
+                <label style="font-weight: 700; font-size: 11px;">Staff PIN</label>
+                <input type="password" id="quickSwitchPinInput" placeholder="••••" maxlength="4" inputmode="numeric">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button class="btn btn-outline" style="flex: 1;" onclick="document.getElementById('staffSwitchModal').style.display='none'">Cancel</button>
+                <button class="btn" style="flex: 2; background: var(--primary);" onclick="confirmQuickStaffSwitch()">Switch Staff</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 💎 SUBSCRIPTION DETAIL MODAL -->
+    <div id="subscriptionDetailModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 500px;">
+            <div class="modal-header">
+                <div>
+                    <h2>💎 Subscription & Plan</h2>
+                    <p>Current plan status and features.</p>
+                </div>
+                <button class="modal-close-btn" onclick="closeSubscriptionModal()">✕</button>
+            </div>
+            
+            <div style="background: linear-gradient(135deg, #33231B, #4D382E); color: #FFFFFF; padding: 20px; border-radius: var(--radius-lg); margin-bottom: 16px; box-shadow: var(--shadow-sm);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.8;">Active License</span>
+                    <span style="background: var(--success); color: #FFFFFF; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 12px;">ACTIVE (FREE TIER)</span>
+                </div>
+                <h3 style="font-size: 22px; font-weight: 800; color: #FFFFFF; margin: 0 0 4px 0;">billnaw Pro</h3>
+                <p style="font-size: 12px; margin: 0; opacity: 0.85;">Free for now • Upgradable via backend subscription webhook.</p>
+            </div>
+
+            <div style="background: #FAF7F4; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">Included Enterprise Features</div>
+                <div style="display: grid; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-dark);">
+                    <div>✅ <strong>Unlimited Daily Billing & Invoices</strong></div>
+                    <div>✅ <strong>Real-Time Firestore Multi-Terminal Sync</strong></div>
+                    <div>✅ <strong>Customer Loyalty Directory & Ledger</strong></div>
+                    <div>✅ <strong>Offline PWA Engine with Auto-Deploy Updates</strong></div>
+                    <div>✅ <strong>Thermal Bluetooth & USB 58mm/80mm Printing</strong></div>
+                    <div>✅ <strong>Dynamic UPI Payment QR Integration</strong></div>
+                    <div>✅ <strong>AI Menu OCR & Vision Digitizer (10 Scans/mo)</strong></div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-outline" style="width: 100%;" onclick="closeSubscriptionModal()">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🏪 STORE PROFILE DETAIL MODAL -->
+    <div id="storeProfileModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 520px;">
+            <div class="modal-header">
+                <div>
+                    <h2>🏪 Store Profile & Branding</h2>
+                    <p>Configure business identity, logo, and receipt details.</p>
+                </div>
+                <button class="modal-close-btn" onclick="closeStoreProfileModal()">✕</button>
+            </div>
+            <div style="display: grid; gap: 14px;">
+                <div class="form-group"><label>Shop Logo</label><input type="file" id="logoFileInput" accept="image/*" onchange="loadLogo(event)" style="padding: 8px; background: #fff; border: 1px dashed var(--border);"></div>
+                <div class="form-group"><label>Business Name *</label><input type="text" id="shopNameInput"></div>
+                <div class="form-group"><label>FSSAI License No.</label><input type="text" id="fssaiInput" placeholder="e.g. 12822013000123"></div>
+                <div class="form-group"><label>GSTIN No.</label><input type="text" id="gstinInput" placeholder="e.g. 19ABCDE1234F1Z5"></div>
+                <div class="form-group"><label>Full Address</label><input type="text" id="shopAddressInput" placeholder="Street, City, Pin Code"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeStoreProfileModal()">Cancel</button>
+                <button class="btn" style="flex: 2; background: var(--primary);" onclick="saveSettings(); closeStoreProfileModal();">💾 Save Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧾 GST CONFIG DETAIL MODAL -->
+    <div id="gstConfigModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 480px;">
+            <div class="modal-header">
+                <div>
+                    <h2>🧾 GST & Pricing Configuration</h2>
+                    <p>Configure tax calculation rules for menu and billing.</p>
+                </div>
+                <button class="modal-close-btn" onclick="closeGstConfigModal()">✕</button>
+            </div>
+            <div style="display: grid; gap: 14px;">
+                <div class="form-group">
+                    <label>GST Pricing Mode</label>
+                    <select id="gstPricingModeInput" onchange="handleGstModeChange()" style="padding: 12px; font-size: 13px; font-weight: 600;">
+                        <option value="inclusive">All menu prices INCLUDE GST (Tax-Inclusive)</option>
+                        <option value="exclusive">All menu prices EXCLUDE GST (Tax Added on Top to Bill)</option>
+                        <option value="none">No GST Applied (0% / Tax-Exempt)</option>
+                    </select>
+                    <p id="gstModeDesc" style="font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.4;">
+                        Menu items only track Rate. Tax is calculated backward or added on top based on this setting.
+                    </p>
+                </div>
+                <div class="form-group" id="defaultGstRateGroup">
+                    <label>Default Store GST Rate (%)</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="defaultGstRateInput" placeholder="5" min="0" max="28" step="0.5" style="width: 110px; font-weight: 700; font-size: 15px;">
+                        <span style="font-weight: 700; color: var(--text-muted);">%</span>
+                        <span style="font-size: 11px; color: var(--text-muted);">Standard cafe GST in India is 5%.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeGstConfigModal()">Cancel</button>
+                <button class="btn" style="flex: 2; background: var(--primary);" onclick="saveSettings(); closeGstConfigModal();">💾 Save GST Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📱 UPI PAYMENT & QR DETAIL MODAL -->
+    <div id="paymentConfigModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 480px;">
+            <div class="modal-header">
+                <div>
+                    <h2>📱 UPI Payment & Dynamic QR</h2>
+                    <p>Configure shop VPA for receipts and dynamic checkout QR.</p>
+                </div>
+                <button class="modal-close-btn" onclick="closePaymentConfigModal()">✕</button>
+            </div>
+            <div style="display: grid; gap: 14px;">
+                <div class="form-group"><label>Shop UPI ID (For Dynamic QR)</label><input type="text" id="upiIdInput" placeholder="merchant@upi" onkeyup="generateSettingsQRPreview()"></div>
+                <div style="display: flex; gap: 12px; align-items: center; background: #FAF7F4; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                    <input type="checkbox" id="enableQrCodeInput" style="width: 18px; height: 18px; accent-color: var(--primary);" onchange="generateSettingsQRPreview()">
+                    <label for="enableQrCodeInput" style="margin:0; font-size: 13px; cursor:pointer; color: var(--text-dark); font-weight: 600;">Print Dynamic Payment QR on Bills</label>
+                </div>
+                <div style="text-align: center; padding: 14px; background: var(--bg-body); border-radius: var(--radius-md); border: 1px dashed var(--border);">
+                    <div id="settingsQrPreview" style="display: flex; justify-content: center; margin-bottom: 6px;"></div>
+                    <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;" id="settingsQrText">QR PREVIEW</span>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closePaymentConfigModal()">Cancel</button>
+                <button class="btn" style="flex: 2; background: var(--primary);" onclick="saveSettings(); closePaymentConfigModal();">💾 Save Payment Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🏷️ DISCOUNT & PROMOTION CONFIG DETAIL MODAL -->
+    <div id="discountConfigModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 520px;">
+            <div class="modal-header">
+                <div>
+                    <h2>🏷️ Discounts & Promotions Config</h2>
+                    <p>Set cashier discount rules, preset buttons, and customer triggers.</p>
+                </div>
+                <button type="button" class="modal-close-btn" onclick="closeDiscountSettingsModal()">✕</button>
+            </div>
+            
+            <div style="display: grid; gap: 14px;">
+                <!-- Master Toggle -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #FAF7F4; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);">
+                    <div>
+                        <strong style="font-size: 13px; color: var(--primary); display: block;">Enable Quick Discounts in POS</strong>
+                        <span style="font-size: 11px; color: var(--text-muted);">Show quick discount button & trigger customer discounts in cart</span>
+                    </div>
+                    <input type="checkbox" id="settingDiscountsEnabled" style="width: 20px; height: 20px; cursor: pointer;" checked>
+                </div>
+
+                <!-- Maximum Limits -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Max Allowed Percentage (%)</label>
+                        <input type="number" id="settingMaxDiscountPercent" min="1" max="100" placeholder="50" style="font-weight: 700;">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Fixed Discount (₹)</label>
+                        <input type="number" id="settingMaxDiscountFixed" min="1" placeholder="1000" style="font-weight: 700;">
+                    </div>
+                </div>
+
+                <!-- Quick Preset Buttons Configuration -->
+                <div class="form-group">
+                    <label>Percentage Presets (comma-separated %)</label>
+                    <input type="text" id="settingDiscountPercentPresets" placeholder="5, 10, 15, 20, 25" style="font-weight: 600;">
+                    <span style="font-size: 11px; color: var(--text-muted);">E.g. 5, 10, 15, 20, 25 for one-click % buttons</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Fixed Amount Presets (comma-separated ₹)</label>
+                    <input type="text" id="settingDiscountFixedPresets" placeholder="20, 50, 100, 200" style="font-weight: 600;">
+                    <span style="font-size: 11px; color: var(--text-muted);">E.g. 20, 50, 100, 200 for one-click ₹ buttons</span>
+                </div>
+
+                <!-- Auto Customer Tier Trigger Rules -->
+                <div style="background: #FDFBF9; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div>
+                            <strong style="font-size: 12px; color: var(--primary); display: block;">Customer Loyalty Auto-Discount Triggers</strong>
+                            <span style="font-size: 11px; color: var(--text-muted);">Prompt instant discount when customer tier is selected</span>
+                        </div>
+                        <input type="checkbox" id="settingAutoTierDiscounts" style="width: 18px; height: 18px; cursor: pointer;" checked>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+                        <div>
+                            <label style="font-size: 10px; font-weight: 700; color: var(--text-muted);">💎 Platinum (20+ visits)</label>
+                            <input type="number" id="settingTierRatePlatinum" placeholder="15" min="0" max="100" style="padding: 6px; font-weight: 700;">
+                        </div>
+                        <div>
+                            <label style="font-size: 10px; font-weight: 700; color: var(--text-muted);">⭐ Gold (10+ visits)</label>
+                            <input type="number" id="settingTierRateGold" placeholder="10" min="0" max="100" style="padding: 6px; font-weight: 700;">
+                        </div>
+                        <div>
+                            <label style="font-size: 10px; font-weight: 700; color: var(--text-muted);">🥈 Silver (5+ visits)</label>
+                            <input type="number" id="settingTierRateSilver" placeholder="5" min="0" max="100" style="padding: 6px; font-weight: 700;">
+                        </div>
+                        <div>
+                            <label style="font-size: 10px; font-weight: 700; color: var(--text-muted);">🥉 Bronze Tier</label>
+                            <input type="number" id="settingTierRateBronze" placeholder="0" min="0" max="100" style="padding: 6px; font-weight: 700;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 16px;">
+                <button type="button" class="btn btn-outline" onclick="closeDiscountSettingsModal()">Cancel</button>
+                <button type="button" class="btn btn-success" style="flex: 2; font-weight: 800;" onclick="saveDiscountSettings()">💾 Save Discount Rules</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🪑 TABLES & SEATING CONFIGURATION MODAL -->
+    <div id="tableConfigModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 580px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <div>
+                    <h2>🪑 Tables & Seating Tabs</h2>
+                    <p>Customize table labels (e.g. T1, T2, AC-1), total table count, and order routing.</p>
+                </div>
+                <button type="button" class="modal-close-btn" onclick="closeTableConfigModal()">✕</button>
+            </div>
+            
+            <div style="overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 14px; flex: 1;">
+                <!-- Total Tables Count Control -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #FAF7F4; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);">
+                    <div>
+                        <strong style="font-size: 13px; color: var(--primary); display: block;">Total Seating Tables</strong>
+                        <span style="font-size: 11px; color: var(--text-muted);">Adjust number of operational tables (1 to 50)</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <button type="button" class="btn btn-outline" style="width: 34px; height: 34px; padding: 0; font-size: 16px; font-weight: 800; border-radius: 8px;" onclick="changeTableCountInSettings(-1)">-</button>
+                        <input type="number" id="settingTableCountInput" min="1" max="50" style="width: 55px; text-align: center; font-weight: 800; font-size: 15px; padding: 6px;" onchange="onTableCountInputChanged(this.value)">
+                        <button type="button" class="btn btn-outline" style="width: 34px; height: 34px; padding: 0; font-size: 16px; font-weight: 800; border-radius: 8px;" onclick="changeTableCountInSettings(1)">+</button>
+                    </div>
+                </div>
+
+                <!-- Quick Mass Naming Presets -->
+                <div style="background: #FDFBF9; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;">
+                    <div style="font-size: 12px; font-weight: 700; color: var(--text-dark); margin-bottom: 8px;">Quick Naming Presets:</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                        <button type="button" class="btn btn-outline" style="padding: 6px 10px; font-size: 11px; border-radius: 16px;" onclick="applyTableNamingPreset('T')">T1, T2, T3...</button>
+                        <button type="button" class="btn btn-outline" style="padding: 6px 10px; font-size: 11px; border-radius: 16px;" onclick="applyTableNamingPreset('Table')">Table 1, Table 2...</button>
+                        <button type="button" class="btn btn-outline" style="padding: 6px 10px; font-size: 11px; border-radius: 16px;" onclick="applyTableNamingPreset('D')">D1, D2, D3... (Dine)</button>
+                        <button type="button" class="btn btn-outline" style="padding: 6px 10px; font-size: 11px; border-radius: 16px;" onclick="applyTableNamingPreset('C')">C1, C2, C3... (Cafe)</button>
+                        <button type="button" class="btn btn-outline" style="padding: 6px 10px; font-size: 11px; border-radius: 16px;" onclick="applyTableNamingPreset('AC')">AC-1, AC-2...</button>
+                    </div>
+                </div>
+
+                <!-- Individual Table Editable List -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Editable Table Tabs:</span>
+                        <span id="tableConfigTotalCountDisplay" style="font-size: 11px; color: var(--text-muted); font-weight: 600;">10 Tables</span>
+                    </div>
+                    <div id="tableConfigList" style="max-height: 260px; overflow-y: auto; padding-right: 2px;">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border);">
+                <button type="button" class="btn btn-outline" style="padding: 8px 14px; font-size: 12px;" onclick="addNewTableInSettings()">➕ Add Table</button>
+                <div style="flex: 1;"></div>
+                <button type="button" class="btn btn-outline" onclick="closeTableConfigModal()">Cancel</button>
+                <button type="button" class="btn btn-success" style="font-weight: 800; padding: 10px 20px;" onclick="saveTableSettings()">💾 Save Tables</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧾 BILL INVOICE PREVIEW MODAL -->
+    <div id="billInvoiceModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 480px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="padding-bottom: 10px;">
+                <div>
+                    <h2>🧾 Bill Invoice</h2>
+                    <p id="invModalBillNo" style="font-family: monospace; font-size: 14px; font-weight: 800; color: var(--primary);">#1001</p>
+                </div>
+                <button type="button" class="modal-close-btn" onclick="closeOrderInvoiceModal()">✕</button>
+            </div>
+
+            <div style="overflow-y: auto; flex: 1; padding: 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px;">
+                <!-- Store Header -->
+                <div style="text-align: center; border-bottom: 1px dashed var(--border); padding-bottom: 12px; margin-bottom: 12px;">
+                    <h3 id="invModalShopName" style="font-size: 16px; font-weight: 800; color: var(--primary); margin: 0;">billnaw</h3>
+                    <p id="invModalShopAddress" style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0;"></p>
+                    <div style="display: flex; justify-content: center; gap: 12px; font-size: 10px; color: var(--text-muted); margin-top: 4px;">
+                        <span id="invModalShopFssai"></span>
+                        <span id="invModalShopGstin"></span>
+                    </div>
+                </div>
+
+                <!-- Meta Row -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; margin-bottom: 12px; background: #FAF7F4; padding: 10px 12px; border-radius: 8px;">
+                    <div><span style="color: var(--text-muted);">Date:</span> <strong id="invModalDate" style="color: var(--text-dark);"></strong></div>
+                    <div><span style="color: var(--text-muted);">Table:</span> <strong id="invModalTable" style="color: var(--primary);"></strong></div>
+                    <div><span style="color: var(--text-muted);">Type / Mode:</span> <span id="invModalOrderType"></span> • <span id="invModalPayMode" style="font-weight: 700;"></span></div>
+                    <div><span style="color: var(--text-muted);">Customer:</span> <strong id="invModalCustomer" style="color: var(--text-dark);"></strong></div>
+                    <div style="grid-column: span 2;"><span style="color: var(--text-muted);">Billed By:</span> <span id="invModalBiller"></span></div>
+                </div>
+
+                <!-- Items Table -->
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+                    <thead>
+                        <tr style="background: #F3EFEA; border-bottom: 1px solid var(--border);">
+                            <th style="padding: 6px 8px; text-align: left; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Item</th>
+                            <th style="padding: 6px 8px; text-align: center; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Qty</th>
+                            <th style="padding: 6px 8px; text-align: right; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Rate</th>
+                            <th style="padding: 6px 8px; text-align: right; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invModalItemsBody">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+
+                <!-- Financials Breakdown with Highlights -->
+                <div style="border-top: 1px dashed var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
+                    <div style="display: flex; justify-content: space-between; color: var(--text-muted);">
+                        <span>Gross Subtotal</span>
+                        <span id="invModalGrossSubtotal" style="font-weight: 600; font-family: monospace;">₹0.00</span>
+                    </div>
+
+                    <!-- Discount Line (Clearly prominent) -->
+                    <div id="invModalDiscountRow" style="display: none; justify-content: space-between; color: var(--success); font-weight: 700; background: rgba(30,138,76,0.08); padding: 4px 8px; border-radius: 6px;">
+                        <span id="invModalDiscountLabel">🏷️ Discount:</span>
+                        <span id="invModalDiscountAmt" style="font-family: monospace;">-₹0.00</span>
+                    </div>
+
+                    <div id="invModalTaxableRow" style="display: none; justify-content: space-between; color: var(--text-muted);">
+                        <span>Net Taxable Subtotal</span>
+                        <span id="invModalTaxableAmt" style="font-family: monospace;">₹0.00</span>
+                    </div>
+
+                    <div id="invModalTaxRow" style="display: none; justify-content: space-between; color: var(--text-muted);">
+                        <span>Total GST</span>
+                        <span id="invModalTaxAmt" style="font-family: monospace;">₹0.00</span>
+                    </div>
+
+                    <div style="border-top: 2px solid var(--border); padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+                        <strong style="font-size: 15px; color: var(--primary);">Grand Total</strong>
+                        <strong id="invModalGrandTotal" style="font-size: 18px; color: var(--success); font-family: monospace;">₹0.00</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 12px;">
+                <button type="button" class="btn btn-outline" onclick="closeOrderInvoiceModal()">Close</button>
+                <button type="button" id="invModalPrintBtn" class="btn btn-primary" style="flex: 2; font-weight: 800;">🖨️ Print Thermal Receipt</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📞 CONTACT & SUPPORT MODAL -->
+    <div id="contactSupportModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 480px;">
+            <div class="modal-header">
+                <div>
+                    <h2>📞 Contact & Help Desk</h2>
+                    <p>Get in touch for technical assistance or feature requests.</p>
+                </div>
+                <button class="modal-close-btn" onclick="closeContactModal()">✕</button>
+            </div>
+            <div style="display: grid; gap: 12px;">
+                <div style="background: #F4FAF5; border: 1px solid #C8E6C9; padding: 14px; border-radius: var(--radius-md);">
+                    <div style="font-weight: 700; color: var(--success); font-size: 14px; margin-bottom: 4px;">💬 WhatsApp Direct Support</div>
+                    <div style="font-size: 12px; color: var(--text-dark);">Available 24/7 for billnaw POS merchants.</div>
+                    <a href="https://wa.me/919830000000" target="_blank" class="btn btn-success" style="margin-top: 10px; padding: 8px 16px; font-size: 12px; width: 100%;">Chat on WhatsApp</a>
+                </div>
+                <div style="background: #FAF7F4; border: 1px solid var(--border); padding: 14px; border-radius: var(--radius-md);">
+                    <div style="font-weight: 700; color: var(--primary); font-size: 14px; margin-bottom: 4px;">✉️ Email Support</div>
+                    <div style="font-size: 12px; color: var(--text-dark); font-family: monospace;">support@billnaw.com</div>
+                </div>
+                <div style="background: #FAF7F4; border: 1px solid var(--border); padding: 14px; border-radius: var(--radius-md); font-size: 12px;">
+                    <div style="font-weight: 700; color: var(--text-dark); margin-bottom: 4px;">⚡ Cache & Version Info</div>
+                    <div>App Version: <strong id="supportAppVersion">2.4.0 (Latest)</strong></div>
+                    <div style="margin-top: 8px;">
+                        <button class="btn btn-outline" style="padding: 6px 12px; font-size: 11px; width: 100%;" onclick="forceCheckAppUpdate()">🔄 Check For Deploy Updates & Clear Cache</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" style="width: 100%;" onclick="closeContactModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🤖 AI QUOTA & CUSTOM KEY MODAL -->
+    <div id="clientQuotaModal" class="modal-overlay" style="display: none;">
+        <div class="auth-box" style="max-width: 480px; text-align: left;">
+            <div class="modal-header">
+                <h2>⚙️ AI Quota & Custom Key</h2>
+                <button class="modal-close-btn" onclick="closeClientQuotaModal()">✕</button>
+            </div>
+            <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 14px;">Configure monthly AI menu scans and optional dedicated Gemini API key.</p>
+            
+            <div class="form-group">
+                <label>Store Client ID</label>
+                <input type="text" id="quotaTargetClientId" readonly style="font-family: monospace; font-weight: bold; background: rgba(0,0,0,0.03);">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                    <label>Monthly Scans Allowed</label>
+                    <input type="number" id="quotaMonthlyLimitInput" min="0" max="1000" placeholder="10" inputmode="numeric">
+                </div>
+                <div class="form-group">
+                    <label>Current Cycle Usage</label>
+                    <input type="text" id="quotaCurrentUsageDisplay" readonly style="background: rgba(0,0,0,0.03); font-weight: bold;">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Dedicated Gemini API Key (Optional)</label>
+                <input type="password" id="quotaCustomKeyInput" placeholder="Leave empty to use shared server key" style="font-family: monospace;">
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button class="btn btn-outline" style="flex: 1;" onclick="closeClientQuotaModal()">Cancel</button>
+                <button class="btn btn-success" style="flex: 2;" onclick="saveClientQuotaSettings()">💾 Save & Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📄 Z-REPORT / DAILY SALES PRINT STATEMENT MODAL -->
+    <div id="statementModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 440px;">
+            <div class="modal-header">
+                <h2>📄 Daily Z-Report Statement</h2>
+                <button class="modal-close-btn" onclick="document.getElementById('statementModal').style.display='none'">✕</button>
+            </div>
+            <div id="statementReportContent" style="font-family: monospace; font-size: 12px; background: #FAF7F4; border: 1px solid var(--border); padding: 14px; border-radius: var(--radius-md); max-height: 50vh; overflow-y: auto;">
+                <!-- Dynamically populated -->
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="document.getElementById('statementModal').style.display='none'">Close</button>
+                <button class="btn btn-primary" style="flex: 2;" onclick="printDailyZReport()">🖨️ Print Statement</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <!-- ✨ DESKTOP SIDEBAR & MOBILE CLASSY BOTTOM BAR (OPERATIONAL HUBS) ✨ -->
+    <div class="sidebar">
+        <div class="sidebar-brand desktop-only">
+            <img id="sidebarLogo" src="" alt="Logo" style="display:none;">
+            <h2 id="displayShopName">billnaw</h2>
+        </div>
+        
+        <!-- Tab 1: POS (DEFAULT VIEW) -->
+        <button class="nav-btn active" id="nav-pos" onclick="switchTab('pos')" title="POS Billing Terminal">
+            <span class="icon-box"><span class="icon" style="font-size: 16px;">⊞</span></span>
+            <span class="nav-text">POS</span>
+        </button>
+
+        <!-- Tab 2: Menu Catalog -->
+        <button class="nav-btn" id="nav-menu" onclick="switchTab('menu')" title="Menu Management">
+            <span class="icon-box"><span class="icon" style="font-size: 16px;">🍔</span></span>
+            <span class="nav-text">Menu</span>
+        </button>
+
+        <!-- Tab 3: WhatsApp Marketing Hub -->
+        <button class="nav-btn" id="nav-whatsapp" onclick="switchTab('whatsapp')" title="WhatsApp Marketing Campaigns">
+            <span class="icon-box"><span class="icon" style="font-size: 16px;">💬</span></span>
+            <span class="nav-text">WhatsApp</span>
+        </button>
+
+        <!-- Tab 4: Inventory Telemetry -->
+        <button class="nav-btn" id="nav-inventory" onclick="switchTab('inventory')" title="Stock Levels & Telemetry">
+            <span class="icon-box"><span class="icon" style="font-size: 16px;">📦</span></span>
+            <span class="nav-text">Inventory</span>
+        </button>
+
+        <!-- Tab 5: Dashboard & Revenue Reports -->
+        <button class="nav-btn" id="nav-dashboard" onclick="switchTab('dashboard')" title="Store Analytics & Revenue Reports">
+            <span class="icon-box"><span class="icon" style="font-size: 16px;">📊</span></span>
+            <span class="nav-text">Reports</span>
+        </button>
+
+        <!-- Tab 6: Customers Directory -->
+        <button class="nav-btn" id="nav-customers" onclick="switchTab('customers')" title="Customer Directory & Loyalty">
+            <span class="icon-box"><span class="icon" style="font-size: 16px;">👥</span></span>
+            <span class="nav-text">Customers</span>
+        </button>
+
+        <!-- Tab 7: Settings -->
+        <button class="nav-btn" id="nav-settings" onclick="switchTab('settings')" title="Store Settings & Management">
+            <span class="icon-box"><span class="icon" style="font-size: 16px;">⚙️</span></span>
+            <span class="nav-text">Settings</span>
+        </button>
+        
+        <div style="flex-grow: 1;" class="desktop-only"></div>
+        <button id="installAppBtn" class="nav-btn desktop-only" style="color: var(--accent); margin-bottom: 4px;" onclick="installApp()">
+            <span class="icon-box"><span class="icon" style="font-size: 14px;">📲</span></span>
+            <span class="nav-text">Install</span>
+        </button>
+        <button id="lockSystemBtn" class="nav-btn desktop-only" style="color: var(--danger);" onclick="lockSystem()">
+            <span class="icon-box" style="border-color: rgba(167, 50, 50, 0.2);"><span class="icon" style="font-size: 14px; color: var(--danger);">🔒</span></span>
+            <span class="nav-text">Lock</span>
+        </button>
+    </div>
+
+    <!-- ✨ MAIN APPLICATION WRAPPER ✨ -->
+    <div class="main-wrapper">
+        
+        <!-- ✨ TOP BAR (MINIMAL WITH MERGED MENU & BRAND ICON + BUSINESS NAME) ✨ -->
+        <div class="topbar">
+            <div class="topbar-brand-minimal">
+                <!-- Merged Menu Trigger Button & Cafe Logo Icon -->
+                <button type="button" class="topbar-menu-icon-btn" onclick="toggleMobileSlideMenu()" aria-label="Open Navigation Menu" title="Open Navigation Menu">
+                    <span class="menu-bars-glyph">☰</span>
+                    <span class="menu-cafe-glyph">☕</span>
+                </button>
+                <div class="topbar-brand-texts" onclick="openStoreProfileModal()" title="Click to change business name">
+                    <span id="topbarShopName" class="brand-title">billnaw</span>
+                    <span class="brand-subtitle">POS</span>
+                    <span class="brand-edit-hint" title="Change business name">✏️</span>
+                </div>
+                <span id="offlineBadge" style="display: none;">OFFLINE</span>
+            </div>
+            <div class="topbar-actions">
+                <!-- Quick Expense Record Button -->
+                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 20px; font-weight: 700; color: var(--danger); border-color: rgba(167,50,50,0.25);" onclick="openQuickExpenseModal()" title="Record Daily Expense">
+                    ➕ Expense
+                </button>
+
+                <!-- Staff Switcher -->
+                <div id="topbarStaffDisplay" class="staff-pill-btn" onclick="openStaffSwitchModal()" title="Current Active Staff (Click to Switch)">
+                    👤 <span id="activeStaffName">Admin</span>
+                </div>
+
+                <div class="topbar-date" id="topbarDate">Loading...</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            
+            <!-- ============================================================
+                 HUB 1: 📊 DASHBOARD & REPORTS (EXECUTIVE BUSINESS OVERVIEW)
+            ============================================================ -->
+            <div id="dashboard" class="view">
+                
+                <!-- KPI Executive Cards -->
+                <div class="kpi-grid">
+                    <div class="kpi-card success" onclick="filterDashboardByMetric('sales')">
+                        <div class="kpi-label">Gross Revenue <span>💰</span></div>
+                        <div class="kpi-value" id="kpiGrossSales">₹0</div>
+                        <div class="kpi-sub" id="kpiGrossSub">Total receipts in range</div>
+                    </div>
+                    <div class="kpi-card danger" onclick="filterDashboardByMetric('expenses')">
+                        <div class="kpi-label">Total Expenses <span>📉</span></div>
+                        <div class="kpi-value" id="kpiTotalExpenses">₹0</div>
+                        <div class="kpi-sub" id="kpiExpenseSub">Market & kitchen supplies</div>
+                    </div>
+                    <div class="kpi-card" id="kpiMarginCard" onclick="filterDashboardByMetric('profit')">
+                        <div class="kpi-label">Net Profit / Margin <span>📈</span></div>
+                        <div class="kpi-value" id="kpiNetProfit">₹0</div>
+                        <div class="kpi-sub" id="kpiProfitSub">Net earnings</div>
+                    </div>
+                    <div class="kpi-card" onclick="filterDashboardByMetric('orders')">
+                        <div class="kpi-label">Total Orders <span>🧾</span></div>
+                        <div class="kpi-value" id="kpiTotalOrders">0</div>
+                        <div class="kpi-sub" id="kpiOrdersSub">Completed invoices</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Average Order Value <span>🏷️</span></div>
+                        <div class="kpi-value" id="kpiAvgOrderValue">₹0</div>
+                        <div class="kpi-sub">Per ticket average</div>
+                    </div>
+                </div>
+
+                <!-- Interactive Filters & Actions Toolbar -->
+                <div class="card" style="margin-bottom: 16px; padding: 16px 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <!-- Date Range Filters -->
+                        <div class="filter-pills-bar" style="margin-bottom: 0;">
+                            <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-right: 4px;">Date Range:</span>
+                            <button class="filter-pill active" id="fRange-today" onclick="setDashboardDateRange('today')">Today</button>
+                            <button class="filter-pill" id="fRange-yesterday" onclick="setDashboardDateRange('yesterday')">Yesterday</button>
+                            <button class="filter-pill" id="fRange-week" onclick="setDashboardDateRange('week')">This Week</button>
+                            <button class="filter-pill" id="fRange-month" onclick="setDashboardDateRange('month')">This Month</button>
+                            <button class="filter-pill" id="fRange-all" onclick="setDashboardDateRange('all')">All Time</button>
+                        </div>
+
+                        <!-- Action / Download Buttons -->
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-outline" style="padding: 8px 14px; font-size: 12px; border-radius: 20px;" onclick="exportFilteredSalesCSV()">
+                                📥 Download Sales CSV
+                            </button>
+                            <button class="btn btn-outline" style="padding: 8px 14px; font-size: 12px; border-radius: 20px;" onclick="openStatementModal()">
+                                📄 Daily Z-Report
+                            </button>
+                            <button class="btn btn-outline" style="padding: 8px 14px; font-size: 12px; border-radius: 20px;" onclick="exportExpensesCSV()">
+                                🪙 Export Costs CSV
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Payment & Type Secondary Filters -->
+                    <div style="display: flex; gap: 14px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle); flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Payment:</label>
+                            <select id="dashFilterPayment" onchange="renderDashboardAnalytics()" style="padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px;">
+                                <option value="All">All Methods (Cash/UPI/Card)</option>
+                                <option value="Cash">Cash Only</option>
+                                <option value="UPI">UPI Only</option>
+                                <option value="Card">Card Only</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Order Type:</label>
+                            <select id="dashFilterType" onchange="renderDashboardAnalytics()" style="padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px;">
+                                <option value="All">All Types (Dine-In & Takeaway)</option>
+                                <option value="Dine-In">Dine-In Only</option>
+                                <option value="Takeaway">Takeaway Only</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
+                            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Month Picker:</label>
+                            <input type="month" id="reportDateSelect" onchange="onDashboardMonthChanged()" style="padding: 5px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; font-weight: 600;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visual Charts Section -->
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div class="card" style="padding: 18px; margin-bottom: 0;">
+                        <div class="card-header" style="margin-bottom: 12px;">
+                            <h3 class="card-title" style="font-size: 15px;">Revenue vs Costs Timeline</h3>
+                        </div>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="monthlySalesChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card" style="padding: 18px; margin-bottom: 0;">
+                        <div class="card-header" style="margin-bottom: 12px;">
+                            <h3 class="card-title" style="font-size: 15px;">Top Selling Items</h3>
+                        </div>
+                        <div id="dashTopSellingList" style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+                            <!-- Top items rendered dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtered Transactions Ledger -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title" style="font-size: 16px;">Sales & Billing Transactions Log</h2>
+                            <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-muted);" id="dashLogCountSubtitle">Showing transactions in selected range</p>
+                        </div>
+                        <div style="position: relative; width: 220px;">
+                            <input type="text" id="dashSearchInput" placeholder="Filter by bill, customer, item..." oninput="renderDashboardAnalytics()" style="width: 100%; padding: 7px 12px; font-size: 12px; border-radius: 12px; border: 1px solid var(--border);">
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Bill #</th>
+                                    <th>Table / Type</th>
+                                    <th>Customer</th>
+                                    <th>Items Ordered</th>
+                                    <th>Payment</th>
+                                    <th>Amount (₹)</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 DUAL VERTICAL HUBS:
+                 1. 💬 AI-DRIVEN WHATSAPP MARKETING HUB
+                 2. 👥 CUSTOMER DIRECTORY & LOYALTY
+            ============================================================ -->
+            <div id="customers" class="view">
+                
+                <!-- VERTICAL HUB 1: 💬 AI-DRIVEN WHATSAPP MARKETING HUB -->
+                <div class="card" id="aiWhatsAppMarketingHub" style="margin-bottom: 24px; border: 1.5px solid var(--border); box-shadow: var(--shadow-sm);">
+                    <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="icon-box-lg" style="background: #E8F5E9; border-color: #C8E6C9;"><span class="icon" style="font-size: 20px;">💬</span></span>
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-dark);">
+                                        WhatsApp Marketing Hub
+                                    </h2>
+                                    <span style="background: #E0F2FE; color: #0284C7; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; letter-spacing: 0.5px;">✨ AI POWERED</span>
+                                </div>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
+                                    Weekly AI customer scans, personalized copy with diner names, bulk customer selection, and 1-tap WhatsApp broadcast.
+                                </p>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 7px 14px;" onclick="runWeeklyAiMarketingScan()" title="Scan customer activity for high-converting marketing audiences">
+                                🤖 Weekly AI Scan
+                            </button>
+                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 7px 16px;" onclick="triggerBulkWhatsAppBroadcast()" title="Dispatch personalized campaign">
+                                🚀 Send Campaign
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Weekly AI Insights & Audience Targeting Recommendation -->
+                    <div id="aiWeeklyScanBanner" style="background: linear-gradient(135deg, #FBF8F5, #F4ECE6); border: 1px solid #E5D5C8; border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 16px;">💡</span>
+                                <strong style="font-size: 13px; color: var(--primary);">Weekly AI Targeting Scan:</strong>
+                                <span id="aiScanSummaryText" style="font-size: 12px; color: var(--text-dark);">Scanned customer directory. 4 high-converting segments ready.</span>
+                            </div>
+                            <span style="font-size: 11px; font-weight: 700; color: var(--milk-choc); background: #FFFFFF; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);">Updated This Week</span>
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="aiSegmentsContainer">
+                            <button type="button" class="filter-pill active" onclick="selectAiSegment('all')" id="aiSeg-all">
+                                🎯 All Patrons (<span id="aiSegCount-all">0</span>)
+                            </button>
+                            <button type="button" class="filter-pill" onclick="selectAiSegment('weekend')" id="aiSeg-weekend">
+                                ☕ Weekend Specials (<span id="aiSegCount-weekend">0</span>)
+                            </button>
+                            <button type="button" class="filter-pill" onclick="selectAiSegment('vip')" id="aiSeg-vip">
+                                💎 VIP Regulars (<span id="aiSegCount-vip">0</span>)
+                            </button>
+                            <button type="button" class="filter-pill" onclick="selectAiSegment('inactive')" id="aiSeg-inactive">
+                                ⏳ Inactive 7+ Days (<span id="aiSegCount-inactive">0</span>)
+                            </button>
+                            <button type="button" class="filter-pill" onclick="selectAiSegment('loyalty')" id="aiSeg-loyalty">
+                                🪙 Unused Points (<span id="aiSegCount-loyalty">0</span>)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- AI Hub Two-Column Grid: Left (Bulk Customers & AI Copy), Right (WhatsApp Phone Mockup & Queue) -->
+                    <div class="wa-hub-grid" style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px;">
+                        <!-- Left Column -->
+                        <div>
+                            <!-- Bulk Customer Selection Box -->
+                            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--primary); cursor: pointer;">
+                                        <input type="checkbox" id="selectAllCustomersCheckbox" onchange="toggleSelectAllCustomers(this.checked)" checked style="width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer;">
+                                        <span>Select Bulk Customers (<span id="bulkSelectedCount">0</span> selected)</span>
+                                    </label>
+                                    <div style="font-size: 11px; color: var(--text-muted);">
+                                        Click checkboxes or chips below
+                                    </div>
+                                </div>
+                                <div id="waBulkCustomerSelectorList" style="max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
+                                    <!-- Dynamic customer checkboxes -->
+                                </div>
+                            </div>
+
+                            <!-- AI Message Generator & Editor -->
+                            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <strong style="font-size: 13px; color: var(--primary);">Campaign Message Copy</strong>
+                                        <span style="font-size: 11px; color: var(--text-muted);">(Editable • Uses {customer_name})</span>
+                                    </div>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px;" onclick="generateAiCampaignCopy()" id="generateAiCampaignBtn">
+                                            ✨ Generate with AI
+                                        </button>
+                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px;" onclick="copyCurrentCampaignTemplate()">
+                                            📋 Copy Text
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <textarea id="waCampaignEditableText" rows="6" class="form-group" style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; line-height: 1.5; font-family: inherit; resize: vertical; margin-bottom: 10px;" oninput="onCustomCampaignTextEdited()"></textarea>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px;">
+                                    <div>
+                                        <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Discount (%)</label>
+                                        <input type="number" id="waQuickDiscount" value="15" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700;" onchange="updateCampaignVariable('discount', this.value)">
+                                    </div>
+                                    <div>
+                                        <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Min Order (₹)</label>
+                                        <input type="number" id="waQuickMinOrder" value="199" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700;" onchange="updateCampaignVariable('minOrder', this.value)">
+                                    </div>
+                                    <div>
+                                        <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Valid Till</label>
+                                        <input type="text" id="waQuickValidTill" value="This Sunday" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px;" onchange="updateCampaignVariable('validTill', this.value)">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Live WhatsApp Simulation & 1-Tap Queue -->
+                        <div>
+                            <!-- Live WhatsApp Phone Simulation -->
+                            <div class="wa-phone-mockup" style="margin-bottom: 14px;">
+                                <div class="wa-phone-header">
+                                    <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white;">☕</span>
+                                    <div>
+                                        <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                                            <span id="waPreviewShopName">billnaw</span>
+                                            <span style="font-size: 11px; color: #86EFAC;">✓</span>
+                                        </div>
+                                        <div style="font-size: 10px; opacity: 0.85;">Official Restaurant Account • Online</div>
+                                    </div>
+                                </div>
+                                <div class="wa-phone-body">
+                                    <div class="wa-bubble">
+                                        <div id="waSimulatedPersonalizedMessage" style="white-space: pre-wrap; font-size: 12px; line-height: 1.45;"></div>
+                                        <div class="wa-bubble-meta">
+                                            <span id="waSimulatedTime">Now</span>
+                                            <span style="color: #34B7F1; font-size: 11px;">✓✓</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="padding: 10px 14px; background: #FFFFFF; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Personalized for: <strong id="waSimulatedTargetName" style="color: var(--primary);">First Diner</strong></span>
+                                    <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 12px;" onclick="cyclePreviewCustomer()">Next Diner ➔</button>
+                                </div>
+                            </div>
+
+                            <!-- 1-Tap Broadcast Dispatch List -->
+                            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <strong style="font-size: 12px; color: var(--primary);">1-Tap Send Queue (<span id="queueCount">0</span> diners)</strong>
+                                    <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 10px; border-radius: 10px;" onclick="copyAllSelectedPhones()">📋 Copy Phone #s</button>
+                                </div>
+                                <div id="waSelectedBroadcastQueue" style="max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                                    <!-- Dynamic 1-tap send items -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VERTICAL HUB 2: 👥 CUSTOMER DIRECTORY & LOYALTY -->
+                <div class="card" style="border: 1.5px solid var(--border); box-shadow: var(--shadow-sm);">
+                    <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="icon-box-lg" style="background: #F3E8FF; border-color: #E9D5FF;"><span class="icon" style="font-size: 20px;">👥</span></span>
+                                <div>
+                                    <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-dark);">
+                                        Customer Directory & Loyalty
+                                    </h2>
+                                    <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
+                                        Click on any customer row to view history, start bill, edit, delete, or send WhatsApp / text messages.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 14px;" onclick="exportCustomerDirectoryCSV()">
+                                📥 Download CSV
+                            </button>
+                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 8px 16px;" onclick="openAddCustomerModal()">
+                                ➕ Add Customer
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Customers</div>
+                            <div id="custStatTotal" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">0</div>
+                        </div>
+                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Loyalty Points</div>
+                            <div id="custStatPoints" style="font-size: 22px; font-weight: 800; color: var(--warning); margin-top: 4px;">0 pts</div>
+                        </div>
+                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Customer Lifetime Spend</div>
+                            <div id="custStatRevenue" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">₹0</div>
+                        </div>
+                    </div>
+
+                    <!-- Customer Filter Chips & Search Bar -->
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                        <div class="filter-pills-bar" style="margin-bottom: 0;">
+                            <button type="button" class="filter-pill active" id="cFilter-all" onclick="filterCustomersByTier('all')">All Customers</button>
+                            <button type="button" class="filter-pill" id="cFilter-platinum" onclick="filterCustomersByTier('Platinum')">💎 Platinum (20+ visits)</button>
+                            <button type="button" class="filter-pill" id="cFilter-gold" onclick="filterCustomersByTier('Gold')">⭐ Gold (10+ visits)</button>
+                            <button type="button" class="filter-pill" id="cFilter-silver" onclick="filterCustomersByTier('Silver')">🥈 Silver (5+ visits)</button>
+                            <button type="button" class="filter-pill" id="cFilter-bronze" onclick="filterCustomersByTier('Bronze')">🥉 Bronze</button>
+                        </div>
+                    </div>
+
+                    <div class="search-container" style="margin-bottom: 16px;">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="customerSearchInput" class="search-bar" placeholder="Search by customer name, phone number, or preferences..." oninput="filterCustomersUI()">
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Phone</th>
+                                    <th>Tier / Loyalty</th>
+                                    <th>Visits</th>
+                                    <th>Total Spent</th>
+                                    <th>Last Visit</th>
+                                    <th style="text-align: right;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customersTableBody">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 HUB 3: ⊞ POS TERMINAL (DEFAULT LANDING VIEW ON APP START)
+            ============================================================ -->
+            <div id="pos" class="view active">
+                <div class="pos-layout">
+                    
+                    <div class="pos-left" id="swipeArea">
+                        <div class="tables-wrapper" style="margin-bottom: 8px;">
+                            <div class="table-top-bar" style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 6px;">
+                                <div class="table-legend">
+                                    <span><i style="background: var(--warning);"></i> ORDER</span>
+                                    <span><i style="background: #9CA3AF;"></i> KITCHEN</span>
+                                    <span><i style="background: var(--warning);"></i> SERVED</span>
+                                    <span><i style="background: var(--danger);"></i> ALERT</span>
+                                </div>
+                            </div>
+                            <div class="table-grid" id="tableGridUI"></div>
+                        </div>
+                        
+                        <div class="menu-wrapper">
+                            <div class="search-container">
+                                <span class="search-icon">🔍</span>
+                                <input type="text" id="menuSearchInput" class="search-bar" placeholder="Search dishes & drinks..." onkeyup="renderMenuUI()">
+                                <span class="mic-icon icon-box" onclick="toggleVoiceBilling()" title="Voice-to-Billing (Speak diner order)" style="right: 8px; width: 28px; height: 28px; font-size: 13px; cursor: pointer;">🎤</span>
+                            </div>
+                            
+                            <!-- Voice-to-Billing Active Listening & Feedback Banner -->
+                            <div id="voiceFeedbackBanner" class="voice-feedback-banner">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="icon-box" style="width: 24px; height: 24px; font-size: 12px; background: #FEE2E2; border-color: #FCA5A5; color: var(--danger);">🎤</span>
+                                    <span id="voiceFeedbackText">Listening for diner order (e.g. 'two fried rice')...</span>
+                                </div>
+                                <button type="button" onclick="updateVoiceIndicatorUI(false)" style="background: none; border: none; color: #991B1B; font-weight: 700; cursor: pointer;">✕</button>
+                            </div>
+
+                            <!-- Contextual Quick Voice Diner Speech Chips -->
+                            <div id="quickVoicePillsRow" class="quick-voice-pills">
+                                <span style="font-size: 11px; font-weight: 700; color: var(--text-dark); margin-right: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                                    <span class="icon-box" style="width: 20px; height: 20px; font-size: 10px;">🎙️</span> Spoken:
+                                </span>
+                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('three fried rice')">"3 Fried Rice"</button>
+                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('two cold coffee')">"2 Cold Coffee"</button>
+                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('one chicken biryani')">"1 Chicken Biryani"</button>
+                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('two espresso')">"2 Espresso"</button>
+                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('two masala chai')">"2 Masala Chai"</button>
+                            </div>
+
+                            <div class="category-scroll" id="categoryFiltersUI"></div>
+                            <div class="menu-grid" id="menuGridUI"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="cartDrawerOverlay" class="drawer-overlay" onclick="toggleCartDrawer()"></div>
+                    <div class="pos-right" id="cartDrawer">
+                        <div class="drawer-handle"></div>
+                        <div class="cart-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3 style="margin: 0; font-size: 17px; color: var(--primary);">🛒 TABLE <span id="activeTableUI">1</span></h3>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <button class="btn btn-outline" style="padding: 5px 8px; border: none; color: var(--danger); font-size: 14px;" onclick="clearTable()">🗑️ Clear</button>
+                                <button class="close-drawer-btn" onclick="toggleCartDrawer()">✖</button>
+                            </div>
+                        </div>
+                        <div class="cart-items-container" id="cartUI"></div>
+                        
+                        <div class="drawer-actions-row">
+                            <button class="action-pill discount-pill" id="cartDiscountBtn" onclick="openQuickDiscountModal()">🏷️ Discount</button>
+                            <button class="action-pill" onclick="bookTable()">📅 Reserve</button>
+                            <button class="action-pill" onclick="sendToKitchen()">👨‍🍳 Kitchen</button>
+                            <button class="action-pill" onclick="markServed()">🍽️ Served</button>
+                        </div>
+
+                        <!-- Customer Tier Discount Auto-Prompt Banner -->
+                        <div id="cartCustomerDiscountBanner" style="display: none; margin: 0 16px 8px 16px; padding: 8px 12px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; font-size: 11px; color: #92400E; justify-content: space-between; align-items: center;">
+                            <span id="cartCustomerDiscountText">🎁 Customer Discount Available</span>
+                            <button type="button" class="btn" style="padding: 3px 8px; font-size: 10px; background: #D97706; color: #fff; border-radius: 6px; border: none; cursor: pointer; font-weight: 700;" onclick="applyCustomerSuggestedDiscount()">Apply</button>
+                        </div>
+
+                        <div class="cart-footer">
+                            <div id="cartDiscountLineRow" style="display: none; justify-content: space-between; align-items: center; font-size: 12px; color: var(--success); font-weight: 700; margin-bottom: 6px; padding: 4px 8px; background: rgba(44, 110, 59, 0.08); border-radius: 6px;">
+                                <span id="cartDiscountDesc">🏷️ Discount:</span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span id="cartDiscountAmt">-₹0.00</span>
+                                    <button type="button" onclick="removeQuickDiscount()" style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 12px; font-weight: 800; padding: 0 2px;" title="Remove Discount">✕</button>
+                                </div>
+                            </div>
+                            <div class="total-display">
+                                <div class="total-text">
+                                    <span style="font-size: 12px; font-weight: 700; opacity: 0.9;">Grand Total</span>
+                                    <span class="gst" id="gstBreakdownUI">Includes ₹0.00 GST</span>
+                                </div>
+                                <h2>₹<span id="totalUI">0</span></h2>
+                            </div>
+                            <button id="desktopCheckoutBtn" class="btn btn-success btn-full sleek-checkout-desktop" onclick="openCheckoutModal()">
+                                <span>CHECKOUT</span>
+                                <span id="desktopCheckoutBtnSub">➔</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mobile-pos-actions">
+                    <div style="display: flex; gap: 8px; width: 100%; max-width: 420px; margin: 0 auto; align-items: center;">
+                        <div id="floatingCart" class="sleek-checkout-bar" style="display: none; flex: 1;">
+                            <div class="sc-left" onclick="toggleCartDrawer()">
+                                <span class="icon" style="margin-right: 5px;">🛒</span> <span id="fc-count">0 ITEMS</span>
+                            </div>
+                            <div class="sc-center" onclick="toggleCartDrawer()">
+                                ₹ <span id="fc-total">0</span>
+                            </div>
+                            <button class="sc-right" onclick="openCheckoutModal()">CHECKOUT ➔</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 HUB 2: 🍔 MENU CATALOG & INVENTORY MANAGEMENT
+            ============================================================ -->
+            <div id="menu" class="view">
+                <!-- Smart AI Menu OCR Scanner Banner with 20% Goal Gradient Effect -->
+                <div style="background: linear-gradient(135deg, #2C6E3B, #1E4E29); padding: 20px 24px; border-radius: var(--radius-lg); margin-bottom: 20px; color: white; box-shadow: var(--shadow-sm);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 12px;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="icon-box" style="background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.25); color: #fff;">🤖</span>
+                                <h3 style="margin: 0; color: white; font-size: 18px; font-weight: 800;">Smart Menu Onboarding & AI Scanner</h3>
+                            </div>
+                            <p style="margin: 6px 0 0 0; font-size: 12px; opacity: 0.95; font-weight: 400; max-width: 580px;">
+                                Snap or upload physical menu photos. Our AI vision parser extracts item names, auto-assigns categories, and detects prices for split-screen review.
+                            </p>
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <input type="file" id="aiMenuUploader" accept="image/*, application/pdf" style="display: none;" onchange="processAIMenu(event)">
+                            <button class="btn" style="background: white; color: var(--success); font-weight: 800; padding: 10px 18px; font-size: 12px; border-radius: 20px; border: none;" onclick="document.getElementById('aiMenuUploader').click()" id="aiMenuBtn">
+                                📸 Snap / Upload Photo
+                            </button>
+                            <button class="btn btn-outline" style="color: white; border-color: rgba(255,255,255,0.4); padding: 10px 14px; font-size: 12px; border-radius: 20px;" onclick="openAddMenuItemModal()">
+                                ➕ Manual Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 20% Goal Gradient Progress Bar -->
+                    <div style="background: rgba(0, 0, 0, 0.15); padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600;">
+                            <span>✓ Step 1: Terminal & Tables Ready (20% Completed)</span>
+                            <span>Step 2: Catalog Ingestion</span>
+                        </div>
+                        <div class="goal-gradient-bar">
+                            <div class="goal-gradient-fill" style="width: 20%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category Management -->
+                <div class="card">
+                    <h3 class="card-title" style="margin-top: 0; margin-bottom: 12px; font-size: 15px;">Manage Categories</h3>
+                    <div style="display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+                        <input type="text" id="newCategoryName" placeholder="E.g., Special Teas, Desserts, Mocktails" class="form-group" style="margin:0; flex: 1; padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border); font-weight: 600; font-size: 13px; min-width: 200px;">
+                        <button class="btn btn-outline" style="padding: 12px 18px; font-size: 13px;" onclick="addCategory()">+ Add Category</button>
+                    </div>
+                    <div id="categoryListUI" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;"></div>
+                </div>
+
+                <!-- Full Menu Catalog Table -->
+                <div class="card">
+                    <div class="card-header" style="margin-bottom: 12px;">
+                        <h2 class="card-title" style="font-size: 16px;">Menu Items Catalog</h2>
+                        <button class="btn btn-success" onclick="openAddMenuItemModal()" style="border-radius: 20px; font-size: 12px; padding: 8px 16px;">➕ Add Item</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead><tr><th>Img</th><th>Name</th><th>Category</th><th>Rate / Price (₹)</th><th>GST Status</th><th>Stock</th><th>Actions</th></tr></thead>
+                            <tbody id="menuTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 HUB 3: 💬 WHATSAPP MARKETING HUB & CAMPAIGNS
+            ============================================================ -->
+            <div id="whatsapp" class="view">
+                <div class="card" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="icon-box-lg"><span class="icon" style="font-size: 22px;">💬</span></span>
+                            <div>
+                                <h2 style="font-size: 18px; font-weight: 800; color: var(--text-dark); margin: 0;">WhatsApp Marketing Hub</h2>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
+                                    Select marketing templates, customize offers in real-time, and dispatch campaigns directly to your customers.
+                                </p>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 16px;" onclick="copyWhatsAppCampaignText()">
+                            📋 Copy Message
+                        </button>
+                    </div>
+                </div>
+
+                <div class="wa-hub-grid">
+                    <!-- Left: Selectable Templates & Customizer -->
+                    <div>
+                        <!-- Selectable Templates -->
+                        <div class="card" style="margin-bottom: 16px;">
+                            <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 10px; color: var(--primary);">1. Choose Campaign Template</h3>
+                            <div id="waTemplatesListContainer"></div>
+                        </div>
+
+                        <!-- Inline Template Customizer -->
+                        <div class="card" style="margin-bottom: 16px;">
+                            <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--primary);">2. Personalize Offer Details</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                                <div>
+                                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Discount Percentage (%)</label>
+                                    <input type="number" id="waInputDiscount" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; font-weight: 700;" oninput="updateWhatsAppCustomValue('discountPercent', parseFloat(this.value) || 0)">
+                                </div>
+                                <div>
+                                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Min Order Value (₹)</label>
+                                    <input type="number" id="waInputMinOrder" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; font-weight: 700;" oninput="updateWhatsAppCustomValue('minOrder', parseFloat(this.value) || 0)">
+                                </div>
+                            </div>
+                            <div style="margin-bottom: 12px;">
+                                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Valid Till / Event Timing</label>
+                                <input type="text" id="waInputValidTill" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px;" oninput="updateWhatsAppCustomValue('validTill', this.value)">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Owner Custom Note / Greeting</label>
+                                <input type="text" id="waInputNote" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px;" oninput="updateWhatsAppCustomValue('customNote', this.value)">
+                            </div>
+                        </div>
+
+                        <!-- Customer List Dispatch Action -->
+                        <div class="card">
+                            <div class="card-header" style="margin-bottom: 10px;">
+                                <h3 style="font-size: 14px; font-weight: 700; color: var(--primary); margin: 0;">3. Customer Contacts Campaign Dispatch</h3>
+                                <span style="font-size: 11px; color: var(--text-muted);">1-Tap Send</span>
+                            </div>
+                            <div id="waCustomerBroadcastList" style="max-height: 280px; overflow-y: auto;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Live WhatsApp Phone Simulation Bubble -->
+                    <div>
+                        <div class="wa-phone-mockup">
+                            <div class="wa-phone-header">
+                                <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white;">🏪</span>
+                                <div>
+                                    <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                                        <span id="waPreviewStoreName">billnaw</span>
+                                        <span style="font-size: 11px; color: #86EFAC;">✓</span>
+                                    </div>
+                                    <div style="font-size: 10px; opacity: 0.85;">Official Restaurant Account • Online</div>
+                                </div>
+                            </div>
+                            <div class="wa-phone-body">
+                                <div class="wa-bubble">
+                                    <div id="waBubbleMessageContent" style="white-space: pre-wrap; font-size: 12px;"></div>
+                                    <div class="wa-bubble-meta">
+                                        <span id="waBubbleTimeDisplay">10:45 AM</span>
+                                        <span style="color: #34B7F1; font-size: 11px;">✓✓</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="padding: 12px 16px; background: #FFFFFF; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Simulated Customer View</span>
+                                <button class="btn btn-success" style="padding: 6px 14px; font-size: 11px; border-radius: 16px;" onclick="copyWhatsAppCampaignText()">
+                                    📋 Copy Text
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 HUB 4: 📦 INVENTORY TELEMETRY & INGREDIENT CONSUMPTION
+            ============================================================ -->
+            <div id="inventory" class="view">
+                <div class="card" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="icon-box-lg"><span class="icon" style="font-size: 22px;">📦</span></span>
+                            <div>
+                                <h2 style="font-size: 18px; font-weight: 800; color: var(--text-dark); margin: 0;">Inventory Telemetry & Ingredients</h2>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
+                                    Real-time raw ingredient tracking, safety threshold monitors, and loss-aversion alerts aligned to order volumes.
+                                </p>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 16px;" onclick="renderInventoryTelemetryUI()">
+                            🔄 Refresh Telemetry
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loss Aversion Banner -->
+                <div id="inventoryLossAversionBanner" class="loss-aversion-banner" style="display: none;">
+                    <div class="loss-alert-icon">⚠️</div>
+                    <div id="inventoryLossAlertText" style="font-size: 13px; color: #7F1D1D; line-height: 1.45;"></div>
+                </div>
+
+                <!-- Telemetry Stats Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                    <div class="card" style="padding: 16px;">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Ingredients Tracked</div>
+                        <div style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">8 Items</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Daily auto-deduction active</div>
+                    </div>
+                    <div class="card" style="padding: 16px;">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Stock Depletion Risk</div>
+                        <div style="font-size: 22px; font-weight: 800; color: var(--danger); margin-top: 4px;">3 Near Low</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Coffee, Milk & Basmati Rice</div>
+                    </div>
+                    <div class="card" style="padding: 16px;">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Peak Dinner Prep</div>
+                        <div style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">82% Ready</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Top 5 menu dishes stocked</div>
+                    </div>
+                </div>
+
+                <!-- Raw Ingredients Grid -->
+                <div id="inventoryIngredientsList" class="inventory-grid"></div>
+            </div>
+
+            <!-- ============================================================
+                 HUB 5: ⚙️ SETTINGS & STORE ADMINISTRATION (ROW-TILES DESIGN)
+            ============================================================ -->
+            <div id="settings" class="view">
+                
+                <div class="card" style="margin-bottom: 20px;">
+                    <div class="card-header" style="margin-bottom: 6px;">
+                        <div>
+                            <h2 class="card-title" style="font-size: 18px; margin: 0;">⚙️ Store Settings & Administration</h2>
+                            <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-muted);">
+                                Manage your store profile, staff permissions, subscription, GST, cloud sync, and devices.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Classy Bento / Row Tiles Grid: Tapping opens dedicated clean detail views -->
+                <div class="settings-tiles-grid">
+                    
+                    <!-- 1. Store Profile & Branding -->
+                    <div class="setting-tile-card" onclick="openStoreProfileModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">🏪</div>
+                            <div class="setting-tile-info">
+                                <h3>Store Profile</h3>
+                                <p>Business name, logo, address, FSSAI & GSTIN</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 2. Staff & Team Management -->
+                    <div class="setting-tile-card" onclick="openStaffManagementModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">👥</div>
+                            <div class="setting-tile-info">
+                                <h3>Staff & Team Management</h3>
+                                <p>Cashiers, waiters, kitchen chefs & PIN security</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 3. Subscription & Plan -->
+                    <div class="setting-tile-card" onclick="openSubscriptionModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">💎</div>
+                            <div class="setting-tile-info">
+                                <h3>Subscription & Plan</h3>
+                                <p>Free Tier Active • Backend billing upgradable</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 4. Daily Expenses & Costs -->
+                    <div class="setting-tile-card" onclick="openExpensesDetailModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">🪙</div>
+                            <div class="setting-tile-info">
+                                <h3>Daily Expenses & Costs</h3>
+                                <p>Record and track raw materials & market supplies</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 5. GST & Pricing Configuration -->
+                    <div class="setting-tile-card" onclick="openGstConfigModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">🧾</div>
+                            <div class="setting-tile-info">
+                                <h3>GST & Pricing Mode</h3>
+                                <p>Inclusive vs exclusive tax rules & default rate</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 6. Payment & Dynamic UPI QR -->
+                    <div class="setting-tile-card" onclick="openPaymentConfigModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">📱</div>
+                            <div class="setting-tile-info">
+                                <h3>UPI & Dynamic QR</h3>
+                                <p>Merchant VPA, receipt QR code & checkout modes</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 7. Tables & Seating Configuration -->
+                    <div class="setting-tile-card" onclick="openTableConfigModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">🪑</div>
+                            <div class="setting-tile-info">
+                                <h3>Tables & Seating Tabs</h3>
+                                <p>Editable table tabs (T1, T2...), table counts & naming presets</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 8. Discounts & Promotions -->
+                    <div class="setting-tile-card" onclick="openDiscountSettingsModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">🏷️</div>
+                            <div class="setting-tile-info">
+                                <h3>Discounts & Promotions</h3>
+                                <p>Master toggle, max limits, presets & loyalty triggers</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 8. Firebase Cloud Sync & Terminals -->
+                    <div class="setting-tile-card" onclick="openCloudSyncDetailModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">🔥</div>
+                            <div class="setting-tile-info">
+                                <h3>Firebase Cloud Sync</h3>
+                                <p>Store code, Firestore DB, backup & restore</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 8. Bluetooth Thermal Printer -->
+                    <div class="setting-tile-card" onclick="connectBluetoothPrinter()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">📡</div>
+                            <div class="setting-tile-info">
+                                <h3>Bluetooth Thermal Printer</h3>
+                                <p>Pair 58mm / 80mm wireless receipt & KOT printers</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 9. AI Engine Quota & Custom Key -->
+                    <div class="setting-tile-card" onclick="openClientQuotaModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">🛡️</div>
+                            <div class="setting-tile-info">
+                                <h3>AI Quota & Custom Key</h3>
+                                <p>Monthly OCR scans allowance & dedicated Gemini key</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+
+                    <!-- 10. Contact & Support -->
+                    <div class="setting-tile-card" onclick="openContactModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon">📞</div>
+                            <div class="setting-tile-info">
+                                <h3>Contact & Support</h3>
+                                <p>24/7 WhatsApp help, email & cache diagnostics</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow">➔</span>
+                    </div>
+                </div>
+
+                <!-- Danger Zone Accordion / Card -->
+                <div class="card" style="border: 1px solid rgba(167, 50, 50, 0.25); background: #FFF8F8; padding: 18px 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="color: var(--danger); margin: 0; font-size: 15px;">Reset Terminal Local Cache</h3>
+                            <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-muted);">Purge local temporary storage and hard reload.</p>
+                        </div>
+                        <button class="btn btn-danger" style="padding: 8px 16px; font-size: 12px; border-radius: 12px;" onclick="factoryReset()">⚠️ Reset Local Cache</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DETAIL SUB-MODAL: STAFF & TEAM MANAGEMENT -->
+            <div id="staffManagementDetailModal" class="modal-overlay" style="display: none;">
+                <div class="modal-box" style="max-width: 650px;">
+                    <div class="modal-header">
+                        <div>
+                            <h2>👥 Staff & Team Management</h2>
+                            <p>Manage cashiers, floor servers, kitchen chefs, and managers.</p>
+                        </div>
+                        <button class="modal-close-btn" onclick="closeStaffManagementModal()">✕</button>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+                        <button class="btn btn-success" style="font-size: 12px; padding: 7px 14px; border-radius: 12px;" onclick="openAddStaffModal()">➕ Add Staff Member</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Staff Member</th>
+                                    <th>Role</th>
+                                    <th>Phone</th>
+                                    <th>Login PIN</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staffTableBody">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-outline" style="width: 100%;" onclick="closeStaffManagementModal()">Done</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DETAIL SUB-MODAL: CLOUD SYNC & FIREBASE -->
+            <div id="cloudSyncDetailModal" class="modal-overlay" style="display: none;">
+                <div class="modal-box" style="max-width: 550px;">
+                    <div class="modal-header">
+                        <div>
+                            <h2>🔥 Firebase Cloud Sync & Mapping</h2>
+                            <p>Real-time bidirectional sync across all store terminals, KOT, and devices.</p>
+                        </div>
+                        <button class="modal-close-btn" onclick="closeCloudSyncDetailModal()">✕</button>
+                    </div>
+                    
+                    <div style="background: #FAF7F4; border-radius: 12px; padding: 14px; margin-bottom: 16px; border: 1px solid var(--border);">
+                        <div style="display: grid; gap: 10px; font-size: 12px;">
+                            <div>
+                                <span style="color: var(--text-muted); display: block; font-size: 10px; text-transform: uppercase; font-weight: 700;">Active Shop Store Code</span>
+                                <div style="display: flex; align-items: center; gap: 8px; margin-top: 3px;">
+                                    <strong id="settingsCurrentShopCode" style="font-size: 14px; color: var(--primary); font-family: monospace;">BONGBHOJ-TERMINAL</strong>
+                                    <button class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;" onclick="openSwitchStoreModal()">Switch</button>
+                                </div>
+                            </div>
+                            <div>
+                                <span style="color: var(--text-muted); display: block; font-size: 10px; text-transform: uppercase; font-weight: 700;">Firestore Database ID</span>
+                                <strong id="settingsFirestoreDbDisplay" style="font-size: 11px; color: var(--text-dark); word-break: break-all; font-family: monospace; margin-top: 2px; display: block;">ai-studio-billnawcafepos-3ac17879-08c8-4e15-9a3d-a965f7d92fda</strong>
+                            </div>
+                            <div>
+                                <span style="color: var(--text-muted); display: block; font-size: 10px; text-transform: uppercase; font-weight: 700;">Last Cloud Heartbeat</span>
+                                <strong id="settingsLastSyncTime" style="font-size: 12px; color: var(--text-dark); margin-top: 2px; display: block;">Just now</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; gap: 8px;">
+                        <button class="btn" style="padding: 11px; background: var(--primary); font-size: 13px;" onclick="forceCloudSyncNow()">⚡ Force Full Cloud Sync</button>
+                        <button class="btn btn-outline" style="padding: 11px; font-size: 13px;" onclick="exportFullShopBackupJSON()">📥 Download Shop JSON Backup</button>
+                        <button class="btn btn-outline" style="padding: 11px; font-size: 13px;" onclick="document.getElementById('shopRestoreFileInput').click()">📤 Restore / Seed Shop from JSON</button>
+                    </div>
+                    <input type="file" id="shopRestoreFileInput" accept=".json" style="display: none;" onchange="handleRestoreShopBackup(event)">
+                    
+                    <div class="modal-actions">
+                        <button class="btn btn-outline" style="width: 100%;" onclick="closeCloudSyncDetailModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DETAIL SUB-MODAL: EXPENSES LEDGER -->
+            <div id="expensesDetailModal" class="modal-overlay" style="display: none;">
+                <div class="modal-box" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <div>
+                            <h2>🪙 Daily Expenses & Market Costs</h2>
+                            <p>Review kitchen supplies, market purchases, and daily overheads.</p>
+                        </div>
+                        <button class="modal-close-btn" onclick="closeExpensesDetailModal()">✕</button>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span id="expensesModalTotal" style="font-weight: 800; color: var(--danger); font-size: 16px;">Today's Total: ₹0.00</span>
+                        <button class="btn btn-danger" style="font-size: 12px; padding: 7px 14px; border-radius: 12px;" onclick="openQuickExpenseModal()">➕ Add Expense</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead><tr><th>Time</th><th>Item / Vendor</th><th>Amount</th><th>Actions</th></tr></thead>
+                            <tbody id="expensesTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-outline" style="width: 100%;" onclick="closeExpensesDetailModal()">Done</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 🖨️ PRINT RECEIPT TEMPLATE -->
+    <div id="print-receipt" style="display: none;">
+        <div class="print-center">
+            <img id="printLogo" src="" alt="Logo">
+            <h2 id="printShopName" style="margin: 0;"></h2>
+            <p id="printShopAddress" style="margin: 5px 0; font-size: 12px;"></p>
+            <p id="printFssai" style="margin: 0; font-size: 11px; color: #444;"></p>
+            <p id="printGstin" style="margin: 0; font-size: 11px; color: #444;"></p>
+            <div class="print-line"></div>
+            <p style="font-size: 16px; font-weight: bold; margin: 5px 0;">Invoice: #<span id="printBillNo"></span></p>
+            <p style="font-size: 14px; margin: 2px 0;" id="printTableNoRow">Table: <span id="printTableNo"></span></p>
+            <p id="printDate" class="print-meta"></p>
+            <p class="print-meta">Type: <span id="printOrderType"></span></p>
+            <p class="print-meta">Payment: <span id="printPayMode"></span></p>
+            <p class="print-meta" id="printCustomerRow" style="display:none;">Customer: <span id="printCustomer"></span></p>
+            <p class="print-meta" id="printBillerRow" style="display:none;">Biller: <span id="printBiller"></span></p>
+            <div class="print-line"></div>
+        </div>
+        <div id="printItems"></div>
+        <div class="print-line"></div>
+        <div id="printSubtotalRow" class="print-row" style="display: none;"><span>Subtotal</span><span id="printSubtotal"></span></div>
+        <div id="printDiscountRow" class="print-row" style="display: none;"><span>Discount (<span id="printDiscountDesc"></span>)</span><span id="printDiscountAmt"></span></div>
+        <div id="printTaxRow" class="print-row" style="display: none;"><span>GST Tax</span><span id="printTax"></span></div>
+        <div class="print-row" style="font-weight: bold; font-size: 16px;"><span>GRAND TOTAL</span><span id="printTotal"></span></div>
+        <div id="printQrCode" style="display: none;"></div>
+        <div class="print-center" style="margin-top: 20px;"><p>Thank You!</p></div>
+    </div>
+
+    <!-- 🖨️ PRINT KOT TEMPLATE -->
+    <div id="print-kot" style="display: none;">
+        <div class="print-center">
+            <h2 style="margin: 0; border-bottom: 2px dashed #000; padding-bottom: 5px;">KITCHEN TICKET</h2>
+            <h1 style="margin: 10px 0; font-size: 28px;">TABLE: <span id="printKotTableNo"></span></h1>
+            <p style="margin: 0; font-weight: bold;">Time: <span id="printKotTime"></span></p>
+            <div class="print-line" style="border-bottom: 2px solid #000;"></div>
+        </div>
+        <div id="printKotItems" style="font-size: 16px; font-weight: bold; margin-top: 15px;"></div>
+        <div class="print-line" style="border-bottom: 2px solid #000; margin-top: 15px;"></div>
+        <div class="print-center" style="margin-top: 10px;"><p>*** END OF KOT ***</p></div>
+    </div>
+
+    <!-- 📱 MOBILE SLIDE MENU DRAWER & OVERLAY -->
+    <div id="mobileSlideMenuOverlay" class="slide-menu-overlay" onclick="toggleMobileSlideMenu(false)"></div>
+    <div id="mobileSlideMenuDrawer" class="slide-menu-drawer">
+        <div class="slide-menu-header">
+            <div style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="openStoreProfileModal(); toggleMobileSlideMenu(false);" title="Click to change business name">
+                <div class="topbar-logo-icon">☕</div>
+                <div>
+                    <div id="slideMenuStoreName" style="font-weight: 800; font-size: 16px; color: var(--primary);">billnaw</div>
+                    <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Restaurant POS Terminal • Edit ✏️</div>
+                </div>
+            </div>
+            <button type="button" class="slide-menu-close-btn" onclick="toggleMobileSlideMenu(false)">✕</button>
+        </div>
+        <div class="slide-menu-nav">
+            <button type="button" class="slide-nav-item active" onclick="switchTab('pos'); toggleMobileSlideMenu(false);">
+                <span class="icon">⊞</span> POS Terminal
+            </button>
+            <button type="button" class="slide-nav-item" onclick="switchTab('menu'); toggleMobileSlideMenu(false);">
+                <span class="icon">📜</span> Menu Catalog & AI Ingest
+            </button>
+            <button type="button" class="slide-nav-item" onclick="switchTab('customers'); toggleMobileSlideMenu(false);">
+                <span class="icon">👥</span> Customers & Loyalty
+            </button>
+            <button type="button" class="slide-nav-item" onclick="switchTab('customers'); toggleMobileSlideMenu(false); setTimeout(() => document.getElementById('aiWhatsAppMarketingHub')?.scrollIntoView({behavior:'smooth'}), 150);">
+                <span class="icon">💬</span> WhatsApp Marketing Hub
+            </button>
+            <button type="button" class="slide-nav-item" onclick="switchTab('inventory'); toggleMobileSlideMenu(false);">
+                <span class="icon">📦</span> Stock & Telemetry
+            </button>
+            <button type="button" class="slide-nav-item" onclick="switchTab('dashboard'); toggleMobileSlideMenu(false);">
+                <span class="icon">📊</span> Business Insights
+            </button>
+            <button type="button" class="slide-nav-item" onclick="switchTab('settings'); toggleMobileSlideMenu(false);">
+                <span class="icon">⚙️</span> Terminal Settings
+            </button>
+            <button type="button" class="slide-nav-item" onclick="openStoreProfileModal(); toggleMobileSlideMenu(false);">
+                <span class="icon">🏪</span> Change Business Name & Profile
+            </button>
+        </div>
+        <div class="slide-menu-footer">
+            <button type="button" class="btn btn-outline" style="width: 100%; border-radius: 12px; font-size: 12px; justify-content: center; margin-bottom: 8px;" onclick="openStaffSwitchModal(); toggleMobileSlideMenu(false);">
+                👤 Switch Staff (<span id="slideStaffName">Admin</span>)
+            </button>
+            <button type="button" class="btn btn-outline" style="width: 100%; border-radius: 12px; font-size: 12px; justify-content: center; color: var(--danger);" onclick="lockTerminal(); toggleMobileSlideMenu(false);">
+                🔒 Lock Terminal
+            </button>
+        </div>
+    </div>
+
+    <!-- 🔥 FIREBASE MODULE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+        import { 
+            getFirestore, 
+            doc, 
+            collection, 
+            onSnapshot, 
+            setDoc, 
+            updateDoc, 
+            deleteDoc, 
+            getDoc, 
+            getDocs, 
+            writeBatch,
+            serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+        // Fetch runtime config securely from backend endpoint
+        async function initFirebaseFromBackend() {
+            let firebaseConfig = {
+                apiKey: "AIzaSyCha9cL9MOmOZjweNd9ZXCX9V5sDh-RlAU",
+                authDomain: "abhi-pro-cafe-pos.firebaseapp.com",
+                projectId: "abhi-pro-cafe-pos",
+                storageBucket: "abhi-pro-cafe-pos.firebasestorage.app",
+                messagingSenderId: "323985422709",
+                appId: "1:323985422709:web:700b77f1a0ff4dc723bb3c"
+            };
+            let firestoreDbId = "ai-studio-billnawcafepos-3ac17879-08c8-4e15-9a3d-a965f7d92fda";
+
+            try {
+                const res = await fetch('/api/config/client');
+                if (res.ok) {
+                    const serverConfig = await res.json();
+                    if (serverConfig.projectId) {
+                        firebaseConfig = {
+                            apiKey: serverConfig.apiKey || firebaseConfig.apiKey,
+                            authDomain: serverConfig.authDomain || firebaseConfig.authDomain,
+                            projectId: serverConfig.projectId,
+                            storageBucket: serverConfig.storageBucket || firebaseConfig.storageBucket,
+                            messagingSenderId: serverConfig.messagingSenderId || firebaseConfig.messagingSenderId,
+                            appId: serverConfig.appId || firebaseConfig.appId
+                        };
+                    }
+                    if (serverConfig.firestoreDatabaseId) {
+                        firestoreDbId = serverConfig.firestoreDatabaseId;
+                    }
+                }
+            } catch (cfgErr) {
+                console.warn("Using bundled config fallback:", cfgErr);
+            }
+
+            const app = initializeApp(firebaseConfig);
+            let db;
+            try {
+                db = getFirestore(app, firestoreDbId);
+                console.log("Firestore initialized with custom db:", firestoreDbId);
+            } catch (e) {
+                console.warn("Falling back to default firestore database:", e);
+                db = getFirestore(app);
+            }
+
+            window.firebaseApp = app;
+            window.firestoreDB = db;
+            window.firestoreDoc = doc;
+            window.firestoreCollection = collection;
+            window.firestoreOnSnapshot = onSnapshot;
+            window.firestoreSetDoc = setDoc;
+            window.firestoreUpdateDoc = updateDoc;
+            window.firestoreDeleteDoc = deleteDoc;
+            window.firestoreGetDoc = getDoc;
+            window.firestoreGetDocs = getDocs;
+            window.firestoreWriteBatch = writeBatch;
+            window.firestoreServerTimestamp = serverTimestamp;
+            window.firestoreDatabaseId = firestoreDbId;
+
+            // Legacy compatibility
+            window.firebaseDB = db;
+            window.dispatchEvent(new Event('firebaseLoaded'));
+        }
+
+        initFirebaseFromBackend();
+    </script>
+    
+    <!-- 📲 SERVICE WORKER REGISTRATION & AUTO-UPDATE LISTENER -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => {
+                        console.log('[SW] ServiceWorker registered with scope:', reg.scope);
+                        // Check for SW updates periodically
+                        setInterval(() => {
+                            reg.update().catch(() => {});
+                        }, 10 * 60 * 1000);
+                    })
+                    .catch(err => {
+                        console.warn('[SW] Registration failed:', err);
+                    });
+
+                // Auto-refresh when new deployment service worker takes control
+                let refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (!refreshing) {
+                        refreshing = true;
+                        console.log('[SW] New deployment detected, refreshing for latest version...');
+                        window.location.reload();
+                    }
+                });
+
+                // Receive messages from SW
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    if (event.data && event.data.type === 'DEPLOY_CACHE_UPDATED') {
+                        console.log('[SW] Deploy cache updated to:', event.data.version);
+                    }
+                });
+            });
+        }
+    </script>
+    <script src="js/core.js?v=2500"></script>
+    <script src="js/staff.js?v=2500"></script>
+    <script src="js/pos.js?v=2500"></script>
+    <script src="js/menu.js?v=2500"></script>
+    <script src="js/customers.js?v=2500"></script>
+    <script src="js/dashboard.js?v=2500"></script>
+    <script src="js/marketing_inventory.js?v=2500"></script>
+    <script src="js/settings.js?v=2500"></script>
+    <script src="app.js?v=2500"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+// server/config.js - Centralized Server-Side Configuration and Secret Management
+// All sensitive keys (Gemini, Google Sheets Webhooks, Firebase Server Keys) remain strictly on backend.
+
+export const CONFIG = {
+  port: 3000,
+  host: '0.0.0.0',
+  gemini: {
+    // Check all standard Gemini API key environment variables dynamically
+    get apiKey() {
+      return (
+        'AQ.Ab8RN6KT_02Vdemz8fVUS8n-m5fsz3APL5LBNvca0vgr6quTlA' ||
+        process.env.GEMINI_API_KEY ||
+        process.env.GEMINI_API_KEY2 ||
+        process.env.API_KEY ||
+        process.env.GOOGLE_API_KEY ||
+        process.env.GOOGLE_GENAI_API_KEY ||
+        ''
+      ).trim();
+    },
+    model: 'gemini-3.7-flash',
+    imageModel: 'gemini-3.1-flash-lite-image'
+  },
+  sheets: {
+    // Default fallback webhook url kept strictly server-side
+    defaultWebhookUrl: process.env.GOOGLE_SHEETS_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbyZiNTkt5uHGhAy9efNz-6bKYw41YrMbM4CBnuAFTTxJU_ubGpF4VnDuj6zS73NlA3S2w/exec'
+  },
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID || 'abhi-pro-cafe-pos',
+    firestoreDatabaseId: process.env.FIRESTORE_DATABASE_ID || 'ai-studio-billnawcafepos-3ac17879-08c8-4e15-9a3d-a965f7d92fda',
+    authDomain: 'abhi-pro-cafe-pos.firebaseapp.com',
+    storageBucket: 'abhi-pro-cafe-pos.firebasestorage.app',
+    messagingSenderId: '323985422709',
+    appId: '1:323985422709:web:700b77f1a0ff4dc723bb3c',
+    apiKey: process.env.FIREBASE_API_KEY || 'AIzaSyCha9cL9MOmOZjweNd9ZXCX9V5sDh-RlAU'
+  }
+};

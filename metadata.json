@@ -1,0 +1,6 @@
+{
+  "name": "billnaw POS",
+  "description": "billnaw point-of-sale terminal with billing, customer directory & loyalty tracking, AI-driven WhatsApp marketing, table management, KOT, expense tracking, and reporting.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

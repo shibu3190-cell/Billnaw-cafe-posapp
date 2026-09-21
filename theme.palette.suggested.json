@@ -1,0 +1,45 @@
+{
+  "theme_name": "Eye-Comfort High-Contrast Terminal Variant (Advisory)",
+  "version": "1.0.0",
+  "description": "Advisory palette variant providing reduced visual fatigue for 12+ hour high-intensity cashier terminal shifts. Retains billnaw brand warmth while softening background glare and maximizing WCAG AAA legibility.",
+  "tokens": {
+    "colors": {
+      "primary": "#2D1F18",
+      "primary_dark": "#1C120D",
+      "primary_light": "#422E24",
+      "brand_accent": "#7D4F42",
+      "background_body": "#F3ECE6",
+      "background_surface": "#FAF6F2",
+      "background_card": "#FFFFFF",
+      "background_terminal_ledger": "#FDFBF9",
+      "text_primary": "#1E140F",
+      "text_secondary": "#6B6058",
+      "text_muted": "#8C8178",
+      "border_subtle": "#E5DCD3",
+      "border_strong": "#D4C7BA",
+      "status_success": "#246633",
+      "status_danger": "#A02B2B",
+      "status_warning": "#BF7816",
+      "status_info": "#205885"
+    },
+    "spacing_tokens": {
+      "grid_base": "8px",
+      "outer_margin_desktop": "24px",
+      "outer_margin_mobile": "16px",
+      "container_padding_sm": "8px",
+      "container_padding_md": "16px",
+      "container_padding_lg": "24px",
+      "container_padding_xl": "32px",
+      "action_bar_height": "64px"
+    },
+    "typography": {
+      "font_family": "'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      "weights": {
+        "bold": 700,
+        "semi_bold": 600,
+        "regular": 400
+      }
+    }
+  },
+  "deployment_note": "As per Theme Preservation & Suggestion Rule, active production theme remains untouched until client approves switching to this variant."
+}

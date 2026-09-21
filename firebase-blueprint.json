@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "shopProfile": {
+      "title": "Shop Profile",
+      "description": "Store settings, identity, and hardware options",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "licenseKey": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "fssai": { "type": "string" },
+        "gstin": { "type": "string" },
+        "tableCount": { "type": "number" },
+        "startInvoiceNo": { "type": "number" },
+        "adminPinHash": { "type": "string" },
+        "upiId": { "type": "string" },
+        "showQr": { "type": "boolean" },
+        "sheetsWebhookUrl": { "type": "string" },
+        "aiMonthlyLimit": { "type": "number" },
+        "customGeminiKey": { "type": "string" },
+        "aiUsageCount": { "type": "number" },
+        "aiUsageMonth": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "staffMember": {
+      "title": "Staff Member",
+      "description": "Store staff and team member mapped to the shop",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "phone": { "type": "string" },
+        "pin": { "type": "string" },
+        "status": { "type": "string" },
+        "joinedDate": { "type": "string" }
+      },
+      "required": ["id", "name", "role", "pin"]
+    },
+    "customerRecord": {
+      "title": "Customer Record",
+      "description": "Customer contact and loyalty history profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "notes": { "type": "string" },
+        "totalVisits": { "type": "number" },
+        "totalSpend": { "type": "number" },
+        "loyaltyPoints": { "type": "number" },
+        "lastVisitDate": { "type": "string" },
+        "createdDate": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "menuItem": {
+      "title": "Menu Item",
+      "description": "Food and beverage item with pricing and stock",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "gstRate": { "type": "number" },
+        "trackStock": { "type": "boolean" },
+        "stockQty": { "type": "number" },
+        "image": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "price"]
+    },
+    "orderRecord": {
+      "title": "Order Record",
+      "description": "Completed transaction log for billing & reporting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "billNo": { "type": "number" },
+        "date": { "type": "string" },
+        "filterDate": { "type": "string" },
+        "table": { "type": "string" },
+        "orderType": { "type": "string" },
+        "paymentMode": { "type": "string" },
+        "customer": { "type": "string" },
+        "customerId": { "type": "number" },
+        "biller": { "type": "string" },
+        "staffId": { "type": "number" },
+        "items": { "type": "string" },
+        "amount": { "type": "number" }
+      },
+      "required": ["id", "billNo", "amount"]
+    },
+    "expenseRecord": {
+      "title": "Expense Record",
+      "description": "Daily cafe costs and purchases",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "cost": { "type": "number" },
+        "time": { "type": "string" },
+        "date": { "type": "string" },
+        "filterDate": { "type": "string" }
+      },
+      "required": ["id", "name", "cost"]
+    },
+    "tableState": {
+      "title": "Table State",
+      "description": "Live status and active cart items for a dining table",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" },
+        "savedTime": { "type": "string" },
+        "lastReminder": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/clients/{clientId}": {
+      "schema": { "$ref": "#/entities/shopProfile" },
+      "description": "Store settings, identity, and hardware options"
+    },
+    "/clients/{clientId}/staff/{staffId}": {
+      "schema": { "$ref": "#/entities/staffMember" },
+      "description": "Staff and team members mapped to this shop"
+    },
+    "/clients/{clientId}/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/customerRecord" },
+      "description": "Customer contact and loyalty history profile"
+    },
+    "/clients/{clientId}/menu/{itemId}": {
+      "schema": { "$ref": "#/entities/menuItem" },
+      "description": "Menu catalog and inventory items"
+    },
+    "/clients/{clientId}/history/{orderId}": {
+      "schema": { "$ref": "#/entities/orderRecord" },
+      "description": "Completed transaction log for billing & reporting"
+    },
+    "/clients/{clientId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/expenseRecord" },
+      "description": "Daily cafe costs and purchases"
+    },
+    "/clients/{clientId}/tables/{tableId}": {
+      "schema": { "$ref": "#/entities/tableState" },
+      "description": "Real-time table dining and KOT state"
+    }
+  }
+}
