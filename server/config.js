@@ -2,8 +2,8 @@
 // All sensitive keys (Gemini, Google Sheets Webhooks, Firebase Server Keys) remain strictly on backend.
 
 export const CONFIG = {
-  port: 3000,
-  host: '0.0.0.0',
+  port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
+  host: process.env.HOST || '0.0.0.0',
   gemini: {
     // Check all standard Gemini API key environment variables dynamically
     get apiKey() {

@@ -669,7 +669,6 @@ function saveTableSettings() {
     showToast("✅ Table tabs & seating saved successfully!");
 }
 window.saveTableSettings = saveTableSettings;
-window.closePaymentConfigModal = closePaymentConfigModal;
 
 function openCloudSyncDetailModal() {
     const el = document.getElementById('cloudSyncDetailModal');

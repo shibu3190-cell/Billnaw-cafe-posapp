@@ -29,7 +29,17 @@ window.renderCategoryFilters = renderCategoryFilters;
 function renderCategoryListUI() {
     const container = document.getElementById('categoryListUI');
     if (container) {
-        container.innerHTML = menuCategories.map(c => `<span class="cat-chip" style="display:inline-flex; align-items:center; gap:8px;">${escapeHtml(c)} <b style="color:var(--danger); cursor:pointer; font-size:16px;" onclick="deleteCategory('${escapeHtml(c)}')">×</b></span>`).join('');
+        container.innerHTML = menuCategories.map(c => `
+            <span class="category-manage-chip">
+                <span>${escapeHtml(c)}</span>
+                ${c !== 'All' ? `<button type="button" class="del-btn" onclick="deleteCategory('${escapeHtml(c)}')" title="Delete Category ${escapeHtml(c)}">✕</button>` : ''}
+            </span>
+        `).join('');
+    }
+    const catCountBadge = document.getElementById('categoryCountBadge');
+    if (catCountBadge) {
+        const count = menuCategories.filter(c => c !== 'All').length;
+        catCountBadge.innerText = `${count} Categor${count === 1 ? 'y' : 'ies'}`;
     }
 }
 window.renderCategoryListUI = renderCategoryListUI;
@@ -102,6 +112,7 @@ function renderMenuUI() {
                     ${imageHtml}
                     ${popularBadge}
                     ${item.trackStock && item.stockQty <= 5 && item.stockQty > 0 ? `<div class="stock-badge low">${item.stockQty} left</div>` : (item.trackStock && item.stockQty > 5 ? `<div class="stock-badge">${item.stockQty} left</div>` : '')}
+                    <div class="card-img-price-pill">₹${Number(item.price).toFixed(0)}</div>
                 </div>
                 <div class="card-content">
                     <div class="card-top-row">
@@ -126,32 +137,82 @@ function renderMenuUI() {
 }
 window.renderMenuUI = renderMenuUI;
 
+function filterCatalogTable() {
+    renderMenuCatalogUI();
+}
+window.filterCatalogTable = filterCatalogTable;
+
 function renderMenuCatalogUI() {
     const menuTable = document.getElementById('menuTableBody');
     if (!menuTable) return;
     const { mode: gstCurrentMode, defaultRate: gstStoreRate } = getStoreGstConfig();
-    menuTable.innerHTML = menuItems.map(item => {
+
+    const searchInput = document.getElementById('catalogSearchInput');
+    const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+
+    let itemsToRender = menuItems;
+    if (query) {
+        itemsToRender = menuItems.filter(i => 
+            (i.name && i.name.toLowerCase().includes(query)) ||
+            (i.category && i.category.toLowerCase().includes(query))
+        );
+    }
+
+    const countBadge = document.getElementById('catalogItemCountBadge');
+    if (countBadge) {
+        countBadge.innerText = query ? `${itemsToRender.length} of ${menuItems.length} Items` : `${menuItems.length} Item${menuItems.length === 1 ? '' : 's'}`;
+    }
+
+    if (itemsToRender.length === 0) {
+        menuTable.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 32px 16px; color: var(--text-muted); font-size: 13px;">No menu items found matching "${escapeHtml(query)}".</td></tr>`;
+        return;
+    }
+
+    menuTable.innerHTML = itemsToRender.map(item => {
         let gstDisplay = '';
         if (gstCurrentMode === 'none') {
-            gstDisplay = '<span style="color:var(--text-muted); font-size:12px; font-weight:600;">0% (Exempt)</span>';
+            gstDisplay = '<span class="stock-pill stock-pill-unlimited">0% Exempt</span>';
         } else if (gstCurrentMode === 'exclusive') {
             const r = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : gstStoreRate;
-            gstDisplay = `<span style="color:var(--warning); font-size:12px; font-weight:700;">+${r}% (Excl)</span>`;
+            gstDisplay = `<span class="stock-pill stock-pill-low">+${r}% Excl</span>`;
         } else {
             const r = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : gstStoreRate;
-            gstDisplay = `<span style="color:var(--success); font-size:12px; font-weight:700;">${r}% (Incl)</span>`;
+            gstDisplay = `<span class="stock-pill stock-pill-in">${r}% Incl</span>`;
         }
+
+        let stockDisplay = '';
+        if (!item.trackStock) {
+            stockDisplay = '<span class="stock-pill stock-pill-unlimited">∞ Unlimited</span>';
+        } else if (item.stockQty > 5) {
+            stockDisplay = `<span class="stock-pill stock-pill-in">${item.stockQty} in stock</span>`;
+        } else if (item.stockQty > 0) {
+            stockDisplay = `<span class="stock-pill stock-pill-low">${item.stockQty} low</span>`;
+        } else {
+            stockDisplay = '<span class="stock-pill stock-pill-out">Out of stock</span>';
+        }
+
         const thumbSrc = item.image || generateFallbackImage(item.name);
         return `<tr>
-            <td><img src="${thumbSrc}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid var(--border);" onerror="this.src=generateFallbackImage('${escapeHtml(item.name)}')"></td>
-            <td style="font-weight:600; color:var(--text-dark);">${escapeHtml(item.name)}</td>
-            <td><span class="cat-label" style="display:inline-block; font-size:11px;">${escapeHtml(item.category)}</span></td>
-            <td style="font-weight:700; color:var(--primary); font-size:14px;">₹${Number(item.price).toFixed(2)}</td>
-            <td>${gstDisplay}</td>
-            <td>${item.trackStock ? item.stockQty : '∞'}</td>
+            <td style="width: 48px;">
+                <img src="${thumbSrc}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display: block;" onerror="this.src=generateFallbackImage('${escapeHtml(item.name)}')">
+            </td>
             <td>
-                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 13px;" onclick="editMenuItem(${item.id})">Edit</button>
-                <button class="btn btn-danger" style="padding: 6px 10px; font-size: 13px;" onclick="deleteMenuItem(${item.id})">Del</button>
+                <div style="font-weight: 700; color: var(--text-dark);">${escapeHtml(item.name)}</div>
+                ${item.badge ? `<span style="font-size: 9px; font-weight: 800; color: var(--accent); text-transform: uppercase;">${escapeHtml(item.badge)}</span>` : ''}
+            </td>
+            <td><span class="cat-label" style="display:inline-block; font-size:11px; padding: 2px 6px; background: #FAF7F4; border-radius: 6px; border: 1px solid var(--border);">${escapeHtml(item.category)}</span></td>
+            <td style="font-weight:700; color:var(--primary); font-size:14px; font-variant-numeric: tabular-nums;">₹${Number(item.price).toFixed(2)}</td>
+            <td>${gstDisplay}</td>
+            <td>${stockDisplay}</td>
+            <td>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <button type="button" class="catalog-action-btn" onclick="editMenuItem(${item.id})" title="Edit Item ${escapeHtml(item.name)}">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                    </button>
+                    <button type="button" class="catalog-action-btn delete-btn" onclick="deleteMenuItem(${item.id})" title="Delete Item">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
             </td>
         </tr>`;
     }).join('');
@@ -169,11 +230,11 @@ function syncMenuUIQuantities() {
 
         let buttonHtml = '';
         if (item.trackStock && item.stockQty <= 0) {
-            buttonHtml = `<button class="add-btn" style="background:var(--border); color:var(--text-muted);">OUT</button>`;
+            buttonHtml = `<button type="button" class="add-btn" style="background:var(--border); color:var(--text-muted); cursor:not-allowed;" disabled>OUT</button>`;
         } else if (qtyInCart > 0) {
-            buttonHtml = `<div class="item-qty-control" onclick="event.stopPropagation()"><button onclick="modifyQty(${item.id}, -1, event)">−</button><span>${qtyInCart}</span><button onclick="addToCart(${item.id}, event)">+</button></div>`;
+            buttonHtml = `<div class="item-qty-control" onclick="event.stopPropagation()"><button type="button" onclick="modifyQty(${item.id}, -1, event)" aria-label="Decrease quantity">−</button><span>${qtyInCart}</span><button type="button" onclick="addToCart(${item.id}, event)" aria-label="Increase quantity">+</button></div>`;
         } else {
-            buttonHtml = `<button class="add-btn" onclick="addToCart(${item.id}, event)">+ ADD</button>`;
+            buttonHtml = `<button type="button" class="add-btn" onclick="addToCart(${item.id}, event)">+ ADD</button>`;
         }
         if (wrapper.innerHTML !== buttonHtml) { wrapper.innerHTML = buttonHtml; }
     });
@@ -199,42 +260,6 @@ function handleItemImageUpload(event) {
     reader.readAsDataURL(file);
 }
 window.handleItemImageUpload = handleItemImageUpload;
-
-function generateFallbackImage(name) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 400; canvas.height = 300;
-    const ctx = canvas.getContext('2d');
-    
-    // Warm gourmet culinary gradient
-    const gradient = ctx.createLinearGradient(0, 0, 400, 300);
-    gradient.addColorStop(0, '#5A3D31');
-    gradient.addColorStop(1, '#2E1E17'); 
-    ctx.fillStyle = gradient; 
-    ctx.fillRect(0, 0, 400, 300);
-    
-    // Background accent ring
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(200, 150, 90, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Dish emblem
-    ctx.fillStyle = '#FFFFFF'; 
-    ctx.font = 'bold 90px sans-serif';
-    ctx.textAlign = 'center'; 
-    ctx.textBaseline = 'middle';
-    ctx.fillText((name||"D").charAt(0).toUpperCase(), 200, 135);
-    
-    // Clean label at bottom
-    ctx.font = '600 16px sans-serif';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    const cleanLabel = (name || "Dish").substring(0, 20);
-    ctx.fillText(cleanLabel, 200, 220);
-
-    return canvas.toDataURL('image/jpeg', 0.85);
-}
-window.generateFallbackImage = generateFallbackImage;
 
 async function fetchImageAsBase64(promptText, itemName = '') {
     try {
@@ -675,17 +700,17 @@ function renderAiPreviewModal() {
         <div class="ai-review-item" id="ai-item-row-${index}">
             <div class="ai-item-thumb" onclick="triggerAiItemImageUpload(${index})" title="Click to upload or replace dish photo">
                 <img id="ai-item-img-${index}" src="${imgDisplay}" alt="${safeName}" onerror="this.src=generateFallbackImage('${safeName}')">
-                <div class="ai-thumb-badge" title="Upload dish photo">📷</div>
+                <div class="ai-thumb-badge" title="Upload dish photo"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></div>
             </div>
 
             <div class="ai-item-info">
                 <label>Item Name</label>
                 <input type="text" value="${safeName}" oninput="updatePendingItemField(${index}, 'name', this.value)" placeholder="Dish or Beverage Name" style="width: 100%; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-dark); background: #fff;">
-                <div style="display: flex; gap: 6px; align-items: center; margin-top: 2px; flex-wrap: wrap;">
-                    <button type="button" onclick="triggerAiItemImageUpload(${index})" style="background: none; border: none; font-size: 10px; color: var(--milk-choc); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600;">📁 Upload Photo</button>
+                <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px; flex-wrap: wrap;">
+                    <button type="button" onclick="triggerAiItemImageUpload(${index})" style="background: none; border: none; font-size: 11px; color: var(--milk-choc); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>Upload Photo</button>
                     <span style="color: var(--border); font-size: 10px;">•</span>
-                    <button type="button" onclick="generateAiItemPhoto(${index})" id="ai-gen-btn-${index}" style="background: none; border: none; font-size: 10px; color: var(--success); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600;">✨ AI Visual</button>
-                    ${item.hasCustomImage ? '<span style="font-size: 9px; color: var(--success); font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">✓ Attached</span>' : ''}
+                    <button type="button" onclick="generateAiItemPhoto(${index})" id="ai-gen-btn-${index}" style="background: none; border: none; font-size: 11px; color: var(--success); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>AI Visual</button>
+                    ${item.hasCustomImage ? '<span style="font-size: 10px; color: var(--success); font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">✓ Attached</span>' : ''}
                 </div>
             </div>
 
@@ -703,7 +728,7 @@ function renderAiPreviewModal() {
             </div>
 
             <div style="text-align: right;">
-                <button type="button" class="btn btn-danger" onclick="removePendingAiItem(${index})" style="padding: 0; width: 28px; height: 28px; border-radius: 7px; font-size: 12px; display: inline-flex; align-items: center; justify-content: center;" title="Remove this item">🗑️</button>
+                <button type="button" class="catalog-action-btn delete-btn" onclick="removePendingAiItem(${index})" style="width: 28px; height: 28px;" title="Remove this item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
             </div>
         </div>
         `;

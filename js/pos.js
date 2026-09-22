@@ -505,17 +505,40 @@ function updateCartUI() {
         }
     }
 
+    // 🧠 Factor 3: Psychological Loss Aversion Alert (Protects Diner Loyalty)
+    const lossAlertEl = document.getElementById('cartLossAversionAlert');
+    const lossAlertMsg = document.getElementById('cartLossAversionMsg');
+    if (lossAlertEl) {
+        const activeCust = getActiveTableCustomer();
+        if (currentCart.length > 0 && totals.finalTotal > 0) {
+            if (!activeCust || !activeCust.phone) {
+                const ptsEst = Math.max(1, Math.floor(totals.finalTotal / 50));
+                const cashEst = Math.max(5, Math.round(totals.finalTotal * 0.05));
+                if (lossAlertMsg) {
+                    lossAlertMsg.innerText = `Diner forfeits +${ptsEst} VIP points (~₹${cashEst} reward cash) if unlinked.`;
+                }
+                lossAlertEl.style.display = 'flex';
+            } else {
+                lossAlertEl.style.display = 'none';
+            }
+        } else {
+            lossAlertEl.style.display = 'none';
+        }
+    }
+
+    // 📊 Factor 4: Relative Evaluation Contrast (Transparent GST Percentage Framing)
     const gstBreakdownEl = document.getElementById('gstBreakdownUI');
     if (gstBreakdownEl) {
+        const taxPct = totals.finalTotal > 0 ? ((totals.totalTax / totals.finalTotal) * 100).toFixed(1) : '0';
         if (totals.gstMode === 'exclusive') {
-            gstBreakdownEl.innerText = totals.totalTax > 0 
-                ? `Subtotal ₹${totals.subtotal.toFixed(2)} + GST ₹${totals.totalTax.toFixed(2)}` 
+            gstBreakdownEl.innerHTML = totals.totalTax > 0 
+                ? `Subtotal ₹${totals.subtotal.toFixed(2)} + GST ₹${totals.totalTax.toFixed(2)} <span class="gst-pct-pill">Just ${taxPct}%</span>` 
                 : "No GST Applied";
         } else if (totals.gstMode === 'none') {
             gstBreakdownEl.innerText = "GST Exempt (0%)";
         } else {
-            gstBreakdownEl.innerText = totals.totalTax > 0 
-                ? `Includes ₹${totals.totalTax.toFixed(2)} GST` 
+            gstBreakdownEl.innerHTML = totals.totalTax > 0 
+                ? `Includes ₹${totals.totalTax.toFixed(2)} GST <span class="gst-pct-pill">Just ${taxPct}% of total</span>` 
                 : "No GST Applied";
         }
     }
@@ -619,6 +642,21 @@ function selectPayment(mode, context) {
         document.querySelectorAll('#checkoutModal .pay-btn').forEach(b => b.classList.remove('selected')); 
         const btn = document.getElementById('btnPay' + mode);
         if (btn) btn.classList.add('selected'); 
+
+        const cashWrap = document.getElementById('checkoutCashTenderContainer');
+        const upiWrap = document.getElementById('checkoutUpiQrContainer');
+        const cardWrap = document.getElementById('checkoutCardContainer');
+
+        if (cashWrap) cashWrap.style.display = mode === 'Cash' ? 'block' : 'none';
+        if (upiWrap) upiWrap.style.display = mode === 'UPI' ? 'flex' : 'none';
+        if (cardWrap) cardWrap.style.display = mode === 'Card' ? 'block' : 'none';
+
+        const cTot = parseFloat(document.getElementById('checkoutTotal')?.innerText) || 0;
+        if (mode === 'Cash') {
+            setupCheckoutTenderEngine(cTot);
+        } else if (mode === 'UPI') {
+            renderCheckoutUpiQr(cTot);
+        }
     } else if (context === 'edit') { 
         const editModeInput = document.getElementById('editSelectedPaymentMode');
         if (editModeInput) editModeInput.value = mode; 
@@ -628,6 +666,118 @@ function selectPayment(mode, context) {
     }
 }
 window.selectPayment = selectPayment;
+
+// ⚡ Factor 5: Fast Cash Tender Engine
+function setupCheckoutTenderEngine(orderTotal) {
+    const denomRow = document.getElementById('checkoutDenomPills');
+    const tenderInput = document.getElementById('checkoutCashTenderedInput');
+    if (!tenderInput) return;
+
+    tenderInput.value = orderTotal > 0 ? orderTotal.toFixed(2) : '';
+    onCashTenderedChange(tenderInput.value);
+
+    if (!denomRow) return;
+
+    const denoms = new Set();
+    denoms.add(Math.round(orderTotal * 100) / 100);
+
+    const steps = [10, 20, 50, 100, 200, 500, 2000];
+    steps.forEach(step => {
+        if (orderTotal < step) {
+            denoms.add(step);
+        } else {
+            const nextRound = Math.ceil(orderTotal / step) * step;
+            if (nextRound > orderTotal) denoms.add(nextRound);
+        }
+    });
+
+    const sorted = Array.from(denoms).sort((a, b) => a - b).slice(0, 5);
+
+    denomRow.innerHTML = sorted.map(d => {
+        const isExact = Math.abs(d - orderTotal) < 0.01;
+        const label = isExact ? `Exact (₹${orderTotal.toFixed(0)})` : `₹${d}`;
+        const activeClass = isExact ? 'active' : '';
+        return `<button type="button" class="denom-pill ${activeClass}" onclick="setTenderAmount(${d}, this)">${label}</button>`;
+    }).join('');
+}
+window.setupCheckoutTenderEngine = setupCheckoutTenderEngine;
+
+function setTenderAmount(amount, btnEl) {
+    const tenderInput = document.getElementById('checkoutCashTenderedInput');
+    if (tenderInput) {
+        tenderInput.value = Number(amount).toFixed(2);
+        onCashTenderedChange(tenderInput.value);
+    }
+    if (btnEl) {
+        document.querySelectorAll('#checkoutDenomPills .denom-pill').forEach(p => p.classList.remove('active'));
+        btnEl.classList.add('active');
+    }
+}
+window.setTenderAmount = setTenderAmount;
+
+function onCashTenderedChange(val) {
+    const orderTotal = parseFloat(document.getElementById('checkoutTotal')?.innerText) || 0;
+    const tendered = parseFloat(val) || 0;
+    const diff = tendered - orderTotal;
+
+    const dueBox = document.getElementById('checkoutChangeDueBox');
+    const dueLabel = document.getElementById('checkoutChangeDueLabel');
+    const dueDisplay = document.getElementById('checkoutChangeDueDisplay');
+
+    if (!dueBox || !dueDisplay) return;
+
+    if (diff >= 0) {
+        dueBox.classList.remove('shortage');
+        if (dueLabel) dueLabel.innerText = 'Change Due to Diner:';
+        dueDisplay.innerText = `₹${diff.toFixed(2)}`;
+    } else {
+        dueBox.classList.add('shortage');
+        if (dueLabel) dueLabel.innerText = 'Amount Short:';
+        dueDisplay.innerText = `₹${Math.abs(diff).toFixed(2)}`;
+    }
+
+    document.querySelectorAll('#checkoutDenomPills .denom-pill').forEach(p => {
+        const text = p.innerText;
+        if ((text.includes('Exact') && Math.abs(tendered - orderTotal) < 0.01) || text === `₹${tendered}`) {
+            p.classList.add('active');
+        } else {
+            p.classList.remove('active');
+        }
+    });
+}
+window.onCashTenderedChange = onCashTenderedChange;
+
+// 📱 Factor 5: In-Modal Dynamic UPI QR Preview
+function renderCheckoutUpiQr(amount) {
+    const canvasHolder = document.getElementById('checkoutModalQrCanvas');
+    const amtDisplay = document.getElementById('checkoutUpiAmtDisplay');
+    if (amtDisplay) amtDisplay.innerText = amount.toFixed(2);
+    if (!canvasHolder) return;
+    canvasHolder.innerHTML = '';
+
+    const upiId = shopProfile.upiId || '';
+    if (!upiId) {
+        canvasHolder.innerHTML = `<div style="padding: 16px 8px; color: var(--text-muted); font-size: 11px; max-width: 180px;">No UPI ID configured.<br><a href="#" onclick="document.getElementById('checkoutModal').style.display='none'; openSettingsModal(); return false;" style="color: var(--primary); font-weight: 700; text-decoration: underline; margin-top: 6px; display: inline-block;">Configure in Settings</a></div>`;
+        return;
+    }
+
+    const shopName = shopProfile.name || shopProfile.shopName || 'billnaw';
+    const upiString = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(shopName)}&am=${amount.toFixed(2)}&cu=INR`;
+
+    if (window.QRCode) {
+        new QRCode(canvasHolder, {
+            text: upiString,
+            width: 160,
+            height: 160,
+            colorDark: "#2B1C15",
+            colorLight: "#FFFFFF",
+            correctLevel: QRCode.CorrectLevel.M
+        });
+    } else {
+        canvasHolder.innerHTML = `<div style="font-size:11px; color:var(--text-muted);">QR Code Generator Loading...</div>`;
+    }
+}
+window.renderCheckoutUpiQr = renderCheckoutUpiQr;
 
 function openCheckoutModal() {
     let tInfo = tablesInfo[activeTable]; 
@@ -657,9 +807,10 @@ function openCheckoutModal() {
         }
         if (discAmtEl) discAmtEl.innerText = `-₹${totals.discountAmount.toFixed(2)}`;
         if (gstNoteEl) {
-            gstNoteEl.innerText = totals.gstMode === 'exclusive' 
-                ? `+₹${totals.totalTax.toFixed(2)} GST Added` 
-                : (totals.gstMode === 'none' ? 'Tax Exempt' : `Includes ₹${totals.totalTax.toFixed(2)} GST`);
+            const taxPct = totals.finalTotal > 0 ? ((totals.totalTax / totals.finalTotal) * 100).toFixed(1) : '0';
+            gstNoteEl.innerHTML = totals.gstMode === 'exclusive' 
+                ? `+₹${totals.totalTax.toFixed(2)} GST Added <span class="gst-pct-pill">Just ${taxPct}%</span>` 
+                : (totals.gstMode === 'none' ? 'Tax Exempt' : `Includes ₹${totals.totalTax.toFixed(2)} GST <span class="gst-pct-pill">Just ${taxPct}%</span>`);
         }
     } else {
         if (discBox) discBox.style.display = 'none';
@@ -667,6 +818,7 @@ function openCheckoutModal() {
     }
     
     selectPayment('Cash', 'checkout');
+    setupCheckoutTenderEngine(totals.finalTotal);
     
     if (typeof populateCheckoutCustomerDropdown === 'function') {
         populateCheckoutCustomerDropdown();
@@ -745,6 +897,9 @@ async function confirmCheckout() {
 
         const oType = document.getElementById('checkoutOrderType')?.value || 'Dine-In'; 
         const pMode = document.getElementById('selectedPaymentMode')?.value || 'Cash';
+        const tenderVal = parseFloat(document.getElementById('checkoutCashTenderedInput')?.value);
+        const amountTendered = pMode === 'Cash' ? (!isNaN(tenderVal) ? tenderVal : total) : total;
+        const changeReturned = pMode === 'Cash' ? Math.max(0, amountTendered - total) : 0;
         const cName = document.getElementById('checkoutCustomerName')?.value.trim() || '';
         const cId = document.getElementById('checkoutCustomerId')?.value || '';
         const bName = document.getElementById('checkoutBillerName')?.value.trim() || (currentStaff?.name || 'Admin');
@@ -765,6 +920,8 @@ async function confirmCheckout() {
             tableId: activeTable,
             orderType: oType, 
             paymentMode: pMode, 
+            amountTendered: amountTendered,
+            changeReturned: changeReturned,
             customer: cName, 
             biller: bName, 
             items: itemNames, 
@@ -1064,6 +1221,12 @@ async function sendEscPosToPrinter(order) {
                 }
                 printItemsEl.innerHTML += htmlGstContent;
             }
+
+            if (order.paymentMode === 'Cash' && order.amountTendered && order.amountTendered > order.amount) {
+                printItemsEl.innerHTML += `<div class="print-line"></div>`;
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Cash Tendered</span><span>₹${Number(order.amountTendered).toFixed(2)}</span></div>`;
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#266838;"><span>Change Due</span><span>₹${Number(order.changeReturned).toFixed(2)}</span></div>`;
+            }
         }
         const pTot = document.getElementById('printTotal'); if (pTot) pTot.innerText = `₹${order.amount.toFixed(2)}`;
         
@@ -1135,6 +1298,13 @@ async function sendEscPosToPrinter(order) {
 
     receiptText += ALIGN_CENTER + DOUBLE_SIZE + BOLD_ON + `TOTAL: Rs.${order.amount.toFixed(2)}\n` + NORMAL_SIZE + BOLD_OFF;
     receiptText += '--------------------------------\n';
+
+    if (order.paymentMode === 'Cash' && order.amountTendered && order.amountTendered > order.amount) {
+        receiptText += ALIGN_LEFT;
+        receiptText += `Cash Tendered:`.padEnd(20, ' ') + `Rs.${Number(order.amountTendered).toFixed(2)}`.padStart(12, ' ') + '\n';
+        receiptText += `Change Due:`.padEnd(20, ' ') + `Rs.${Number(order.changeReturned).toFixed(2)}`.padStart(12, ' ') + '\n';
+        receiptText += '--------------------------------\n';
+    }
 
     let payloads = [];
     
