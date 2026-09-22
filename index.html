@@ -93,7 +93,7 @@
                         <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">Log market supplies, raw materials, wages, or overheads</p>
                     </div>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="closeQuickExpenseModal()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeQuickExpenseModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <input type="hidden" id="quickExpenseEditId">
             <div class="form-group">
@@ -149,7 +149,7 @@
                         <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">Configure dish pricing, portions, stock, and media</p>
                     </div>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="document.getElementById('menuItemModal').style.display='none'">✕</button>
+                <button type="button" class="modal-close-btn" onclick="document.getElementById('menuItemModal').style.display='none'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             
             <!-- Media & Photo Sourcing Toggles -->
@@ -263,7 +263,7 @@
                         <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">Menu Digitization & Visual Extraction Status</p>
                     </div>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="closeAiPreConvertModal()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeAiPreConvertModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
 
             <div style="background: #FFF8E1; border: 1px solid #FFE082; border-left: 4px solid #FFA000; border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
@@ -313,7 +313,7 @@
                         <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">Review item names, rates, and dish photos before catalog import</p>
                     </div>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="closeAiPreviewModal()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeAiPreviewModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
 
             <!-- Compact Scanned Menu Document Preview for easy cross-reference -->
@@ -366,7 +366,7 @@
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                     <span>Scanned Menu Document</span>
                 </h3>
-                <button type="button" class="modal-close-btn" onclick="closeAiMenuZoomModal()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeAiMenuZoomModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div style="overflow: auto; max-height: 75vh; border-radius: 8px;">
                 <img id="aiMenuZoomImg" src="" alt="Full Scanned Menu" style="max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: 6px;">
@@ -378,7 +378,10 @@
     <div id="customerModal" class="modal-overlay" style="display: none;">
         <div class="modal-box" style="max-width: 440px;">
             <div class="modal-header">
-                <h2 id="customerModalTitle">➕ Add Customer</h2>
+                <h2 id="customerModalTitle" style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                    <span>Add Customer</span>
+                </h2>
                 <p>Store customer profile and contact info for instant checkout.</p>
             </div>
             <input type="hidden" id="customerEditId">
@@ -408,7 +411,10 @@
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline" onclick="closeCustomerModal()">Cancel</button>
-                <button type="button" class="btn btn-success" style="flex: 2;" onclick="saveCustomer()">💾 Save Customer</button>
+                <button type="button" class="btn btn-success" style="flex: 2; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="saveCustomer()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    <span>Save Customer</span>
+                </button>
             </div>
         </div>
     </div>
@@ -424,7 +430,7 @@
                     <h2 id="cActionModalName" style="margin: 0; font-size: 18px; font-weight: 800; color: var(--primary);">Customer Profile</h2>
                     <p id="cActionModalSub" style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-muted);">Manage customer, view bills, or dispatch WhatsApp / text</p>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="closeCustomerActionHub()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeCustomerActionHub()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
 
             <div style="overflow-y: auto; flex: 1; padding: 12px 0 4px 0;">
@@ -439,28 +445,28 @@
                         </div>
                     </div>
                     <div style="text-align: right;">
-                        <span id="cActionTierBadge" class="cust-badge tier-gold">⭐ Gold</span>
-                        <div id="cActionPoints" style="font-size: 12px; font-weight: 700; color: var(--warning); margin-top: 3px;">🪙 0 pts</div>
+                        <span id="cActionTierBadge" class="cust-badge tier-gold"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg> <span>Gold</span></span>
+                        <div id="cActionPoints" style="font-size: 12px; font-weight: 700; color: var(--warning); margin-top: 3px; display: inline-flex; align-items: center; gap: 3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg><span>0 pts</span></div>
                         <div id="cActionSpend" style="font-size: 11px; color: var(--success); font-weight: 700; margin-top: 2px;">Spent: ₹0.00</div>
                     </div>
                 </div>
 
                 <!-- 4 Quick Actions (History, Bill, Edit, Delete) -->
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px;">
-                    <button type="button" class="btn btn-outline" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 4px;" onclick="handleCustomerHubAction('history')" title="View Purchase & Order History">
-                        <span style="font-size: 18px;">📜</span>
+                    <button type="button" class="btn btn-outline hub-action-btn" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 5px;" onclick="handleCustomerHubAction('history')" title="View Purchase & Order History">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                         <strong>History</strong>
                     </button>
-                    <button type="button" class="btn btn-outline" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 4px;" onclick="handleCustomerHubAction('bill')" title="Start Order & Bill for this Customer">
-                        <span style="font-size: 18px;">🛒</span>
+                    <button type="button" class="btn btn-outline hub-action-btn" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 5px;" onclick="handleCustomerHubAction('bill')" title="Start Order & Bill for this Customer">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
                         <strong>Bill</strong>
                     </button>
-                    <button type="button" class="btn btn-outline" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 4px;" onclick="handleCustomerHubAction('edit')" title="Edit Profile Details">
-                        <span style="font-size: 18px;">✏️</span>
+                    <button type="button" class="btn btn-outline hub-action-btn" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 5px;" onclick="handleCustomerHubAction('edit')" title="Edit Profile Details">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                         <strong>Edit</strong>
                     </button>
-                    <button type="button" class="btn btn-danger" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 4px; background: #C55335;" onclick="handleCustomerHubAction('delete')" title="Delete Customer">
-                        <span style="font-size: 18px;">🗑️</span>
+                    <button type="button" class="btn btn-danger hub-action-btn" style="flex-direction: column; padding: 10px 4px; border-radius: 12px; font-size: 11px; gap: 5px; background: #C55335;" onclick="handleCustomerHubAction('delete')" title="Delete Customer">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                         <strong>Delete</strong>
                     </button>
                 </div>
@@ -469,7 +475,7 @@
                 <div style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 14px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 18px;">💬</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                             <strong style="font-size: 14px; color: var(--primary);">Send WhatsApp or Text Message</strong>
                         </div>
                         <div style="display: flex; gap: 4px;">
@@ -482,14 +488,16 @@
                     <textarea id="cActionMessageInput" rows="5" class="form-group" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; line-height: 1.45; font-family: inherit; resize: vertical; margin-bottom: 12px;" placeholder="Type customized message..."></textarea>
 
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button type="button" class="btn btn-success" style="flex: 1; border-radius: 10px; justify-content: center;" onclick="sendCustomerWhatsAppDirect()">
-                            💬 Send via WhatsApp
+                        <button type="button" class="btn btn-success" style="flex: 1; border-radius: 10px; justify-content: center; display: inline-flex; align-items: center; gap: 6px;" onclick="sendCustomerWhatsAppDirect()">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            <span>Send via WhatsApp</span>
                         </button>
-                        <button type="button" class="btn btn-outline" style="flex: 1; border-radius: 10px; justify-content: center;" onclick="sendCustomerTextSMSDirect()">
-                            📱 Send Text / SMS
+                        <button type="button" class="btn btn-outline" style="flex: 1; border-radius: 10px; justify-content: center; display: inline-flex; align-items: center; gap: 6px;" onclick="sendCustomerTextSMSDirect()">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                            <span>Send Text / SMS</span>
                         </button>
-                        <button type="button" class="btn btn-outline" style="padding: 10px 14px; border-radius: 10px;" onclick="copyCustomerDirectMessage()" title="Copy Message">
-                            📋
+                        <button type="button" class="btn btn-outline" style="padding: 10px 14px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;" onclick="copyCustomerDirectMessage()" title="Copy Message">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                         </button>
                     </div>
                 </div>
@@ -512,7 +520,7 @@
                             </div>
                         </div>
                     </div>
-                    <button class="modal-close-btn" onclick="document.getElementById('customerHistoryModal').style.display='none'">✕</button>
+                    <button class="modal-close-btn" onclick="document.getElementById('customerHistoryModal').style.display='none'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                 </div>
 
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; width: 100%;">
@@ -541,7 +549,10 @@
 
             <div class="modal-actions" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
                 <button type="button" class="btn btn-outline" onclick="document.getElementById('customerHistoryModal').style.display='none'">Close</button>
-                <button type="button" class="btn btn-success" style="flex: 2;" onclick="startOrderForCustomerFromHistory()">🛒 Start Bill For This Customer</button>
+                <button type="button" class="btn btn-success" style="flex: 2; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="startOrderForCustomerFromHistory()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                    <span>Start Bill For This Customer</span>
+                </button>
             </div>
         </div>
     </div>
@@ -551,10 +562,13 @@
         <div class="modal-box" style="max-width: 460px;">
             <div class="modal-header">
                 <div>
-                    <h2 style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px;"><span>🏷️</span> Quick Discount</h2>
+                    <h2 style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+                        <span>Quick Discount</span>
+                    </h2>
                     <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Apply percentage or flat discount to Table <span id="discountModalTableNo" style="font-weight: 700; color: var(--primary);">1</span>.</p>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="closeQuickDiscountModal()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeQuickDiscountModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
 
             <!-- Discount Type Switcher -->
@@ -637,7 +651,7 @@
                     <h2>Complete Payment</h2>
                     <p>Table <span id="checkoutTableNoDisplay"></span> • <span id="checkoutTotalItems"></span> Items</p>
                 </div>
-                <button class="modal-close-btn" onclick="document.getElementById('checkoutModal').style.display='none'">✕</button>
+                <button class="modal-close-btn" onclick="document.getElementById('checkoutModal').style.display='none'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div class="huge-total">₹<span id="checkoutTotal">0</span></div>
 
@@ -755,7 +769,7 @@
         <div class="modal-box">
             <div class="modal-header">
                 <h2>Edit Bill #<span id="editBillNoDisplay"></span></h2>
-                <button class="modal-close-btn" onclick="document.getElementById('editOrderModal').style.display='none'">✕</button>
+                <button class="modal-close-btn" onclick="document.getElementById('editOrderModal').style.display='none'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <input type="hidden" id="editOrderId">
             <div class="form-group">
@@ -802,7 +816,7 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                     <span>Add Staff Member</span>
                 </h2>
-                <button class="modal-close-btn" onclick="closeStaffModal()">✕</button>
+                <button class="modal-close-btn" onclick="closeStaffModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <input type="hidden" id="staffIdInput">
             <div class="form-group">
@@ -851,7 +865,7 @@
         <div class="auth-box" style="max-width: 440px;">
             <div class="modal-header">
                 <h2>Connect / Switch Shop</h2>
-                <button class="modal-close-btn" onclick="document.getElementById('switchStoreModal').style.display='none'">✕</button>
+                <button class="modal-close-btn" onclick="document.getElementById('switchStoreModal').style.display='none'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">Enter your Shop Store Code to sync data from Firestore.</p>
             <div class="form-group" style="text-align: left;">
@@ -873,7 +887,7 @@
         <div class="auth-box" style="max-width: 420px;">
             <div class="modal-header">
                 <h2>Switch Active Staff</h2>
-                <button class="modal-close-btn" onclick="document.getElementById('staffSwitchModal').style.display='none'">✕</button>
+                <button class="modal-close-btn" onclick="document.getElementById('staffSwitchModal').style.display='none'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div id="quickSwitchStaffList" class="staff-grid-picker"></div>
             <div class="form-group" style="text-align: left; margin-top: 10px;">
@@ -898,7 +912,7 @@
                     </h2>
                     <p>Current plan status and features.</p>
                 </div>
-                <button class="modal-close-btn" onclick="closeSubscriptionModal()">✕</button>
+                <button class="modal-close-btn" onclick="closeSubscriptionModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             
             <div style="background: linear-gradient(135deg, #33231B, #4D382E); color: #FFFFFF; padding: 20px; border-radius: var(--radius-lg); margin-bottom: 16px; box-shadow: var(--shadow-sm);">
@@ -940,7 +954,7 @@
                     </h2>
                     <p>Configure business identity, logo, and receipt details.</p>
                 </div>
-                <button class="modal-close-btn" onclick="closeStoreProfileModal()">✕</button>
+                <button class="modal-close-btn" onclick="closeStoreProfileModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div style="display: grid; gap: 14px;">
                 <div class="form-group"><label>Shop Logo</label><input type="file" id="logoFileInput" accept="image/*" onchange="loadLogo(event)" style="padding: 8px; background: #fff; border: 1px dashed var(--border);"></div>
@@ -970,7 +984,7 @@
                     </h2>
                     <p>Configure tax calculation rules for menu and billing.</p>
                 </div>
-                <button class="modal-close-btn" onclick="closeGstConfigModal()">✕</button>
+                <button class="modal-close-btn" onclick="closeGstConfigModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div style="display: grid; gap: 14px;">
                 <div class="form-group">
@@ -1014,7 +1028,7 @@
                     </h2>
                     <p>Configure shop VPA for receipts and dynamic checkout QR.</p>
                 </div>
-                <button class="modal-close-btn" onclick="closePaymentConfigModal()">✕</button>
+                <button class="modal-close-btn" onclick="closePaymentConfigModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div style="display: grid; gap: 14px;">
                 <div class="form-group"><label>Shop UPI ID (For Dynamic QR)</label><input type="text" id="upiIdInput" placeholder="merchant@upi" onkeyup="generateSettingsQRPreview()"></div>
@@ -1048,7 +1062,7 @@
                     </h2>
                     <p>Set cashier discount rules, preset buttons, and customer triggers.</p>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="closeDiscountSettingsModal()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeDiscountSettingsModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             
             <div style="display: grid; gap: 14px;">
@@ -1132,7 +1146,7 @@
                     <h2>🪑 Tables & Seating Tabs</h2>
                     <p>Customize table labels (e.g. T1, T2, AC-1), total table count, and order routing.</p>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="closeTableConfigModal()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeTableConfigModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             
             <div style="overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 14px; flex: 1;">
@@ -1193,7 +1207,7 @@
                     </h2>
                     <p id="invModalBillNo" style="font-family: monospace; font-size: 14px; font-weight: 800; color: var(--primary);">#1001</p>
                 </div>
-                <button type="button" class="modal-close-btn" onclick="closeOrderInvoiceModal()">✕</button>
+                <button type="button" class="modal-close-btn" onclick="closeOrderInvoiceModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
 
             <div style="overflow-y: auto; flex: 1; padding: 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px;">
@@ -1285,7 +1299,7 @@
                     </h2>
                     <p>Get in touch for technical assistance or feature requests.</p>
                 </div>
-                <button class="modal-close-btn" onclick="closeContactModal()">✕</button>
+                <button class="modal-close-btn" onclick="closeContactModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div style="display: grid; gap: 12px;">
                 <div style="background: #F4FAF5; border: 1px solid #C8E6C9; padding: 14px; border-radius: var(--radius-md);">
@@ -1331,7 +1345,7 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                     <span>AI Quota & Custom Key</span>
                 </h2>
-                <button class="modal-close-btn" onclick="closeClientQuotaModal()">✕</button>
+                <button class="modal-close-btn" onclick="closeClientQuotaModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 14px;">Configure monthly AI menu scans and optional dedicated Gemini API key.</p>
             
@@ -1374,7 +1388,7 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
                     <span>Daily Z-Report Statement</span>
                 </h2>
-                <button class="modal-close-btn" onclick="document.getElementById('statementModal').style.display='none'">✕</button>
+                <button class="modal-close-btn" onclick="document.getElementById('statementModal').style.display='none'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
             <div id="statementReportContent" style="font-family: monospace; font-size: 12px; background: #FAF7F4; border: 1px solid var(--border); padding: 14px; border-radius: var(--radius-md); max-height: 50vh; overflow-y: auto;">
                 <!-- Dynamically populated -->
@@ -1645,13 +1659,16 @@
                 <div class="card" id="aiWhatsAppMarketingHub" style="margin-bottom: 24px; border: 1.5px solid var(--border); box-shadow: var(--shadow-sm);">
                     <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="icon-box-lg" style="background: #E8F5E9; border-color: #C8E6C9;"><span class="icon" style="font-size: 20px;">💬</span></span>
+                            <span class="icon-box-lg" style="background: #E8F5E9; border-color: #C8E6C9;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>
                             <div>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-dark);">
                                         WhatsApp Marketing Hub
                                     </h2>
-                                    <span style="background: #E0F2FE; color: #0284C7; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; letter-spacing: 0.5px;">✨ AI POWERED</span>
+                                    <span style="background: #E0F2FE; color: #0284C7; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 4px;">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                        <span>AI POWERED</span>
+                                    </span>
                                 </div>
                                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
                                     Weekly AI customer scans, personalized copy with diner names, bulk customer selection, and 1-tap WhatsApp broadcast.
@@ -1659,11 +1676,13 @@
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 7px 14px;" onclick="runWeeklyAiMarketingScan()" title="Scan customer activity for high-converting marketing audiences">
-                                🤖 Weekly AI Scan
+                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 7px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="runWeeklyAiMarketingScan()" title="Scan customer activity for high-converting marketing audiences">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path><circle cx="12" cy="12" r="4"></circle></svg>
+                                <span>Weekly AI Scan</span>
                             </button>
-                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 7px 16px;" onclick="triggerBulkWhatsAppBroadcast()" title="Dispatch personalized campaign">
-                                🚀 Send Campaign
+                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 7px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="triggerBulkWhatsAppBroadcast()" title="Dispatch personalized campaign">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                <span>Send Campaign</span>
                             </button>
                         </div>
                     </div>
@@ -1672,27 +1691,32 @@
                     <div id="aiWeeklyScanBanner" style="background: linear-gradient(135deg, #FBF8F5, #F4ECE6); border: 1px solid #E5D5C8; border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 16px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 16px;">💡</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                                 <strong style="font-size: 13px; color: var(--primary);">Weekly AI Targeting Scan:</strong>
                                 <span id="aiScanSummaryText" style="font-size: 12px; color: var(--text-dark);">Scanned customer directory. 4 high-converting segments ready.</span>
                             </div>
                             <span style="font-size: 11px; font-weight: 700; color: var(--milk-choc); background: #FFFFFF; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);">Updated This Week</span>
                         </div>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="aiSegmentsContainer">
-                            <button type="button" class="filter-pill active" onclick="selectAiSegment('all')" id="aiSeg-all">
-                                🎯 All Patrons (<span id="aiSegCount-all">0</span>)
+                            <button type="button" class="filter-pill active" onclick="selectAiSegment('all')" id="aiSeg-all" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                                <span>All Patrons (<span id="aiSegCount-all">0</span>)</span>
                             </button>
-                            <button type="button" class="filter-pill" onclick="selectAiSegment('weekend')" id="aiSeg-weekend">
-                                ☕ Weekend Specials (<span id="aiSegCount-weekend">0</span>)
+                            <button type="button" class="filter-pill" onclick="selectAiSegment('weekend')" id="aiSeg-weekend" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                                <span>Weekend Specials (<span id="aiSegCount-weekend">0</span>)</span>
                             </button>
-                            <button type="button" class="filter-pill" onclick="selectAiSegment('vip')" id="aiSeg-vip">
-                                💎 VIP Regulars (<span id="aiSegCount-vip">0</span>)
+                            <button type="button" class="filter-pill" onclick="selectAiSegment('vip')" id="aiSeg-vip" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                <span>VIP Regulars (<span id="aiSegCount-vip">0</span>)</span>
                             </button>
-                            <button type="button" class="filter-pill" onclick="selectAiSegment('inactive')" id="aiSeg-inactive">
-                                ⏳ Inactive 7+ Days (<span id="aiSegCount-inactive">0</span>)
+                            <button type="button" class="filter-pill" onclick="selectAiSegment('inactive')" id="aiSeg-inactive" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span>Inactive 7+ Days (<span id="aiSegCount-inactive">0</span>)</span>
                             </button>
-                            <button type="button" class="filter-pill" onclick="selectAiSegment('loyalty')" id="aiSeg-loyalty">
-                                🪙 Unused Points (<span id="aiSegCount-loyalty">0</span>)
+                            <button type="button" class="filter-pill" onclick="selectAiSegment('loyalty')" id="aiSeg-loyalty" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>
+                                <span>Unused Points (<span id="aiSegCount-loyalty">0</span>)</span>
                             </button>
                         </div>
                     </div>
@@ -1703,7 +1727,7 @@
                         <div>
                             <!-- Bulk Customer Selection Box -->
                             <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="display: justify-content: space-between; align-items: center; margin-bottom: 10px; display: flex;">
                                     <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--primary); cursor: pointer;">
                                         <input type="checkbox" id="selectAllCustomersCheckbox" onchange="toggleSelectAllCustomers(this.checked)" checked style="width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer;">
                                         <span>Select Bulk Customers (<span id="bulkSelectedCount">0</span> selected)</span>
@@ -1725,11 +1749,13 @@
                                         <span style="font-size: 11px; color: var(--text-muted);">(Editable • Uses {customer_name})</span>
                                     </div>
                                     <div style="display: flex; gap: 6px;">
-                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px;" onclick="generateAiCampaignCopy()" id="generateAiCampaignBtn">
-                                            ✨ Generate with AI
+                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="generateAiCampaignCopy()" id="generateAiCampaignBtn">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+                                            <span>Generate with AI</span>
                                         </button>
-                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px;" onclick="copyCurrentCampaignTemplate()">
-                                            📋 Copy Text
+                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyCurrentCampaignTemplate()">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            <span>Copy Text</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1758,7 +1784,9 @@
                             <!-- Live WhatsApp Phone Simulation -->
                             <div class="wa-phone-mockup" style="margin-bottom: 14px;">
                                 <div class="wa-phone-header">
-                                    <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white;">☕</span>
+                                    <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white; display: inline-flex; align-items: center; justify-content: center;">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                                    </span>
                                     <div>
                                         <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
                                             <span id="waPreviewShopName">billnaw</span>
@@ -1786,7 +1814,10 @@
                             <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                     <strong style="font-size: 12px; color: var(--primary);">1-Tap Send Queue (<span id="queueCount">0</span> diners)</strong>
-                                    <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 10px; border-radius: 10px;" onclick="copyAllSelectedPhones()">📋 Copy Phone #s</button>
+                                    <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 10px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px;" onclick="copyAllSelectedPhones()">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <span>Copy Phone #s</span>
+                                    </button>
                                 </div>
                                 <div id="waSelectedBroadcastQueue" style="max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
                                     <!-- Dynamic 1-tap send items -->
@@ -1801,7 +1832,7 @@
                     <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
                         <div>
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span class="icon-box-lg" style="background: #F3E8FF; border-color: #E9D5FF;"><span class="icon" style="font-size: 20px;">👥</span></span>
+                                <span class="icon-box-lg" style="background: #F3E8FF; border-color: #E9D5FF; color: #7E22CE;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
                                 <div>
                                     <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-dark);">
                                         Customer Directory & Loyalty
@@ -1813,11 +1844,13 @@
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 14px;" onclick="exportCustomerDirectoryCSV()">
-                                📥 Download CSV
+                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="exportCustomerDirectoryCSV()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                <span>Download CSV</span>
                             </button>
-                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 8px 16px;" onclick="openAddCustomerModal()">
-                                ➕ Add Customer
+                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="openAddCustomerModal()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                <span>Add Customer</span>
                             </button>
                         </div>
                     </div>
@@ -1841,15 +1874,27 @@
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
                         <div class="filter-pills-bar" style="margin-bottom: 0;">
                             <button type="button" class="filter-pill active" id="cFilter-all" onclick="filterCustomersByTier('all')">All Customers</button>
-                            <button type="button" class="filter-pill" id="cFilter-platinum" onclick="filterCustomersByTier('Platinum')">💎 Platinum (20+ visits)</button>
-                            <button type="button" class="filter-pill" id="cFilter-gold" onclick="filterCustomersByTier('Gold')">⭐ Gold (10+ visits)</button>
-                            <button type="button" class="filter-pill" id="cFilter-silver" onclick="filterCustomersByTier('Silver')">🥈 Silver (5+ visits)</button>
-                            <button type="button" class="filter-pill" id="cFilter-bronze" onclick="filterCustomersByTier('Bronze')">🥉 Bronze</button>
+                            <button type="button" class="filter-pill" id="cFilter-platinum" onclick="filterCustomersByTier('Platinum')" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                <span>Platinum (20+ visits)</span>
+                            </button>
+                            <button type="button" class="filter-pill" id="cFilter-gold" onclick="filterCustomersByTier('Gold')" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                                <span>Gold (10+ visits)</span>
+                            </button>
+                            <button type="button" class="filter-pill" id="cFilter-silver" onclick="filterCustomersByTier('Silver')" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+                                <span>Silver (5+ visits)</span>
+                            </button>
+                            <button type="button" class="filter-pill" id="cFilter-bronze" onclick="filterCustomersByTier('Bronze')" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                <span>Bronze</span>
+                            </button>
                         </div>
                     </div>
 
                     <div class="search-container" style="margin-bottom: 16px;">
-                        <span class="search-icon">🔍</span>
+                        <span class="search-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
                         <input type="text" id="customerSearchInput" class="search-bar" placeholder="Search by customer name, phone number, or preferences..." oninput="filterCustomersUI()">
                     </div>
 
@@ -2141,7 +2186,7 @@
                 <div class="card" style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="icon-box-lg"><span class="icon" style="font-size: 22px;">💬</span></span>
+                            <span class="icon-box-lg" style="background: #E8F5E9; border-color: #C8E6C9; color: #16A34A;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>
                             <div>
                                 <h2 style="font-size: 18px; font-weight: 800; color: var(--text-dark); margin: 0;">WhatsApp Marketing Hub</h2>
                                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
@@ -2149,8 +2194,9 @@
                                 </p>
                             </div>
                         </div>
-                        <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 16px;" onclick="copyWhatsAppCampaignText()">
-                            📋 Copy Message
+                        <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="copyWhatsAppCampaignText()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            <span>Copy Message</span>
                         </button>
                     </div>
                 </div>
@@ -2201,7 +2247,9 @@
                     <div>
                         <div class="wa-phone-mockup">
                             <div class="wa-phone-header">
-                                <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white;">🏪</span>
+                                <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white; display: inline-flex; align-items: center; justify-content: center;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                                </span>
                                 <div>
                                     <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
                                         <span id="waPreviewStoreName">billnaw</span>
@@ -2221,8 +2269,9 @@
                             </div>
                             <div style="padding: 12px 16px; background: #FFFFFF; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
                                 <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Simulated Customer View</span>
-                                <button class="btn btn-success" style="padding: 6px 14px; font-size: 11px; border-radius: 16px;" onclick="copyWhatsAppCampaignText()">
-                                    📋 Copy Text
+                                <button class="btn btn-success" style="padding: 6px 14px; font-size: 11px; border-radius: 16px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyWhatsAppCampaignText()">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    <span>Copy Text</span>
                                 </button>
                             </div>
                         </div>
@@ -2237,7 +2286,7 @@
                 <div class="card" style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="icon-box-lg"><span class="icon" style="font-size: 22px;">📦</span></span>
+                            <span class="icon-box-lg" style="background: #FEF3C7; border-color: #FDE68A; color: #D97706;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></span>
                             <div>
                                 <h2 style="font-size: 18px; font-weight: 800; color: var(--text-dark); margin: 0;">Inventory Telemetry & Ingredients</h2>
                                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
@@ -2245,15 +2294,16 @@
                                 </p>
                             </div>
                         </div>
-                        <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 16px;" onclick="renderInventoryTelemetryUI()">
-                            🔄 Refresh Telemetry
+                        <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="renderInventoryTelemetryUI()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                            <span>Refresh Telemetry</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Loss Aversion Banner -->
                 <div id="inventoryLossAversionBanner" class="loss-aversion-banner" style="display: none;">
-                    <div class="loss-alert-icon">⚠️</div>
+                    <div class="loss-alert-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
                     <div id="inventoryLossAlertText" style="font-size: 13px; color: #7F1D1D; line-height: 1.45;"></div>
                 </div>
 
@@ -2497,7 +2547,7 @@
                             </h2>
                             <p>Manage cashiers, floor servers, kitchen chefs, and managers.</p>
                         </div>
-                        <button class="modal-close-btn" onclick="closeStaffManagementModal()">✕</button>
+                        <button class="modal-close-btn" onclick="closeStaffManagementModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                     </div>
                     <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
                         <button class="btn btn-success" style="font-size: 12px; padding: 7px 14px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px;" onclick="openAddStaffModal()">
@@ -2539,7 +2589,7 @@
                             </h2>
                             <p>Real-time bidirectional sync across all store terminals, KOT, and devices.</p>
                         </div>
-                        <button class="modal-close-btn" onclick="closeCloudSyncDetailModal()">✕</button>
+                        <button class="modal-close-btn" onclick="closeCloudSyncDetailModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                     </div>
                     
                     <div style="background: #FAF7F4; border-radius: 12px; padding: 14px; margin-bottom: 16px; border: 1px solid var(--border);">
@@ -2595,7 +2645,7 @@
                             </h2>
                             <p>Review kitchen supplies, market purchases, and daily overheads.</p>
                         </div>
-                        <button class="modal-close-btn" onclick="closeExpensesDetailModal()">✕</button>
+                        <button class="modal-close-btn" onclick="closeExpensesDetailModal()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <span id="expensesModalTotal" style="font-weight: 800; color: var(--danger); font-size: 16px;">Today's Total: ₹0.00</span>

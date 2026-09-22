@@ -65,7 +65,21 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .modal-header { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: flex-start; }
 .modal-header h2 { color: var(--primary); font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
 .modal-header p { margin: 4px 0 0 0; font-size: 13px; color: var(--text-muted); }
-.modal-close-btn { background: transparent; border: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+.modal-close-btn { 
+    background: transparent; 
+    border: none; 
+    color: var(--text-muted); 
+    cursor: pointer; 
+    padding: 0; 
+    width: 32px; 
+    height: 32px; 
+    border-radius: 8px; 
+    display: inline-flex; 
+    align-items: center; 
+    justify-content: center; 
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
 .modal-close-btn:hover { background: var(--bg-body); color: var(--text-dark); }
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
 
@@ -767,6 +781,54 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .customer-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, #7D4F42, #33231B); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
 .timeline-card { border-left: 2px solid var(--border); padding-left: 14px; margin-bottom: 14px; position: relative; text-align: left; }
 .timeline-card::before { content: ''; position: absolute; left: -6px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--milk-choc); }
+
+/* Customer Action Hub Quick Tiles */
+.hub-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 6px;
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    gap: 6px;
+    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    color: var(--text-dark);
+}
+.hub-action-btn:hover {
+    border-color: var(--milk-choc);
+    background: var(--accent-soft);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+.hub-action-btn:active {
+    transform: scale(0.96);
+}
+.hub-action-btn.delete-tile {
+    border-color: rgba(162, 46, 46, 0.25);
+    color: var(--danger);
+    background: #FFF5F5;
+}
+.hub-action-btn.delete-tile:hover {
+    background: #FEE2E2;
+    border-color: var(--danger);
+}
+.hub-action-btn svg {
+    color: var(--primary);
+    transition: transform 0.15s ease;
+}
+.hub-action-btn:hover svg {
+    transform: scale(1.1);
+}
+.hub-action-btn.delete-tile svg {
+    color: var(--danger);
+}
+.hub-action-btn strong {
+    font-size: 11px;
+    font-weight: 700;
+}
 
 /* STAFF STYLING */
 .staff-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #4A332A, #7D4F42); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }

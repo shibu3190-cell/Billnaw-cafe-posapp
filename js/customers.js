@@ -5,10 +5,26 @@
 let currentCustomerTierFilter = 'all';
 
 function getCustomerTier(visits = 0) {
-    if (visits >= 20) return { name: "Platinum", class: "tier-platinum", icon: "💎" };
-    if (visits >= 10) return { name: "Gold", class: "tier-gold", icon: "⭐" };
-    if (visits >= 5) return { name: "Silver", class: "tier-silver", icon: "🥈" };
-    return { name: "Bronze", class: "tier-bronze", icon: "🥉" };
+    if (visits >= 20) return { 
+        name: "Platinum", 
+        class: "tier-platinum", 
+        icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>` 
+    };
+    if (visits >= 10) return { 
+        name: "Gold", 
+        class: "tier-gold", 
+        icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>` 
+    };
+    if (visits >= 5) return { 
+        name: "Silver", 
+        class: "tier-silver", 
+        icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>` 
+    };
+    return { 
+        name: "Bronze", 
+        class: "tier-bronze", 
+        icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>` 
+    };
 }
 window.getCustomerTier = getCustomerTier;
 
@@ -60,7 +76,7 @@ function renderCustomersUI() {
     tbody.innerHTML = displayList.map(cust => {
         const tier = getCustomerTier(cust.totalVisits || 0);
         const initials = getInitials(cust.name);
-        const notesSnippet = cust.notes ? `<div style="font-size: 11px; color: var(--text-muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;">💬 ${escapeHtml(cust.notes)}</div>` : '';
+        const notesSnippet = cust.notes ? `<div style="font-size: 11px; color: var(--text-muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>${escapeHtml(cust.notes)}</div>` : '';
         const visits = cust.totalVisits || 0;
         const totalSpent = Number(cust.totalSpend || 0).toFixed(2);
         const points = cust.loyaltyPoints || 0;
@@ -82,10 +98,11 @@ function renderCustomersUI() {
                 </td>
                 <td>
                     <span class="cust-badge ${tier.class}">
-                        ${tier.icon} ${tier.name}
+                        ${tier.icon} <span>${tier.name}</span>
                     </span>
-                    <div style="font-size: 11px; font-weight: 700; color: var(--warning); margin-top: 2px;">
-                        🪙 ${points} pts
+                    <div style="font-size: 11px; font-weight: 700; color: var(--warning); margin-top: 2px; display: inline-flex; align-items: center; gap: 3px;">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>
+                        <span>${points} pts</span>
                     </div>
                 </td>
                 <td style="font-weight: 700; font-size: 13px;">
@@ -98,8 +115,9 @@ function renderCustomersUI() {
                     ${lastVisit}
                 </td>
                 <td style="text-align: right;">
-                    <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 16px; color: var(--primary);" onclick="event.stopPropagation(); openCustomerActionHub(${cust.id})" title="Manage Customer & Message">
-                        ⚙️ Manage & Message
+                    <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 16px; color: var(--primary); display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openCustomerActionHub(${cust.id})" title="Manage Customer & Message">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        <span>Manage & Message</span>
                     </button>
                 </td>
             </tr>
@@ -240,11 +258,11 @@ function openCustomerHistoryModal(id) {
     
     const tierBadge = document.getElementById('custHistTier');
     tierBadge.className = `cust-badge ${tier.class}`;
-    tierBadge.innerText = `${tier.icon} ${tier.name}`;
+    tierBadge.innerHTML = `${tier.icon} <span>${tier.name}</span>`;
 
     document.getElementById('custHistVisits').innerText = cust.totalVisits || 0;
     document.getElementById('custHistTotalSpend').innerText = `₹${(Number(cust.totalSpend) || 0).toFixed(2)}`;
-    document.getElementById('custHistPoints').innerText = `${cust.loyaltyPoints || 0} pts`;
+    document.getElementById('custHistPoints').innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>${cust.loyaltyPoints || 0} pts`;
 
     const notesEl = document.getElementById('custHistNotes');
     if (cust.notes) {
@@ -466,12 +484,12 @@ function openCustomerActionHub(customerId) {
     if (avatarEl) avatarEl.innerText = initials;
     if (tierEl) {
         tierEl.className = `cust-badge ${tier.class}`;
-        tierEl.innerText = `${tier.icon} ${tier.name}`;
+        tierEl.innerHTML = `${tier.icon} <span>${tier.name}</span>`;
     }
-    if (pointsEl) pointsEl.innerText = `🪙 ${cust.loyaltyPoints || 0} pts`;
+    if (pointsEl) pointsEl.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>${cust.loyaltyPoints || 0} pts`;
     if (spendEl) spendEl.innerText = `Spent: ₹${Number(cust.totalSpend || 0).toFixed(2)}`;
     if (notesEl) {
-        notesEl.innerText = cust.notes ? `📝 ${cust.notes}` : '';
+        notesEl.innerHTML = cust.notes ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>${escapeHtml(cust.notes)}` : '';
         notesEl.style.display = cust.notes ? 'block' : 'none';
     }
 
