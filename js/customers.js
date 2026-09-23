@@ -81,6 +81,13 @@ function renderCustomersUI() {
         const totalSpent = Number(cust.totalSpend || 0).toFixed(2);
         const points = cust.loyaltyPoints || 0;
         const lastVisit = cust.lastVisitDate || cust.createdDate || '-';
+        const cleanPhone = (cust.phone || '').replace(/\D/g, '');
+        const phoneDisplay = cust.phone 
+            ? `<a href="tel:${escapeHtml(cust.phone)}" onclick="event.stopPropagation();" class="cust-phone-link" style="font-family: monospace; font-size: 13px; font-weight: 600; color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 8px; background: rgba(28, 77, 38, 0.06); border: 1px solid rgba(28, 77, 38, 0.12);" title="Click to call ${escapeHtml(cust.phone)}">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                <span>${escapeHtml(cust.phone)}</span>
+              </a>` 
+            : '<span style="color:var(--text-muted)">-</span>';
 
         return `
             <tr style="cursor: pointer; transition: background 0.15s ease;" onclick="openCustomerActionHub(${cust.id})" title="Click to view history, bill, edit, delete, or send WhatsApp / SMS">
@@ -93,8 +100,8 @@ function renderCustomersUI() {
                         </div>
                     </div>
                 </td>
-                <td style="font-family: monospace; font-size: 13px; font-weight: 600; color: var(--text-dark);">
-                    ${cust.phone ? escapeHtml(cust.phone) : '<span style="color:var(--text-muted)">-</span>'}
+                <td>
+                    ${phoneDisplay}
                 </td>
                 <td>
                     <span class="cust-badge ${tier.class}">
@@ -114,11 +121,22 @@ function renderCustomersUI() {
                 <td style="font-size: 12px; color: var(--text-muted);">
                     ${lastVisit}
                 </td>
-                <td style="text-align: right;">
-                    <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 16px; color: var(--primary); display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openCustomerActionHub(${cust.id})" title="Manage Customer & Message">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                        <span>Manage & Message</span>
-                    </button>
+                <td style="text-align: right; white-space: nowrap;">
+                    <div style="display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-outline" style="padding: 5px 9px; font-size: 11px; font-weight: 700; border-radius: 12px; color: var(--success); border-color: rgba(40,167,69,0.3); background: rgba(40,167,69,0.06); display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); startOrderForCustomer(${cust.id})" title="Start Order & Bill for ${escapeHtml(cust.name)}">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            <span>Bill</span>
+                        </button>
+                        ${cleanPhone ? `
+                        <a href="https://wa.me/91${cleanPhone}" target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="padding: 5px 9px; font-size: 11px; font-weight: 700; border-radius: 12px; color: #128C7E; border-color: rgba(18,140,126,0.3); background: rgba(18,140,126,0.06); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation();" title="Chat on WhatsApp">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            <span>WhatsApp</span>
+                        </a>` : ''}
+                        <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 16px; color: var(--primary); display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openCustomerActionHub(${cust.id})" title="Manage Customer & Message">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                            <span>Manage & Message</span>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
@@ -137,11 +155,11 @@ function filterCustomersUI() {
 window.filterCustomersUI = filterCustomersUI;
 
 function filterCustomersByTier(tier) {
-    currentCustomerTierFilter = tier;
+    currentCustomerTierFilter = tier || 'all';
     ['all', 'platinum', 'gold', 'silver', 'bronze'].forEach(t => {
-        const btn = document.getElementById(`tierFilter-${t}`);
+        const btn = document.getElementById(`cFilter-${t}`) || document.getElementById(`tierFilter-${t}`);
         if (btn) {
-            if (t === tier) btn.classList.add('active');
+            if (t.toLowerCase() === currentCustomerTierFilter.toLowerCase()) btn.classList.add('active');
             else btn.classList.remove('active');
         }
     });

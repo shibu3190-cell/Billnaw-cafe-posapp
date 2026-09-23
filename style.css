@@ -83,6 +83,20 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .modal-close-btn:hover { background: var(--bg-body); color: var(--text-dark); }
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
 
+/* 🛡️ Strict Modal Stacking & Z-Index Hierarchy (Prevents Popup-Under-Popup Bugs) */
+.modal-overlay.stacked-level-1 { z-index: 1000010 !important; }
+.modal-overlay.stacked-level-2 { z-index: 1000030 !important; }
+.modal-overlay.stacked-level-3 { z-index: 1000050 !important; }
+#expensesDetailModal { z-index: 1000015 !important; }
+#customerActionHubModal { z-index: 1000020 !important; }
+#aiPreviewModal { z-index: 1000025 !important; }
+#quickExpenseModal { z-index: 1000030 !important; }
+#quickDiscountModal { z-index: 1000030 !important; }
+#clientQuotaModal { z-index: 1000030 !important; }
+#staffSwitchModal { z-index: 1000030 !important; }
+#addStaffModal { z-index: 1000040 !important; }
+#aiMenuZoomModal { z-index: 1000050 !important; }
+
 .huge-total { font-size: 38px; font-weight: 800; color: var(--primary); text-align: center; margin: 12px 0; letter-spacing: -1px; }
 
 .key-input, .pin-input { width: 100%; padding: 14px; font-size: 18px; text-align: center; letter-spacing: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px; background: var(--bg-body); color: var(--text-dark); font-family: monospace; font-weight: 700; transition: all 0.2s ease; }
@@ -225,6 +239,51 @@ input:focus, select:focus, textarea:focus { outline: none; }
 @keyframes pulseDot {
     0% { opacity: 0.4; transform: scale(0.85); }
     100% { opacity: 1; transform: scale(1.15); }
+}
+
+/* 🪑 Topbar Active Table Display Pill */
+.topbar-table-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-dark);
+    font-weight: 600;
+    transition: all 0.15s ease;
+    box-shadow: var(--shadow-xs);
+}
+.topbar-table-pill:hover {
+    border-color: var(--milk-choc);
+    background: var(--accent-soft);
+    transform: translateY(-1px);
+}
+.topbar-table-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    flex-shrink: 0;
+}
+.topbar-table-dot.occupied {
+    background: var(--warning);
+}
+.topbar-table-dot.empty {
+    background: var(--success);
+}
+.topbar-table-label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+.topbar-table-pill strong {
+    font-weight: 800;
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
 }
 
 .staff-pill-btn {
@@ -1769,9 +1828,9 @@ input:focus, select:focus, textarea:focus { outline: none; }
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    width: 38px;
     height: 38px;
-    padding: 0 10px;
+    padding: 0;
     background: var(--primary);
     color: #FFFFFF;
     border: 1px solid rgba(255, 255, 255, 0.16);
@@ -2254,9 +2313,9 @@ input:focus, select:focus, textarea:focus { outline: none; }
         padding: 8px 12px;
     }
     .topbar-menu-icon-btn {
+        width: 36px;
         height: 36px;
-        padding: 0 8px;
-        gap: 5px;
+        padding: 0;
     }
     .topbar-brand-texts .brand-title {
         font-size: 16px;

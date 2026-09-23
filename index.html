@@ -1471,10 +1471,9 @@
         <!-- ✨ TOP BAR (MINIMAL WITH MERGED MENU & BRAND ICON + BUSINESS NAME) ✨ -->
         <div class="topbar">
             <div class="topbar-brand-minimal">
-                <!-- Merged Menu Trigger Button & Cafe Logo Icon -->
+                <!-- Cafe Brand Icon Button (Pure Coffee Cup) -->
                 <button type="button" class="topbar-menu-icon-btn" onclick="toggleMobileSlideMenu()" aria-label="Open Navigation Menu" title="Open Navigation Menu">
-                    <svg class="menu-bars-glyph" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                    <svg class="menu-cafe-glyph" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                    <svg class="menu-cafe-glyph" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
                 </button>
                 <div class="topbar-brand-texts" onclick="openStoreProfileModal()" title="Click to change business name">
                     <span id="topbarShopName" class="brand-title">billnaw</span>
@@ -1486,6 +1485,13 @@
                 <span id="offlineBadge" style="display: none;">OFFLINE</span>
             </div>
             <div class="topbar-actions">
+                <!-- Active Table Indicator Pill -->
+                <div id="topbarTablePill" class="topbar-table-pill" onclick="switchTab('pos')" title="Active Table (Click to switch to POS)">
+                    <span class="topbar-table-dot empty" id="topbarTableDot"></span>
+                    <span class="topbar-table-label">Table:</span>
+                    <strong id="topbarTableDisplay">1</strong>
+                </div>
+
                 <!-- Quick Expense Record Button -->
                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 20px; font-weight: 700; color: var(--danger); border-color: rgba(167,50,50,0.25); display: inline-flex; align-items: center; gap: 6px;" onclick="openQuickExpenseModal()" title="Record Daily Expense">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -1655,7 +1661,98 @@
             ============================================================ -->
             <div id="customers" class="view">
                 
-                <!-- VERTICAL HUB 1: 💬 AI-DRIVEN WHATSAPP MARKETING HUB -->
+                <!-- VERTICAL HUB 1: 👥 CUSTOMER DIRECTORY & LOYALTY (FRONT-AND-CENTER) -->
+                <div class="card" style="border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 20px;">
+                    <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="icon-box-lg" style="background: #F3E8FF; border-color: #E9D5FF; color: #7E22CE;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
+                                <div>
+                                    <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-dark);">
+                                        Customer Directory & Loyalty
+                                    </h2>
+                                    <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
+                                        Click on any customer row to view history, start bill, edit, delete, or send WhatsApp / text messages.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="exportCustomerDirectoryCSV()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                <span>Download CSV</span>
+                            </button>
+                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="openAddCustomerModal()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                <span>Add Customer</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Customers</div>
+                            <div id="custStatTotal" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">0</div>
+                        </div>
+                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Loyalty Points</div>
+                            <div id="custStatPoints" style="font-size: 22px; font-weight: 800; color: var(--warning); margin-top: 4px;">0 pts</div>
+                        </div>
+                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Customer Lifetime Spend</div>
+                            <div id="custStatRevenue" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">₹0</div>
+                        </div>
+                    </div>
+
+                    <!-- Customer Filter Chips & Search Bar -->
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+                        <div class="filter-pills-bar" style="margin-bottom: 0;">
+                            <button type="button" class="filter-pill active" id="cFilter-all" onclick="filterCustomersByTier('all')">All Customers</button>
+                            <button type="button" class="filter-pill" id="cFilter-platinum" onclick="filterCustomersByTier('Platinum')" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                <span>Platinum (20+ visits)</span>
+                            </button>
+                            <button type="button" class="filter-pill" id="cFilter-gold" onclick="filterCustomersByTier('Gold')" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                                <span>Gold (10+ visits)</span>
+                            </button>
+                            <button type="button" class="filter-pill" id="cFilter-silver" onclick="filterCustomersByTier('Silver')" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+                                <span>Silver (5+ visits)</span>
+                            </button>
+                            <button type="button" class="filter-pill" id="cFilter-bronze" onclick="filterCustomersByTier('Bronze')" style="display: inline-flex; align-items: center; gap: 5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                <span>Bronze</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="search-container" style="margin-bottom: 16px;">
+                        <span class="search-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
+                        <input type="text" id="customerSearchInput" class="search-bar" placeholder="Search by customer name, phone number, or preferences..." oninput="filterCustomersUI()">
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Phone</th>
+                                    <th>Tier / Loyalty</th>
+                                    <th>Visits</th>
+                                    <th>Total Spent</th>
+                                    <th>Last Visit</th>
+                                    <th style="text-align: right;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customersTableBody">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- VERTICAL HUB 2: 💬 AI-DRIVEN WHATSAPP MARKETING HUB -->
                 <div class="card" id="aiWhatsAppMarketingHub" style="margin-bottom: 24px; border: 1.5px solid var(--border); box-shadow: var(--shadow-sm);">
                     <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
@@ -1826,97 +1923,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- VERTICAL HUB 2: 👥 CUSTOMER DIRECTORY & LOYALTY -->
-                <div class="card" style="border: 1.5px solid var(--border); box-shadow: var(--shadow-sm);">
-                    <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
-                        <div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span class="icon-box-lg" style="background: #F3E8FF; border-color: #E9D5FF; color: #7E22CE;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
-                                <div>
-                                    <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-dark);">
-                                        Customer Directory & Loyalty
-                                    </h2>
-                                    <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
-                                        Click on any customer row to view history, start bill, edit, delete, or send WhatsApp / text messages.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="exportCustomerDirectoryCSV()">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                <span>Download CSV</span>
-                            </button>
-                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="openAddCustomerModal()">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
-                                <span>Add Customer</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
-                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Customers</div>
-                            <div id="custStatTotal" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">0</div>
-                        </div>
-                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Loyalty Points</div>
-                            <div id="custStatPoints" style="font-size: 22px; font-weight: 800; color: var(--warning); margin-top: 4px;">0 pts</div>
-                        </div>
-                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Customer Lifetime Spend</div>
-                            <div id="custStatRevenue" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">₹0</div>
-                        </div>
-                    </div>
-
-                    <!-- Customer Filter Chips & Search Bar -->
-                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
-                        <div class="filter-pills-bar" style="margin-bottom: 0;">
-                            <button type="button" class="filter-pill active" id="cFilter-all" onclick="filterCustomersByTier('all')">All Customers</button>
-                            <button type="button" class="filter-pill" id="cFilter-platinum" onclick="filterCustomersByTier('Platinum')" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                                <span>Platinum (20+ visits)</span>
-                            </button>
-                            <button type="button" class="filter-pill" id="cFilter-gold" onclick="filterCustomersByTier('Gold')" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
-                                <span>Gold (10+ visits)</span>
-                            </button>
-                            <button type="button" class="filter-pill" id="cFilter-silver" onclick="filterCustomersByTier('Silver')" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
-                                <span>Silver (5+ visits)</span>
-                            </button>
-                            <button type="button" class="filter-pill" id="cFilter-bronze" onclick="filterCustomersByTier('Bronze')" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                                <span>Bronze</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="search-container" style="margin-bottom: 16px;">
-                        <span class="search-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
-                        <input type="text" id="customerSearchInput" class="search-bar" placeholder="Search by customer name, phone number, or preferences..." oninput="filterCustomersUI()">
-                    </div>
-
-                    <div class="table-responsive">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Customer</th>
-                                    <th>Phone</th>
-                                    <th>Tier / Loyalty</th>
-                                    <th>Visits</th>
-                                    <th>Total Spent</th>
-                                    <th>Last Visit</th>
-                                    <th style="text-align: right;">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="customersTableBody">
-                                <!-- Rendered dynamically -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
             </div>
 
             <!-- ============================================================
@@ -1954,16 +1960,15 @@
                                 <button type="button" onclick="updateVoiceIndicatorUI(false)" style="background: none; border: none; color: #991B1B; font-weight: 700; cursor: pointer;">✕</button>
                             </div>
 
-                            <!-- Contextual Quick Voice Diner Speech Chips -->
+                            <!-- Contextual Quick Voice Diner Speech Chips (Strictly Last 2 History Items) -->
                             <div id="quickVoicePillsRow" class="quick-voice-pills">
                                 <span style="font-size: 11px; font-weight: 700; color: var(--text-dark); margin-right: 4px; display: inline-flex; align-items: center; gap: 4px;">
-                                    <span class="icon-box" style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span> Spoken:
+                                    <span class="icon-box" style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span> History (Last 2):
                                 </span>
-                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('three fried rice')">"3 Fried Rice"</button>
-                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('two cold coffee')">"2 Cold Coffee"</button>
-                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('one chicken biryani')">"1 Chicken Biryani"</button>
-                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('two espresso')">"2 Espresso"</button>
-                                <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('two masala chai')">"2 Masala Chai"</button>
+                                <div id="quickVoicePillsContainer" style="display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                                    <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('two cold coffee')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 3px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>"2 Cold Coffee"</button>
+                                    <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('one chicken biryani')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 3px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>"1 Chicken Biryani"</button>
+                                </div>
                             </div>
 
                             <div class="category-scroll" id="categoryFiltersUI"></div>
@@ -2080,7 +2085,7 @@
             ============================================================ -->
             <div id="menu" class="view">
                 <!-- Smart AI Menu OCR Scanner Banner with 20% Goal Gradient Effect -->
-                <div class="menu-ai-banner">
+                <div class="menu-ai-banner" ondragover="event.preventDefault(); this.style.filter='brightness(1.08)';" ondragleave="this.style.filter='';" ondrop="handleMenuDrop(event); this.style.filter='';">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 14px;">
                         <div>
                             <div style="display: flex; align-items: center; gap: 10px;">
@@ -2099,8 +2104,9 @@
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            <input type="file" id="aiMenuFileInput" accept="image/*, application/pdf" style="display: none;" onchange="processAIMenu(event)">
                             <input type="file" id="aiMenuUploader" accept="image/*, application/pdf" style="display: none;" onchange="processAIMenu(event)">
-                            <button class="btn" style="background: #FFFFFF; color: #1C4D26; font-weight: 700; padding: 10px 18px; font-size: 12px; border-radius: 12px; border: none; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" onclick="document.getElementById('aiMenuUploader').click()" id="aiMenuBtn">
+                            <button class="btn" style="background: #FFFFFF; color: #1C4D26; font-weight: 700; padding: 10px 18px; font-size: 12px; border-radius: 12px; border: none; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" onclick="(document.getElementById('aiMenuFileInput') || document.getElementById('aiMenuUploader')).click()" id="aiMenuBtn">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                                 <span>Upload Menu Photo</span>
                             </button>
@@ -2311,18 +2317,18 @@
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
                     <div class="card" style="padding: 16px;">
                         <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Ingredients Tracked</div>
-                        <div style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">8 Items</div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Daily auto-deduction active</div>
+                        <div id="invStatTotalCount" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">9 Items</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Daily recipe deduction active</div>
                     </div>
                     <div class="card" style="padding: 16px;">
                         <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Stock Depletion Risk</div>
-                        <div style="font-size: 22px; font-weight: 800; color: var(--danger); margin-top: 4px;">3 Near Low</div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Coffee, Milk & Basmati Rice</div>
+                        <div id="invStatRiskCount" style="font-size: 22px; font-weight: 800; color: var(--danger); margin-top: 4px;">3 Near Low</div>
+                        <div id="invStatRiskSummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Coffee, Milk & Basmati Rice</div>
                     </div>
                     <div class="card" style="padding: 16px;">
                         <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Peak Dinner Prep</div>
-                        <div style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">82% Ready</div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Top 5 menu dishes stocked</div>
+                        <div id="invStatReadyPercent" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">82% Ready</div>
+                        <div id="invStatReadySummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Top menu dishes stocked</div>
                     </div>
                 </div>
 

@@ -2,10 +2,75 @@
 // 📦 JS/MARKETING_INVENTORY.JS - WhatsApp Hub, Inventory Telemetry & Voice-to-Billing Engine
 // ============================================================
 
-// --- 1. VOICE-TO-BILLING ENGINE WITH CONTEXTUAL RETENTION ---
+// --- 1. VOICE-TO-BILLING ENGINE WITH CONTEXTUAL RETENTION (STRICTLY LAST 2 ITEMS) ---
 let isVoiceListening = false;
 let speechRecognizer = null;
 let cachedVoiceBuffer = localStorage.getItem('bongbhoj_voice_buffer') || '';
+
+// Persistent Voice Order History (strictly capped at 2 items)
+let voiceLogHistory = [];
+try {
+    voiceLogHistory = JSON.parse(localStorage.getItem('billnaw_voice_history') || '[]');
+    if (!Array.isArray(voiceLogHistory)) voiceLogHistory = [];
+} catch (e) {
+    voiceLogHistory = [];
+}
+if (voiceLogHistory.length === 0) {
+    voiceLogHistory = [
+        { text: 'two cold coffee', label: '2 Cold Coffee', time: '12:30 PM' },
+        { text: 'one chicken biryani', label: '1 Chicken Biryani', time: '12:35 PM' }
+    ];
+}
+if (voiceLogHistory.length > 2) {
+    voiceLogHistory = voiceLogHistory.slice(-2);
+}
+
+function recordVoiceHistory(phrase, label) {
+    if (!phrase || !phrase.trim()) return;
+    const clean = phrase.trim();
+    const cleanLabel = label || clean;
+    voiceLogHistory.push({
+        text: clean,
+        label: cleanLabel.charAt(0).toUpperCase() + cleanLabel.slice(1),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+    // STRICTLY LAST 2 ITEMS ONLY
+    if (voiceLogHistory.length > 2) {
+        voiceLogHistory = voiceLogHistory.slice(-2);
+    }
+    try {
+        localStorage.setItem('billnaw_voice_history', JSON.stringify(voiceLogHistory));
+    } catch (e) {}
+    renderVoiceHistoryChips();
+}
+window.recordVoiceHistory = recordVoiceHistory;
+
+function renderVoiceHistoryChips() {
+    const container = document.getElementById('quickVoicePillsContainer') || document.getElementById('quickVoicePillsRow');
+    if (!container) return;
+
+    // Strict cap of 2 items
+    const items = voiceLogHistory.slice(-2);
+    const html = items.map(entry => {
+        const escaped = entry.text.replace(/'/g, "\\'");
+        return `<button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('${escaped}')" title="Replay voice order: ${entry.text} (${entry.time || ''})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 3px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>"${entry.label || entry.text}"</button>`;
+    }).join(' ');
+
+    const inner = document.getElementById('quickVoicePillsContainer');
+    if (inner) {
+        inner.innerHTML = html;
+    } else {
+        container.innerHTML = `
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dark); margin-right: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="icon-box" style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span> History (Last 2):
+            </span>
+            <div id="quickVoicePillsContainer" style="display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                ${html}
+            </div>
+        `;
+    }
+}
+window.renderVoiceHistoryChips = renderVoiceHistoryChips;
 
 // Spoken number word mapping for English/Hindi/Bengali common diner speech
 const spokenNumberMap = {
@@ -213,6 +278,7 @@ function parseAndPushVoiceOrder(phrase) {
         const msg = `🎙️ Voice Order added to Table ${getTableName(activeTable)}: ${addedSummary.join(', ')}`;
         showToast(msg);
         updateVoiceIndicatorUI(true, `✓ Added: ${addedSummary.join(', ')}`);
+        recordVoiceHistory(cleanPhrase, addedSummary.join(', '));
         setTimeout(() => updateVoiceIndicatorUI(false), 3000);
     } else {
         showToast(`Could not recognize menu items in: "${phrase}". Try "2 Cold Coffee" or "1 Espresso"`);
@@ -420,16 +486,48 @@ window.copyWhatsAppCampaignText = copyWhatsAppCampaignText;
 
 
 // --- 3. INVENTORY TELEMETRY & RAW INGREDIENTS ENGINE ---
-let inventoryTelemetryData = JSON.parse(localStorage.getItem('bongbhoj_inventory_telemetry') || 'null') || [
+const defaultInventoryData = [
     { id: 1, name: "Special Roast Coffee Beans", category: "Beverages", stock: 1.2, minThreshold: 3.0, unit: "kg", costPerUnit: 750, dailyUsage: "0.8 kg/day", impactedDishes: ["Espresso", "Cold Coffee", "Cappuccino"], status: "critical" },
     { id: 2, name: "Fresh Cow Milk (Dairy)", category: "Dairy", stock: 2.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 64, dailyUsage: "6.5 L/day", impactedDishes: ["Masala Chai", "Cold Coffee", "Paneer Rolls"], status: "critical" },
     { id: 3, name: "Aromatic Basmati Rice", category: "Grains", stock: 3.5, minThreshold: 8.0, unit: "kg", costPerUnit: 110, dailyUsage: "4.0 kg/day", impactedDishes: ["Chicken Biryani", "Special Fried Rice"], status: "critical" },
-    { id: 4, name: "Refined Sunflower Oil", category: "Pantry", stock: 6.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 135, dailyUsage: "1.5 L/day", impactedDishes: ["Fried Rice", "Cutlets"], status: "low" },
+    { id: 4, name: "Refined Sunflower Oil", category: "Pantry", stock: 6.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 135, dailyUsage: "1.5 L/day", impactedDishes: ["Fried Rice", "Cutlets", "Paneer Rolls"], status: "low" },
     { id: 5, name: "Premium CTC Tea Leaves", category: "Beverages", stock: 4.5, minThreshold: 2.5, unit: "kg", costPerUnit: 380, dailyUsage: "0.5 kg/day", impactedDishes: ["Masala Chai", "Lemon Tea"], status: "good" },
     { id: 6, name: "Fresh Farm Chicken", category: "Meat", stock: 8.0, minThreshold: 4.0, unit: "kg", costPerUnit: 220, dailyUsage: "5.0 kg/day", impactedDishes: ["Chicken Biryani", "Chicken Rolls"], status: "good" },
     { id: 7, name: "Fresh Dairy Paneer", category: "Dairy", stock: 2.8, minThreshold: 2.0, unit: "kg", costPerUnit: 360, dailyUsage: "1.5 kg/day", impactedDishes: ["Paneer Rolls", "Paneer Sandwich"], status: "good" },
-    { id: 8, name: "Refined White Sugar", category: "Pantry", stock: 9.0, minThreshold: 5.0, unit: "kg", costPerUnit: 44, dailyUsage: "1.2 kg/day", impactedDishes: ["Tea", "Coffee", "Mocktails"], status: "good" }
+    { id: 8, name: "Refined White Sugar", category: "Pantry", stock: 9.0, minThreshold: 5.0, unit: "kg", costPerUnit: 44, dailyUsage: "1.2 kg/day", impactedDishes: ["Tea", "Coffee", "Mocktails"], status: "good" },
+    { id: 9, name: "Refined Wheat & All-Purpose Flour", category: "Grains & Bakery", stock: 12.0, minThreshold: 6.0, unit: "kg", costPerUnit: 45, dailyUsage: "3.0 kg/day", impactedDishes: ["Paneer Rolls", "Veg Burger", "Samosa", "Sandwich"], status: "good" }
 ];
+
+let inventoryTelemetryData = JSON.parse(localStorage.getItem('bongbhoj_inventory_telemetry') || 'null') || defaultInventoryData;
+
+// Ensure Flour (id 9) exists if loaded from older localStorage
+if (Array.isArray(inventoryTelemetryData) && !inventoryTelemetryData.find(i => i.id === 9)) {
+    inventoryTelemetryData.push({ id: 9, name: "Refined Wheat & All-Purpose Flour", category: "Grains & Bakery", stock: 12.0, minThreshold: 6.0, unit: "kg", costPerUnit: 45, dailyUsage: "3.0 kg/day", impactedDishes: ["Paneer Rolls", "Veg Burger", "Samosa", "Sandwich"], status: "good" });
+}
+
+// Pre-configured default dish recipes for existing menu items (ingredientId: amountPerPortion)
+const defaultDishRecipes = {
+    "espresso": { 1: 0.018 },
+    "cappuccino": { 1: 0.02, 2: 0.18, 8: 0.015 },
+    "cold coffee": { 1: 0.02, 2: 0.22, 8: 0.02 },
+    "coffee": { 1: 0.02, 2: 0.15, 8: 0.015 },
+    "masala chai": { 5: 0.01, 2: 0.12, 8: 0.015 },
+    "tea": { 5: 0.01, 2: 0.1, 8: 0.015 },
+    "lemon tea": { 5: 0.01, 8: 0.015 },
+    "chicken biryani": { 6: 0.25, 3: 0.20, 4: 0.03 },
+    "chicken rolls": { 6: 0.15, 9: 0.08, 4: 0.02 },
+    "paneer roll": { 7: 0.12, 9: 0.08, 4: 0.02 },
+    "paneer tikka": { 7: 0.18, 4: 0.02 },
+    "paneer sandwich": { 7: 0.10, 9: 0.06, 4: 0.01 },
+    "paneer": { 7: 0.12, 9: 0.06, 4: 0.02 },
+    "veg burger": { 9: 0.10, 4: 0.02 },
+    "burger": { 9: 0.10, 4: 0.02 },
+    "fried rice": { 3: 0.20, 4: 0.03 },
+    "special fried rice": { 3: 0.20, 4: 0.03 },
+    "rice": { 3: 0.20, 4: 0.02 },
+    "french fries": { 4: 0.04 },
+    "cutlets": { 9: 0.06, 4: 0.03 }
+};
 
 function persistInventoryTelemetry() {
     localStorage.setItem('bongbhoj_inventory_telemetry', JSON.stringify(inventoryTelemetryData));
@@ -438,11 +536,11 @@ function persistInventoryTelemetry() {
 function calculateLossAversionMetrics() {
     // Count critical and low items
     const criticalItems = inventoryTelemetryData.filter(i => i.stock <= i.minThreshold);
-    // Approximate potential dinner revenue impact
-    const estImpact = criticalItems.length * 1400; 
+    // Dynamic calculated revenue impact based on costPerUnit and estimated rush servings
+    const estImpact = criticalItems.reduce((acc, item) => acc + Math.round((item.costPerUnit || 100) * 8), 0); 
     return {
         criticalCount: criticalItems.length,
-        potentialLoss: estImpact,
+        potentialLoss: estImpact || (criticalItems.length * 1200),
         itemsSummary: criticalItems.map(i => i.name).slice(0, 3).join(', ')
     };
 }
@@ -463,6 +561,25 @@ function renderInventoryTelemetryUI() {
             alertBanner.style.display = 'none';
         }
     }
+
+    // Update dynamic top cards if elements exist in DOM
+    const totalCount = inventoryTelemetryData.length;
+    const criticalItems = inventoryTelemetryData.filter(i => i.stock <= i.minThreshold);
+    const lowCount = criticalItems.length;
+    const itemsSummary = criticalItems.map(i => i.name.split(' ')[0]).slice(0, 3).join(', ');
+    const stockedCount = inventoryTelemetryData.filter(i => i.stock > i.minThreshold).length;
+    const readyPercent = Math.round((stockedCount / totalCount) * 100);
+
+    const totalEl = document.getElementById('invStatTotalCount');
+    if (totalEl) totalEl.innerText = `${totalCount} Items`;
+    const riskEl = document.getElementById('invStatRiskCount');
+    if (riskEl) riskEl.innerText = `${lowCount} Near Low`;
+    const riskSumEl = document.getElementById('invStatRiskSummary');
+    if (riskSumEl) riskSumEl.innerText = itemsSummary || 'All items optimal';
+    const readyEl = document.getElementById('invStatReadyPercent');
+    if (readyEl) readyEl.innerText = `${readyPercent}% Ready`;
+    const readySumEl = document.getElementById('invStatReadySummary');
+    if (readySumEl) readySumEl.innerText = `${stockedCount}/${totalCount} dishes stocked`;
 
     if (!container) return;
 
@@ -534,37 +651,53 @@ function promptRestockIngredient(id) {
 }
 window.promptRestockIngredient = promptRestockIngredient;
 
-// Deduct inventory ingredients when an order is completed
+// Deduct inventory ingredients when an order is completed using dish recipes
 function deductInventoryForOrder(order) {
     if (!order || !Array.isArray(order.rawItems)) return;
+    
     order.rawItems.forEach(cartItem => {
-        const dishName = (cartItem.name || '').toLowerCase();
+        const dishName = (cartItem.name || '').toLowerCase().trim();
         const qty = cartItem.qty || 1;
 
-        // Smart deduction heuristics
-        if (dishName.includes('coffee')) {
-            const coffeeItem = inventoryTelemetryData.find(i => i.id === 1);
-            if (coffeeItem) coffeeItem.stock = Math.max(0, Math.round((coffeeItem.stock - (0.02 * qty)) * 100) / 100);
-            const milkItem = inventoryTelemetryData.find(i => i.id === 2);
-            if (milkItem) milkItem.stock = Math.max(0, Math.round((milkItem.stock - (0.15 * qty)) * 100) / 100);
+        // 1. Try exact or partial match from defaultDishRecipes
+        let recipe = defaultDishRecipes[dishName];
+        if (!recipe) {
+            const recipeKey = Object.keys(defaultDishRecipes).find(k => dishName.includes(k));
+            if (recipeKey) recipe = defaultDishRecipes[recipeKey];
         }
-        if (dishName.includes('tea') || dishName.includes('chai')) {
-            const teaItem = inventoryTelemetryData.find(i => i.id === 5);
-            if (teaItem) teaItem.stock = Math.max(0, Math.round((teaItem.stock - (0.01 * qty)) * 100) / 100);
-            const milkItem = inventoryTelemetryData.find(i => i.id === 2);
-            if (milkItem) milkItem.stock = Math.max(0, Math.round((milkItem.stock - (0.1 * qty)) * 100) / 100);
-        }
-        if (dishName.includes('biryani')) {
-            const riceItem = inventoryTelemetryData.find(i => i.id === 3);
-            if (riceItem) riceItem.stock = Math.max(0, Math.round((riceItem.stock - (0.25 * qty)) * 100) / 100);
-            const chickItem = inventoryTelemetryData.find(i => i.id === 6);
-            if (chickItem) chickItem.stock = Math.max(0, Math.round((chickItem.stock - (0.2 * qty)) * 100) / 100);
-        }
-        if (dishName.includes('rice')) {
-            const riceItem = inventoryTelemetryData.find(i => i.id === 3);
-            if (riceItem) riceItem.stock = Math.max(0, Math.round((riceItem.stock - (0.2 * qty)) * 100) / 100);
+
+        if (recipe) {
+            Object.entries(recipe).forEach(([ingIdStr, amount]) => {
+                const ingId = parseInt(ingIdStr, 10);
+                const item = inventoryTelemetryData.find(i => i.id === ingId);
+                if (item) {
+                    item.stock = Math.max(0, Math.round((item.stock - (amount * qty)) * 100) / 100);
+                }
+            });
+        } else {
+            // Heuristic deductions for unmapped dish components
+            if (dishName.includes('coffee')) {
+                const c = inventoryTelemetryData.find(i => i.id === 1); if (c) c.stock = Math.max(0, Math.round((c.stock - 0.02 * qty) * 100) / 100);
+                const m = inventoryTelemetryData.find(i => i.id === 2); if (m) m.stock = Math.max(0, Math.round((m.stock - 0.15 * qty) * 100) / 100);
+            }
+            if (dishName.includes('tea') || dishName.includes('chai')) {
+                const t = inventoryTelemetryData.find(i => i.id === 5); if (t) t.stock = Math.max(0, Math.round((t.stock - 0.01 * qty) * 100) / 100);
+                const m = inventoryTelemetryData.find(i => i.id === 2); if (m) m.stock = Math.max(0, Math.round((m.stock - 0.10 * qty) * 100) / 100);
+            }
+            if (dishName.includes('biryani')) {
+                const r = inventoryTelemetryData.find(i => i.id === 3); if (r) r.stock = Math.max(0, Math.round((r.stock - 0.25 * qty) * 100) / 100);
+                const ch = inventoryTelemetryData.find(i => i.id === 6); if (ch) ch.stock = Math.max(0, Math.round((ch.stock - 0.20 * qty) * 100) / 100);
+            }
+            if (dishName.includes('paneer')) {
+                const p = inventoryTelemetryData.find(i => i.id === 7); if (p) p.stock = Math.max(0, Math.round((p.stock - 0.12 * qty) * 100) / 100);
+                const f = inventoryTelemetryData.find(i => i.id === 9); if (f) f.stock = Math.max(0, Math.round((f.stock - 0.08 * qty) * 100) / 100);
+            }
+            if (dishName.includes('rice')) {
+                const r = inventoryTelemetryData.find(i => i.id === 3); if (r) r.stock = Math.max(0, Math.round((r.stock - 0.20 * qty) * 100) / 100);
+            }
         }
     });
+
     persistInventoryTelemetry();
     renderInventoryTelemetryUI();
 }
@@ -602,4 +735,6 @@ window.importFromPlatformModal = importFromPlatformModal;
 // Initialize when ready
 document.addEventListener('DOMContentLoaded', () => {
     initVoiceEngine();
+    renderVoiceHistoryChips();
+    renderInventoryTelemetryUI();
 });

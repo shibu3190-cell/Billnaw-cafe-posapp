@@ -91,6 +91,15 @@ function syncTableUI() {
     const kTable = document.getElementById('kotTableNoDisplay'); if (kTable) kTable.innerText = currentTableName;
     const cTable = document.getElementById('checkoutTableNoDisplay'); if (cTable) cTable.innerText = currentTableName;
     const discountModalTableNo = document.getElementById('discountModalTableNo'); if (discountModalTableNo) discountModalTableNo.innerText = currentTableName;
+    
+    // Topbar Active Table Display & Occupied Status
+    const topbarDisplay = document.getElementById('topbarTableDisplay');
+    if (topbarDisplay) topbarDisplay.innerText = currentTableName;
+    const topbarDot = document.getElementById('topbarTableDot');
+    if (topbarDot) {
+        const isOccupied = tablesInfo[activeTable] && tablesInfo[activeTable].items && tablesInfo[activeTable].items.length > 0;
+        topbarDot.className = 'topbar-table-dot ' + (isOccupied ? 'occupied' : 'empty');
+    }
 }
 window.syncTableUI = syncTableUI;
 

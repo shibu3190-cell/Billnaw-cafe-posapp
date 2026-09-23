@@ -172,7 +172,7 @@ app.get('/api/gemini/status', async (req, res) => {
 });
 
 // Protected Gemini Menu Extraction: AI key resolution + Monthly quota enforcement + Graceful Fallback
-app.post('/api/extract-menu', async (req, res) => {
+app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res) => {
   const { base64Data, mimeType, clientId, extractedText } = req.body;
   let keyCheck = null;
 

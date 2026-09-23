@@ -20,6 +20,11 @@ window.loadLazyScript = loadLazyScript;
 
 // Global Keyboard Shortcut Handlers
 document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        dismissTopModal();
+        return;
+    }
+
     if (event.key === 'Enter') {
         const activeId = document.activeElement ? document.activeElement.id : '';
         if (!activeId) return;
@@ -50,6 +55,47 @@ document.addEventListener('keydown', function(event) {
     }
 });
 
+// Dynamic Top Modal Dismissal (Clean hierarchy stack resolution)
+function dismissTopModal() {
+    const overlays = Array.from(document.querySelectorAll('.modal-overlay')).filter(el => {
+        if (!el || el.id === 'activationOverlay' || el.id === 'loginOverlay') return false;
+        if (el.style.display === 'none') return false;
+        const comp = window.getComputedStyle(el);
+        return comp.display !== 'none' && comp.visibility !== 'hidden';
+    });
+    if (overlays.length === 0) return false;
+    
+    // Sort by computed zIndex descending
+    overlays.sort((a, b) => {
+        const zA = parseInt(window.getComputedStyle(a).zIndex, 10) || 0;
+        const zB = parseInt(window.getComputedStyle(b).zIndex, 10) || 0;
+        return zB - zA;
+    });
+    
+    const topModal = overlays[0];
+    const closeBtn = topModal.querySelector('.modal-close-btn');
+    if (closeBtn && typeof closeBtn.click === 'function') {
+        closeBtn.click();
+    } else {
+        topModal.style.display = 'none';
+    }
+    return true;
+}
+window.dismissTopModal = dismissTopModal;
+
+// Modal Backdrop Click Dismissal
+document.addEventListener('click', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+        if (e.target.id === 'activationOverlay' || e.target.id === 'loginOverlay') return;
+        const closeBtn = e.target.querySelector('.modal-close-btn');
+        if (closeBtn && typeof closeBtn.click === 'function') {
+            closeBtn.click();
+        } else {
+            e.target.style.display = 'none';
+        }
+    }
+});
+
 // App Bootstrap Initialization
 async function initApp() {
     try {
@@ -64,6 +110,12 @@ async function initApp() {
         }
         if (typeof updateAllUI === 'function') {
             updateAllUI();
+        }
+        if (typeof renderVoiceHistoryChips === 'function') {
+            renderVoiceHistoryChips();
+        }
+        if (typeof renderInventoryTelemetryUI === 'function') {
+            renderInventoryTelemetryUI();
         }
     } catch (err) {
         console.error("Initialization error:", err);
