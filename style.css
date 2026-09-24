@@ -316,6 +316,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 
 .view { display: none; flex: 1; overflow-y: auto; animation: fadeUp 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
 .view.active { display: flex; flex-direction: column; }
+.view.active > * { flex-shrink: 0; }
 #pos.view.active { overflow-y: hidden; } 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -2217,6 +2218,8 @@ input:focus, select:focus, textarea:focus { outline: none; }
     border: 1px solid rgba(255, 255, 255, 0.12);
     position: relative;
     overflow: hidden;
+    flex-shrink: 0;
+    min-height: fit-content;
 }
 .menu-ai-banner::after {
     content: '';
@@ -2675,15 +2678,14 @@ body.printing { background: #fff !important; }
     display: none;
 }
 
-/* Deep Emerald/Teal #143832 Brand Header */
+/* Royal Cafe POS Theme Brand Header */
 .shop-auth-header {
-    background: #143832;
-    background: linear-gradient(135deg, #143832 0%, #0D2622 100%);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
     padding: 22px 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid rgba(45, 212, 191, 0.15);
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12);
     color: #FFFFFF;
 }
 
@@ -2697,13 +2699,14 @@ body.printing { background: #fff !important; }
     width: 42px;
     height: 42px;
     border-radius: 12px;
-    background: rgba(45, 212, 191, 0.12);
-    border: 1.5px solid rgba(45, 212, 191, 0.3);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1.5px solid rgba(255, 255, 255, 0.22);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    color: #FAF7F4;
 }
 
 .shop-auth-brand-name {
@@ -2721,19 +2724,20 @@ body.printing { background: #fff !important; }
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.08em;
-    padding: 2px 7px;
+    padding: 2px 8px;
     border-radius: 6px;
-    background: #10B981;
-    color: #FFFFFF;
+    background: var(--milk-choc);
+    color: #FAF7F4;
     text-transform: uppercase;
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .shop-auth-brand-sub {
     margin: 2px 0 0 0;
     font-size: 11px;
-    color: #99F6E4;
+    color: #D4B895;
     font-weight: 500;
-    opacity: 0.9;
+    opacity: 0.95;
 }
 
 /* Semantic Close Button (strictly distinct from .modal-close-btn) */
@@ -2879,9 +2883,9 @@ body.printing { background: #fff !important; }
 
 /* Buttons */
 .btn-emerald {
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
     color: #FFFFFF;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.15);
     padding: 12px 18px;
     border-radius: 12px;
     font-size: 13px;
@@ -2892,12 +2896,12 @@ body.printing { background: #fff !important; }
     justify-content: center;
     gap: 8px;
     transition: all 0.18s ease;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 4px 14px rgba(43, 28, 21, 0.22);
 }
 
 .btn-emerald:hover {
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
-    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+    box-shadow: 0 6px 18px rgba(43, 28, 21, 0.32);
     transform: translateY(-1px);
 }
 
@@ -2907,8 +2911,8 @@ body.printing { background: #fff !important; }
 
 /* 6-Digit Auto-Advancing OTP Inputs */
 .otp-section {
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
+    background: #FAF7F4;
+    border: 1.5px solid var(--border);
     border-radius: 14px;
     padding: 16px;
     margin-bottom: 14px;
@@ -2922,7 +2926,7 @@ body.printing { background: #fff !important; }
 
 .otp-step-label {
     font-size: 12px;
-    color: #475569;
+    color: var(--text-dark);
 }
 
 .otp-inputs-grid {
@@ -2940,9 +2944,9 @@ body.printing { background: #fff !important; }
     font-weight: 800;
     font-family: inherit;
     font-variant-numeric: tabular-nums;
-    color: #143832;
+    color: var(--primary);
     background: #FFFFFF;
-    border: 2px solid #CBD5E1;
+    border: 2px solid var(--border);
     border-radius: 12px;
     transition: all 0.15s ease;
     outline: none;
@@ -2950,10 +2954,10 @@ body.printing { background: #fff !important; }
 }
 
 .otp-digit-input:focus {
-    border-color: #10B981;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(43, 28, 21, 0.15);
     transform: translateY(-2px);
-    background: #F0FDF4;
+    background: #FFFFFF;
 }
 
 /* Timer and Resend Row */
@@ -2962,20 +2966,20 @@ body.printing { background: #fff !important; }
     align-items: center;
     justify-content: space-between;
     font-size: 12px;
-    color: #64748B;
+    color: var(--text-muted);
     margin-bottom: 6px;
     padding: 0 4px;
 }
 
 .otp-timer-text strong {
-    color: #143832;
+    color: var(--primary);
     font-variant-numeric: tabular-nums;
 }
 
 .btn-resend-link {
     background: transparent;
     border: none;
-    color: #059669;
+    color: var(--milk-choc);
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
@@ -2986,11 +2990,11 @@ body.printing { background: #fff !important; }
 
 .btn-resend-link:hover:not(:disabled) {
     text-decoration: underline;
-    background: rgba(16, 185, 129, 0.08);
+    background: rgba(43, 28, 21, 0.06);
 }
 
 .btn-resend-link:disabled {
-    color: #94A3B8;
+    color: var(--text-subtle);
     cursor: not-allowed;
     text-decoration: none;
 }
@@ -3004,9 +3008,9 @@ body.printing { background: #fff !important; }
 .auth-link-btn {
     background: transparent;
     border: none;
-    color: #059669;
+    color: var(--milk-choc);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -3017,7 +3021,8 @@ body.printing { background: #fff !important; }
 }
 
 .auth-link-btn:hover {
-    background: rgba(16, 185, 129, 0.08);
+    background: rgba(43, 28, 21, 0.06);
+    color: var(--primary);
     text-decoration: underline;
 }
 

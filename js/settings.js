@@ -779,8 +779,14 @@ function switchTab(tabId) {
     if (targetNavBtn) targetNavBtn.classList.add('active');
     
     const targetContent = document.getElementById(tabId);
-    if (targetContent) targetContent.classList.add('active');
-    
+    if (targetContent) {
+        targetContent.classList.add('active');
+        try { targetContent.scrollTop = 0; } catch(e) {}
+    }
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        try { mainContent.scrollTop = 0; } catch(e) {}
+    }
     window.scrollTo(0, 0); 
     
     // Always keep topbar active table indicator synced across all tab views

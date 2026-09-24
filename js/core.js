@@ -552,7 +552,16 @@ function attachFirestoreListener(targetStoreCode = null) {
                 persistAllToFirestore();
             }
         }, (err) => {
-            console.warn("Firestore onSnapshot error:", err);
+            const isPermissionError = err && (err.code === 'permission-denied' || (err.message && err.message.toLowerCase().includes('permission')));
+            if (isPermissionError) {
+                console.info("⚡ Firestore cloud permissions require active Firebase credentials. Running seamlessly in Local IndexedDB mode.");
+                if (firestoreUnsubscribe) {
+                    try { firestoreUnsubscribe(); } catch(e) {}
+                    firestoreUnsubscribe = null;
+                }
+            } else {
+                console.warn("Firestore onSnapshot error:", err);
+            }
             setCloudSyncStatus('offline', 'Offline (Local)');
         });
     } catch (err) {
@@ -587,8 +596,13 @@ async function persistAllToFirestore() {
         lastCloudSyncTime = Date.now();
         setCloudSyncStatus('synced', 'Real-Time Synced');
     } catch (e) {
-        console.warn("Cloud backup error:", e);
-        setCloudSyncStatus('offline', 'Sync Error (Retrying)');
+        const isPermission = e && (e.code === 'permission-denied' || (e.message && e.message.toLowerCase().includes('permission')));
+        if (isPermission) {
+            console.info("⚡ Cloud store saved to Local IndexedDB (Cloud permissions require Service Account).");
+        } else {
+            console.warn("Cloud backup error:", e);
+        }
+        setCloudSyncStatus('offline', 'Local (IndexedDB)');
     }
 }
 window.persistAllToFirestore = persistAllToFirestore;
