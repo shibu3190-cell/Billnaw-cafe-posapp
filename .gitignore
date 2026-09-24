@@ -50,6 +50,7 @@ __pycache__/
 .agents/orchestrator*
 .agents/sentinel*
 .agents/teamwork_preview_*
+.agents/victory_*
 .agents/ORIGINAL_REQUEST.md
 ORIGINAL_REQUEST.md
 PROJECT.md

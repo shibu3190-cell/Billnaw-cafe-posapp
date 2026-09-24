@@ -763,6 +763,9 @@ function switchTab(tabId) {
     
     window.scrollTo(0, 0); 
     
+    // Always keep topbar active table indicator synced across all tab views
+    if (typeof syncTableUI === 'function') syncTableUI();
+
     if (tabId === 'dashboard') {
         if (typeof renderDashboardAnalytics === 'function') renderDashboardAnalytics();
     }
@@ -771,7 +774,6 @@ function switchTab(tabId) {
     }
     if (tabId === 'pos') {
         if (typeof renderMenuUI === 'function') renderMenuUI();
-        if (typeof syncTableUI === 'function') syncTableUI();
         if (typeof updateCartUI === 'function') updateCartUI();
     }
     if (tabId === 'menu' || tabId === 'menuManage') {

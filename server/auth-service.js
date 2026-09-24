@@ -386,7 +386,7 @@ export function verifyOtp(email, otp, shopName) {
 /**
  * Email + Password account registration.
  */
-export function registerUser({ firstName, lastName, shopName, email, password, confirmPassword }) {
+export function registerUser({ firstName, lastName, shopName, email, password, confirmPassword, otp }) {
   const normalizedEmail = normalizeEmail(email);
   if (!isValidEmail(normalizedEmail)) {
     return { status: 400, data: { success: false, error: 'Invalid email address' } };
@@ -405,6 +405,21 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
   }
   if (userStore.has(normalizedEmail)) {
     return { status: 400, data: { success: false, error: 'An account with this email already exists' } };
+  }
+
+  // Verify email OTP when provided
+  if (otp !== undefined && otp !== null && String(otp).trim() !== '') {
+    const cleanOtp = String(otp).trim();
+    const otpRes = verifyOtp(normalizedEmail, cleanOtp, shopName);
+    if (otpRes.status !== 200) {
+      return {
+        status: 400,
+        data: {
+          success: false,
+          error: (otpRes.data && otpRes.data.error) || 'Invalid or expired email verification code'
+        }
+      };
+    }
   }
 
   const salt = crypto.randomBytes(16).toString('hex');

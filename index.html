@@ -196,9 +196,36 @@
                         </div>
                     </div>
 
+                    <!-- Step 2: Signup Email Verification OTP Code Container -->
+                    <div id="signupOtpSection" class="otp-section" style="display: none; margin-top: 14px; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px;">
+                        <div class="otp-header-info">
+                            <span class="otp-step-label">Enter 6-digit code sent to <strong id="signupOtpRecipientEmail"></strong> to verify new shop (<a href="javascript:void(0)" onclick="resetSignupOtpView()" style="color: #143832; font-weight: 700; text-decoration: underline; font-size: 11px; margin-left: 4px;">Change</a>):</span>
+                        </div>
+                        
+                        <div class="otp-inputs-grid" id="signupOtpBoxesContainer">
+                            <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="0" autocomplete="one-time-code" aria-label="Signup Digit 1">
+                            <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="1" aria-label="Signup Digit 2">
+                            <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="2" aria-label="Signup Digit 3">
+                            <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="3" aria-label="Signup Digit 4">
+                            <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="4" aria-label="Signup Digit 5">
+                            <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="5" aria-label="Signup Digit 6">
+                        </div>
+
+                        <!-- 60-Second Countdown Timer & Resend Link -->
+                        <div class="otp-timer-row" style="margin-top: 8px;">
+                            <span id="signupOtpTimerText" class="otp-timer-text">Resend code in <strong id="signupOtpSecondsCount">60</strong>s</span>
+                            <button type="button" id="btnSignupResendOtp" class="btn-resend-link" disabled onclick="handleResendSignupOtp()">Resend Code</button>
+                        </div>
+
+                        <button type="button" id="btnVerifySignupSubmit" class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="handleVerifyAndCreateAccount()">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            <span>Verify OTP & Complete Shop Registration</span>
+                        </button>
+                    </div>
+
                     <button type="button" id="btnSignupSubmit" class="btn btn-emerald" style="width: 100%; margin-top: 12px;" onclick="handleCreateShopAccount()">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
-                        <span>Create Shop Account</span>
+                        <span>Verify Email & Create Shop</span>
                     </button>
                 </div>
 
@@ -2222,6 +2249,18 @@
                         </div>
                         
                         <div class="menu-wrapper">
+                            <!-- Smart Menu Fast Upload Bar in POS -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <button type="button" class="btn" style="background: #143832; color: #FFFFFF; font-weight: 700; padding: 7px 14px; font-size: 12px; border-radius: 20px; border: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--shadow-xs); cursor: pointer;" onclick="triggerSmartMenuUpload()" id="posSmartMenuUploadBtn" title="Upload menu photo or PDF for AI vision extraction & auto-add">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+                                        <span>✨ Smart Menu (Auto-Detect)</span>
+                                    </button>
+                                    <input type="file" id="smartMenuUniversalInput" accept="image/*, application/pdf" style="display: none;" onchange="processAIMenu(event)">
+                                </div>
+                                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Upload photo/PDF to auto-detect & add dishes</span>
+                            </div>
+
                             <div class="search-container">
                                 <span class="search-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
                                 <input type="text" id="menuSearchInput" class="search-bar" placeholder="Search dishes & drinks..." onkeyup="renderMenuUI()">
@@ -2817,6 +2856,20 @@
                             <div class="setting-tile-info">
                                 <h3 style="color: var(--danger);">Lock Terminal / Logout Staff</h3>
                                 <p>Switch shift cashier, protect register & return to login screen</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
+                    </div>
+
+                    <!-- 12. Logout Cloud Shop Account (Sign out of shop profile & log in again via OTP or password) -->
+                    <div class="setting-tile-card" onclick="logoutShopCloudAccount()" id="settingTileLogoutShop" style="border-left: 3px solid #143832;">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon" style="background: rgba(20, 56, 50, 0.1); color: #143832;">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                            </div>
+                            <div class="setting-tile-info">
+                                <h3 style="color: #143832;">Logout Cloud Shop Account</h3>
+                                <p>Sign out of shop account. Log in again via Email OTP or Password</p>
                             </div>
                         </div>
                         <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
@@ -3611,6 +3664,40 @@
             }
             window.handlePasswordSignIn = handlePasswordSignIn;
 
+            let signupOtpCountdownInterval = null;
+            let signupOtpRemainingSeconds = 60;
+
+            function startSignupOtpTimer(seconds) {
+                if (signupOtpCountdownInterval) clearInterval(signupOtpCountdownInterval);
+                signupOtpRemainingSeconds = seconds;
+                const countSpan = document.getElementById('signupOtpSecondsCount');
+                const resendBtn = document.getElementById('btnSignupResendOtp');
+                const timerText = document.getElementById('signupOtpTimerText');
+                
+                if (resendBtn) resendBtn.disabled = true;
+                if (timerText) timerText.style.display = 'inline';
+                if (countSpan) countSpan.innerText = signupOtpRemainingSeconds;
+
+                signupOtpCountdownInterval = setInterval(() => {
+                    signupOtpRemainingSeconds--;
+                    if (countSpan) countSpan.innerText = signupOtpRemainingSeconds;
+                    if (signupOtpRemainingSeconds <= 0) {
+                        clearInterval(signupOtpCountdownInterval);
+                        if (resendBtn) resendBtn.disabled = false;
+                        if (timerText) timerText.style.display = 'none';
+                    }
+                }, 1000);
+            }
+
+            function resetSignupOtpView() {
+                const otpSec = document.getElementById('signupOtpSection');
+                if (otpSec) otpSec.style.display = 'none';
+                const signupBtn = document.getElementById('btnSignupSubmit');
+                if (signupBtn) signupBtn.style.display = 'block';
+                if (signupOtpCountdownInterval) clearInterval(signupOtpCountdownInterval);
+            }
+            window.resetSignupOtpView = resetSignupOtpView;
+
             function handleCreateShopAccount() {
                 const fn = document.getElementById('signupFirstName') ? document.getElementById('signupFirstName').value.trim() : '';
                 const ln = document.getElementById('signupLastName') ? document.getElementById('signupLastName').value.trim() : '';
@@ -3623,12 +3710,85 @@
                     alert('Please fill out all required fields');
                     return;
                 }
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email) || email.includes('..')) {
+                    alert('Please enter a valid email address');
+                    return;
+                }
                 if (pass.length < 6) {
                     alert('Password must be at least 6 characters');
                     return;
                 }
                 if (pass !== confirm) {
                     alert('Passwords do not match');
+                    return;
+                }
+
+                // Show OTP Section & dispatch verification code to email
+                const recipientEmailEl = document.getElementById('signupOtpRecipientEmail');
+                if (recipientEmailEl) recipientEmailEl.innerText = email;
+
+                const otpSec = document.getElementById('signupOtpSection');
+                if (otpSec) otpSec.style.display = 'block';
+
+                const signupBtn = document.getElementById('btnSignupSubmit');
+                if (signupBtn) signupBtn.style.display = 'none';
+
+                startSignupOtpTimer(60);
+
+                const firstDigit = document.querySelector('#signupOtpBoxesContainer .signup-otp-input[data-index="0"]');
+                if (firstDigit) {
+                    setTimeout(() => { firstDigit.focus(); firstDigit.select(); }, 100);
+                }
+
+                if (typeof fetch === 'function') {
+                    fetch('/api/auth/send-otp', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, purpose: 'signup' })
+                    }).then(res => res.json()).then(data => {
+                        if (data && data.success && typeof showToast === 'function') {
+                            showToast('Verification code sent to ' + email, 'success');
+                        }
+                    }).catch(() => {});
+                }
+            }
+            window.handleCreateShopAccount = handleCreateShopAccount;
+
+            function handleResendSignupOtp() {
+                const resendBtn = document.getElementById('btnSignupResendOtp');
+                if (resendBtn && resendBtn.disabled) return;
+                const email = document.getElementById('signupEmail') ? document.getElementById('signupEmail').value.trim() : '';
+                if (!email) return;
+
+                startSignupOtpTimer(60);
+                if (typeof fetch === 'function') {
+                    fetch('/api/auth/send-otp', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, purpose: 'signup' })
+                    }).then(res => res.json()).then(data => {
+                        if (data && data.success && typeof showToast === 'function') {
+                            showToast('New verification code sent to ' + email, 'success');
+                        }
+                    }).catch(() => {});
+                }
+            }
+            window.handleResendSignupOtp = handleResendSignupOtp;
+
+            function handleVerifyAndCreateAccount() {
+                const fn = document.getElementById('signupFirstName') ? document.getElementById('signupFirstName').value.trim() : '';
+                const ln = document.getElementById('signupLastName') ? document.getElementById('signupLastName').value.trim() : '';
+                const shop = document.getElementById('signupShopName') ? document.getElementById('signupShopName').value.trim() : '';
+                const email = document.getElementById('signupEmail') ? document.getElementById('signupEmail').value.trim() : '';
+                const pass = document.getElementById('signupPassword') ? document.getElementById('signupPassword').value : '';
+                const confirm = document.getElementById('signupConfirmPassword') ? document.getElementById('signupConfirmPassword').value : '';
+
+                const digitInputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
+                const otp = digitInputs.map(i => i.value.trim()).join('');
+
+                if (otp.length < 6) {
+                    alert('Please enter complete 6-digit verification code sent to your email');
                     return;
                 }
 
@@ -3642,7 +3802,8 @@
                             shopName: shop,
                             email,
                             password: pass,
-                            confirmPassword: confirm
+                            confirmPassword: confirm,
+                            otp
                         })
                     }).then(res => res.json()).then(async data => {
                         if (data && data.success) {
@@ -3681,10 +3842,10 @@
                             if (typeof updateCloudStoreTopbar === 'function') {
                                 updateCloudStoreTopbar(email, true);
                             }
-                            if (typeof showToast === 'function') showToast('Shop Account Created! Welcome, ' + fn, 'success');
+                            if (typeof showToast === 'function') showToast('Shop Account Created & Verified! Welcome, ' + fn, 'success');
                             closeShopAuthModal();
                         } else {
-                            alert((data && data.error) ? data.error : 'Failed to create account');
+                            alert((data && data.error) ? data.error : 'Failed to verify OTP & create account');
                         }
                     }).catch(() => {
                         try {
@@ -3705,7 +3866,7 @@
                     closeShopAuthModal();
                 }
             }
-            window.handleCreateShopAccount = handleCreateShopAccount;
+            window.handleVerifyAndCreateAccount = handleVerifyAndCreateAccount;
 
             // ⚡ 1-TAP DEMO BYPASS
             function skipShopAuthToDemo() {
@@ -3746,6 +3907,7 @@
                 openShopAuthModal();
             }
             window.logoutShop = logoutShop;
+            window.logoutShopCloudAccount = logoutShop;
 
             function updateShopAuthUI() {
                 try {
@@ -3778,59 +3940,66 @@
                 verifyOtp: handleVerifyOtpCode,
                 loginWithPassword: handlePasswordSignIn,
                 signup: handleCreateShopAccount,
+                verifySignupOtp: handleVerifyAndCreateAccount,
+                resendSignupOtp: handleResendSignupOtp,
                 skipAuthToDemo: skipShopAuthToDemo,
                 logoutShop
             };
 
-            // Setup OTP digit input behavior
+            // Setup OTP digit input behavior for both Login and Signup OTP grids
             function setupOtpDigitInputs() {
-                const container = document.getElementById('otpBoxesContainer');
-                if (!container) return;
-                const inputs = Array.from(container.querySelectorAll('.otp-digit-input'));
+                function wireContainer(containerId, onComplete) {
+                    const container = document.getElementById(containerId);
+                    if (!container) return;
+                    const inputs = Array.from(container.querySelectorAll('.otp-digit-input'));
 
-                inputs.forEach((input, index) => {
-                    input.addEventListener('input', () => {
-                        const val = input.value.replace(/[^0-9]/g, '');
-                        input.value = val ? val[0] : '';
-                        if (input.value && index < inputs.length - 1) {
-                            inputs[index + 1].focus();
-                            inputs[index + 1].select();
-                        }
-                        const fullCode = inputs.map(i => i.value.trim()).join('');
-                        if (fullCode.length === 6) {
-                            handleVerifyOtpCode();
-                        }
-                    });
+                    inputs.forEach((input, index) => {
+                        input.addEventListener('input', () => {
+                            const val = input.value.replace(/[^0-9]/g, '');
+                            input.value = val ? val[0] : '';
+                            if (input.value && index < inputs.length - 1) {
+                                inputs[index + 1].focus();
+                                inputs[index + 1].select();
+                            }
+                            const fullCode = inputs.map(i => i.value.trim()).join('');
+                            if (fullCode.length === 6 && typeof onComplete === 'function') {
+                                onComplete();
+                            }
+                        });
 
-                    input.addEventListener('keydown', (e) => {
-                        if (e.key === 'Backspace') {
-                            if (!input.value && index > 0) {
+                        input.addEventListener('keydown', (e) => {
+                            if (e.key === 'Backspace') {
+                                if (!input.value && index > 0) {
+                                    inputs[index - 1].focus();
+                                    inputs[index - 1].select();
+                                }
+                            } else if (e.key === 'ArrowLeft' && index > 0) {
                                 inputs[index - 1].focus();
-                                inputs[index - 1].select();
+                            } else if (e.key === 'ArrowRight' && index < inputs.length - 1) {
+                                inputs[index + 1].focus();
                             }
-                        } else if (e.key === 'ArrowLeft' && index > 0) {
-                            inputs[index - 1].focus();
-                        } else if (e.key === 'ArrowRight' && index < inputs.length - 1) {
-                            inputs[index + 1].focus();
-                        }
-                    });
+                        });
 
-                    input.addEventListener('paste', (e) => {
-                        e.preventDefault();
-                        const pasteData = (e.clipboardData || window.clipboardData).getData('text');
-                        const digits = pasteData.replace(/[^0-9]/g, '').slice(0, 6);
-                        if (digits) {
-                            for (let i = 0; i < inputs.length; i++) {
-                                inputs[i].value = digits[i] || '';
+                        input.addEventListener('paste', (e) => {
+                            e.preventDefault();
+                            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+                            const digits = pasteData.replace(/[^0-9]/g, '').slice(0, 6);
+                            if (digits) {
+                                for (let i = 0; i < inputs.length; i++) {
+                                    inputs[i].value = digits[i] || '';
+                                }
+                                const nextFocusIndex = Math.min(digits.length, inputs.length - 1);
+                                inputs[nextFocusIndex].focus();
+                                if (digits.length === 6 && typeof onComplete === 'function') {
+                                    onComplete();
+                                }
                             }
-                            const nextFocusIndex = Math.min(digits.length, inputs.length - 1);
-                            inputs[nextFocusIndex].focus();
-                            if (digits.length === 6) {
-                                handleVerifyOtpCode();
-                            }
-                        }
+                        });
                     });
-                });
+                }
+
+                wireContainer('otpBoxesContainer', handleVerifyOtpCode);
+                wireContainer('signupOtpBoxesContainer', handleVerifyAndCreateAccount);
             }
 
             if (document.readyState === 'loading') {

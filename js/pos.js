@@ -100,8 +100,26 @@ function syncTableUI() {
         const isOccupied = tablesInfo[activeTable] && tablesInfo[activeTable].items && tablesInfo[activeTable].items.length > 0;
         topbarDot.className = 'topbar-table-dot ' + (isOccupied ? 'occupied' : 'empty');
     }
+    const topbarPill = document.getElementById('topbarTablePill');
+    if (topbarPill) {
+        topbarPill.style.display = 'inline-flex';
+        topbarPill.style.visibility = 'visible';
+    }
 }
 window.syncTableUI = syncTableUI;
+
+function triggerSmartMenuUpload() {
+    const uploader = document.getElementById('smartMenuUniversalInput') || document.getElementById('aiMenuUploader') || document.getElementById('aiMenuFileInput');
+    if (uploader) {
+        try { uploader.value = null; } catch(e) {}
+        uploader.click();
+    } else {
+        if (typeof switchTab === 'function') switchTab('menu');
+        const fallback = document.getElementById('aiMenuBtn');
+        if (fallback) fallback.click();
+    }
+}
+window.triggerSmartMenuUpload = triggerSmartMenuUpload;
 
 function selectTable(num) { 
     activeTable = num; 
