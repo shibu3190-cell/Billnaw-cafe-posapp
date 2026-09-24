@@ -183,6 +183,15 @@
                         <div id="signupEmailFeedback" class="validation-feedback"></div>
                     </div>
 
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label for="signupPhone" class="shop-auth-label">Owner Mobile / WhatsApp Number *</label>
+                        <div class="shop-auth-input-wrap">
+                            <span style="position: absolute; left: 12px; font-weight: 800; font-size: 13px; color: var(--primary);">+91</span>
+                            <input type="tel" id="signupPhone" class="shop-auth-input" placeholder="98765 43210" maxlength="14" style="padding-left: 48px;" required oninput="validateSignupPhone(this.value); validateSignupForm();">
+                        </div>
+                        <div id="signupPhoneFeedback" class="validation-feedback"></div>
+                    </div>
+
                     <div class="form-row-dual">
                         <div class="form-group">
                             <label for="signupPassword" class="shop-auth-label">Password *</label>
@@ -229,16 +238,14 @@
                     </button>
                 </div>
 
-                <!-- 3. FRICTIONLESS "SKIP LOGIN FOR NOW (DEMO POS)" BYPASS -->
-                <div class="auth-bypass-card">
-                    <button type="button" id="skipAuthToDemoBtn" class="btn-demo-bypass" onclick="skipShopAuthToDemo()" title="Instant offline counter mode for peak rush hours">
-                        <span class="btn-demo-bypass-text">
-                            <span class="demo-lightning-icon">⚡</span>
-                            <span>Skip Login for Now (Demo POS)</span>
-                        </span>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="demo-arrow"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                    </button>
-                    <p class="bypass-subtext">Instant offline counter mode for peak rush hours</p>
+                <!-- 3. PHONE & WHATSAPP OTP (COMING SOON FEATURE PREVIEW) -->
+                <div class="phone-auth-feature-preview">
+                    <div class="phone-feature-badge">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                        <span>Phone & WhatsApp OTP</span>
+                        <span class="coming-soon-pill">Coming Soon</span>
+                    </div>
+                    <p class="phone-feature-sub">SMS & WhatsApp verification launching soon. Please sign in via registered Email + OTP above.</p>
                 </div>
             </div>
         </div>
@@ -1241,6 +1248,23 @@
             <div style="display: grid; gap: 14px;">
                 <div class="form-group"><label>Shop Logo</label><input type="file" id="logoFileInput" accept="image/*" onchange="loadLogo(event)" style="padding: 8px; background: #fff; border: 1px dashed var(--border);"></div>
                 <div class="form-group"><label>Business Name *</label><input type="text" id="shopNameInput"></div>
+                
+                <div class="form-row-dual" style="margin-bottom: 0;">
+                    <div class="form-group">
+                        <label>Owner Email (Cloud Account)</label>
+                        <input type="text" id="shopEmailInput" readonly style="background: #F3F4F6; cursor: not-allowed; font-weight: 600;" placeholder="owner@cafe.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Store ID Code</label>
+                        <input type="text" id="shopStoreCodeInput" readonly style="background: #F3F4F6; cursor: not-allowed; font-weight: 600;" placeholder="SHOP-XXXX">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Owner Mobile / WhatsApp Number</label>
+                    <input type="tel" id="shopPhoneInput" placeholder="+91 98765 43210" style="font-weight: 600;">
+                </div>
+
                 <div class="form-group"><label>FSSAI License No.</label><input type="text" id="fssaiInput" placeholder="e.g. 12822013000123"></div>
                 <div class="form-group"><label>GSTIN No.</label><input type="text" id="gstinInput" placeholder="e.g. 19ABCDE1234F1Z5"></div>
                 <div class="form-group"><label>Full Address</label><input type="text" id="shopAddressInput" placeholder="Street, City, Pin Code"></div>
@@ -1250,6 +1274,80 @@
                 <button class="btn" style="flex: 2; background: var(--primary); display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="saveSettings(); closeStoreProfileModal();">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                     <span>Save Profile</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🪑 TABLE & FLOOR MANAGEMENT MODAL -->
+    <div id="tableManagementModal" class="modal-overlay" style="display: none; z-index: 1000005;">
+        <div class="modal-box" style="max-width: 480px;">
+            <div class="modal-header">
+                <div>
+                    <h2 style="display: inline-flex; align-items: center; gap: 8px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3zM3 9h18M9 21V9"></path></svg>
+                        <span>Tables & Floor Configuration</span>
+                    </h2>
+                    <p>Customize table count, dine-in display, and unpaid reminder alerts.</p>
+                </div>
+                <!-- ⚠️ CRITICAL INVARIANT: Uses tbl-close-btn, strictly NOT modal-close-btn -->
+                <button type="button" class="tbl-close-btn" onclick="closeTableManagementModal()" aria-label="Close Table Settings">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            
+            <div style="display: grid; gap: 16px;">
+                <!-- 1. Show / Hide Tables Toggle -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 14px;">
+                    <div>
+                        <strong style="font-size: 13px; color: var(--primary); display: block;">Show Tables in POS Terminal</strong>
+                        <span style="font-size: 11px; color: var(--text-muted);">Enable for Dine-In restaurants; disable for fast QSR counter / takeaway</span>
+                    </div>
+                    <label class="switch-toggle" style="margin: 0; cursor: pointer;">
+                        <input type="checkbox" id="tblMgmtShowTables" checked onchange="toggleTablesVisibility(this.checked)">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+
+                <!-- 2. Table Count Stepper (Increase / Decrease) -->
+                <div style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 12px; padding: 14px;">
+                    <label style="display: block; font-size: 12px; font-weight: 800; color: var(--primary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.4px;">
+                        Number of Dine-In Tables (T1, T2, T3...)
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button type="button" class="btn" style="width: 44px; height: 44px; font-size: 20px; font-weight: 800; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: 12px; color: var(--primary); cursor: pointer;" onclick="adjustTableCount(-1)" aria-label="Decrease Tables">−</button>
+                        <input type="number" id="tblMgmtCountInput" min="1" max="60" value="10" style="flex: 1; height: 44px; text-align: center; font-size: 20px; font-weight: 800; color: var(--primary); border: 2px solid var(--border); border-radius: 12px; background: #FAF7F4;" onchange="updateTableCountDirect(this.value)">
+                        <button type="button" class="btn" style="width: 44px; height: 44px; font-size: 20px; font-weight: 800; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: 12px; color: var(--primary); cursor: pointer;" onclick="adjustTableCount(1)" aria-label="Increase Tables">+</button>
+                    </div>
+
+                    <!-- Quick Preset Chips -->
+                    <div style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); align-self: center; margin-right: 4px;">Presets:</span>
+                        <button type="button" class="table-preset-chip" onclick="setTableCountPreset(5)">5 Tables</button>
+                        <button type="button" class="table-preset-chip" onclick="setTableCountPreset(10)">10 Tables</button>
+                        <button type="button" class="table-preset-chip" onclick="setTableCountPreset(15)">15 Tables</button>
+                        <button type="button" class="table-preset-chip" onclick="setTableCountPreset(20)">20 Tables</button>
+                        <button type="button" class="table-preset-chip" onclick="setTableCountPreset(30)">30 Tables</button>
+                    </div>
+                </div>
+
+                <!-- 3. 15-Minute Unpaid Table Alert Toggle -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 14px;">
+                    <div>
+                        <strong style="font-size: 13px; color: var(--primary); display: block;">15-Minute Unpaid Table Notification</strong>
+                        <span style="font-size: 11px; color: var(--text-muted);">Pulse table red & alert staff if food is served or seated for 15+ minutes without bill payment</span>
+                    </div>
+                    <label class="switch-toggle" style="margin: 0; cursor: pointer;">
+                        <input type="checkbox" id="tblMgmtUnpaidAlert" checked>
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 18px;">
+                <button type="button" class="btn btn-outline" onclick="closeTableManagementModal()">Cancel</button>
+                <button type="button" class="btn btn-emerald" style="flex: 2;" onclick="saveTableSettings()">
+                    <span>Save Table Settings</span>
                 </button>
             </div>
         </div>
@@ -2234,7 +2332,7 @@
                 <div class="pos-layout">
                     
                     <div class="pos-left" id="swipeArea">
-                        <div class="tables-wrapper" style="margin-bottom: 10px; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px;">
+                        <div class="tables-wrapper" id="tablesWrapper" style="margin-bottom: 10px; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px;">
                             <div class="table-top-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                     <span style="font-size: 13px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 6px;">
@@ -2245,12 +2343,14 @@
                                         Active: <strong id="posActiveTableBadge">Table 1</strong>
                                     </span>
                                     <span id="tableStatsSummary" style="font-size: 11px; color: var(--text-muted); font-weight: 600;"></span>
+                                    <button type="button" class="table-quick-settings-btn" onclick="openTableManagementModal()" title="Manage Dine-In Tables, Count & Alerts">⚙️ Tables</button>
                                 </div>
                                 <div class="table-legend" style="margin-bottom: 0;">
                                     <span><i style="background: var(--success);"></i> VACANT</span>
                                     <span><i style="background: var(--warning);"></i> ORDER</span>
-                                    <span><i style="background: #9CA3AF;"></i> KITCHEN</span>
-                                    <span><i style="background: var(--danger);"></i> ALERT</span>
+                                    <span><i style="background: #3B82F6;"></i> KOT</span>
+                                    <span><i style="background: #8B5CF6;"></i> SERVED</span>
+                                    <span><i style="background: var(--danger);"></i> 15M+ ALERT</span>
                                 </div>
                             </div>
                             <div class="table-grid" id="tableGridUI"></div>
@@ -2685,6 +2785,20 @@
                             <div class="setting-tile-info">
                                 <h3>Store Profile</h3>
                                 <p>Business name, logo, address, FSSAI & GSTIN</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
+                    </div>
+
+                    <!-- 1B. Tables & Floor Management -->
+                    <div class="setting-tile-card" onclick="openTableManagementModal()">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon" style="background: rgba(20, 56, 50, 0.1); color: var(--primary);">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3zM3 9h18M9 21V9"></path></svg>
+                            </div>
+                            <div class="setting-tile-info">
+                                <h3>Tables & Floor Management</h3>
+                                <p id="settingsTableSubtitle">Manage table count (T1-T10), 15m unpaid alerts, or hide tables</p>
                             </div>
                         </div>
                         <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
@@ -3425,6 +3539,18 @@
             }
             window.validateSignupConfirmPassword = validateSignupConfirmPassword;
 
+            function validateSignupPhone(val) {
+                const clean = (val || '').replace(/\D/g, '');
+                if (!val) {
+                    showValidationMsg('signupPhoneFeedback', '', '');
+                } else if (clean.length < 10) {
+                    showValidationMsg('signupPhoneFeedback', `Enter 10-digit mobile number (${clean.length}/10)`, 'error');
+                } else {
+                    showValidationMsg('signupPhoneFeedback', 'Valid mobile number ✓', 'success');
+                }
+            }
+            window.validateSignupPhone = validateSignupPhone;
+
             function validateSignupForm() {
                 // Live check hook
             }
@@ -3519,9 +3645,13 @@
                         body: JSON.stringify({ email, otp: otpCode })
                     }).then(res => res.json()).then(async data => {
                         if (data && data.success) {
+                            // Wipe OTP inputs upon successful login
+                            digitInputs.forEach(input => { input.value = ''; });
+
                             try {
                                 localStorage.setItem('billnaw_auth_mode', 'authenticated');
                                 if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
+                                if (email) localStorage.setItem('billnaw_auth_email', email);
                                 if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
                                 localStorage.setItem('billnaw_shop_session', JSON.stringify({
                                     token: data.token,
@@ -3533,6 +3663,7 @@
                                 }));
                                 if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
                                     shopProfile.name = data.shop.name;
+                                    if (data.shop.phone) shopProfile.phone = data.shop.phone;
                                     if (typeof persistProfile === 'function') persistProfile();
                                 }
                             } catch (e) {}
@@ -3562,26 +3693,10 @@
                             showValidationMsg('loginEmailValidationFeedback', (data && data.error) ? data.error : 'Invalid verification code', 'error');
                         }
                     }).catch(err => {
-                        try {
-                            localStorage.setItem('billnaw_auth_mode', 'authenticated');
-                            localStorage.setItem('billnaw_store_code', 'SHOP-OFFLINE-01');
-                            localStorage.setItem('billnaw_shop_session', JSON.stringify({
-                                token: 'sess_offline_fallback',
-                                storeCode: 'SHOP-OFFLINE-01',
-                                shop: { name: 'Billnaw Cafe' },
-                                user: { email },
-                                loginAt: Date.now()
-                            }));
-                        } catch (e) {}
-                        updateShopAuthUI();
-                        if (typeof updateCloudStoreTopbar === 'function') updateCloudStoreTopbar(email, true);
-                        if (typeof showToast === 'function') showToast('Signed in successfully (Offline mode)', 'success');
-                        closeShopAuthModal();
+                        showValidationMsg('loginEmailValidationFeedback', 'Verification error: ' + (err.message || 'Network issue. Please try again.'), 'error');
                     });
                 } else {
-                    try { localStorage.setItem('billnaw_auth_mode', 'authenticated'); } catch (e) {}
-                    updateShopAuthUI();
-                    closeShopAuthModal();
+                    showValidationMsg('loginEmailValidationFeedback', 'Network connection unavailable', 'error');
                 }
             }
             window.handleVerifyOtpCode = handleVerifyOtpCode;
@@ -3686,12 +3801,37 @@
                 }, 1000);
             }
 
+            function resetLoginOtpView() {
+                const digitInputs = document.querySelectorAll('#otpBoxesContainer .otp-digit-input');
+                digitInputs.forEach(input => { input.value = ''; });
+                const otpInputSection = document.getElementById('otpInputSection');
+                if (otpInputSection) otpInputSection.style.display = 'none';
+                const otpSendActionWrap = document.getElementById('otpSendActionWrap');
+                if (otpSendActionWrap) otpSendActionWrap.style.display = 'block';
+                if (otpCountdownInterval) {
+                    clearInterval(otpCountdownInterval);
+                    otpCountdownInterval = null;
+                }
+                const resendBtn = document.getElementById('btnResendOtp');
+                if (resendBtn) resendBtn.disabled = true;
+                const timerText = document.getElementById('otpTimerText');
+                if (timerText) timerText.style.display = 'none';
+                const feedback = document.getElementById('loginEmailValidationFeedback');
+                if (feedback) feedback.innerText = '';
+            }
+            window.resetLoginOtpView = resetLoginOtpView;
+
             function resetSignupOtpView() {
+                const otpInputs = document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input');
+                otpInputs.forEach(i => { i.value = ''; });
                 const otpSec = document.getElementById('signupOtpSection');
                 if (otpSec) otpSec.style.display = 'none';
                 const signupBtn = document.getElementById('btnSignupSubmit');
                 if (signupBtn) signupBtn.style.display = 'block';
-                if (signupOtpCountdownInterval) clearInterval(signupOtpCountdownInterval);
+                if (signupOtpCountdownInterval) {
+                    clearInterval(signupOtpCountdownInterval);
+                    signupOtpCountdownInterval = null;
+                }
             }
             window.resetSignupOtpView = resetSignupOtpView;
 
@@ -3700,11 +3840,18 @@
                 const ln = document.getElementById('signupLastName') ? document.getElementById('signupLastName').value.trim() : '';
                 const shop = document.getElementById('signupShopName') ? document.getElementById('signupShopName').value.trim() : '';
                 const email = document.getElementById('signupEmail') ? document.getElementById('signupEmail').value.trim() : '';
+                const phoneEl = document.getElementById('signupPhone');
+                const phone = phoneEl ? phoneEl.value.replace(/\D/g, '') : '';
                 const pass = document.getElementById('signupPassword') ? document.getElementById('signupPassword').value : '';
                 const confirm = document.getElementById('signupConfirmPassword') ? document.getElementById('signupConfirmPassword').value : '';
 
                 if (!fn || !shop || !email || !pass || !confirm) {
                     alert('Please fill out all required fields');
+                    return;
+                }
+                if (!phone || phone.length < 10) {
+                    alert('Mobile phone number is mandatory (minimum 10 digits required)');
+                    if (phoneEl) phoneEl.focus();
                     return;
                 }
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -3778,11 +3925,18 @@
                 const ln = document.getElementById('signupLastName') ? document.getElementById('signupLastName').value.trim() : '';
                 const shop = document.getElementById('signupShopName') ? document.getElementById('signupShopName').value.trim() : '';
                 const email = document.getElementById('signupEmail') ? document.getElementById('signupEmail').value.trim() : '';
+                const phoneEl = document.getElementById('signupPhone');
+                const phone = phoneEl ? phoneEl.value.replace(/\D/g, '') : '';
                 const pass = document.getElementById('signupPassword') ? document.getElementById('signupPassword').value : '';
                 const confirm = document.getElementById('signupConfirmPassword') ? document.getElementById('signupConfirmPassword').value : '';
 
                 const digitInputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
                 const otp = digitInputs.map(i => i.value.trim()).join('');
+
+                if (!phone || phone.length < 10) {
+                    alert('Mobile phone number is mandatory (minimum 10 digits required)');
+                    return;
+                }
 
                 if (otp.length < 6) {
                     alert('Please enter complete 6-digit verification code sent to your email');
@@ -3798,15 +3952,19 @@
                             lastName: ln,
                             shopName: shop,
                             email,
+                            phone,
                             password: pass,
                             confirmPassword: confirm,
                             otp
                         })
                     }).then(res => res.json()).then(async data => {
                         if (data && data.success) {
+                            digitInputs.forEach(i => { i.value = ''; });
                             try {
                                 localStorage.setItem('billnaw_auth_mode', 'authenticated');
                                 if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
+                                if (email) localStorage.setItem('billnaw_auth_email', email);
+                                if (phone) localStorage.setItem('billnaw_auth_phone', phone);
                                 if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
                                 localStorage.setItem('billnaw_shop_session', JSON.stringify({
                                     token: data.token,
@@ -3816,9 +3974,11 @@
                                     user: data.user,
                                     loginAt: Date.now()
                                 }));
-                                localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email }));
+                                localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email, phone }));
                                 if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
                                     shopProfile.name = data.shop.name;
+                                    shopProfile.phone = phone;
+                                    shopProfile.ownerPhone = phone;
                                     if (typeof persistProfile === 'function') persistProfile();
                                 }
                             } catch (e) {}
@@ -3826,6 +3986,7 @@
                             if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
                                 try {
                                     await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
+                                    console.log("Firebase Auth sign in established");
                                 } catch (fbErr) {
                                     console.warn("Firebase Auth sign in fallback:", fbErr);
                                 }
@@ -3844,23 +4005,11 @@
                         } else {
                             alert((data && data.error) ? data.error : 'Failed to verify OTP & create account');
                         }
-                    }).catch(() => {
-                        try {
-                            localStorage.setItem('billnaw_auth_mode', 'authenticated');
-                            localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email }));
-                        } catch (e) {}
-                        updateShopAuthUI();
-                        if (typeof updateCloudStoreTopbar === 'function') updateCloudStoreTopbar(email, true);
-                        if (typeof showToast === 'function') showToast('Shop Account Created! Welcome, ' + fn, 'success');
-                        closeShopAuthModal();
+                    }).catch((err) => {
+                        alert('Signup verification error: ' + (err.message || 'Please check your connection and retry.'));
                     });
                 } else {
-                    try {
-                        localStorage.setItem('billnaw_auth_mode', 'authenticated');
-                        localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email }));
-                    } catch (e) {}
-                    updateShopAuthUI();
-                    closeShopAuthModal();
+                    alert('Network connection unavailable');
                 }
             }
             window.handleVerifyAndCreateAccount = handleVerifyAndCreateAccount;
@@ -3882,6 +4031,20 @@
             window.skipShopAuthToDemo = skipShopAuthToDemo;
 
             function logoutShop() {
+                const activeToken = localStorage.getItem('billnaw_auth_token');
+                const activeEmail = localStorage.getItem('billnaw_auth_email') || (document.getElementById('shopAuthEmail') ? document.getElementById('shopAuthEmail').value.trim() : '');
+
+                // Send invalidation request to backend to purge session & pending OTPs
+                try {
+                    if (typeof fetch === 'function') {
+                        fetch('/api/auth/logout', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: activeToken, email: activeEmail })
+                        }).catch(() => {});
+                    }
+                } catch (e) {}
+
                 if (window.auth && typeof window.firebaseSignOut === 'function') {
                     try {
                         window.firebaseSignOut(window.auth).catch(() => {});
@@ -3891,20 +4054,125 @@
                 try {
                     localStorage.removeItem('billnaw_shop_session');
                     localStorage.removeItem('billnaw_auth_token');
+                    localStorage.removeItem('billnaw_auth_email');
                     localStorage.setItem('billnaw_auth_mode', 'demo');
                 } catch (e) {}
+
+                // Reset login and signup OTP states & wipe digit inputs so no stale OTP can ever be used
+                if (typeof resetLoginOtpView === 'function') resetLoginOtpView();
+                if (typeof resetSignupOtpView === 'function') resetSignupOtpView();
 
                 updateShopAuthUI();
                 if (typeof updateCloudStoreTopbar === 'function') {
                     updateCloudStoreTopbar(null, false, 'demo');
                 }
                 if (typeof showToast === 'function') {
-                    showToast('Logged out of cloud shop. Operating in Demo POS.', 'info');
+                    showToast('Logged out of cloud shop. Session destroyed.', 'info');
                 }
                 openShopAuthModal();
             }
             window.logoutShop = logoutShop;
             window.logoutShopCloudAccount = logoutShop;
+
+            // 🪑 Floor & Table Management Functions
+            function openTableManagementModal() {
+                const modal = document.getElementById('tableManagementModal');
+                if (!modal) return;
+                const countInput = document.getElementById('tblMgmtCountInput');
+                if (countInput) countInput.value = (typeof shopProfile !== 'undefined' && shopProfile.tableCount) ? shopProfile.tableCount : 10;
+                const showToggle = document.getElementById('tblMgmtShowTables');
+                if (showToggle) showToggle.checked = (typeof shopProfile !== 'undefined' && shopProfile.showTablesInPos !== false);
+                const alertToggle = document.getElementById('tblMgmtUnpaidAlert');
+                if (alertToggle) alertToggle.checked = (typeof shopProfile !== 'undefined' && shopProfile.unpaidTableAlert !== false);
+                modal.style.display = 'flex';
+            }
+            window.openTableManagementModal = openTableManagementModal;
+
+            function closeTableManagementModal() {
+                const modal = document.getElementById('tableManagementModal');
+                if (modal) modal.style.display = 'none';
+            }
+            window.closeTableManagementModal = closeTableManagementModal;
+
+            function adjustTableCount(delta) {
+                const countInput = document.getElementById('tblMgmtCountInput');
+                if (!countInput) return;
+                let current = parseInt(countInput.value, 10) || 10;
+                current = Math.max(1, Math.min(60, current + delta));
+                countInput.value = current;
+            }
+            window.adjustTableCount = adjustTableCount;
+
+            function updateTableCountDirect(val) {
+                const countInput = document.getElementById('tblMgmtCountInput');
+                if (!countInput) return;
+                let num = parseInt(val, 10);
+                if (isNaN(num) || num < 1) num = 1;
+                if (num > 60) num = 60;
+                countInput.value = num;
+            }
+            window.updateTableCountDirect = updateTableCountDirect;
+
+            function setTableCountPreset(preset) {
+                const countInput = document.getElementById('tblMgmtCountInput');
+                if (!countInput) return;
+                countInput.value = preset;
+            }
+            window.setTableCountPreset = setTableCountPreset;
+
+            function toggleTablesVisibility(checked) {
+                const tablesWrapper = document.getElementById('tablesWrapper');
+                if (tablesWrapper) {
+                    tablesWrapper.style.display = checked ? 'block' : 'none';
+                }
+                if (typeof shopProfile !== 'undefined') {
+                    shopProfile.showTablesInPos = Boolean(checked);
+                    if (typeof persistProfile === 'function') persistProfile();
+                }
+            }
+            window.toggleTablesVisibility = toggleTablesVisibility;
+
+            function saveTableSettings() {
+                const countInput = document.getElementById('tblMgmtCountInput');
+                const showToggle = document.getElementById('tblMgmtShowTables');
+                const alertToggle = document.getElementById('tblMgmtUnpaidAlert');
+
+                const count = Math.max(1, Math.min(60, parseInt(countInput ? countInput.value : 10, 10) || 10));
+                const showTables = showToggle ? showToggle.checked : true;
+                const unpaidAlert = alertToggle ? alertToggle.checked : true;
+
+                if (typeof shopProfile !== 'undefined') {
+                    shopProfile.tableCount = count;
+                    shopProfile.showTablesInPos = showTables;
+                    shopProfile.unpaidTableAlert = unpaidAlert;
+                }
+
+                if (typeof tablesInfo !== 'undefined') {
+                    for (let i = 1; i <= count; i++) {
+                        if (!tablesInfo[i]) {
+                            tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
+                        }
+                    }
+                }
+
+                if (typeof persistProfile === 'function') persistProfile();
+                if (typeof persistTables === 'function') persistTables();
+
+                toggleTablesVisibility(showTables);
+                if (typeof renderTables === 'function') renderTables();
+                if (typeof syncTableUI === 'function') syncTableUI();
+
+                const subtitle = document.getElementById('settingsTableSubtitle');
+                if (subtitle) {
+                    subtitle.innerText = `Manage table count (T1-T${count}), 15m unpaid alerts, or hide tables`;
+                }
+
+                closeTableManagementModal();
+                if (typeof showToast === 'function') {
+                    showToast(`Table configuration updated: ${count} Tables (${showTables ? 'Visible' : 'Hidden'})`, 'success');
+                }
+            }
+            window.saveTableSettings = saveTableSettings;
 
             function updateShopAuthUI() {
                 try {

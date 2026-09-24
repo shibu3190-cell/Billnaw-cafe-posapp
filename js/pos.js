@@ -7,6 +7,11 @@ function renderTables() {
     if (!grid) return;
     grid.innerHTML = '';
     const totalTables = shopProfile.tableCount || 10;
+
+    const tablesWrapper = document.getElementById('tablesWrapper');
+    if (tablesWrapper) {
+        tablesWrapper.style.display = (shopProfile.showTablesInPos === false) ? 'none' : 'block';
+    }
     
     let occupiedCount = 0;
     for (let i = 1; i <= totalTables; i++) {
@@ -27,10 +32,30 @@ function renderTables() {
         const tInfo = tablesInfo[i];
         const tableName = getTableName(i);
         let classes = 'table-btn';
-        if (tInfo && tInfo.status !== 'empty') classes += ` ${tInfo.status}`;
+        let statusTag = 'VACANT';
+
+        const hasItems = tInfo && tInfo.items && tInfo.items.length > 0;
+        if (hasItems) {
+            if (tInfo.status === 'alert') {
+                classes += ' alert';
+                statusTag = '15M+ ALERT';
+            } else if (tInfo.status === 'served') {
+                classes += ' served';
+                statusTag = 'SERVED';
+            } else if (tInfo.status === 'saved' || tInfo.status === 'kot') {
+                classes += ' kot';
+                statusTag = 'KOT';
+            } else {
+                classes += ' occupied';
+                statusTag = 'ORDER';
+            }
+        } else {
+            classes += ' empty';
+            statusTag = 'VACANT';
+        }
         if (i === activeTable) classes += ' selected';
         
-        const itemCount = (tInfo && tInfo.items && tInfo.items.length > 0) 
+        const itemCount = hasItems 
             ? tInfo.items.reduce((s, it) => s + it.qty, 0) 
             : 0;
         const countBadge = itemCount > 0 ? `<span class="table-item-badge">${itemCount}</span>` : '';
@@ -38,8 +63,10 @@ function renderTables() {
         grid.innerHTML += `
             <button type="button" id="table-btn-${i}" class="${classes}" onclick="selectTable(${i})" title="Table ${escapeHtml(tableName)}">
                 <div class="table-status-dot"></div>
+                <span class="table-t-code">T${i}</span>
+                <span class="table-status-tag">${statusTag}</span>
                 <span class="table-num-pill">${i}</span>
-                <span class="table-btn-name">${escapeHtml(tableName)}</span>
+                <span class="table-btn-name" style="display:none;">${escapeHtml(tableName)}</span>
                 ${countBadge}
             </button>
         `;
@@ -51,23 +78,53 @@ function syncTableUI() {
     const totalTables = shopProfile.tableCount || 10;
     let occupiedCount = 0;
 
+    const tablesWrapper = document.getElementById('tablesWrapper');
+    if (tablesWrapper) {
+        tablesWrapper.style.display = (shopProfile.showTablesInPos === false) ? 'none' : 'block';
+    }
+
     for (let i = 1; i <= totalTables; i++) {
         const tInfo = tablesInfo[i];
-        if (tInfo && tInfo.items && tInfo.items.length > 0) occupiedCount++;
+        const hasItems = tInfo && tInfo.items && tInfo.items.length > 0;
+        if (hasItems) occupiedCount++;
 
         const tBtn = document.getElementById(`table-btn-${i}`);
         if (tBtn) {
             let classes = 'table-btn';
-            if (tInfo && tInfo.status !== 'empty') classes += ` ${tInfo.status}`;
+            let statusTag = 'VACANT';
+            if (hasItems) {
+                if (tInfo.status === 'alert') {
+                    classes += ' alert';
+                    statusTag = '15M+ ALERT';
+                } else if (tInfo.status === 'served') {
+                    classes += ' served';
+                    statusTag = 'SERVED';
+                } else if (tInfo.status === 'saved' || tInfo.status === 'kot') {
+                    classes += ' kot';
+                    statusTag = 'KOT';
+                } else {
+                    classes += ' occupied';
+                    statusTag = 'ORDER';
+                }
+            } else {
+                classes += ' empty';
+                statusTag = 'VACANT';
+            }
             if (i === activeTable) classes += ' selected';
             if (tBtn.className !== classes) tBtn.className = classes;
+
+            // Status tag & T-code updates
+            const tagEl = tBtn.querySelector('.table-status-tag');
+            if (tagEl) tagEl.innerText = statusTag;
+            const codeEl = tBtn.querySelector('.table-t-code');
+            if (codeEl) codeEl.innerText = `T${i}`;
 
             // Name update
             const nameEl = tBtn.querySelector('.table-btn-name');
             if (nameEl) nameEl.innerText = getTableName(i);
 
             // Item count badge update
-            const itemCount = (tInfo && tInfo.items && tInfo.items.length > 0) 
+            const itemCount = hasItems 
                 ? tInfo.items.reduce((s, it) => s + it.qty, 0) 
                 : 0;
             const existingBadge = tBtn.querySelector('.table-item-badge');
@@ -635,12 +692,15 @@ function markServed() {
 window.markServed = markServed;
 
 setInterval(() => { 
+    if (shopProfile.unpaidTableAlert === false) return;
     const now = Date.now(); 
     let needsSync = false; 
-    for(let i = 1; i <= shopProfile.tableCount; i++) { 
+    const total = shopProfile.tableCount || 10;
+    for(let i = 1; i <= total; i++) { 
         let tInfo = tablesInfo[i]; 
-        if(tInfo && (tInfo.status === 'served' || tInfo.status === 'alert')) { 
-            if(tInfo.lastReminder && (now - tInfo.lastReminder) >= ALERT_THRESHOLD_MS) { 
+        if(tInfo && (tInfo.status === 'served' || tInfo.status === 'alert' || tInfo.status === 'saved' || tInfo.status === 'occupied')) { 
+            const timeBase = tInfo.lastReminder || tInfo.savedTime;
+            if(timeBase && (now - timeBase) >= ALERT_THRESHOLD_MS) { 
                 tInfo.status = 'alert'; 
                 tInfo.lastReminder = now; 
                 needsSync = true; 

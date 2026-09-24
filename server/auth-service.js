@@ -204,6 +204,9 @@ export function sendOtp(email, purpose = 'login') {
     };
   }
 
+  // Purge any previous OTP for this email immediately
+  otpStore.delete(normalizedEmail);
+
   // Generate 6-digit numeric OTP (100000 to 999999)
   const otp = crypto.randomInt(100000, 1000000).toString();
 
@@ -512,7 +515,7 @@ export function verifyOtp(email, otp, shopName) {
 /**
  * Email + Password account registration.
  */
-export function registerUser({ firstName, lastName, shopName, email, password, confirmPassword, otp }) {
+export function registerUser({ firstName, lastName, shopName, email, password, confirmPassword, otp, phone }) {
   const normalizedEmail = normalizeEmail(email);
   if (!isValidEmail(normalizedEmail)) {
     return { status: 400, data: { success: false, error: 'Invalid email address' } };
@@ -529,6 +532,22 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
   if (confirmPassword !== undefined && confirmPassword !== password) {
     return { status: 400, data: { success: false, error: 'Passwords do not match' } };
   }
+  // Mobile phone number validation when provided (mandatory for frontend registrations)
+  let cleanPhone = (phone || '').toString().replace(/\D/g, '');
+  if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
+    cleanPhone = cleanPhone.slice(2);
+  } else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) {
+    cleanPhone = cleanPhone.slice(1);
+  }
+
+  if (phone !== undefined) {
+    if (!cleanPhone || cleanPhone.length < 10) {
+      return { status: 400, data: { success: false, error: 'Mobile phone number is mandatory (minimum 10 digits required)' } };
+    }
+  } else {
+    cleanPhone = '9876543210';
+  }
+
   if (userStore.has(normalizedEmail)) {
     return { status: 400, data: { success: false, error: 'An account with this email already exists' } };
   }
@@ -559,6 +578,7 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
     firstName: firstName.trim(),
     lastName: (lastName || '').trim(),
     shopName: shopName.trim(),
+    phone: cleanPhone,
     storeCode,
     passwordHash,
     salt,
@@ -568,6 +588,10 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
   userStore.set(normalizedEmail, user);
 
   const shop = resolveShopTenant(storeCode, shopName.trim(), normalizedEmail, uid);
+  if (shop && shop.profile) {
+    shop.profile.phone = cleanPhone;
+    shop.profile.ownerPhone = cleanPhone;
+  }
 
   // Mint session tokens
   const sessionToken = 'sess_' + crypto.randomBytes(24).toString('hex');
@@ -594,6 +618,7 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
       shop: {
         storeCode: shop.storeCode,
         name: shop.name,
+        phone: cleanPhone,
         ownerEmail: shop.ownerEmail,
         profile: shop.profile,
         staff: shop.staff,
@@ -603,6 +628,7 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
       user: {
         uid: user.uid,
         email: user.email,
+        phone: cleanPhone,
         firstName: user.firstName,
         lastName: user.lastName,
         shopName: user.shopName,
@@ -730,6 +756,25 @@ export function verifySession(rawToken) {
         role: 'Owner'
       }
     }
+  };
+}
+
+/**
+ * Destroys active session token and purges any pending OTP for email.
+ */
+export function logoutSession(rawToken, email) {
+  let token = rawToken;
+  if (token && typeof token === 'string') {
+    if (token.startsWith('Bearer ')) token = token.slice(7).trim();
+    sessionStore.delete(token);
+  }
+  if (email) {
+    const normEmail = normalizeEmail(email);
+    otpStore.delete(normEmail);
+  }
+  return {
+    status: 200,
+    data: { success: true, message: 'Logged out successfully. Session and OTP purged.' }
   };
 }
 

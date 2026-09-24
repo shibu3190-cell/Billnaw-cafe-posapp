@@ -118,6 +118,14 @@ function saveSettings() {
     const shopAddressInput = document.getElementById('shopAddressInput');
     if (shopAddressInput) shopProfile.address = shopAddressInput.value;
     
+    const shopPhoneInput = document.getElementById('shopPhoneInput');
+    if (shopPhoneInput) {
+        const cleanPhone = shopPhoneInput.value.replace(/\D/g, '');
+        shopProfile.phone = cleanPhone || shopPhoneInput.value.trim();
+        shopProfile.ownerPhone = shopProfile.phone;
+        try { localStorage.setItem('billnaw_auth_phone', shopProfile.phone); } catch(e) {}
+    }
+
     const fssaiInput = document.getElementById('fssaiInput');
     if (fssaiInput) shopProfile.fssai = fssaiInput.value;
     
@@ -277,6 +285,18 @@ function openStoreProfileModal() {
         if (nameInput) {
             nameInput.value = shopProfile.name || 'billnaw';
             setTimeout(() => nameInput.focus(), 80);
+        }
+        const emailInput = document.getElementById('shopEmailInput');
+        if (emailInput) {
+            emailInput.value = shopProfile.ownerEmail || shopProfile.email || localStorage.getItem('billnaw_auth_email') || 'owner@cafe.com';
+        }
+        const storeCodeInput = document.getElementById('shopStoreCodeInput');
+        if (storeCodeInput) {
+            storeCodeInput.value = shopProfile.storeCode || localStorage.getItem('billnaw_store_code') || 'SHOP-DEFAULT';
+        }
+        const phoneInput = document.getElementById('shopPhoneInput');
+        if (phoneInput) {
+            phoneInput.value = shopProfile.phone || shopProfile.ownerPhone || localStorage.getItem('billnaw_auth_phone') || '';
         }
         const addrInput = document.getElementById('shopAddressInput');
         if (addrInput) addrInput.value = shopProfile.address || '';
