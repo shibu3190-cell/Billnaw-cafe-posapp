@@ -4,6 +4,7 @@
 
 import express from 'express';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { CONFIG } from './server/config.js';
 import { extractMenuFromDocument, generateMenuItemImage, generateMarketingCampaign, isGeminiKeyOperational, clearGeminiCaches } from './server/gemini-service.js';
@@ -439,6 +440,26 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+function getNetworkIp() {
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal && !iface.address.startsWith('169.254')) {
+          return iface.address;
+        }
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 app.listen(CONFIG.port, CONFIG.host, () => {
-  console.log(`Server is running at http://${CONFIG.host}:${CONFIG.port}`);
+  const netIp = getNetworkIp();
+  console.log(`\n🚀 Billnaw POS Server running:`);
+  console.log(`  ➜  Local:   http://localhost:${CONFIG.port}`);
+  if (netIp) {
+    console.log(`  ➜  Network: http://${netIp}:${CONFIG.port}`);
+  }
+  console.log(`  ➜  Host:    ${CONFIG.host}\n`);
 });
