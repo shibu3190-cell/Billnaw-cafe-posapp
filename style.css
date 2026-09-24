@@ -561,29 +561,30 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .menu-card:hover .add-btn { background: var(--primary); transform: translateY(-1px); }
 .menu-card:active .add-btn { transform: translateY(0); }
 
-/* Proximity Inline Stepper (Factor 2: 1-Motion Quantity Control) */
+/* Proximity Inline Stepper (Factor 2: 1-Motion Quantity Control with 44px Thumb Reach) */
 .item-qty-control { 
-    display: flex; 
+    display: inline-flex; 
     align-items: center; 
     justify-content: space-between; 
     background: var(--primary); 
     color: #FFFFFF; 
     border-radius: 20px; 
     padding: 2px 4px; 
-    width: 84px; 
+    width: 88px; 
     pointer-events: auto; 
-    height: 28px; 
-    box-shadow: 0 2px 6px rgba(43, 28, 21, 0.25); 
+    height: 32px; 
+    box-shadow: 0 2px 8px rgba(43, 28, 21, 0.28); 
     user-select: none;
+    vertical-align: middle;
 }
 .item-qty-control button { 
     background: transparent; 
     border: none; 
     color: #FFFFFF; 
-    font-size: 15px; 
+    font-size: 16px; 
     font-weight: 800; 
-    width: 24px; 
-    height: 24px; 
+    width: 28px; 
+    height: 28px; 
     cursor: pointer; 
     display: flex; 
     align-items: center; 
@@ -592,6 +593,19 @@ input:focus, select:focus, textarea:focus { outline: none; }
     transition: all 0.12s ease; 
     padding: 0;
     line-height: 1;
+    position: relative;
+    touch-action: manipulation;
+}
+/* 44px ergonomic thumb hit zone */
+.item-qty-control button::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    left: -8px;
+    right: -8px;
+    min-width: 44px;
+    min-height: 44px;
 }
 .item-qty-control button:hover { 
     background: rgba(255, 255, 255, 0.22); 
@@ -602,7 +616,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 }
 .item-qty-control span { 
     font-weight: 800; 
-    font-size: 12px; 
+    font-size: 13px; 
     font-variant-numeric: tabular-nums;
     min-width: 18px;
     text-align: center;
@@ -1449,11 +1463,10 @@ input:focus, select:focus, textarea:focus { outline: none; }
     .card-content { padding: 8px 10px; }
     .menu-card .cat-label { font-size: 8px; }
     .menu-card .name { font-size: 12px; min-height: 28px; line-height: 1.2; margin-bottom: 4px; }
-    .menu-card .price { font-size: 14px; }
-    .menu-card .add-btn { padding: 5px 10px; font-size: 10px; border-radius: 14px; }
-    .item-qty-control { width: 62px; height: 26px; border-radius: 14px; }
-    .item-qty-control button { font-size: 13px; width: 20px; }
-    .item-qty-control span { font-size: 11px; }
+    .menu-card .add-btn { padding: 6px 12px; font-size: 11px; border-radius: 14px; min-height: 30px; }
+    .item-qty-control { width: 78px; height: 30px; border-radius: 16px; }
+    .item-qty-control button { font-size: 15px; width: 26px; height: 26px; }
+    .item-qty-control span { font-size: 12px; }
 
     .mobile-pos-actions { display: flex; flex-direction: column; position: fixed; bottom: calc(64px + env(safe-area-inset-bottom)); left: 0; width: 100%; padding: 6px 12px; background: linear-gradient(to top, var(--bg-body) 70%, transparent); z-index: 4000; pointer-events: none; }
     .mobile-pos-actions > * { pointer-events: auto; }
@@ -2323,6 +2336,123 @@ input:focus, select:focus, textarea:focus { outline: none; }
     .brand-edit-hint {
         display: none;
     }
+}
+
+/* ============================================================
+   🔐 MODULE 1 & 3: STAFF PICKER, QUICK LOGIN & DASHBOARD STICKY BAR
+   ============================================================ */
+.staff-grid-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.staff-card {
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-xs);
+    position: relative;
+    user-select: none;
+}
+.staff-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+.staff-card.selected {
+    border-color: var(--primary) !important;
+    background: #FAF7F4 !important;
+    box-shadow: 0 0 0 2px rgba(43, 28, 21, 0.22), var(--shadow-sm) !important;
+    transform: translateY(-1px);
+}
+.staff-card.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    width: 17px;
+    height: 17px;
+    background: var(--primary);
+    color: #FFFFFF;
+    font-size: 10px;
+    font-weight: 800;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+}
+
+.quick-login-card {
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(120, 72, 59, 0.05);
+    border: 1px dashed rgba(120, 72, 59, 0.25);
+    border-radius: 14px;
+    transition: all 0.18s ease;
+}
+.quick-login-card:hover {
+    background: rgba(120, 72, 59, 0.09);
+    border-color: var(--milk-choc);
+}
+
+/* Dashboard Sticky Top Bar (Social Proof & Context Retention) */
+.dashboard-sticky-bar {
+    position: sticky;
+    top: 0;
+    z-index: 85;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    background: rgba(248, 245, 241, 0.94);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 4px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.terminal-status-badge {
+    background: rgba(16, 185, 129, 0.12);
+    color: #065F46;
+    border: 1px solid rgba(16, 185, 129, 0.32);
+    font-weight: 700;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.2px;
+}
+.terminal-status-badge .status-ping {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10B981;
+    display: inline-block;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+}
+
+.goal-gradient-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(28, 77, 38, 0.12) 0%, rgba(16, 185, 129, 0.18) 100%);
+    border: 1px solid rgba(28, 77, 38, 0.25);
+    color: #1C4D26;
+    font-size: 11px;
+    font-weight: 700;
+    box-shadow: var(--shadow-xs);
 }
 
 /* ✨ PRINT STYLES ✨ */

@@ -524,7 +524,7 @@ function updateCartUI() {
                 const ptsEst = Math.max(1, Math.floor(totals.finalTotal / 50));
                 const cashEst = Math.max(5, Math.round(totals.finalTotal * 0.05));
                 if (lossAlertMsg) {
-                    lossAlertMsg.innerText = `Diner forfeits +${ptsEst} VIP points (~₹${cashEst} reward cash) if unlinked.`;
+                    lossAlertMsg.innerHTML = `⚠️ Unclaimed Loyalty: Customer will forfeit <strong>₹${cashEst} VIP discount</strong> on this order. (Diner forfeits +${ptsEst} VIP points)`;
                 }
                 lossAlertEl.style.display = 'flex';
             } else {
@@ -541,13 +541,13 @@ function updateCartUI() {
         const taxPct = totals.finalTotal > 0 ? ((totals.totalTax / totals.finalTotal) * 100).toFixed(1) : '0';
         if (totals.gstMode === 'exclusive') {
             gstBreakdownEl.innerHTML = totals.totalTax > 0 
-                ? `Subtotal ₹${totals.subtotal.toFixed(2)} + GST ₹${totals.totalTax.toFixed(2)} <span class="gst-pct-pill">Just ${taxPct}%</span>` 
+                ? `Subtotal ₹${totals.subtotal.toFixed(2)} + GST: ₹${totals.totalTax.toFixed(2)} <span class="gst-pct-pill">Just ${taxPct}%</span>` 
                 : "No GST Applied";
         } else if (totals.gstMode === 'none') {
             gstBreakdownEl.innerText = "GST Exempt (0%)";
         } else {
             gstBreakdownEl.innerHTML = totals.totalTax > 0 
-                ? `Includes ₹${totals.totalTax.toFixed(2)} GST <span class="gst-pct-pill">Just ${taxPct}% of total</span>` 
+                ? `GST & Service: ₹${totals.totalTax.toFixed(2)} <span class="gst-pct-pill">Just ${taxPct}% of total</span>` 
                 : "No GST Applied";
         }
     }

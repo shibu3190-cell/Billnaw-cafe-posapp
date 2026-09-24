@@ -54,6 +54,16 @@ function renderLoginStaffPicker() {
         return;
     }
 
+    // Smart Defaults: Pre-select last active cashier/manager from localStorage
+    const savedStaffId = parseInt(localStorage.getItem('billnaw_last_staff_id'), 10);
+    if (!selectedLoginStaffId || !staffList.some(s => s.id === selectedLoginStaffId)) {
+        if (savedStaffId && staffList.some(s => s.id === savedStaffId)) {
+            selectedLoginStaffId = savedStaffId;
+        } else if (staffList.length > 0) {
+            selectedLoginStaffId = staffList[0].id;
+        }
+    }
+
     container.innerHTML = staffList.map(staff => {
         const initials = staff.name ? staff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
         const roleCls = staff.role ? `role-${staff.role.toLowerCase()}` : 'role-cashier';
@@ -66,6 +76,14 @@ function renderLoginStaffPicker() {
             </div>
         `;
     }).join('');
+
+    // Auto-Advance Focus: Focus immediately on 4-digit PIN input
+    setTimeout(() => {
+        const pinInput = document.getElementById('staffLoginPinInput');
+        if (pinInput && document.getElementById('loginOverlay') && document.getElementById('loginOverlay').style.display !== 'none') {
+            pinInput.focus();
+        }
+    }, 80);
 }
 window.renderLoginStaffPicker = renderLoginStaffPicker;
 
@@ -99,12 +117,22 @@ function confirmStaffLogin() {
             currentRole = 'staff';
         }
 
+        // Persist last active cashier for seamless pre-selection
+        try {
+            localStorage.setItem('billnaw_last_staff_id', currentStaff.id);
+        } catch(e) {}
+
         document.getElementById('loginOverlay').style.display = 'none';
         document.getElementById('staffLoginPinInput').value = '';
         enforcePermissions();
         updateStaffTopbarDisplay();
         showToast(`Welcome, ${currentStaff.name}! (${currentStaff.role})`);
     } else {
+        const pinInput = document.getElementById('staffLoginPinInput');
+        if (pinInput) {
+            pinInput.value = '';
+            pinInput.focus();
+        }
         showToast("❌ Incorrect PIN. Please try again.");
     }
 }
@@ -114,6 +142,9 @@ function quickStaffLoginAsSelected() {
     const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId) || staffList[0];
     currentStaff = matchedStaff || { id: 2, name: "Staff", role: "Cashier" };
     currentRole = 'staff';
+    try {
+        localStorage.setItem('billnaw_last_staff_id', currentStaff.id);
+    } catch(e) {}
     document.getElementById('loginOverlay').style.display = 'none';
     enforcePermissions();
     updateStaffTopbarDisplay();
@@ -282,6 +313,14 @@ window.loginAsAdmin = loginAsAdmin;
 function lockSystem() { 
     currentRole = null; 
     document.getElementById('loginOverlay').style.display = 'flex'; 
+    renderLoginStaffPicker();
+    setTimeout(() => {
+        const pinInput = document.getElementById('staffLoginPinInput');
+        if (pinInput) {
+            pinInput.value = '';
+            pinInput.focus();
+        }
+    }, 80);
     if (typeof switchTab === 'function') switchTab('pos'); 
     enforcePermissions(); 
 }

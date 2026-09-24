@@ -804,3 +804,87 @@ function factoryReset() {
     }
 }
 window.factoryReset = factoryReset;
+
+// ============================================================
+// 🚀 ONBOARDING: GOAL GRADIENT 2-STEP SETUP WIZARD
+// ============================================================
+let onboardUploadedLogo = '';
+
+function handleOnboardLogoUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        onboardUploadedLogo = e.target.result;
+        const statusEl = document.getElementById('onboardLogoStatus');
+        if (statusEl) statusEl.innerText = '✅ Logo selected!';
+    };
+    reader.readAsDataURL(file);
+}
+window.handleOnboardLogoUpload = handleOnboardLogoUpload;
+
+function activateSoftware() {
+    const keyInput = document.getElementById('activationKeyInput');
+    const enteredKey = keyInput ? keyInput.value.trim() : '';
+    
+    // Dismiss activation overlay
+    const actOverlay = document.getElementById('activationOverlay');
+    if (actOverlay) actOverlay.style.display = 'none';
+
+    try {
+        localStorage.setItem('billnaw_license_active', 'true');
+        if (enteredKey) localStorage.setItem('billnaw_license_key', enteredKey);
+    } catch(e) {}
+
+    showToast("🚀 Step 1: Terminal Connected ✓ (20% Completed)");
+
+    // Launch Step 2: Goal Gradient Quick Setup Wizard
+    const wizardModal = document.getElementById('onboardingWizardModal');
+    if (wizardModal) {
+        const nameInput = document.getElementById('onboardStoreName');
+        const upiInput = document.getElementById('onboardUpiId');
+        if (nameInput) nameInput.value = shopProfile.shopName || 'billnaw';
+        if (upiInput) upiInput.value = shopProfile.upiId || '';
+        wizardModal.style.display = 'flex';
+    }
+}
+window.activateSoftware = activateSoftware;
+
+function skipActivationSoftware() {
+    const actOverlay = document.getElementById('activationOverlay');
+    if (actOverlay) actOverlay.style.display = 'none';
+    showToast("⚡ Demo POS Session Active");
+}
+window.skipActivationSoftware = skipActivationSoftware;
+
+function saveOnboardingProfile() {
+    const nameInput = document.getElementById('onboardStoreName');
+    const upiInput = document.getElementById('onboardUpiId');
+    if (nameInput && nameInput.value.trim()) {
+        shopProfile.shopName = nameInput.value.trim();
+        const topbarName = document.getElementById('topbarShopName');
+        if (topbarName) topbarName.innerText = shopProfile.shopName;
+    }
+    if (upiInput && upiInput.value.trim()) {
+        shopProfile.upiId = upiInput.value.trim();
+        shopProfile.showQr = true;
+    }
+    if (onboardUploadedLogo) {
+        shopProfile.logo = onboardUploadedLogo;
+    }
+    persistProfile();
+
+    const wizardModal = document.getElementById('onboardingWizardModal');
+    if (wizardModal) wizardModal.style.display = 'none';
+
+    showToast("🎉 Store Setup Complete! Ready for Rush Hour.");
+    if (typeof switchTab === 'function') switchTab('pos');
+}
+window.saveOnboardingProfile = saveOnboardingProfile;
+
+function skipOnboardingWizard() {
+    const wizardModal = document.getElementById('onboardingWizardModal');
+    if (wizardModal) wizardModal.style.display = 'none';
+    showToast("Ready to take orders on POS.");
+}
+window.skipOnboardingWizard = skipOnboardingWizard;
