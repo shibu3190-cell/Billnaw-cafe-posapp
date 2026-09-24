@@ -18,6 +18,11 @@ function renderTables() {
         statsEl.innerHTML = `<strong>${occupiedCount}</strong> Active • <strong>${Math.max(0, totalTables - occupiedCount)}</strong> Vacant`;
     }
 
+    const posActiveBadge = document.getElementById('posActiveTableBadge');
+    if (posActiveBadge) {
+        posActiveBadge.innerText = getTableName(activeTable);
+    }
+
     for (let i = 1; i <= totalTables; i++) {
         const tInfo = tablesInfo[i];
         const tableName = getTableName(i);
@@ -33,6 +38,7 @@ function renderTables() {
         grid.innerHTML += `
             <button type="button" id="table-btn-${i}" class="${classes}" onclick="selectTable(${i})" title="Table ${escapeHtml(tableName)}">
                 <div class="table-status-dot"></div>
+                <span class="table-num-pill">${i}</span>
                 <span class="table-btn-name">${escapeHtml(tableName)}</span>
                 ${countBadge}
             </button>
@@ -92,7 +98,12 @@ function syncTableUI() {
     const cTable = document.getElementById('checkoutTableNoDisplay'); if (cTable) cTable.innerText = currentTableName;
     const discountModalTableNo = document.getElementById('discountModalTableNo'); if (discountModalTableNo) discountModalTableNo.innerText = currentTableName;
     
-    // Topbar Active Table Display & Occupied Status
+    const posActiveBadge = document.getElementById('posActiveTableBadge');
+    if (posActiveBadge) {
+        posActiveBadge.innerText = currentTableName;
+    }
+    
+    // Topbar Active Table Display & Occupied Status (Hidden hook preserved for compatibility)
     const topbarDisplay = document.getElementById('topbarTableDisplay');
     if (topbarDisplay) topbarDisplay.innerText = currentTableName;
     const topbarDot = document.getElementById('topbarTableDot');
@@ -102,21 +113,17 @@ function syncTableUI() {
     }
     const topbarPill = document.getElementById('topbarTablePill');
     if (topbarPill) {
-        topbarPill.style.display = 'inline-flex';
-        topbarPill.style.visibility = 'visible';
+        topbarPill.style.display = 'none';
     }
 }
 window.syncTableUI = syncTableUI;
 
 function triggerSmartMenuUpload() {
-    const uploader = document.getElementById('smartMenuUniversalInput') || document.getElementById('aiMenuUploader') || document.getElementById('aiMenuFileInput');
+    if (typeof switchTab === 'function') switchTab('menu');
+    const uploader = document.getElementById('aiMenuFileInput') || document.getElementById('aiMenuUploader');
     if (uploader) {
         try { uploader.value = null; } catch(e) {}
         uploader.click();
-    } else {
-        if (typeof switchTab === 'function') switchTab('menu');
-        const fallback = document.getElementById('aiMenuBtn');
-        if (fallback) fallback.click();
     }
 }
 window.triggerSmartMenuUpload = triggerSmartMenuUpload;

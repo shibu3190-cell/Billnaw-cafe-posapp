@@ -242,9 +242,12 @@ input:focus, select:focus, textarea:focus { outline: none; }
     100% { opacity: 1; transform: scale(1.15); }
 }
 
-/* 🪑 Topbar Active Table Display Pill */
+/* 🪑 Topbar Active Table Display Pill (Removed from top header as requested) */
+#topbarTablePill {
+    display: none !important;
+}
 .topbar-table-pill {
-    display: inline-flex;
+    display: none !important;
     align-items: center;
     gap: 6px;
     background: #FFFFFF;
@@ -422,6 +425,24 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .table-btn.selected .table-item-badge {
     border-color: var(--primary);
     background: #E05A38;
+}
+.table-num-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.08);
+    font-size: 11px;
+    font-weight: 800;
+    margin-right: 6px;
+    color: inherit;
+    flex-shrink: 0;
+}
+.table-btn.selected .table-num-pill {
+    background: rgba(255, 255, 255, 0.28);
+    color: #FFFFFF;
 }
 
 .menu-wrapper { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
@@ -926,18 +947,18 @@ input:focus, select:focus, textarea:focus { outline: none; }
 /* 🤖 AI MENU REVIEW COMPACT PREVIEW STYLES (PC, LAPTOP & MOBILE) */
 .ai-review-item {
     display: grid;
-    grid-template-columns: 44px 1.4fr 1.1fr 110px 34px;
-    gap: 10px;
+    grid-template-columns: 48px 1.5fr 1fr 150px 36px;
+    gap: 12px;
     align-items: center;
     background: #FFFFFF;
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 8px 12px;
+    padding: 10px 14px;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .ai-review-item:hover {
     border-color: var(--accent);
-    box-shadow: var(--shadow-xs);
+    box-shadow: var(--shadow-sm);
 }
 .ai-item-thumb {
     width: 44px;
@@ -990,6 +1011,20 @@ input:focus, select:focus, textarea:focus { outline: none; }
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.3px;
+}
+.item-meta-rate {
+    min-width: 140px;
+}
+.item-meta-rate input {
+    height: 38px;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    color: var(--primary) !important;
+    transition: all 0.15s ease;
+}
+.item-meta-rate input:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px rgba(20, 56, 50, 0.15) !important;
 }
 .ai-uploaded-doc-preview {
     display: flex;

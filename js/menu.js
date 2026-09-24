@@ -788,11 +788,11 @@ function renderAiPreviewModal() {
                 <input type="text" value="${safeCat}" oninput="updatePendingItemField(${index}, 'category', this.value)" list="knownCategoriesList" placeholder="Category" style="width: 100%; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px; font-weight: 500; background: #fff;">
             </div>
 
-            <div class="item-meta-rate" style="display: flex; flex-direction: column; gap: 3px;">
-                <label>Rate / Price</label>
+            <div class="item-meta-rate" style="display: flex; flex-direction: column; gap: 4px; min-width: 140px;">
+                <label style="font-size: 11px; font-weight: 800; color: var(--primary); letter-spacing: 0.4px;">RATE / PRICE (₹)</label>
                 <div style="display: flex; align-items: center; position: relative;">
-                    <span style="position: absolute; left: 7px; font-weight: 700; color: var(--text-muted); font-size: 11px;">₹</span>
-                    <input type="number" step="0.5" min="0" value="${safePrice}" oninput="updatePendingItemField(${index}, 'price', this.value)" placeholder="0.00" style="width: 100%; padding: 7px 6px 7px 18px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px; font-weight: 700; color: var(--primary); background: #fff;">
+                    <span style="position: absolute; left: 10px; font-weight: 800; color: var(--primary); font-size: 14px; pointer-events: none;">₹</span>
+                    <input type="number" step="0.5" min="0" value="${safePrice}" oninput="updatePendingItemField(${index}, 'price', this.value)" placeholder="0.00" style="width: 100%; height: 38px; padding: 7px 8px 7px 26px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 15px; font-weight: 800; color: var(--primary); background: #fff; box-shadow: var(--shadow-xs);">
                 </div>
             </div>
 

@@ -4,6 +4,7 @@
 // tenant resolution to shops/{storeCode}, password fallback authentication, and session persistence.
 
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { CONFIG } from './config.js';
 
 // In-memory data repositories
@@ -219,21 +220,146 @@ export function sendOtp(email, purpose = 'login') {
 
   otpStore.set(normalizedEmail, record);
 
-  // Dev/Mock delivery fallback logging
-  console.log(`[AUTH OTP] 📧 Verification code for ${normalizedEmail}: ${otp}`);
+  // Dispatch actual email in background if SMTP or Resend credentials are configured
+  const hasLiveEmailCredentials = Boolean((CONFIG?.email?.user && CONFIG?.email?.pass) || CONFIG?.email?.resendApiKey);
+  sendActualOtpEmail(normalizedEmail, otp, purpose).catch(err => {
+    console.warn(`[AUTH OTP] Async dispatch error for ${normalizedEmail}:`, err.message);
+  });
 
   return {
     status: 200,
     data: {
       success: true,
-      message: `A 6-digit verification code has been sent to ${normalizedEmail}`,
+      message: hasLiveEmailCredentials
+        ? `A 6-digit verification code has been dispatched to your email (${normalizedEmail})`
+        : `A 6-digit verification code has been sent to ${normalizedEmail}`,
       email: normalizedEmail,
       cooldownSeconds: OTP_COOLDOWN_SECONDS,
       expiresInSeconds: OTP_TTL_SECONDS,
-      mockDelivery: true,
+      realEmailDispatched: hasLiveEmailCredentials,
+      mockDelivery: !hasLiveEmailCredentials,
       devOtp: otp
     }
   };
+}
+
+/**
+ * Dispatches real email OTP to the recipient via SMTP or Resend API if configured.
+ * Seamlessly falls back to terminal logging if credentials are not yet set.
+ */
+export async function sendActualOtpEmail(toEmail, otp, purpose = 'login') {
+  const isSignup = purpose === 'signup';
+  const actionText = isSignup ? 'verify your new cafe shop profile' : 'sign in to your shop counter';
+  const subject = `🔐 Billnaw POS - Your 6-Digit Code is ${otp}`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Billnaw POS Verification Code</title>
+</head>
+<body style="margin: 0; padding: 24px 12px; background-color: #FAF7F4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 520px; background: #FFFFFF; border-radius: 16px; overflow: hidden; border: 1.5px solid #E6DCCD; box-shadow: 0 4px 18px rgba(35, 22, 16, 0.08);" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="background: linear-gradient(135deg, #143832 0%, #0D2622 100%); padding: 28px 24px; text-align: center;">
+              <h1 style="color: #FFFFFF; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Billnaw POS</h1>
+              <p style="color: #2DD4BF; margin: 6px 0 0 0; font-size: 13px; font-weight: 600;">Cafe Counter & Cloud Operations</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 28px;">
+              <p style="color: #1F2937; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">Hello,</p>
+              <p style="color: #4B5563; font-size: 14px; line-height: 1.5; margin: 0 0 20px 0;">
+                Your one-time 6-digit verification code to <strong>${actionText}</strong> is:
+              </p>
+              <div style="background: #FAF7F4; border: 2px dashed #143832; border-radius: 12px; padding: 18px 24px; text-align: center; margin: 0 0 24px 0;">
+                <span style="font-size: 34px; font-weight: 800; letter-spacing: 10px; color: #143832; font-family: monospace; display: inline-block;">${otp}</span>
+              </div>
+              <p style="color: #6B7280; font-size: 12px; line-height: 1.5; margin: 0 0 10px 0;">
+                ⏱️ This code is valid for <strong>10 minutes</strong> and can only be used once.
+              </p>
+              <p style="color: #DC2626; font-size: 12px; line-height: 1.5; margin: 0;">
+                🔒 For security, never share this code with anyone. Billnaw staff will never ask for your code.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background: #F9FAFB; padding: 16px 24px; text-align: center; border-top: 1px solid #E5E7EB;">
+              <span style="color: #9CA3AF; font-size: 11px;">Billnaw POS • Smart Counter Terminal</span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  const text = `Billnaw POS Verification Code: ${otp}\n\nUse this 6-digit code to ${actionText}.\nThis code expires in 10 minutes.\nNever share this code with anyone.`;
+
+  // 1. Resend API support if configured
+  if (CONFIG?.email?.resendApiKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${CONFIG.email.resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: CONFIG.email.from || 'Billnaw POS <onboarding@resend.dev>',
+          to: [toEmail],
+          subject,
+          html,
+          text
+        })
+      });
+      if (res.ok) {
+        console.log(`[AUTH OTP] 🚀 Real email successfully delivered via Resend API to ${toEmail}`);
+        return { sent: true, provider: 'resend' };
+      } else {
+        const errText = await res.text();
+        console.warn(`[AUTH OTP] Resend API error (${res.status}):`, errText);
+      }
+    } catch (err) {
+      console.warn('[AUTH OTP] Resend API fetch failed:', err.message);
+    }
+  }
+
+  // 2. Nodemailer SMTP support (Gmail, SendGrid, custom SMTP)
+  if (CONFIG?.email?.user && CONFIG?.email?.pass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: CONFIG.email.host,
+        port: CONFIG.email.port,
+        secure: CONFIG.email.secure,
+        auth: {
+          user: CONFIG.email.user,
+          pass: CONFIG.email.pass
+        }
+      });
+      await transporter.sendMail({
+        from: CONFIG.email.from,
+        to: toEmail,
+        subject,
+        text,
+        html
+      });
+      console.log(`[AUTH OTP] 🚀 Real email successfully delivered via SMTP (${CONFIG.email.host}) to ${toEmail}`);
+      return { sent: true, provider: 'smtp' };
+    } catch (err) {
+      console.warn(`[AUTH OTP] SMTP send error to ${toEmail}:`, err.message);
+    }
+  }
+
+  // Fallback: Terminal logger for development
+  console.log(`[AUTH OTP] 📧 Verification code for ${toEmail}: ${otp}`);
+  return { sent: false, devMock: true };
 }
 
 /**
