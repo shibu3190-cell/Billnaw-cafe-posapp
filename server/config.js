@@ -1,5 +1,15 @@
-// server/config.js - Centralized Server-Side Configuration and Secret Management
-// All sensitive keys (Gemini, Google Sheets Webhooks, Firebase Server Keys) remain strictly on backend.
+import fs from 'fs';
+import path from 'path';
+
+// Automatically load .env file if present in working directory (Node.js 20.6.0+ native)
+try {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath) && typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile(envPath);
+  }
+} catch (e) {
+  // Silent fallback if .env is missing or invalid
+}
 
 export const CONFIG = {
   port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
@@ -38,7 +48,10 @@ export const CONFIG = {
     get port() { return parseInt(process.env.SMTP_PORT || '587', 10); },
     get secure() { return process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465'; },
     get user() { return process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || ''; },
-    get pass() { return process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || ''; },
+    get pass() { 
+      const raw = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || '';
+      return raw ? raw.trim().replace(/\s+/g, '') : '';
+    },
     get from() { return process.env.SMTP_FROM || process.env.EMAIL_FROM || (this.user ? `"Billnaw POS" <${this.user}>` : '"Billnaw POS" <no-reply@billnawcafe.com>'); },
     get resendApiKey() { return process.env.RESEND_API_KEY || ''; }
   }
