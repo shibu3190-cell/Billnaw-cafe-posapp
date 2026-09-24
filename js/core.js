@@ -497,19 +497,52 @@ function handleRemoteFirestoreUpdate(data) {
 }
 window.handleRemoteFirestoreUpdate = handleRemoteFirestoreUpdate;
 
-function attachFirestoreListener() {
+// Firestore Store Resolution & Sync Integration (/shops/{storeCode} with /clients/{clientId} fallback)
+function getActiveStoreIdentifier() {
+    return localStorage.getItem('billnaw_store_code') || 
+           localStorage.getItem('cafeLicenseKey') || 
+           myClientID || 
+           'BONGBHOJ-TERMINAL';
+}
+window.getActiveStoreIdentifier = getActiveStoreIdentifier;
+
+function getStoreDocRef(explicitCode = null) {
+    if (!window.firestoreDB || !window.firestoreDoc) return null;
+    const code = explicitCode || getActiveStoreIdentifier();
+    const isShop = (code.startsWith('SHOP-') || localStorage.getItem('billnaw_auth_mode') === 'authenticated') && code !== 'BONGBHOJ-TERMINAL';
+    const collectionName = isShop ? "shops" : "clients";
+    return window.firestoreDoc(window.firestoreDB, collectionName, code);
+}
+window.getStoreDocRef = getStoreDocRef;
+
+function attachFirestoreListener(targetStoreCode = null) {
+    if (targetStoreCode && typeof targetStoreCode === 'string') {
+        if (targetStoreCode.startsWith('SHOP-')) {
+            try { localStorage.setItem('billnaw_store_code', targetStoreCode); } catch(e) {}
+        }
+        myClientID = targetStoreCode;
+        window.myClientID = myClientID;
+    }
+
     if (!window.firestoreDB || !window.firestoreDoc || !window.firestoreOnSnapshot) {
+        setCloudSyncStatus('offline', 'Offline (Local)');
         return;
     }
 
     if (firestoreUnsubscribe) {
         try { firestoreUnsubscribe(); } catch(e) {}
+        firestoreUnsubscribe = null;
     }
 
     setCloudSyncStatus('syncing', 'Connecting Cloud...');
     try {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        firestoreUnsubscribe = window.firestoreOnSnapshot(clientDocRef, (snap) => {
+        const storeDocRef = getStoreDocRef(targetStoreCode);
+        if (!storeDocRef) {
+            setCloudSyncStatus('offline', 'Offline (Local)');
+            return;
+        }
+
+        firestoreUnsubscribe = window.firestoreOnSnapshot(storeDocRef, (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
                 handleRemoteFirestoreUpdate(data);
@@ -528,6 +561,7 @@ function attachFirestoreListener() {
     }
 }
 window.attachFirestoreListener = attachFirestoreListener;
+window.initFirestoreSync = attachFirestoreListener;
 
 window.addEventListener('firebaseLoaded', () => {
     attachFirestoreListener();
@@ -537,8 +571,9 @@ async function persistAllToFirestore() {
     if (!window.firestoreDB || !window.firestoreDoc || !window.firestoreSetDoc) return;
     setCloudSyncStatus('syncing', 'Backing up to Cloud...');
     try {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        await window.firestoreSetDoc(clientDocRef, {
+        const storeDocRef = getStoreDocRef();
+        if (!storeDocRef) return;
+        await window.firestoreSetDoc(storeDocRef, {
             profile: shopProfile,
             staff: staffList,
             menu: menuItems,
@@ -561,8 +596,10 @@ window.persistAllToFirestore = persistAllToFirestore;
 function persistTables() { 
     idb.set('cafe_tables', tablesInfo); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        window.firestoreSetDoc(clientDocRef, { tables: tablesInfo, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, { tables: tablesInfo, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
     }
 }
 window.persistTables = persistTables;
@@ -570,8 +607,10 @@ window.persistTables = persistTables;
 function persistMenu() { 
     idb.set('cafe_menu', menuItems); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        window.firestoreSetDoc(clientDocRef, { menu: menuItems, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, { menu: menuItems, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
     }
 }
 window.persistMenu = persistMenu;
@@ -579,8 +618,10 @@ window.persistMenu = persistMenu;
 function persistCategories() { 
     idb.set('cafe_categories', menuCategories); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        window.firestoreSetDoc(clientDocRef, { categories: menuCategories, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, { categories: menuCategories, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
     }
 }
 window.persistCategories = persistCategories;
@@ -588,8 +629,10 @@ window.persistCategories = persistCategories;
 function persistProfile() { 
     idb.set('cafe_profile', shopProfile); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        window.firestoreSetDoc(clientDocRef, { profile: shopProfile, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, { profile: shopProfile, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
     }
 }
 window.persistProfile = persistProfile;
@@ -597,8 +640,10 @@ window.persistProfile = persistProfile;
 function persistCustomersFirebase(newCust = null) {
     idb.set('cafe_customers', customersList);
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        window.firestoreSetDoc(clientDocRef, { customers: customersList, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, { customers: customersList, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
     }
 }
 window.persistCustomersFirebase = persistCustomersFirebase;
@@ -606,8 +651,10 @@ window.persistCustomersFirebase = persistCustomersFirebase;
 function persistHistoryFirebase(newOrder = null) { 
     idb.set('cafe_history', orderHistory); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        window.firestoreSetDoc(clientDocRef, { history: orderHistory, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, { history: orderHistory, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
     }
 }
 window.persistHistoryFirebase = persistHistoryFirebase;
@@ -615,8 +662,10 @@ window.persistHistoryFirebase = persistHistoryFirebase;
 function persistExpensesFirebase(newExp = null) { 
     idb.set('cafe_expenses', dailyExpenses); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        window.firestoreSetDoc(clientDocRef, { expenses: dailyExpenses, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, { expenses: dailyExpenses, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
     }
 }
 window.persistExpensesFirebase = persistExpensesFirebase;
@@ -624,8 +673,10 @@ window.persistExpensesFirebase = persistExpensesFirebase;
 function persistStaffToFirestore(newStaff = null) {
     idb.set('cafe_staff', staffList);
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-        const clientDocRef = window.firestoreDoc(window.firestoreDB, "clients", myClientID);
-        window.firestoreSetDoc(clientDocRef, { staff: staffList, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, { staff: staffList, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
     }
 }
 window.persistStaffToFirestore = persistStaffToFirestore;
@@ -742,6 +793,22 @@ async function initDatabase() {
         if (!shopProfile.startInvoiceNo) shopProfile.startInvoiceNo = 1001;
         window.shopProfile = shopProfile;
     }
+    // Restore authenticated store profile if saved in session
+    try {
+        const authMode = localStorage.getItem('billnaw_auth_mode');
+        const sessionRaw = localStorage.getItem('billnaw_shop_session');
+        if (authMode === 'authenticated' && sessionRaw) {
+            const session = JSON.parse(sessionRaw);
+            if (session && session.shop && session.shop.name && (shopProfile.name === 'billnaw' || !shopProfile.name)) {
+                shopProfile.name = session.shop.name;
+                window.shopProfile = shopProfile;
+            }
+            if (session && session.storeCode) {
+                myClientID = session.storeCode;
+                window.myClientID = myClientID;
+            }
+        }
+    } catch(e) {}
     const storedMenu = await idb.get('cafe_menu');
     if (storedMenu && Array.isArray(storedMenu) && storedMenu.length > 0) {
         menuItems = storedMenu;

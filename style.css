@@ -84,6 +84,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
 
 /* 🛡️ Strict Modal Stacking & Z-Index Hierarchy (Prevents Popup-Under-Popup Bugs) */
+#shopAuthModal { z-index: 1000008 !important; }
 .modal-overlay.stacked-level-1 { z-index: 1000010 !important; }
 .modal-overlay.stacked-level-2 { z-index: 1000030 !important; }
 .modal-overlay.stacked-level-3 { z-index: 1000050 !important; }
@@ -2471,3 +2472,530 @@ body.printing { background: #fff !important; }
     #printLogo { max-width: 45px; max-height: 45px; margin: 0 auto 8px auto; object-fit: contain; filter: grayscale(100%) contrast(200%); }
     .print-meta { font-size: 11px; margin: 2px 0; color: #000; }
 }
+
+/* ============================================================
+   🏢 SHOP CLOUD AUTHENTICATION MODAL & RESPONSIVE BOTTOM SHEET
+   ============================================================ */
+#shopAuthModal {
+    z-index: 1000008;
+    background: rgba(13, 38, 34, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.shop-auth-card {
+    background: #FFFFFF;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(20, 56, 50, 0.1);
+    overflow: hidden;
+    position: relative;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    animation: authModalFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes authModalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.96) translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.shop-auth-sheet-handle {
+    display: none;
+}
+
+/* Deep Emerald/Teal #143832 Brand Header */
+.shop-auth-header {
+    background: #143832;
+    background: linear-gradient(135deg, #143832 0%, #0D2622 100%);
+    padding: 22px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(45, 212, 191, 0.15);
+    color: #FFFFFF;
+}
+
+.shop-auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.shop-auth-logo-badge {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: rgba(45, 212, 191, 0.12);
+    border: 1.5px solid rgba(45, 212, 191, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.shop-auth-brand-name {
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.2;
+}
+
+.shop-auth-brand-badge {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: #10B981;
+    color: #FFFFFF;
+    text-transform: uppercase;
+}
+
+.shop-auth-brand-sub {
+    margin: 2px 0 0 0;
+    font-size: 11px;
+    color: #99F6E4;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+/* Semantic Close Button (strictly distinct from .modal-close-btn) */
+.shop-auth-close-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #E2E8F0;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.shop-auth-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #FFFFFF;
+    transform: scale(1.05);
+}
+
+.shop-auth-close-btn:active {
+    transform: scale(0.95);
+}
+
+/* Modal Body */
+.shop-auth-body {
+    padding: 22px 24px 24px 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Segmented Tab Control (Login vs Sign Up) */
+.auth-segmented-control {
+    display: flex;
+    background: #F1F5F9;
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 20px;
+    border: 1px solid #E2E8F0;
+    gap: 4px;
+}
+
+.auth-tab-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748B;
+    cursor: pointer;
+    border-radius: 9px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+}
+
+.auth-tab-btn:hover:not(.active) {
+    color: #0F172A;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.auth-tab-btn.active {
+    color: #143832;
+    background: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(20, 56, 50, 0.12), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Labels and Inputs */
+.shop-auth-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #475569;
+    margin-bottom: 6px;
+}
+
+.shop-auth-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.shop-auth-input-wrap .input-icon {
+    position: absolute;
+    left: 12px;
+    color: #94A3B8;
+    pointer-events: none;
+}
+
+.shop-auth-input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #0F172A;
+    background: #FFFFFF;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+}
+
+.shop-auth-input-wrap .shop-auth-input {
+    padding-left: 38px;
+}
+
+.shop-auth-input:focus {
+    border-color: #10B981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+    background: #FFFFFF;
+    outline: none;
+}
+
+/* Two-column responsive row */
+.form-row-dual {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+/* Validation Feedback */
+.validation-feedback {
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+    min-height: 16px;
+    line-height: 1.3;
+}
+.validation-feedback.success { color: #059669; }
+.validation-feedback.error { color: #DC2626; }
+.validation-feedback.muted { color: #64748B; }
+
+/* Buttons */
+.btn-emerald {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: #FFFFFF;
+    border: none;
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.18s ease;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.btn-emerald:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+    transform: translateY(-1px);
+}
+
+.btn-emerald:active {
+    transform: translateY(1px);
+}
+
+/* 6-Digit Auto-Advancing OTP Inputs */
+.otp-section {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+    animation: authModalFadeIn 0.2s ease;
+}
+
+.otp-header-info {
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.otp-step-label {
+    font-size: 12px;
+    color: #475569;
+}
+
+.otp-inputs-grid {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.otp-digit-input {
+    width: 46px;
+    height: 52px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 800;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    color: #143832;
+    background: #FFFFFF;
+    border: 2px solid #CBD5E1;
+    border-radius: 12px;
+    transition: all 0.15s ease;
+    outline: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.otp-digit-input:focus {
+    border-color: #10B981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
+    transform: translateY(-2px);
+    background: #F0FDF4;
+}
+
+/* Timer and Resend Row */
+.otp-timer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #64748B;
+    margin-bottom: 6px;
+    padding: 0 4px;
+}
+
+.otp-timer-text strong {
+    color: #143832;
+    font-variant-numeric: tabular-nums;
+}
+
+.btn-resend-link {
+    background: transparent;
+    border: none;
+    color: #059669;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.btn-resend-link:hover:not(:disabled) {
+    text-decoration: underline;
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.btn-resend-link:disabled {
+    color: #94A3B8;
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
+/* Mode toggle link */
+.auth-mode-toggle-wrap {
+    text-align: center;
+    margin-top: 14px;
+}
+
+.auth-link-btn {
+    background: transparent;
+    border: none;
+    color: #059669;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+}
+
+.auth-link-btn:hover {
+    background: rgba(16, 185, 129, 0.08);
+    text-decoration: underline;
+}
+
+/* ⚡ Frictionless Skip / Demo POS Bypass Button */
+.auth-bypass-card {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid #E2E8F0;
+    text-align: center;
+}
+
+.btn-demo-bypass {
+    width: 100%;
+    padding: 13px 18px;
+    background: #F0FDF4;
+    border: 1.5px solid rgba(16, 185, 129, 0.4);
+    border-radius: 12px;
+    color: #065F46;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+}
+
+.btn-demo-bypass:hover {
+    background: #DCFCE7;
+    border-color: #10B981;
+    color: #047857;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    transform: translateY(-1px);
+}
+
+.btn-demo-bypass:active {
+    transform: translateY(1px);
+    background: #BBF7D0;
+}
+
+.btn-demo-bypass-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.demo-lightning-icon {
+    font-size: 15px;
+    color: #F59E0B;
+}
+
+.demo-arrow {
+    transition: transform 0.2s ease;
+}
+
+.btn-demo-bypass:hover .demo-arrow {
+    transform: translateX(3px);
+}
+
+.bypass-subtext {
+    font-size: 11px;
+    color: #64748B;
+    margin: 6px 0 0 0;
+    font-weight: 500;
+}
+
+/* Topbar Cloud Auth Pill */
+.cloud-auth-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: rgba(20, 56, 50, 0.08);
+    border: 1px solid rgba(20, 56, 50, 0.2);
+    color: #143832;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.cloud-auth-pill:hover {
+    background: #143832;
+    color: #FFFFFF;
+    border-color: #143832;
+    box-shadow: 0 2px 8px rgba(20, 56, 50, 0.2);
+}
+
+/* ============================================================
+   📱 RESPONSIVE MOBILE VIEWPORT: NATIVE BOTTOM-SHEET STYLING
+   ============================================================ */
+@media screen and (max-width: 640px) {
+    #shopAuthModal {
+        justify-content: flex-end;
+        align-items: stretch;
+        padding: 0;
+    }
+
+    #shopAuthModal .shop-auth-card {
+        max-width: 100%;
+        width: 100%;
+        border-radius: 24px 24px 0 0;
+        max-height: 92vh;
+        margin: 0;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.35);
+        animation: shopAuthSheetSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes shopAuthSheetSlideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
+
+    .shop-auth-sheet-handle {
+        display: block;
+        width: 44px;
+        height: 5px;
+        background: rgba(255, 255, 255, 0.35);
+        border-radius: 10px;
+        margin: 8px auto 4px auto;
+    }
+
+    .otp-inputs-grid {
+        gap: 6px;
+    }
+
+    .otp-digit-input {
+        width: 42px;
+        height: 48px;
+        font-size: 20px;
+    }
+
+    .form-row-dual {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+}
+

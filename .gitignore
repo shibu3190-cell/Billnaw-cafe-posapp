@@ -46,3 +46,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Teamwork internal scratch runs
+.agents/orchestrator*
+.agents/sentinel*
+.agents/teamwork_preview_*
+.agents/ORIGINAL_REQUEST.md
+ORIGINAL_REQUEST.md
+PROJECT.md
+TEST_INFRA.md
+TEST_READY.md
+
+

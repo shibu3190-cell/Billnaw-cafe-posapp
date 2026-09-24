@@ -11,6 +11,7 @@ import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
 import { parseMenuFromText, generateDefaultMenuTemplate } from './server/menu-parser.js';
+import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession } from './server/auth-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -366,6 +367,67 @@ app.post('/api/shop/import-validate', (req, res) => {
     res.json({ success: true, summary });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================
+// Authentication & OTP Suite (Milestone 1)
+// ==========================================
+
+// 1. Send OTP (Passwordless Login / Signup initiation)
+app.post('/api/auth/send-otp', (req, res) => {
+  try {
+    const { email, purpose } = req.body || {};
+    const result = sendOtp(email, purpose);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to dispatch verification code' });
+  }
+});
+
+// 2. Verify OTP (Validates code, rate-limits attempts, resolves store tenant, mints tokens)
+app.post('/api/auth/verify-otp', (req, res) => {
+  try {
+    const { email, otp, shopName } = req.body || {};
+    const result = verifyOtp(email, otp, shopName);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to verify verification code' });
+  }
+});
+
+// 3. User Signup (Email + Password account registration)
+app.post(['/api/auth/signup', '/api/auth/register'], (req, res) => {
+  try {
+    const result = registerUser(req.body || {});
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to create account' });
+  }
+});
+
+// 4. User Login (Email + Password authentication fallback)
+app.post(['/api/auth/login', '/api/auth/login-password'], (req, res) => {
+  try {
+    const result = loginWithPassword(req.body || {});
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to authenticate' });
+  }
+});
+
+// 5. Session Verification / Refresh
+app.all('/api/auth/session', (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ success: false, error: 'Method Not Allowed' });
+  }
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader || req.headers['x-session-token'] || req.query.token || req.body?.token;
+    const result = verifySession(token);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to verify session' });
   }
 });
 

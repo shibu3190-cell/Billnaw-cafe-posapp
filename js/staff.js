@@ -343,3 +343,14 @@ function enforcePermissions() {
     }); 
 }
 window.enforcePermissions = enforcePermissions;
+
+// Shop Cloud Logout delegation
+function logoutShop() {
+    if (typeof window.shopAuth !== 'undefined' && typeof window.shopAuth.logoutShop === 'function') {
+        window.shopAuth.logoutShop();
+    } else if (typeof window.logoutShop === 'function' && window.logoutShop !== logoutShop) {
+        window.logoutShop();
+    }
+}
+window.logoutShop = window.logoutShop || logoutShop;
+

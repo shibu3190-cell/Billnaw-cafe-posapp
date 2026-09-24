@@ -58,7 +58,7 @@ document.addEventListener('keydown', function(event) {
 // Dynamic Top Modal Dismissal (Clean hierarchy stack resolution)
 function dismissTopModal() {
     const overlays = Array.from(document.querySelectorAll('.modal-overlay')).filter(el => {
-        if (!el || el.id === 'activationOverlay' || el.id === 'loginOverlay') return false;
+        if (!el || el.id === 'activationOverlay' || el.id === 'loginOverlay' || el.id === 'shopAuthModal') return false;
         if (el.style.display === 'none') return false;
         const comp = window.getComputedStyle(el);
         return comp.display !== 'none' && comp.visibility !== 'hidden';
@@ -86,7 +86,7 @@ window.dismissTopModal = dismissTopModal;
 // Modal Backdrop Click Dismissal
 document.addEventListener('click', function(e) {
     if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
-        if (e.target.id === 'activationOverlay' || e.target.id === 'loginOverlay') return;
+        if (e.target.id === 'activationOverlay' || e.target.id === 'loginOverlay' || e.target.id === 'shopAuthModal') return;
         const closeBtn = e.target.querySelector('.modal-close-btn');
         if (closeBtn && typeof closeBtn.click === 'function') {
             closeBtn.click();
@@ -95,6 +95,108 @@ document.addEventListener('click', function(e) {
         }
     }
 });
+
+// Topbar Cloud Auth & Shop Branding Orchestration
+function updateCloudStoreTopbar(ownerEmailOrShopName = null, isOnline = null, mode = null) {
+    try {
+        const authMode = mode || localStorage.getItem('billnaw_auth_mode') || 'guest';
+        const topbarShopName = document.getElementById('topbarShopName');
+        const authStatusEl = document.getElementById('topbarAuthStatus');
+        const cloudBtn = document.getElementById('topbarCloudAuthBtn');
+        const activeStoreCode = localStorage.getItem('billnaw_store_code');
+
+        if (topbarShopName) {
+            if (typeof shopProfile !== 'undefined' && shopProfile.name && shopProfile.name !== 'billnaw') {
+                topbarShopName.innerText = shopProfile.name;
+            } else if (ownerEmailOrShopName && !ownerEmailOrShopName.includes('@')) {
+                topbarShopName.innerText = ownerEmailOrShopName;
+            }
+        }
+
+        if (authStatusEl) {
+            if (authMode === 'authenticated') {
+                authStatusEl.innerText = 'Cloud Store ✓';
+                if (cloudBtn) {
+                    cloudBtn.classList.add('authenticated');
+                    const label = ownerEmailOrShopName || activeStoreCode || 'Active Cloud';
+                    cloudBtn.title = `Cloud Store Connected: ${label} (Click to manage)`;
+                }
+            } else if (authMode === 'demo') {
+                authStatusEl.innerText = 'Demo POS';
+                if (cloudBtn) {
+                    cloudBtn.classList.remove('authenticated');
+                    cloudBtn.title = 'Demo POS Mode (Click to Sign In / Connect Cloud)';
+                }
+            } else {
+                authStatusEl.innerText = 'Cloud Shop';
+                if (cloudBtn) {
+                    cloudBtn.classList.remove('authenticated');
+                    cloudBtn.title = 'Shop Cloud Account & Fast Sign In';
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("Error updating cloud store topbar:", e);
+    }
+}
+window.updateCloudStoreTopbar = updateCloudStoreTopbar;
+
+// Restore saved cloud shop session from localStorage
+function restoreShopSession() {
+    try {
+        const authMode = localStorage.getItem('billnaw_auth_mode');
+        const sessionRaw = localStorage.getItem('billnaw_shop_session');
+        if (authMode === 'authenticated' && sessionRaw) {
+            const session = JSON.parse(sessionRaw);
+            if (session) {
+                if (session.storeCode) {
+                    localStorage.setItem('billnaw_store_code', session.storeCode);
+                    if (typeof myClientID !== 'undefined') myClientID = session.storeCode;
+                }
+                if (session.shop && session.shop.name && typeof shopProfile !== 'undefined') {
+                    shopProfile.name = session.shop.name;
+                }
+                // Silently re-authenticate Firebase Custom Token if window.auth is ready
+                if (session.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
+                    window.firebaseSignInWithCustomToken(window.auth, session.customToken).catch(() => {});
+                }
+                updateCloudStoreTopbar(session.user?.email || session.shop?.name || session.storeCode, true);
+            }
+        } else if (authMode === 'demo') {
+            updateCloudStoreTopbar(null, false, 'demo');
+        }
+    } catch (e) {
+        console.warn("Failed to restore shop session:", e);
+    }
+}
+window.restoreShopSession = restoreShopSession;
+
+// Sign out of Cloud Shop and return to Demo POS / Auth screen
+function logoutShop() {
+    if (window.auth && typeof window.firebaseSignOut === 'function') {
+        try {
+            window.firebaseSignOut(window.auth).catch(() => {});
+        } catch (e) {}
+    }
+    window.currentAuthUser = null;
+    try {
+        localStorage.removeItem('billnaw_shop_session');
+        localStorage.removeItem('billnaw_auth_token');
+        localStorage.setItem('billnaw_auth_mode', 'demo');
+    } catch (e) {}
+
+    updateCloudStoreTopbar(null, false, 'demo');
+    if (typeof updateShopAuthUI === 'function') {
+        updateShopAuthUI();
+    }
+    if (typeof showToast === 'function') {
+        showToast('Logged out of cloud shop. Operating in Demo POS.', 'info');
+    }
+    if (typeof openShopAuthModal === 'function') {
+        openShopAuthModal();
+    }
+}
+window.logoutShop = logoutShop;
 
 // App Bootstrap Initialization
 async function initApp() {
@@ -108,6 +210,12 @@ async function initApp() {
         if (typeof initFirestoreSync === 'function') {
             initFirestoreSync();
         }
+        if (typeof restoreShopSession === 'function') {
+            restoreShopSession();
+        }
+        if (typeof updateCloudStoreTopbar === 'function') {
+            updateCloudStoreTopbar();
+        }
         if (typeof updateAllUI === 'function') {
             updateAllUI();
         }
@@ -116,6 +224,20 @@ async function initApp() {
         }
         if (typeof renderInventoryTelemetryUI === 'function') {
             renderInventoryTelemetryUI();
+        }
+
+        // Present Shop Auth Modal on first cold boot if not yet authenticated or bypassed
+        const authMode = localStorage.getItem('billnaw_auth_mode');
+        if (!authMode && typeof openShopAuthModal === 'function') {
+            setTimeout(() => {
+                const actOverlay = document.getElementById('activationOverlay');
+                const logOverlay = document.getElementById('loginOverlay');
+                const isActivationShowing = actOverlay && actOverlay.style.display !== 'none';
+                const isLoginShowing = logOverlay && logOverlay.style.display !== 'none';
+                if (!isActivationShowing && !isLoginShowing) {
+                    openShopAuthModal();
+                }
+            }, 150);
         }
     } catch (err) {
         console.error("Initialization error:", err);
