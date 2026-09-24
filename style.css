@@ -643,6 +643,7 @@ input:focus, select:focus, textarea:focus { outline: none; }
     z-index: 1;
 }
 .card-img-price-pill {
+    display: none !important;
     position: absolute;
     bottom: 6px;
     right: 6px;
@@ -3084,9 +3085,10 @@ body.printing { background: #fff !important; }
     font-weight: 500;
 }
 
-/* Topbar Cloud Auth Pill */
+/* Topbar Cloud Auth Pill (Hidden as requested: Access via Settings -> Store Profile) */
+#topbarCloudAuthBtn,
 .cloud-auth-pill {
-    display: inline-flex;
+    display: none !important;
     align-items: center;
     gap: 6px;
     padding: 6px 12px;

@@ -1883,8 +1883,8 @@
                     <span id="activeStaffName">Admin</span>
                 </div>
 
-                <!-- Shop Cloud Auth Pill -->
-                <button type="button" id="topbarCloudAuthBtn" class="cloud-auth-pill" onclick="openShopAuthModal()" title="Shop Cloud Account & Fast Sign In">
+                <!-- Shop Cloud Auth Pill (Hidden: Access via Settings -> Store Profile) -->
+                <button type="button" id="topbarCloudAuthBtn" class="cloud-auth-pill" onclick="openShopAuthModal()" title="Shop Cloud Account & Fast Sign In" style="display: none !important;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
                     <span id="topbarAuthStatus">Cloud Shop</span>
                 </button>
@@ -2343,7 +2343,6 @@
                                         Active: <strong id="posActiveTableBadge">Table 1</strong>
                                     </span>
                                     <span id="tableStatsSummary" style="font-size: 11px; color: var(--text-muted); font-weight: 600;"></span>
-                                    <button type="button" class="table-quick-settings-btn" onclick="openTableManagementModal()" title="Manage Dine-In Tables, Count & Alerts">⚙️ Tables</button>
                                 </div>
                                 <div class="table-legend" style="margin-bottom: 0;">
                                     <span><i style="background: var(--success);"></i> VACANT</span>
@@ -2578,6 +2577,10 @@
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                                 <input type="text" id="catalogSearchInput" placeholder="Search catalog items..." oninput="filterCatalogTable()">
                             </div>
+                            <button type="button" class="btn" id="menuCatalogAutoDetectBtn" onclick="triggerSmartMenuUpload()" style="background: linear-gradient(135deg, #143832 0%, #1f5249 100%); color: #FFFFFF; border-radius: 12px; font-size: 12px; padding: 9px 16px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; border: none; box-shadow: 0 2px 6px rgba(20,56,50,0.25); cursor: pointer;" title="Upload paper menu photo or PDF to auto-detect items with AI">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+                                <span>⚡ Auto-Detect Menu</span>
+                            </button>
                             <button class="btn btn-success" onclick="openAddMenuItemModal()" style="border-radius: 12px; font-size: 12px; padding: 9px 18px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700;">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                 <span>Add New Item</span>

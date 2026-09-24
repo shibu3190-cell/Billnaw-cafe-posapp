@@ -177,7 +177,7 @@ window.syncTableUI = syncTableUI;
 
 function triggerSmartMenuUpload() {
     if (typeof switchTab === 'function') switchTab('menu');
-    const uploader = document.getElementById('aiMenuFileInput') || document.getElementById('aiMenuUploader');
+    const uploader = document.getElementById('aiMenuUploader') || document.getElementById('aiMenuFileInput');
     if (uploader) {
         try { uploader.value = null; } catch(e) {}
         uploader.click();

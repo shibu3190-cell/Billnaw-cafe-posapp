@@ -112,7 +112,7 @@ function renderMenuUI() {
                     ${imageHtml}
                     ${popularBadge}
                     ${item.trackStock && item.stockQty <= 5 && item.stockQty > 0 ? `<div class="stock-badge low">${item.stockQty} left</div>` : (item.trackStock && item.stockQty > 5 ? `<div class="stock-badge">${item.stockQty} left</div>` : '')}
-                    <div class="card-img-price-pill">₹${Number(item.price).toFixed(0)}</div>
+                    <div class="card-img-price-pill" style="display: none !important;">₹${Number(item.price).toFixed(0)}</div>
                 </div>
                 <div class="card-content">
                     <div class="card-top-row">
