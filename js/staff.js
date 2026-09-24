@@ -310,9 +310,11 @@ function loginAsAdmin() {
 }
 window.loginAsAdmin = loginAsAdmin;
 
-function lockSystem() { 
+function logoutStaff() { 
+    currentStaff = null;
     currentRole = null; 
-    document.getElementById('loginOverlay').style.display = 'flex'; 
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) overlay.style.display = 'flex'; 
     renderLoginStaffPicker();
     setTimeout(() => {
         const pinInput = document.getElementById('staffLoginPinInput');
@@ -323,6 +325,12 @@ function lockSystem() {
     }, 80);
     if (typeof switchTab === 'function') switchTab('pos'); 
     enforcePermissions(); 
+    showToast("Terminal locked / Staff logged out.");
+}
+window.logoutStaff = logoutStaff;
+
+function lockSystem() { 
+    logoutStaff();
 }
 window.lockSystem = lockSystem;
 

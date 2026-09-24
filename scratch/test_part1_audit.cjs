@@ -83,8 +83,22 @@ test("style.css provides 44px thumb reach tap targets on quantity stepper button
     assert.ok(css.includes('min-width: 44px;') && css.includes('min-height: 44px;'), "Missing 44px min tap dimensions");
 });
 
+console.log("\n📍 FACTOR 6: SETTINGS LOGOUT & AI MENU UPLOAD ENHANCEMENTS");
+test("index.html provides Lock Terminal / Logout Staff tile calling logoutStaff()", () => {
+    assert.ok(html.includes('onclick="logoutStaff()"'), "Missing logoutStaff() onclick in settings tiles");
+    assert.ok(staffJs.includes('function logoutStaff()'), "Missing logoutStaff in staff.js");
+});
+
+test("index.html provides explicit AI Menu Photo and PDF upload triggers", () => {
+    assert.ok(html.includes('id="aiMenuBtn"'), "Missing #aiMenuBtn for photo upload");
+    assert.ok(html.includes('id="aiMenuPdfBtn"'), "Missing #aiMenuPdfBtn for PDF upload");
+    assert.ok(html.includes('id="aiMenuFileInput"'), "Missing #aiMenuFileInput");
+    assert.ok(html.includes('id="aiMenuPdfInput"'), "Missing #aiMenuPdfInput");
+});
+
 console.log("\n====================================================");
 console.log(`🎯 TOTAL RESULTS: ${passed} PASSED, ${failed} FAILED`);
 console.log("====================================================");
 
 if (failed > 0) process.exit(1);
+
