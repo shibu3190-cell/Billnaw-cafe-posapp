@@ -31,7 +31,12 @@ import {
   getPredictiveForecast,
   logWastage,
   getWastageHistory,
-  performStockAudit
+  performStockAudit,
+  saveDishRecipe,
+  updateAlertThreshold,
+  recordRestockExpense,
+  getApproxAutoFill,
+  getRestockExpenses
 } from './server/inventory-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -576,6 +581,55 @@ app.post('/api/inventory/batch-produce', (req, res) => {
 app.get('/api/inventory/recipes', (req, res) => {
   try {
     res.json({ success: true, recipes: getDishRecipes() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Configure / Save dish recipe
+app.post('/api/inventory/recipes', (req, res) => {
+  try {
+    const result = saveDishRecipe(req.body);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Approx Auto-Fill suggestion
+app.get('/api/inventory/auto-fill', (req, res) => {
+  try {
+    const suggestion = getApproxAutoFill(req.query.dish_name || req.query.name, req.query.category);
+    res.json({ success: true, auto_fill: suggestion });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update item alert threshold
+app.post('/api/inventory/alert-threshold', (req, res) => {
+  try {
+    const result = updateAlertThreshold(req.body?.material_id || req.body?.id, req.body?.min_threshold);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Record shopping expense & restock stock
+app.post('/api/inventory/restock', (req, res) => {
+  try {
+    const result = recordRestockExpense(req.body);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Restock / Mandi purchase expense history
+app.get('/api/inventory/restock-history', (req, res) => {
+  try {
+    res.json({ success: true, expenses: getRestockExpenses() });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

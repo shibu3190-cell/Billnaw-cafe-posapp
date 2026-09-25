@@ -1388,6 +1388,315 @@
         </div>
     </div>
 
+    <!-- 🥘 DISH RECIPE & PORTION CONFIGURATOR MODAL -->
+    <div id="dishRecipeConfigModal" class="modal-overlay" style="display: none; z-index: 1000010;">
+        <div class="modal-box" style="max-width: 640px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header" style="border-bottom: 1.5px solid var(--border); padding-bottom: 12px; margin-bottom: 14px;">
+                <div>
+                    <h2 style="display: inline-flex; align-items: center; gap: 8px; font-size: 18px; margin: 0; color: #143832;">
+                        <span>🥘 Recipe & Portion Configurator</span>
+                    </h2>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                        <span id="rtrDishNameBadge" style="font-weight: 800; font-size: 15px; color: var(--text-dark);">Dish Name</span>
+                        <span id="rtrDishCategoryBadge" class="badge" style="background: #E0F2FE; color: #0369A1; font-size: 11px;">Category</span>
+                        <span id="rtrDishPriceBadge" class="badge" style="background: #DCFCE7; color: #15803D; font-size: 12px; font-weight: 800;">₹0.00</span>
+                    </div>
+                </div>
+                <!-- ⚠️ CRITICAL INVARIANT: Uses rtr_close_btn exclusively -->
+                <button type="button" class="rtr_close_btn" onclick="window.culinaryInventory.closeDishRecipeModal()" aria-label="Close Recipe Configurator">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <!-- 1-Tap Approx Auto-Fill Banner -->
+            <div style="background: #F0FDF4; border: 1.5px dashed #86EFAC; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <div style="font-size: 13px; font-weight: 800; color: #166534; display: flex; align-items: center; gap: 6px;">
+                        <span>⚡ 1-Tap Approx Culinary Auto-Fill</span>
+                    </div>
+                    <div style="font-size: 11px; color: #15803D; margin-top: 2px;">
+                        Auto-detects dish profile (Curry, Biryani, Dal, Roll, etc.) & sets standard kitchen portion ratios.
+                    </div>
+                </div>
+                <button type="button" class="btn btn-success" style="padding: 7px 16px; font-size: 12px; border-radius: 20px; font-weight: 700;" onclick="window.culinaryInventory.triggerApproxAutoFill()">
+                    ⚡ Auto-Fill Quantities
+                </button>
+            </div>
+
+            <input type="hidden" id="rtrRecipeDishId">
+            <input type="hidden" id="rtrRecipeMenuItemId">
+            <input type="hidden" id="rtrRecipeDishName">
+            <input type="hidden" id="rtrRecipeDishCategory">
+            <input type="hidden" id="rtrRecipeSellingPrice">
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                <!-- 1. Gravy Base & Quantity -->
+                <div class="card" style="padding: 14px; border: 1.5px solid #E5E7EB; border-radius: 10px; background: #FAFAFA;">
+                    <label style="font-weight: 800; font-size: 13px; color: #143832; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <span>🍲 Gravy Base Used</span>
+                    </label>
+                    <select id="rtrRecipeGravySelect" onchange="window.culinaryInventory.recalcRecipeModalCost()" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-size: 12px; font-weight: 600; margin-bottom: 8px;">
+                        <option value="">None (Dry Prep / Snack)</option>
+                        <option value="SUB-MAK-01">Makhani Gravy Base (Shahi Butter Masala)</option>
+                        <option value="SUB-BROWN-01">Bhuna Onion-Tomato Gravy Base</option>
+                        <option value="SUB-YAKHNI-01">Awadhi Dum Biryani Yakhni / Meat Stock</option>
+                        <option value="SUB-DAL-01">Dal Makhani Slow-Cook Base</option>
+                    </select>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="number" id="rtrRecipeGravyQty" step="0.01" min="0" placeholder="0.20" oninput="window.culinaryInventory.recalcRecipeModalCost()" style="flex: 1; padding: 7px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 13px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); width: 45px;">Litres</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 6px;">
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeGravyQty', 0.15)">150ml</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeGravyQty', 0.20)">200ml</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeGravyQty', 0.25)">250ml</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeGravyQty', 0)">0ml</button>
+                    </div>
+                </div>
+
+                <!-- 2. Refined Cooking Oil -->
+                <div class="card" style="padding: 14px; border: 1.5px solid #E5E7EB; border-radius: 10px; background: #FAFAFA;">
+                    <label style="font-weight: 800; font-size: 13px; color: #143832; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <span>🛢️ Refined Cooking Oil</span>
+                    </label>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Deducts from Refined Sunflower Oil stock</div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="number" id="rtrRecipeOilQty" step="0.005" min="0" placeholder="0.02" oninput="window.culinaryInventory.recalcRecipeModalCost()" style="flex: 1; padding: 7px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 13px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); width: 45px;">Litres</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 6px;">
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeOilQty', 0.015)">15ml</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeOilQty', 0.02)">20ml</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeOilQty', 0.03)">30ml</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeOilQty', 0.04)">40ml</button>
+                    </div>
+                </div>
+
+                <!-- 3. Paneer / Chicken / Meat -->
+                <div class="card" style="padding: 14px; border: 1.5px solid #E5E7EB; border-radius: 10px; background: #FAFAFA;">
+                    <label style="font-weight: 800; font-size: 13px; color: #143832; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <span>🧀 Protein / Paneer / Meat</span>
+                    </label>
+                    <select id="rtrRecipeProteinSelect" onchange="window.culinaryInventory.recalcRecipeModalCost()" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-size: 12px; font-weight: 600; margin-bottom: 8px;">
+                        <option value="">None (Vegetarian / Plain)</option>
+                        <option value="RM-PANEER">Malai Paneer Blocks</option>
+                        <option value="RM-CHICKEN">Fresh Farm Chicken</option>
+                    </select>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="number" id="rtrRecipeProteinQty" step="0.01" min="0" placeholder="0.15" oninput="window.culinaryInventory.recalcRecipeModalCost()" style="flex: 1; padding: 7px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 13px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); width: 45px;">kg</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 6px;">
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeProteinQty', 0.10)">100g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeProteinQty', 0.15)">150g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeProteinQty', 0.20)">200g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeProteinQty', 0)">0g</button>
+                    </div>
+                </div>
+
+                <!-- 4. Raw Veggies & Onions -->
+                <div class="card" style="padding: 14px; border: 1.5px solid #E5E7EB; border-radius: 10px; background: #FAFAFA;">
+                    <label style="font-weight: 800; font-size: 13px; color: #143832; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <span>🧅 Raw Veggies & Onions</span>
+                    </label>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Deducts from Red Onions / Veggies stock</div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="number" id="rtrRecipeVeggieQty" step="0.01" min="0" placeholder="0.04" oninput="window.culinaryInventory.recalcRecipeModalCost()" style="flex: 1; padding: 7px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 13px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); width: 45px;">kg</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 6px;">
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeVeggieQty', 0.03)">30g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeVeggieQty', 0.05)">50g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeVeggieQty', 0.08)">80g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeVeggieQty', 0)">0g</button>
+                    </div>
+                </div>
+
+                <!-- 5. Flour / Maida / Rice -->
+                <div class="card" style="padding: 14px; border: 1.5px solid #E5E7EB; border-radius: 10px; background: #FAFAFA;">
+                    <label style="font-weight: 800; font-size: 13px; color: #143832; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <span>🌾 Flour (Maida) / Rice</span>
+                    </label>
+                    <select id="rtrRecipeFlourSelect" onchange="window.culinaryInventory.recalcRecipeModalCost()" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-size: 12px; font-weight: 600; margin-bottom: 8px;">
+                        <option value="RM-MAIDA">Refined Flour (Maida)</option>
+                        <option value="RM-BASMATI-RICE">Dum Biryani Basmati Rice</option>
+                    </select>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="number" id="rtrRecipeFlourQty" step="0.01" min="0" placeholder="0.00" oninput="window.culinaryInventory.recalcRecipeModalCost()" style="flex: 1; padding: 7px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 13px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); width: 45px;">kg</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 6px;">
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeFlourQty', 0.05)">50g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeFlourQty', 0.08)">80g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeFlourQty', 0.15)">150g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeFlourQty', 0)">0g</button>
+                    </div>
+                </div>
+
+                <!-- 6. Dairy Butter / Cream / Fat -->
+                <div class="card" style="padding: 14px; border: 1.5px solid #E5E7EB; border-radius: 10px; background: #FAFAFA;">
+                    <label style="font-weight: 800; font-size: 13px; color: #143832; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <span>🧈 Dairy Butter / Cream</span>
+                    </label>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Deducts from Dairy Butter stock</div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="number" id="rtrRecipeButterQty" step="0.005" min="0" placeholder="0.02" oninput="window.culinaryInventory.recalcRecipeModalCost()" style="flex: 1; padding: 7px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 13px;">
+                        <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); width: 45px;">kg</span>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 6px;">
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeButterQty', 0.015)">15g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeButterQty', 0.025)">25g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeButterQty', 0.05)">50g</button>
+                        <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 10px; border-radius: 12px;" onclick="window.culinaryInventory.setRecipeField('rtrRecipeButterQty', 0)">0g</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Serving Cost & Margin Box -->
+            <div id="rtrRecipeCostPreviewBox" style="background: #F8FAFC; border: 1.5px solid #CBD5E1; border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Estimated Unit Food Cost</div>
+                    <div id="rtrServingCostVal" style="font-size: 20px; font-weight: 800; color: #143832; margin-top: 2px;">₹0.00</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Gross Profit / Serving</div>
+                    <div id="rtrServingProfitVal" style="font-size: 20px; font-weight: 800; color: #16A34A; margin-top: 2px;">₹0.00</div>
+                </div>
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Gross Margin %</div>
+                    <div id="rtrServingMarginVal" style="font-size: 20px; font-weight: 800; color: #2563EB; margin-top: 2px;">0.0%</div>
+                </div>
+            </div>
+
+            <!-- Modal Action Buttons -->
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" style="padding: 8px 18px; font-size: 13px;" onclick="window.culinaryInventory.closeDishRecipeModal()">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-success" style="padding: 8px 24px; font-size: 13px; font-weight: 700; border-radius: 8px;" onclick="window.culinaryInventory.saveCurrentRecipeModal()">
+                    💾 Save Dish Recipe
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔔 ITEM ALERT SETTINGS MODAL -->
+    <div id="itemAlertModal" class="modal-overlay" style="display: none; z-index: 1000010;">
+        <div class="modal-box" style="max-width: 480px;">
+            <div class="modal-header">
+                <div>
+                    <h2 style="display: inline-flex; align-items: center; gap: 8px; font-size: 18px; margin: 0; color: #143832;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                        <span>Item Minimum Alert Threshold</span>
+                    </h2>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-muted);">Set low stock alert trigger for real-time kitchen warnings.</p>
+                </div>
+                <!-- ⚠️ CRITICAL INVARIANT: Uses rtr_close_btn exclusively -->
+                <button type="button" class="rtr_close_btn" onclick="window.culinaryInventory.closeItemAlertModal()" aria-label="Close Alert Modal">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <input type="hidden" id="rtrAlertItemId">
+
+            <div style="background: #F8FAFC; border: 1.5px solid #E2E8F0; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div id="rtrAlertItemName" style="font-weight: 800; font-size: 15px; color: var(--text-dark);">Item Name</div>
+                        <div id="rtrAlertItemCategory" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Category</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Current Stock</div>
+                        <div id="rtrAlertCurrentStock" style="font-size: 16px; font-weight: 800; color: #143832;">0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="font-weight: 700; font-size: 13px; color: var(--text-dark); margin-bottom: 6px; display: block;">
+                    Low Stock Alert Trigger Quantity (<span id="rtrAlertItemUnit">units</span>)
+                </label>
+                <input type="number" id="rtrAlertThresholdInput" min="0" step="0.5" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 15px;">
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                    When leftover quantity drops below this value, the tracker flashes a Red/Amber alert badge.
+                </div>
+            </div>
+
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+                <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 7px 16px;" onclick="window.culinaryInventory.closeItemAlertModal()">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-success" style="font-size: 12px; padding: 7px 20px; font-weight: 700;" onclick="window.culinaryInventory.saveItemAlertSettings()">
+                    💾 Save Alert Trigger
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🛒 SHOPPING RESTOCK & EXPENSE INTAKE MODAL -->
+    <div id="restockExpenseModal" class="modal-overlay" style="display: none; z-index: 1000010;">
+        <div class="modal-box" style="max-width: 500px;">
+            <div class="modal-header">
+                <div>
+                    <h2 style="display: inline-flex; align-items: center; gap: 8px; font-size: 18px; margin: 0; color: #143832;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                        <span>Restock & Shopping Expense Intake</span>
+                    </h2>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-muted);">Record market purchase to increment stock and track kitchen expenses.</p>
+                </div>
+                <!-- ⚠️ CRITICAL INVARIANT: Uses rtr_close_btn exclusively -->
+                <button type="button" class="rtr_close_btn" onclick="window.culinaryInventory.closeRestockModal()" aria-label="Close Restock Modal">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <input type="hidden" id="rtrRestockItemId">
+
+            <div style="background: #F8FAFC; border: 1.5px solid #E2E8F0; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div id="rtrRestockItemName" style="font-weight: 800; font-size: 15px; color: var(--text-dark);">Item Name</div>
+                        <div id="rtrRestockItemCategory" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Category</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Current Stock</div>
+                        <div id="rtrRestockCurrentStock" style="font-size: 16px; font-weight: 800; color: #143832;">0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                <div class="form-group">
+                    <label style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;">Quantity Added (<span id="rtrRestockItemUnit">units</span>)</label>
+                    <input type="number" id="rtrRestockQtyInput" min="0.1" step="0.5" placeholder="10" oninput="window.culinaryInventory.recalcRestockTotal()" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;">Purchase Rate (₹ / unit)</label>
+                    <input type="number" id="rtrRestockCostInput" min="0" step="1" placeholder="120" oninput="window.culinaryInventory.recalcRestockTotal()" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 14px;">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: block;">Supplier / Mandi Vendor</label>
+                <input type="text" id="rtrRestockSupplierInput" placeholder="Kolkata Fresh Veggies Mandi / Wholesale" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1.5px solid #CBD5E1; font-size: 13px;">
+            </div>
+
+            <div style="background: #ECFDF5; border: 1.5px solid #A7F3D0; border-radius: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <span style="font-size: 12px; font-weight: 700; color: #065F46;">Total Purchase Expense:</span>
+                <span id="rtrRestockTotalExpense" style="font-size: 18px; font-weight: 800; color: #047857;">₹0.00</span>
+            </div>
+
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 7px 16px;" onclick="window.culinaryInventory.closeRestockModal()">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-success" style="font-size: 12px; padding: 7px 20px; font-weight: 700;" onclick="window.culinaryInventory.submitRestockExpense()">
+                    📥 Add Stock & Record Expense
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- 🧾 GST CONFIG DETAIL MODAL -->
     <div id="gstConfigModal" class="modal-overlay" style="display: none;">
         <div class="modal-box" style="max-width: 480px;">
@@ -2794,7 +3103,10 @@
 
                 <!-- Sub-Navigation for Advanced Indian Culinary & Liquid Telemetry Matrix -->
                 <div class="inv-subnav-bar">
-                    <button type="button" class="inv-subnav-btn active" data-subtab="raw_materials" onclick="window.switchInventorySubTab('raw_materials')">
+                    <button type="button" class="inv-subnav-btn active" data-subtab="rtr_tracker" onclick="window.switchInventorySubTab('rtr_tracker')">
+                        🥘 RTR Raw & Recipe Tracker
+                    </button>
+                    <button type="button" class="inv-subnav-btn" data-subtab="raw_materials" onclick="window.switchInventorySubTab('raw_materials')">
                         🥦 Raw Materials & Bar Pegs
                     </button>
                     <button type="button" class="inv-subnav-btn" data-subtab="morning_batch" onclick="window.switchInventorySubTab('morning_batch')">

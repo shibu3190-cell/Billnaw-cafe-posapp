@@ -3291,4 +3291,97 @@ body.printing { background: #fff !important; }
     box-shadow: 0 2px 8px rgba(20, 56, 50, 0.2);
 }
 
+/* ============================================================
+   🥘 RTR (REAL-TIME RAW) TRACKER & RECIPE CONFIG STYLES
+   ============================================================ */
+.rtr_close_btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+.rtr_close_btn:hover {
+    background: #FEE2E2;
+    color: #DC2626;
+}
+
+.rtr-vertical-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.rtr-staples-vertical-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rtr-staple-row {
+    background: #FFFFFF;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+.rtr-staple-row:hover {
+    border-color: #CBD5E1;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
+}
+.rtr-staple-row.low-stock {
+    border-color: #FCA5A5;
+    background: #FEF2F2;
+}
+
+.rtr-dishes-vertical-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.rtr-dish-card {
+    background: #FFFFFF;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.rtr-dish-card:hover {
+    border-color: #143832;
+    background: #FAF7F4;
+    box-shadow: 0 4px 12px rgba(20, 56, 50, 0.08);
+    transform: translateY(-1px);
+}
+
+.rtr-recipe-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #F1F5F9;
+    color: #334155;
+    border: 1px solid #E2E8F0;
+}
+
+
 

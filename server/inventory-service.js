@@ -269,6 +269,7 @@ let deductionHistory = [];
 let purchaseOrdersStore = new Map();
 let transfersStore = new Map();
 let wastageHistory = [];
+let restockExpensesHistory = [];
 
 /**
  * Resets stores to default seed data (useful for test isolation).
@@ -282,6 +283,7 @@ export function resetInventoryStore() {
   purchaseOrdersStore.clear();
   transfersStore.clear();
   wastageHistory = [];
+  restockExpensesHistory = [];
 
   DEFAULT_RAW_MATERIALS.forEach(item => {
     rawMaterialsStore.set(item.id, JSON.parse(JSON.stringify(item)));
@@ -533,10 +535,19 @@ export function deductOrderInventory(order) {
 
   items.forEach(cartItem => {
     const dishName = (cartItem.name || '').toLowerCase().trim();
+    const itemId = cartItem.id ? String(cartItem.id) : null;
     const qty = parseInt(cartItem.qty || cartItem.quantity || 1, 10);
 
+    // 0. Match by menu_item_id or custom ID if available
+    let recipe = null;
+    if (itemId) {
+      recipe = Array.from(recipesStore.values()).find(r => String(r.menu_item_id) === itemId || String(r.id) === itemId);
+    }
+
     // 1. Exact match in recipe store
-    let recipe = Array.from(recipesStore.values()).find(r => r.dish_name.toLowerCase() === dishName);
+    if (!recipe) {
+      recipe = Array.from(recipesStore.values()).find(r => r.dish_name.toLowerCase() === dishName);
+    }
     
     // 2. Substring or token match
     if (!recipe) {
@@ -1070,3 +1081,364 @@ export function performStockAudit(auditEntries) {
     }
   };
 }
+
+// ==========================================
+// 10. RTR TRACKER: RECIPE CONFIG, AUTO-FILL & STAPLES
+// ==========================================
+
+/**
+ * Intelligent Approx Auto-Fill based on Indian culinary portion benchmarks
+ */
+export function getApproxAutoFill(dishName = '', category = '') {
+  const name = (dishName || '').toLowerCase().trim();
+  const cat = (category || '').toLowerCase().trim();
+
+  // 1. Paneer gravies (Paneer Butter Masala, Shahi Paneer, Kadhai Paneer, etc.)
+  if (name.includes('paneer') && (name.includes('butter') || name.includes('makhani') || name.includes('shahi') || name.includes('masala') || cat.includes('curry') || cat.includes('main'))) {
+    return {
+      gravy_id: 'SUB-MAK-01',
+      gravy_name: 'Makhani Gravy Base',
+      gravy_qty: 0.20,
+      protein_id: 'RM-PANEER',
+      protein_name: 'Malai Paneer',
+      protein_qty: 0.15,
+      oil_qty: 0.02,
+      veggie_qty: 0.03,
+      flour_qty: 0.0,
+      butter_qty: 0.02,
+      confidence: 'High (Curry / Paneer Base)'
+    };
+  }
+
+  // 2. Chicken gravies (Butter Chicken, Chicken Tikka Masala, Chicken Curry)
+  if (name.includes('chicken') && (name.includes('butter') || name.includes('curry') || name.includes('masala') || name.includes('makhani') || cat.includes('main'))) {
+    const isMakhani = name.includes('butter') || name.includes('makhani');
+    return {
+      gravy_id: isMakhani ? 'SUB-MAK-01' : 'SUB-BROWN-01',
+      gravy_name: isMakhani ? 'Makhani Gravy Base' : 'Bhuna Onion-Tomato Gravy Base',
+      gravy_qty: 0.22,
+      protein_id: 'RM-CHICKEN',
+      protein_name: 'Fresh Farm Chicken',
+      protein_qty: 0.20,
+      oil_qty: 0.02,
+      veggie_qty: 0.04,
+      flour_qty: 0.0,
+      butter_qty: isMakhani ? 0.025 : 0.01,
+      confidence: 'High (Poultry Gravy)'
+    };
+  }
+
+  // 3. Biryani / Pulao
+  if (name.includes('biryani') || name.includes('pulao') || name.includes('fried rice')) {
+    const hasChicken = name.includes('chicken') || name.includes('murgh') || name.includes('meat');
+    const hasPaneer = name.includes('paneer');
+    return {
+      gravy_id: 'SUB-YAKHNI-01',
+      gravy_name: 'Awadhi Dum Biryani Yakhni / Meat Stock Base',
+      gravy_qty: 0.15,
+      protein_id: hasPaneer ? 'RM-PANEER' : (hasChicken ? 'RM-CHICKEN' : 'RM-ONION'),
+      protein_name: hasPaneer ? 'Malai Paneer' : (hasChicken ? 'Fresh Farm Chicken' : 'Fresh Veggies'),
+      protein_qty: (hasChicken || hasPaneer) ? 0.18 : 0.08,
+      oil_qty: 0.025,
+      veggie_qty: 0.06,
+      flour_qty: 0.20, // Rice
+      butter_qty: 0.015,
+      confidence: 'High (Dum Rice / Biryani Base)'
+    };
+  }
+
+  // 4. Dal (Dal Makhani, Dal Tadka, Yellow Dal)
+  if (name.includes('dal') || name.includes('daal') || name.includes('lentil')) {
+    return {
+      gravy_id: 'SUB-DAL-01',
+      gravy_name: 'Dal Makhani Slow-Cook Base',
+      gravy_qty: 0.25,
+      protein_id: 'RM-BUTTER',
+      protein_name: 'Dairy Butter',
+      protein_qty: 0.02,
+      oil_qty: 0.015,
+      veggie_qty: 0.04,
+      flour_qty: 0.0,
+      butter_qty: 0.02,
+      confidence: 'High (Lentil Base)'
+    };
+  }
+
+  // 5. Rolls / Wraps / Kathi / Roti / Naan / Paratha
+  if (name.includes('roll') || name.includes('wrap') || name.includes('roti') || name.includes('naan') || name.includes('paratha')) {
+    const hasPaneer = name.includes('paneer');
+    const hasChicken = name.includes('chicken');
+    return {
+      gravy_id: '',
+      gravy_name: 'None (Dry Prep)',
+      gravy_qty: 0.0,
+      protein_id: hasPaneer ? 'RM-PANEER' : (hasChicken ? 'RM-CHICKEN' : ''),
+      protein_name: hasPaneer ? 'Malai Paneer' : (hasChicken ? 'Fresh Chicken' : 'None'),
+      protein_qty: (hasPaneer || hasChicken) ? 0.10 : 0.0,
+      oil_qty: 0.02,
+      veggie_qty: 0.04,
+      flour_qty: 0.09, // Maida/Atta
+      butter_qty: 0.01,
+      confidence: 'High (Bread / Roll Base)'
+    };
+  }
+
+  // 6. Generic Snack / Starter / Veg Curry fallback
+  return {
+    gravy_id: 'SUB-BROWN-01',
+    gravy_name: 'Bhuna Onion-Tomato Gravy Base',
+    gravy_qty: 0.12,
+    protein_id: 'RM-PANEER',
+    protein_name: 'Malai Paneer / Veg',
+    protein_qty: 0.08,
+    oil_qty: 0.02,
+    veggie_qty: 0.06,
+    flour_qty: 0.04,
+    butter_qty: 0.01,
+    confidence: 'Moderate (Estimated Generic Profile)'
+  };
+}
+
+/**
+ * Creates or updates a dish's portion composition recipe.
+ */
+export function saveDishRecipe(recipeData) {
+  if (!recipeData || !recipeData.dish_name) {
+    return { status: 400, data: { success: false, error: 'dish_name is required' } };
+  }
+
+  const recipeId = recipeData.id || ('REC-' + recipeData.dish_name.toUpperCase().replace(/[^A-Z0-9]/g, '-').slice(0, 16));
+  const sellingPrice = parseFloat(recipeData.selling_price) || 200;
+  const gstPct = parseFloat(recipeData.gst_percentage) || 5;
+
+  let components = [];
+
+  if (Array.isArray(recipeData.components) && recipeData.components.length > 0) {
+    components = recipeData.components;
+  } else {
+    // Construct components from dedicated portion fields
+    // 1. Gravy base
+    if (recipeData.gravy_id && parseFloat(recipeData.gravy_qty) > 0) {
+      const sub = subRecipesStore.get(recipeData.gravy_id);
+      components.push({
+        type: 'sub_recipe',
+        id: recipeData.gravy_id,
+        name: sub ? sub.name : 'Gravy Base',
+        exact_quantity: parseFloat(recipeData.gravy_qty),
+        unit: 'Litre'
+      });
+    }
+
+    // 2. Cooking Oil
+    if (parseFloat(recipeData.oil_qty) > 0) {
+      components.push({
+        type: 'raw',
+        id: 'RM-OIL',
+        name: 'Refined Sunflower Oil',
+        exact_quantity: parseFloat(recipeData.oil_qty),
+        unit: 'Litre'
+      });
+    }
+
+    // 3. Protein (Paneer / Chicken / Meat)
+    if (recipeData.protein_id && parseFloat(recipeData.protein_qty) > 0) {
+      const rm = rawMaterialsStore.get(recipeData.protein_id);
+      components.push({
+        type: 'raw',
+        id: recipeData.protein_id,
+        name: rm ? rm.name : 'Protein / Main Base',
+        exact_quantity: parseFloat(recipeData.protein_qty),
+        unit: 'kg'
+      });
+    }
+
+    // 4. Raw Veggies & Onions
+    if (parseFloat(recipeData.veggie_qty) > 0) {
+      components.push({
+        type: 'raw',
+        id: 'RM-ONION',
+        name: 'Red Onions & Veggies',
+        exact_quantity: parseFloat(recipeData.veggie_qty),
+        unit: 'kg'
+      });
+    }
+
+    // 5. Flour / Maida / Rice
+    if (parseFloat(recipeData.flour_qty) > 0) {
+      const flourId = recipeData.flour_id || 'RM-MAIDA';
+      const rm = rawMaterialsStore.get(flourId);
+      components.push({
+        type: 'raw',
+        id: flourId,
+        name: rm ? rm.name : 'Flour / Grains',
+        exact_quantity: parseFloat(recipeData.flour_qty),
+        unit: 'kg'
+      });
+    }
+
+    // 6. Butter / Cream
+    if (parseFloat(recipeData.butter_qty) > 0) {
+      components.push({
+        type: 'raw',
+        id: 'RM-BUTTER',
+        name: 'Dairy Butter',
+        exact_quantity: parseFloat(recipeData.butter_qty),
+        unit: 'kg'
+      });
+    }
+  }
+
+  const recipe = {
+    id: recipeId,
+    menu_item_id: recipeData.menu_item_id ? String(recipeData.menu_item_id) : recipeId,
+    dish_name: recipeData.dish_name.trim(),
+    menu_category: recipeData.menu_category || 'Main Course',
+    selling_price: sellingPrice,
+    gst_percentage: gstPct,
+    components,
+    updated_at: new Date().toISOString()
+  };
+
+  recipesStore.set(recipe.id, recipe);
+
+  // Recalculate live costing for this single dish
+  let dishCost = 0;
+  recipe.components.forEach(comp => {
+    if (comp.type === 'sub_recipe') {
+      const sub = subRecipesStore.get(comp.id);
+      if (sub) {
+        let subCostPerUnit = 0;
+        let subBatchTotal = 0;
+        sub.ingredients.forEach(ing => {
+          const rm = rawMaterialsStore.get(ing.material_id);
+          if (rm) subBatchTotal += (rm.cost_per_unit * ing.quantity);
+        });
+        subCostPerUnit = sub.yield_quantity > 0 ? (subBatchTotal / sub.yield_quantity) : 0;
+        dishCost += (subCostPerUnit * comp.exact_quantity);
+      }
+    } else {
+      const rm = rawMaterialsStore.get(comp.id);
+      if (rm) {
+        dishCost += (rm.cost_per_unit * comp.exact_quantity);
+      }
+    }
+  });
+
+  const roundedCost = Math.round(dishCost * 100) / 100;
+  const profitMargin = sellingPrice > 0 ? Math.round(((sellingPrice - roundedCost) / sellingPrice) * 1000) / 10 : 0;
+
+  return {
+    status: 200,
+    data: {
+      success: true,
+      message: `Recipe for '${recipe.dish_name}' configured successfully`,
+      recipe,
+      costing: {
+        cost_per_serving: roundedCost,
+        selling_price: sellingPrice,
+        profit_per_serving: Math.round((sellingPrice - roundedCost) * 100) / 100,
+        gross_margin_percentage: profitMargin
+      }
+    }
+  };
+}
+
+/**
+ * Updates item alert minimum threshold.
+ */
+export function updateAlertThreshold(materialId, minThreshold) {
+  if (!materialId) return { status: 400, data: { success: false, error: 'material_id is required' } };
+  const thresh = parseFloat(minThreshold);
+  if (isNaN(thresh) || thresh < 0) return { status: 400, data: { success: false, error: 'Valid threshold is required' } };
+
+  let item = rawMaterialsStore.get(materialId);
+  let isSub = false;
+  if (!item) {
+    item = subRecipesStore.get(materialId);
+    isSub = true;
+  }
+
+  if (!item) {
+    return { status: 404, data: { success: false, error: 'Item not found in inventory' } };
+  }
+
+  item.min_threshold = thresh;
+
+  return {
+    status: 200,
+    data: {
+      success: true,
+      message: `Minimum alert threshold for ${item.name} set to ${thresh}`,
+      item_id: materialId,
+      name: item.name,
+      min_threshold: thresh,
+      current_stock: item.current_stock,
+      is_low: item.current_stock <= thresh
+    }
+  };
+}
+
+/**
+ * Records a shopping / mandi purchase intake & expense, incrementing stock immediately.
+ */
+export function recordRestockExpense(data) {
+  if (!data || !data.material_id) {
+    return { status: 400, data: { success: false, error: 'material_id is required' } };
+  }
+
+  const qty = parseFloat(data.quantity);
+  if (isNaN(qty) || qty <= 0) {
+    return { status: 400, data: { success: false, error: 'Valid positive quantity is required' } };
+  }
+
+  let item = rawMaterialsStore.get(data.material_id);
+  let isSub = false;
+  if (!item) {
+    item = subRecipesStore.get(data.material_id);
+    isSub = true;
+  }
+
+  if (!item) {
+    return { status: 404, data: { success: false, error: 'Material not found in inventory' } };
+  }
+
+  const oldStock = item.current_stock;
+  item.current_stock = Math.round((item.current_stock + qty) * 100) / 100;
+
+  const unitCost = parseFloat(data.unit_cost) || item.cost_per_unit || 0;
+  if (data.unit_cost && !isNaN(unitCost) && unitCost > 0) {
+    item.cost_per_unit = unitCost;
+  }
+
+  const totalExpense = Math.round(qty * unitCost * 100) / 100;
+
+  const logEntry = {
+    id: 'EXP-' + Date.now().toString().slice(-6),
+    material_id: item.id,
+    name: item.name,
+    quantity_added: qty,
+    unit: item.consumption_unit || item.yield_unit || 'units',
+    unit_cost: unitCost,
+    total_expense: totalExpense,
+    supplier: data.supplier || item.supplier || 'Local Market / Mandi Shopping',
+    notes: data.notes || 'Counter restock intake',
+    timestamp: new Date().toISOString()
+  };
+
+  restockExpensesHistory.unshift(logEntry);
+
+  return {
+    status: 200,
+    data: {
+      success: true,
+      message: `Added +${qty} ${logEntry.unit} to ${item.name}. Stock now ${item.current_stock}.`,
+      log: logEntry,
+      updated_stock: item.current_stock
+    }
+  };
+}
+
+export function getRestockExpenses() {
+  return restockExpensesHistory;
+}
+

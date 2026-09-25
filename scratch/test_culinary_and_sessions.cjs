@@ -533,6 +533,121 @@ const css = fs.readFileSync(cssPath, 'utf8');
     assert.strictEqual(rawAfter.find(r => r.id === 'RM-ONION').current_stock, 42.0);
   });
 
+  // ----------------------------------------------------
+  // SECTION 8: RTR (REAL-TIME RAW) TRACKER & RECIPE ENGINE
+  // ----------------------------------------------------
+  console.log("\n📍 SECTION 8: RTR (REAL-TIME RAW) TRACKER & RECIPE ENGINE");
+
+  test("RTR-AUTOFILL-1: getApproxAutoFill calculates standard culinary portion ratios for Paneer, Chicken & Biryani", () => {
+    const paneerFill = invService.getApproxAutoFill('Shahi Paneer Masala', 'Main Course');
+    assert.strictEqual(paneerFill.gravy_id, 'SUB-MAK-01');
+    assert.strictEqual(paneerFill.gravy_qty, 0.20);
+    assert.strictEqual(paneerFill.protein_id, 'RM-PANEER');
+    assert.strictEqual(paneerFill.protein_qty, 0.15);
+    assert.strictEqual(paneerFill.oil_qty, 0.02);
+
+    const chickenFill = invService.getApproxAutoFill('Chicken Tikka Masala', 'Curries');
+    assert.strictEqual(chickenFill.protein_id, 'RM-CHICKEN');
+    assert.strictEqual(chickenFill.protein_qty, 0.20);
+
+    const biryaniFill = invService.getApproxAutoFill('Dum Chicken Biryani', 'Biryani');
+    assert.strictEqual(biryaniFill.gravy_id, 'SUB-YAKHNI-01');
+    assert.strictEqual(biryaniFill.flour_qty, 0.20);
+  });
+
+  test("RTR-RECIPE-1: saveDishRecipe creates recipe mapping and calculates live food cost & margin", () => {
+    invService.resetInventoryStore();
+    const saveRes = invService.saveDishRecipe({
+      dish_name: 'Chef Special Paneer Lababdar',
+      menu_item_id: '9901',
+      menu_category: 'Chef Specials',
+      selling_price: 320,
+      gravy_id: 'SUB-MAK-01',
+      gravy_qty: 0.20,
+      oil_qty: 0.02,
+      protein_id: 'RM-PANEER',
+      protein_qty: 0.15,
+      veggie_qty: 0.04,
+      flour_qty: 0.0,
+      butter_qty: 0.02
+    });
+
+    assert.strictEqual(saveRes.status, 200);
+    assert.ok(saveRes.data.recipe);
+    assert.strictEqual(saveRes.data.recipe.dish_name, 'Chef Special Paneer Lababdar');
+    assert.ok(saveRes.data.costing.cost_per_serving > 50, "Cost per serving calculated");
+    assert.ok(saveRes.data.costing.gross_margin_percentage > 50, "Gross margin percentage calculated");
+  });
+
+  test("RTR-DEDUCT-1: Live POS order deduction decrements configured Gravy, Oil, and Paneer accurately", () => {
+    invService.resetInventoryStore();
+    // Configure recipe
+    invService.saveDishRecipe({
+      dish_name: 'Custom Kadhai Paneer',
+      menu_item_id: '8801',
+      selling_price: 290,
+      gravy_id: 'SUB-MAK-01',
+      gravy_qty: 0.20,
+      oil_qty: 0.02,
+      protein_id: 'RM-PANEER',
+      protein_qty: 0.15
+    });
+
+    const gravyBefore = invService.getSubRecipes().find(s => s.id === 'SUB-MAK-01').current_stock;
+    const paneerBefore = invService.getRawMaterials().find(r => r.id === 'RM-PANEER').current_stock;
+    const oilBefore = invService.getRawMaterials().find(r => r.id === 'RM-OIL').current_stock;
+
+    // Simulate POS Order for 2 portions
+    const orderRes = invService.deductOrderInventory({
+      items: [{ id: '8801', name: 'Custom Kadhai Paneer', qty: 2 }]
+    });
+
+    assert.strictEqual(orderRes.status, 200);
+
+    const gravyAfter = invService.getSubRecipes().find(s => s.id === 'SUB-MAK-01').current_stock;
+    const paneerAfter = invService.getRawMaterials().find(r => r.id === 'RM-PANEER').current_stock;
+    const oilAfter = invService.getRawMaterials().find(r => r.id === 'RM-OIL').current_stock;
+
+    assert.strictEqual(gravyAfter, Math.round((gravyBefore - 0.40) * 100) / 100, "2x0.20L gravy deducted");
+    assert.strictEqual(paneerAfter, Math.round((paneerBefore - 0.30) * 100) / 100, "2x0.15kg paneer deducted");
+    assert.strictEqual(oilAfter, Math.round((oilBefore - 0.04) * 100) / 100, "2x0.02L oil deducted");
+  });
+
+  test("RTR-ALERT-1: updateAlertThreshold updates minimum low stock trigger", () => {
+    invService.resetInventoryStore();
+    const res = invService.updateAlertThreshold('RM-OIL', 15.0);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.min_threshold, 15.0);
+
+    const updated = invService.getRawMaterials().find(r => r.id === 'RM-OIL');
+    assert.strictEqual(updated.min_threshold, 15.0);
+  });
+
+  test("RTR-RESTOCK-1: recordRestockExpense increments stock and logs purchase expense", () => {
+    invService.resetInventoryStore();
+    const oilBefore = invService.getRawMaterials().find(r => r.id === 'RM-OIL').current_stock;
+
+    const res = invService.recordRestockExpense({
+      material_id: 'RM-OIL',
+      quantity: 15.0,
+      unit_cost: 140,
+      supplier: 'Kolkata Wholesale Mandi',
+      notes: 'Morning fresh purchase'
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.updated_stock, oilBefore + 15.0);
+    assert.strictEqual(res.data.log.total_expense, 15.0 * 140);
+  });
+
+  test("RTR-UI-1: index.html provides #dishRecipeConfigModal, #itemAlertModal, #restockExpenseModal with rtr_close_btn", () => {
+    assert.ok(html.includes('id="dishRecipeConfigModal"'), "Missing #dishRecipeConfigModal");
+    assert.ok(html.includes('id="itemAlertModal"'), "Missing #itemAlertModal");
+    assert.ok(html.includes('id="restockExpenseModal"'), "Missing #restockExpenseModal");
+    assert.ok(html.includes('class="rtr_close_btn"'), "Missing .rtr_close_btn");
+    assert.ok(html.includes('data-subtab="rtr_tracker"'), "Missing rtr_tracker subtab button");
+  });
+
   console.log("\n====================================================");
   console.log(`🎯 TOTAL SUITE RESULTS: ${passed} PASSED, ${failed} FAILED (TOTAL: ${passed + failed})`);
   console.log("====================================================");

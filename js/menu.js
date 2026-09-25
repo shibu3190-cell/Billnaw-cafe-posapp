@@ -397,6 +397,9 @@ function addMenuItem() {
         }
         persistMenu(); 
         renderMenuUI(); 
+        if (window.culinaryInventory && typeof window.culinaryInventory.syncMenuItems === 'function') {
+            window.culinaryInventory.syncMenuItems();
+        }
         document.getElementById('menuItemModal').style.display = 'none';
     } else { 
         showToast("⚠️ Name and Price required."); 

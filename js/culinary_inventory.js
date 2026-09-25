@@ -17,7 +17,7 @@
     let forecast = [];
     let wastage = { total_loss_inr: 0, history: [] };
     let costingReport = [];
-    let activeSubTab = 'raw_materials';
+    let activeSubTab = 'rtr_tracker';
 
     // Offline / Local defaults fallback
     const DEFAULT_LOCAL_MATERIALS = [
@@ -179,7 +179,9 @@
         const contentArea = document.getElementById('culinarySubTabContent');
         if (!contentArea) return;
 
-        if (activeSubTab === 'raw_materials') {
+        if (activeSubTab === 'rtr_tracker') {
+            renderRtrTrackerTab(contentArea);
+        } else if (activeSubTab === 'raw_materials') {
             renderRawMaterialsTab(contentArea);
         } else if (activeSubTab === 'morning_batch') {
             renderMorningBatchTab(contentArea);
@@ -194,6 +196,806 @@
         } else if (activeSubTab === 'quick_audit') {
             renderQuickAuditTab(contentArea);
         }
+    }
+
+    // ==========================================
+    // 🥘 TAB 0: RTR (REAL-TIME RAW) & RECIPE TRACKER
+    // ==========================================
+    let rtrDishFilterQuery = '';
+
+    function getCoreStaples() {
+        return [
+            { id: 'RM-OIL', icon: '🛢️', title: 'Cooking Oil', subtitle: 'Refined Sunflower Cooking Oil', unit: 'Litre', isSub: false, capacity: 50 },
+            { id: 'RM-MAIDA', icon: '🌾', title: 'Flour (Maida)', subtitle: 'Refined Wheat Flour & Grains', unit: 'kg', isSub: false, capacity: 50 },
+            { id: 'RM-ONION', icon: '🧅', title: 'Raw Veggies & Onions', subtitle: 'Fresh Red Onions & Veg', unit: 'kg', isSub: false, capacity: 60 },
+            { id: 'RM-CHICKEN', icon: '🍗', title: 'Fresh Chicken / Meat', subtitle: 'Poultry Curry Cut & Boneless', unit: 'kg', isSub: false, capacity: 40 },
+            { id: 'RM-PANEER', icon: '🧀', title: 'Malai Paneer', subtitle: 'Fresh Dairy Paneer Blocks', unit: 'kg', isSub: false, capacity: 35 },
+            { id: 'SUB-MAK-01', icon: '🍲', title: 'Makhani Gravy Base', subtitle: 'Shahi Butter Masala Gravy', unit: 'Litre', isSub: true, capacity: 30 },
+            { id: 'SUB-BROWN-01', icon: '🥘', title: 'Brown Curry Base', subtitle: 'Bhuna Onion-Tomato Gravy Base', unit: 'Litre', isSub: true, capacity: 25 },
+            { id: 'SUB-DAL-01', icon: '🍛', title: 'Dal Makhani Base', subtitle: 'Slow-Cooked Black Dal Base', unit: 'Litre', isSub: true, capacity: 20 }
+        ];
+    }
+
+    function getAllMenuDishes() {
+        let menuList = [];
+        if (window.menuItems && Array.isArray(window.menuItems) && window.menuItems.length > 0) {
+            menuList = window.menuItems;
+        } else {
+            try {
+                menuList = JSON.parse(localStorage.getItem('billnaw_menu') || '[]');
+            } catch (e) {
+                menuList = [];
+            }
+        }
+
+        // If no menu items exist in storage, fall back to seeded recipes
+        if (!menuList || menuList.length === 0) {
+            return recipes.map(r => ({
+                id: r.menu_item_id || r.id,
+                name: r.dish_name,
+                category: r.menu_category || 'Main Course',
+                price: r.selling_price || 200,
+                recipe: r
+            }));
+        }
+
+        return menuList.map(item => {
+            const recipe = findRecipeForDish(item.id, item.name);
+            return {
+                id: item.id,
+                name: item.name,
+                category: item.category || 'General',
+                price: item.price || 0,
+                recipe: recipe
+            };
+        });
+    }
+
+    function findRecipeForDish(itemId, dishName) {
+        const strId = String(itemId);
+        const nameClean = (dishName || '').toLowerCase().trim();
+
+        // 1. By menu_item_id or id
+        let rec = recipes.find(r => String(r.menu_item_id) === strId || String(r.id) === strId);
+        if (rec) return rec;
+
+        // 2. By exact dish name
+        rec = recipes.find(r => (r.dish_name || '').toLowerCase().trim() === nameClean);
+        if (rec) return rec;
+
+        // 3. By partial match
+        rec = recipes.find(r => {
+            const rName = (r.dish_name || '').toLowerCase().trim();
+            return nameClean.includes(rName) || rName.includes(nameClean);
+        });
+        return rec || null;
+    }
+
+    function renderRtrTrackerTab(container) {
+        const staples = getCoreStaples();
+        const dishes = getAllMenuDishes();
+
+        // Quick aggregate KPI counts
+        const oilItem = rawMaterials.find(m => m.id === 'RM-OIL') || { current_stock: 40, min_threshold: 10, consumption_unit: 'Litre' };
+        const paneerItem = rawMaterials.find(m => m.id === 'RM-PANEER') || { current_stock: 25, min_threshold: 6, consumption_unit: 'kg' };
+        const chickenItem = rawMaterials.find(m => m.id === 'RM-CHICKEN') || { current_stock: 30, min_threshold: 8, consumption_unit: 'kg' };
+        const totalGravyStock = subRecipes.reduce((sum, s) => sum + (s.current_stock || 0), 0);
+        const configuredCount = dishes.filter(d => !!d.recipe).length;
+
+        // Filter dishes by search term
+        const filteredDishes = dishes.filter(d => {
+            if (!rtrDishFilterQuery) return true;
+            const q = rtrDishFilterQuery.toLowerCase();
+            return (d.name || '').toLowerCase().includes(q) || (d.category || '').toLowerCase().includes(q);
+        });
+
+        container.innerHTML = `
+            <div class="rtr-vertical-container">
+                <!-- RTR Header Banner & Quick Insights -->
+                <div class="card" style="padding: 18px 20px; border: 1.5px solid #E6DCCD; background: linear-gradient(135deg, #143832 0%, #1A4940 100%); color: #FFFFFF; border-radius: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #FFFFFF; display: inline-flex; align-items: center; gap: 8px;">
+                                    <span>🥘 Real-Time Raw (RTR) & Recipe Tracker</span>
+                                </h2>
+                                <span class="badge" style="background: #2DD4BF; color: #143832; font-size: 11px; font-weight: 800;">LIVE POS AUTO-DEDUCTION</span>
+                            </div>
+                            <p style="margin: 6px 0 0 0; font-size: 12px; color: #D1FAE5; max-width: 680px; line-height: 1.5;">
+                                Tracks exact consumption of Cooking Oil, Flour, Veggies/Onions, Meat/Paneer, and Gravy bases as POS bills are settled. Click any menu dish below to set portion quantities or use <strong>⚡ Approx Auto-Fill</strong>.
+                            </p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" class="btn" style="background: #2DD4BF; color: #143832; font-weight: 800; font-size: 12px; border-radius: 20px; padding: 7px 16px; border: none;" onclick="window.culinaryInventory.syncMenuItems()">
+                                🔄 Refresh Menu & Stock
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 3 Quick KPI Metrics -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.15);">
+                        <div style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px 14px;">
+                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🛢️ Cooking Oil Leftover</div>
+                            <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
+                                ${oilItem.current_stock} <span style="font-size: 12px; font-weight: 600;">Litres</span>
+                            </div>
+                            <div style="font-size: 11px; color: ${oilItem.current_stock <= (oilItem.min_threshold || 10) ? '#FCA5A5' : '#86EFAC'};">
+                                ${oilItem.current_stock <= (oilItem.min_threshold || 10) ? '⚠️ Alert: Reorder Required' : '🟢 Sufficient Kitchen Supply'}
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px 14px;">
+                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🧀 Paneer & 🍗 Chicken</div>
+                            <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
+                                ${paneerItem.current_stock} kg <span style="font-size: 12px; font-weight: 400; opacity: 0.8;">/</span> ${chickenItem.current_stock} kg
+                            </div>
+                            <div style="font-size: 11px; color: #D1FAE5;">
+                                Leftover fresh proteins in kitchen
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px 14px;">
+                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🍲 Gravy Bases Ready</div>
+                            <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
+                                ${totalGravyStock.toFixed(1)} <span style="font-size: 12px; font-weight: 600;">Litres</span>
+                            </div>
+                            <div style="font-size: 11px; color: #D1FAE5;">
+                                ${configuredCount} of ${dishes.length} menu dishes mapped
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 1: 🥦 ESSENTIAL LEFTOVER STAPLES (VERTICAL STACK) -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                                <span>🥦 Essential Leftover Raw Materials & Gravies</span>
+                                <span class="badge" style="background: #E0F2FE; color: #0369A1; font-size: 11px;">Vertical Live Monitor</span>
+                            </h3>
+                            <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
+                                Leftover stocks decrease automatically when bills settle. Click <strong>🔔 Item Alert</strong> to change alert trigger, or <strong>🛒 + Restock</strong> after market shopping.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="rtr-staples-vertical-list">
+                        ${staples.map(s => {
+                            let item = s.isSub ? subRecipes.find(sub => sub.id === s.id) : rawMaterials.find(rm => rm.id === s.id);
+                            if (!item) {
+                                item = { current_stock: 0, min_threshold: 10, cost_per_unit: 100, consumption_unit: s.unit };
+                            }
+                            const stock = parseFloat(item.current_stock) || 0;
+                            const thresh = parseFloat(item.min_threshold ?? item.minThreshold ?? 10);
+                            const unit = item.consumption_unit || item.yield_unit || s.unit;
+                            const isOut = stock <= 0;
+                            const isLow = !isOut && stock <= thresh;
+
+                            let statusBadge = '';
+                            if (isOut) {
+                                statusBadge = `<span class="badge" style="background: #FEE2E2; color: #DC2626; font-size: 11px; font-weight: 800;">🚨 Out of Stock (0 ${unit})</span>`;
+                            } else if (isLow) {
+                                statusBadge = `<span class="badge" style="background: #FEF3C7; color: #D97706; font-size: 11px; font-weight: 800;">⚠️ Low Alert (< ${thresh} ${unit})</span>`;
+                            } else {
+                                statusBadge = `<span class="badge" style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 800;">🟢 Healthy Stock (> ${thresh} ${unit})</span>`;
+                            }
+
+                            return `
+                                <div class="rtr-staple-row ${isLow || isOut ? 'low-stock' : ''}">
+                                    <div style="display: flex; align-items: center; gap: 14px; min-width: 220px;">
+                                        <div style="width: 44px; height: 44px; border-radius: 12px; background: #FAF7F4; border: 1.5px solid #E6DCCD; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                                            ${s.icon}
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 15px; font-weight: 800; color: var(--text-dark);">${escapeHtml(item.name || s.title)}</div>
+                                            <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(s.subtitle)} • Alert below <strong>${thresh} ${unit}</strong></div>
+                                        </div>
+                                    </div>
+
+                                    <div style="display: flex; align-items: center; gap: 16px;">
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Leftover Current Stock</div>
+                                            <div style="font-size: 20px; font-weight: 800; color: ${isOut ? '#DC2626' : (isLow ? '#D97706' : '#143832')};">
+                                                ${stock} <span style="font-size: 13px; font-weight: 600;">${unit}</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            ${statusBadge}
+                                        </div>
+                                    </div>
+
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 11px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 4px;" onclick="window.culinaryInventory.openItemAlertModal('${s.id}')">
+                                            <span>🔔 Item Alert</span>
+                                        </button>
+                                        <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 11px; padding: 6px 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="window.culinaryInventory.openRestockModal('${s.id}')">
+                                            <span>🛒 + Restock / Shop</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+
+                <!-- SECTION 2: 🍽️ MENU DISHES RECIPE CONFIGURATOR (VERTICAL STACK) -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                                <span>🍽️ Dishes & Portion Recipe Configurator</span>
+                                <span class="badge" style="background: #143832; color: #2DD4BF; font-size: 11px;">${configuredCount} / ${dishes.length} Mapped</span>
+                            </h3>
+                            <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
+                                Click any dish to map its exact Gravy, Oil, Paneer/Meat, Veggies, and Flour quantities or use <strong>⚡ Approx Auto-Fill</strong>.
+                            </p>
+                        </div>
+
+                        <!-- Dish Filter Search -->
+                        <div style="min-width: 260px;">
+                            <input type="text" id="rtrDishSearchInput" class="search-bar" placeholder="Search dishes (e.g. Paneer, Chicken, Roll)..." value="${escapeHtml(rtrDishFilterQuery)}" oninput="window.culinaryInventory.filterRtrDishes(this.value)" style="padding: 8px 12px; font-size: 12px; border-radius: 20px; width: 100%;">
+                        </div>
+                    </div>
+
+                    <div class="rtr-dishes-vertical-list">
+                        ${filteredDishes.length === 0 ? `
+                            <div style="text-align: center; padding: 30px; background: #FFFFFF; border: 1.5px dashed #E5E7EB; border-radius: 12px; color: var(--text-muted); font-size: 13px;">
+                                No dishes matched your search. Try a different keyword or create a dish in the Menu section.
+                            </div>
+                        ` : filteredDishes.map(dish => {
+                            const rec = dish.recipe;
+                            const isConfigured = !!rec && Array.isArray(rec.components) && rec.components.length > 0;
+
+                            let pillsHtml = '';
+                            let costHtml = '';
+
+                            if (isConfigured) {
+                                const pills = [];
+                                let totalCost = 0;
+
+                                rec.components.forEach(comp => {
+                                    if (comp.type === 'sub_recipe') {
+                                        pills.push(`<span class="rtr-recipe-pill">🍲 ${escapeHtml(comp.name || 'Gravy')}: ${comp.exact_quantity}L</span>`);
+                                    } else if (comp.id === 'RM-OIL') {
+                                        pills.push(`<span class="rtr-recipe-pill">🛢️ Oil: ${comp.exact_quantity}L</span>`);
+                                    } else if (comp.id === 'RM-PANEER') {
+                                        pills.push(`<span class="rtr-recipe-pill">🧀 Paneer: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-CHICKEN') {
+                                        pills.push(`<span class="rtr-recipe-pill">🍗 Chicken: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-ONION') {
+                                        pills.push(`<span class="rtr-recipe-pill">🧅 Veggies: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-MAIDA') {
+                                        pills.push(`<span class="rtr-recipe-pill">🌾 Flour: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-BUTTER') {
+                                        pills.push(`<span class="rtr-recipe-pill">🧈 Butter: ${comp.exact_quantity}kg</span>`);
+                                    }
+                                });
+                                pillsHtml = pills.join(' ');
+
+                                // Calculate food cost & margin
+                                rec.components.forEach(comp => {
+                                    if (comp.type === 'sub_recipe') {
+                                        const sub = subRecipes.find(s => s.id === comp.id);
+                                        const unitCost = sub ? (sub.unit_production_cost || 120) : 120;
+                                        totalCost += (unitCost * comp.exact_quantity);
+                                    } else {
+                                        const rm = rawMaterials.find(m => m.id === comp.id);
+                                        const unitCost = rm ? (rm.cost_per_unit || 50) : 50;
+                                        totalCost += (unitCost * comp.exact_quantity);
+                                    }
+                                });
+
+                                const sPrice = parseFloat(dish.price) || parseFloat(rec.selling_price) || 0;
+                                const marginPct = sPrice > 0 ? Math.round(((sPrice - totalCost) / sPrice) * 100) : 0;
+                                costHtml = `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Food Cost: <strong>₹${totalCost.toFixed(2)}</strong> • Margin: <strong style="color: #16A34A;">${marginPct}%</strong></div>`;
+                            } else {
+                                pillsHtml = `<span style="font-size: 12px; color: #D97706;">⚠️ Needs Recipe Mapping — Tap to configure portion quantities or ⚡ Approx Auto-Fill</span>`;
+                            }
+
+                            return `
+                                <div class="rtr-dish-card" onclick="window.culinaryInventory.openDishRecipeModal('${dish.id}')">
+                                    <div style="flex: 1; min-width: 240px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 15px; font-weight: 800; color: var(--text-dark);">${escapeHtml(dish.name)}</span>
+                                            <span class="badge" style="background: #F1F5F9; color: #475569; font-size: 11px;">${escapeHtml(dish.category)}</span>
+                                            <span style="font-size: 13px; font-weight: 800; color: #143832;">₹${dish.price}</span>
+                                        </div>
+                                        <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+                                            ${pillsHtml}
+                                        </div>
+                                        ${costHtml}
+                                    </div>
+
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        ${isConfigured ? `
+                                            <span class="badge" style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 800;">Configured ✅</span>
+                                        ` : `
+                                            <span class="badge" style="background: #FEF3C7; color: #92400E; font-size: 11px; font-weight: 800;">Needs Recipe ⚠️</span>
+                                        `}
+                                        <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 11px; padding: 6px 14px; font-weight: 700; pointer-events: none;">
+                                            ⚙️ Configure
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Filter dishes by search term
+    function filterRtrDishes(searchTerm) {
+        rtrDishFilterQuery = searchTerm || '';
+        const contentArea = document.getElementById('culinarySubTabContent');
+        if (contentArea && activeSubTab === 'rtr_tracker') {
+            renderRtrTrackerTab(contentArea);
+        }
+    }
+
+    // --- DISH RECIPE CONFIGURATOR MODAL CONTROLLER ---
+    function openDishRecipeModal(dishIdOrName) {
+        const dishes = getAllMenuDishes();
+        const dish = dishes.find(d => String(d.id) === String(dishIdOrName) || (d.name || '').toLowerCase() === String(dishIdOrName).toLowerCase()) || {
+            id: dishIdOrName,
+            name: dishIdOrName,
+            category: 'Main Course',
+            price: 200,
+            recipe: null
+        };
+
+        const modal = document.getElementById('dishRecipeConfigModal');
+        if (!modal) return;
+
+        // Set dish identifiers in modal
+        document.getElementById('rtrRecipeDishId').value = dish.recipe ? (dish.recipe.id || '') : '';
+        document.getElementById('rtrRecipeMenuItemId').value = String(dish.id);
+        document.getElementById('rtrRecipeDishName').value = dish.name;
+        document.getElementById('rtrRecipeDishCategory').value = dish.category || 'Main Course';
+        document.getElementById('rtrRecipeSellingPrice').value = dish.price || 200;
+
+        document.getElementById('rtrDishNameBadge').innerText = dish.name;
+        document.getElementById('rtrDishCategoryBadge').innerText = dish.category || 'Main Course';
+        document.getElementById('rtrDishPriceBadge').innerText = `₹${dish.price || 0}`;
+
+        const rec = dish.recipe;
+        if (rec && Array.isArray(rec.components) && rec.components.length > 0) {
+            // Populate from existing recipe
+            let gravyId = '';
+            let gravyQty = 0;
+            let oilQty = 0;
+            let proteinId = '';
+            let proteinQty = 0;
+            let veggieQty = 0;
+            let flourId = 'RM-MAIDA';
+            let flourQty = 0;
+            let butterQty = 0;
+
+            rec.components.forEach(comp => {
+                if (comp.type === 'sub_recipe') {
+                    gravyId = comp.id;
+                    gravyQty = comp.exact_quantity || 0;
+                } else if (comp.id === 'RM-OIL') {
+                    oilQty = comp.exact_quantity || 0;
+                } else if (comp.id === 'RM-PANEER' || comp.id === 'RM-CHICKEN') {
+                    proteinId = comp.id;
+                    proteinQty = comp.exact_quantity || 0;
+                } else if (comp.id === 'RM-ONION') {
+                    veggieQty = comp.exact_quantity || 0;
+                } else if (comp.id === 'RM-MAIDA' || comp.id === 'RM-BASMATI-RICE') {
+                    flourId = comp.id;
+                    flourQty = comp.exact_quantity || 0;
+                } else if (comp.id === 'RM-BUTTER') {
+                    butterQty = comp.exact_quantity || 0;
+                }
+            });
+
+            document.getElementById('rtrRecipeGravySelect').value = gravyId;
+            document.getElementById('rtrRecipeGravyQty').value = gravyQty || '';
+            document.getElementById('rtrRecipeOilQty').value = oilQty || '';
+            document.getElementById('rtrRecipeProteinSelect').value = proteinId;
+            document.getElementById('rtrRecipeProteinQty').value = proteinQty || '';
+            document.getElementById('rtrRecipeVeggieQty').value = veggieQty || '';
+            document.getElementById('rtrRecipeFlourSelect').value = flourId;
+            document.getElementById('rtrRecipeFlourQty').value = flourQty || '';
+            document.getElementById('rtrRecipeButterQty').value = butterQty || '';
+        } else {
+            // Pre-populate with intelligent auto-fill
+            applyAutoFillFields(dish.name, dish.category);
+        }
+
+        recalcRecipeModalCost();
+        modal.style.display = 'flex';
+    }
+
+    function triggerApproxAutoFill() {
+        const dishName = document.getElementById('rtrRecipeDishName').value;
+        const category = document.getElementById('rtrRecipeDishCategory').value;
+        applyAutoFillFields(dishName, category);
+        recalcRecipeModalCost();
+        if (typeof showToast === 'function') showToast(`⚡ Applied Approx Auto-Fill for ${dishName}!`);
+    }
+
+    function applyAutoFillFields(dishName, category) {
+        const name = (dishName || '').toLowerCase().trim();
+        const cat = (category || '').toLowerCase().trim();
+
+        // 1. Paneer
+        if (name.includes('paneer')) {
+            document.getElementById('rtrRecipeGravySelect').value = 'SUB-MAK-01';
+            document.getElementById('rtrRecipeGravyQty').value = 0.20;
+            document.getElementById('rtrRecipeOilQty').value = 0.02;
+            document.getElementById('rtrRecipeProteinSelect').value = 'RM-PANEER';
+            document.getElementById('rtrRecipeProteinQty').value = 0.15;
+            document.getElementById('rtrRecipeVeggieQty').value = 0.03;
+            document.getElementById('rtrRecipeFlourSelect').value = 'RM-MAIDA';
+            document.getElementById('rtrRecipeFlourQty').value = '';
+            document.getElementById('rtrRecipeButterQty').value = 0.02;
+            return;
+        }
+
+        // 2. Chicken
+        if (name.includes('chicken') || name.includes('murgh')) {
+            const isMakhani = name.includes('butter') || name.includes('makhani');
+            document.getElementById('rtrRecipeGravySelect').value = isMakhani ? 'SUB-MAK-01' : 'SUB-BROWN-01';
+            document.getElementById('rtrRecipeGravyQty').value = 0.22;
+            document.getElementById('rtrRecipeOilQty').value = 0.02;
+            document.getElementById('rtrRecipeProteinSelect').value = 'RM-CHICKEN';
+            document.getElementById('rtrRecipeProteinQty').value = 0.20;
+            document.getElementById('rtrRecipeVeggieQty').value = 0.04;
+            document.getElementById('rtrRecipeFlourSelect').value = 'RM-MAIDA';
+            document.getElementById('rtrRecipeFlourQty').value = '';
+            document.getElementById('rtrRecipeButterQty').value = isMakhani ? 0.025 : 0.01;
+            return;
+        }
+
+        // 3. Biryani
+        if (name.includes('biryani') || name.includes('pulao')) {
+            const hasChicken = name.includes('chicken') || name.includes('murgh');
+            document.getElementById('rtrRecipeGravySelect').value = 'SUB-YAKHNI-01';
+            document.getElementById('rtrRecipeGravyQty').value = 0.15;
+            document.getElementById('rtrRecipeOilQty').value = 0.025;
+            document.getElementById('rtrRecipeProteinSelect').value = hasChicken ? 'RM-CHICKEN' : 'RM-PANEER';
+            document.getElementById('rtrRecipeProteinQty').value = 0.18;
+            document.getElementById('rtrRecipeVeggieQty').value = 0.05;
+            document.getElementById('rtrRecipeFlourSelect').value = 'RM-BASMATI-RICE';
+            document.getElementById('rtrRecipeFlourQty').value = 0.20;
+            document.getElementById('rtrRecipeButterQty').value = 0.015;
+            return;
+        }
+
+        // 4. Dal
+        if (name.includes('dal') || name.includes('daal')) {
+            document.getElementById('rtrRecipeGravySelect').value = 'SUB-DAL-01';
+            document.getElementById('rtrRecipeGravyQty').value = 0.25;
+            document.getElementById('rtrRecipeOilQty').value = 0.015;
+            document.getElementById('rtrRecipeProteinSelect').value = '';
+            document.getElementById('rtrRecipeProteinQty').value = '';
+            document.getElementById('rtrRecipeVeggieQty').value = 0.03;
+            document.getElementById('rtrRecipeFlourSelect').value = 'RM-MAIDA';
+            document.getElementById('rtrRecipeFlourQty').value = '';
+            document.getElementById('rtrRecipeButterQty').value = 0.025;
+            return;
+        }
+
+        // 5. Rolls / Bread
+        if (name.includes('roll') || name.includes('wrap') || name.includes('roti') || name.includes('naan')) {
+            const hasPaneer = name.includes('paneer');
+            const hasChicken = name.includes('chicken');
+            document.getElementById('rtrRecipeGravySelect').value = '';
+            document.getElementById('rtrRecipeGravyQty').value = '';
+            document.getElementById('rtrRecipeOilQty').value = 0.02;
+            document.getElementById('rtrRecipeProteinSelect').value = hasPaneer ? 'RM-PANEER' : (hasChicken ? 'RM-CHICKEN' : '');
+            document.getElementById('rtrRecipeProteinQty').value = (hasPaneer || hasChicken) ? 0.10 : '';
+            document.getElementById('rtrRecipeVeggieQty').value = 0.04;
+            document.getElementById('rtrRecipeFlourSelect').value = 'RM-MAIDA';
+            document.getElementById('rtrRecipeFlourQty').value = 0.08;
+            document.getElementById('rtrRecipeButterQty').value = 0.01;
+            return;
+        }
+
+        // Default Generic
+        document.getElementById('rtrRecipeGravySelect').value = 'SUB-BROWN-01';
+        document.getElementById('rtrRecipeGravyQty').value = 0.15;
+        document.getElementById('rtrRecipeOilQty').value = 0.02;
+        document.getElementById('rtrRecipeProteinSelect').value = 'RM-PANEER';
+        document.getElementById('rtrRecipeProteinQty').value = 0.08;
+        document.getElementById('rtrRecipeVeggieQty').value = 0.05;
+        document.getElementById('rtrRecipeFlourSelect').value = 'RM-MAIDA';
+        document.getElementById('rtrRecipeFlourQty').value = '';
+        document.getElementById('rtrRecipeButterQty').value = 0.01;
+    }
+
+    function setRecipeField(fieldId, value) {
+        const input = document.getElementById(fieldId);
+        if (input) {
+            input.value = value > 0 ? value : '';
+            recalcRecipeModalCost();
+        }
+    }
+
+    function recalcRecipeModalCost() {
+        const gravyId = document.getElementById('rtrRecipeGravySelect')?.value;
+        const gravyQty = parseFloat(document.getElementById('rtrRecipeGravyQty')?.value) || 0;
+        const oilQty = parseFloat(document.getElementById('rtrRecipeOilQty')?.value) || 0;
+        const proteinId = document.getElementById('rtrRecipeProteinSelect')?.value;
+        const proteinQty = parseFloat(document.getElementById('rtrRecipeProteinQty')?.value) || 0;
+        const veggieQty = parseFloat(document.getElementById('rtrRecipeVeggieQty')?.value) || 0;
+        const flourId = document.getElementById('rtrRecipeFlourSelect')?.value;
+        const flourQty = parseFloat(document.getElementById('rtrRecipeFlourQty')?.value) || 0;
+        const butterQty = parseFloat(document.getElementById('rtrRecipeButterQty')?.value) || 0;
+        const sellingPrice = parseFloat(document.getElementById('rtrRecipeSellingPrice')?.value) || 0;
+
+        let totalCost = 0;
+
+        // Gravy cost
+        if (gravyId && gravyQty > 0) {
+            const sub = subRecipes.find(s => s.id === gravyId);
+            const subCost = sub ? (sub.unit_production_cost || 130) : 130;
+            totalCost += (subCost * gravyQty);
+        }
+
+        // Oil cost
+        if (oilQty > 0) {
+            const rm = rawMaterials.find(m => m.id === 'RM-OIL');
+            const oilCost = rm ? rm.cost_per_unit : 135;
+            totalCost += (oilCost * oilQty);
+        }
+
+        // Protein cost
+        if (proteinId && proteinQty > 0) {
+            const rm = rawMaterials.find(m => m.id === proteinId);
+            const protCost = rm ? rm.cost_per_unit : (proteinId === 'RM-PANEER' ? 380 : 240);
+            totalCost += (protCost * proteinQty);
+        }
+
+        // Veggie cost
+        if (veggieQty > 0) {
+            const rm = rawMaterials.find(m => m.id === 'RM-ONION');
+            const vegCost = rm ? rm.cost_per_unit : 35;
+            totalCost += (vegCost * veggieQty);
+        }
+
+        // Flour cost
+        if (flourId && flourQty > 0) {
+            const rm = rawMaterials.find(m => m.id === flourId);
+            const fCost = rm ? rm.cost_per_unit : 45;
+            totalCost += (fCost * flourQty);
+        }
+
+        // Butter cost
+        if (butterQty > 0) {
+            const rm = rawMaterials.find(m => m.id === 'RM-BUTTER');
+            const bCost = rm ? rm.cost_per_unit : 520;
+            totalCost += (bCost * butterQty);
+        }
+
+        const costDisplay = document.getElementById('rtrServingCostVal');
+        const profitDisplay = document.getElementById('rtrServingProfitVal');
+        const marginDisplay = document.getElementById('rtrServingMarginVal');
+
+        const profit = Math.max(0, sellingPrice - totalCost);
+        const marginPct = sellingPrice > 0 ? Math.round((profit / sellingPrice) * 1000) / 10 : 0;
+
+        if (costDisplay) costDisplay.innerText = `₹${totalCost.toFixed(2)}`;
+        if (profitDisplay) profitDisplay.innerText = `₹${profit.toFixed(2)}`;
+        if (marginDisplay) marginDisplay.innerText = `${marginPct}%`;
+    }
+
+    async function saveCurrentRecipeModal() {
+        const dishId = document.getElementById('rtrRecipeDishId')?.value;
+        const menuItemId = document.getElementById('rtrRecipeMenuItemId')?.value;
+        const dishName = document.getElementById('rtrRecipeDishName')?.value;
+        const category = document.getElementById('rtrRecipeDishCategory')?.value;
+        const sellingPrice = parseFloat(document.getElementById('rtrRecipeSellingPrice')?.value) || 200;
+
+        const gravyId = document.getElementById('rtrRecipeGravySelect')?.value;
+        const gravyQty = parseFloat(document.getElementById('rtrRecipeGravyQty')?.value) || 0;
+        const oilQty = parseFloat(document.getElementById('rtrRecipeOilQty')?.value) || 0;
+        const proteinId = document.getElementById('rtrRecipeProteinSelect')?.value;
+        const proteinQty = parseFloat(document.getElementById('rtrRecipeProteinQty')?.value) || 0;
+        const veggieQty = parseFloat(document.getElementById('rtrRecipeVeggieQty')?.value) || 0;
+        const flourId = document.getElementById('rtrRecipeFlourSelect')?.value;
+        const flourQty = parseFloat(document.getElementById('rtrRecipeFlourQty')?.value) || 0;
+        const butterQty = parseFloat(document.getElementById('rtrRecipeButterQty')?.value) || 0;
+
+        const payload = {
+            id: dishId || ('REC-' + dishName.toUpperCase().replace(/[^A-Z0-9]/g, '-').slice(0, 16)),
+            menu_item_id: menuItemId,
+            dish_name: dishName,
+            menu_category: category,
+            selling_price: sellingPrice,
+            gravy_id: gravyId,
+            gravy_qty: gravyQty,
+            oil_qty: oilQty,
+            protein_id: proteinId,
+            protein_qty: proteinQty,
+            veggie_qty: veggieQty,
+            flour_id: flourId,
+            flour_qty: flourQty,
+            butter_qty: butterQty
+        };
+
+        try {
+            const res = await fetch('/api/inventory/recipes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json());
+
+            if (res && res.recipe) {
+                const idx = recipes.findIndex(r => r.id === res.recipe.id || String(r.menu_item_id) === String(res.recipe.menu_item_id));
+                if (idx >= 0) recipes[idx] = res.recipe;
+                else recipes.push(res.recipe);
+            }
+        } catch (e) {
+            console.warn('[Culinary Inventory] Backend recipe save warning, saving locally:', e);
+            // Construct local recipe fallback
+            const comps = [];
+            if (gravyId && gravyQty > 0) comps.push({ type: 'sub_recipe', id: gravyId, exact_quantity: gravyQty, unit: 'Litre' });
+            if (oilQty > 0) comps.push({ type: 'raw', id: 'RM-OIL', exact_quantity: oilQty, unit: 'Litre' });
+            if (proteinId && proteinQty > 0) comps.push({ type: 'raw', id: proteinId, exact_quantity: proteinQty, unit: 'kg' });
+            if (veggieQty > 0) comps.push({ type: 'raw', id: 'RM-ONION', exact_quantity: veggieQty, unit: 'kg' });
+            if (flourQty > 0) comps.push({ type: 'raw', id: flourId, exact_quantity: flourQty, unit: 'kg' });
+            if (butterQty > 0) comps.push({ type: 'raw', id: 'RM-BUTTER', exact_quantity: butterQty, unit: 'kg' });
+
+            const localRecipe = {
+                id: payload.id,
+                menu_item_id: payload.menu_item_id,
+                dish_name: payload.dish_name,
+                menu_category: payload.menu_category,
+                selling_price: payload.selling_price,
+                components: comps
+            };
+            const idx = recipes.findIndex(r => r.id === localRecipe.id || String(r.menu_item_id) === String(localRecipe.menu_item_id));
+            if (idx >= 0) recipes[idx] = localRecipe;
+            else recipes.push(localRecipe);
+        }
+
+        try {
+            localStorage.setItem('billnaw_culinary_recipes', JSON.stringify(recipes));
+        } catch (e) {}
+
+        closeDishRecipeModal();
+        renderActiveSubTab();
+        if (typeof showToast === 'function') showToast(`✅ Recipe mapped for '${dishName}'!`);
+    }
+
+    function closeDishRecipeModal() {
+        const modal = document.getElementById('dishRecipeConfigModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    // --- ITEM ALERT MODAL CONTROLLER ---
+    function openItemAlertModal(itemId) {
+        let item = rawMaterials.find(m => m.id === itemId);
+        let isSub = false;
+        if (!item) {
+            item = subRecipes.find(s => s.id === itemId);
+            isSub = true;
+        }
+        if (!item) return;
+
+        const modal = document.getElementById('itemAlertModal');
+        if (!modal) return;
+
+        document.getElementById('rtrAlertItemId').value = itemId;
+        document.getElementById('rtrAlertItemName').innerText = item.name;
+        document.getElementById('rtrAlertItemCategory').innerText = item.category || (isSub ? 'Prepared Gravy Base' : 'Pantry / Raw');
+        const unit = item.consumption_unit || item.yield_unit || 'units';
+        document.getElementById('rtrAlertItemUnit').innerText = unit;
+        document.getElementById('rtrAlertCurrentStock').innerText = `${item.current_stock} ${unit}`;
+        document.getElementById('rtrAlertThresholdInput').value = item.min_threshold ?? item.minThreshold ?? 10;
+
+        modal.style.display = 'flex';
+    }
+
+    async function saveItemAlertSettings() {
+        const itemId = document.getElementById('rtrAlertItemId')?.value;
+        const thresh = parseFloat(document.getElementById('rtrAlertThresholdInput')?.value);
+        if (!itemId || isNaN(thresh)) return;
+
+        let item = rawMaterials.find(m => m.id === itemId) || subRecipes.find(s => s.id === itemId);
+        if (item) {
+            item.min_threshold = thresh;
+            item.minThreshold = thresh;
+        }
+
+        try {
+            await fetch('/api/inventory/alert-threshold', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ material_id: itemId, min_threshold: thresh })
+            });
+        } catch (e) {}
+
+        persistLocalSnapshot();
+        closeItemAlertModal();
+        renderActiveSubTab();
+        if (typeof showToast === 'function') showToast(`🔔 Low stock alert trigger updated to ${thresh}!`);
+    }
+
+    function closeItemAlertModal() {
+        const modal = document.getElementById('itemAlertModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    // --- RESTOCK & SHOPPING EXPENSE MODAL CONTROLLER ---
+    function openRestockModal(itemId) {
+        let item = rawMaterials.find(m => m.id === itemId);
+        let isSub = false;
+        if (!item) {
+            item = subRecipes.find(s => s.id === itemId);
+            isSub = true;
+        }
+        if (!item) return;
+
+        const modal = document.getElementById('restockExpenseModal');
+        if (!modal) return;
+
+        document.getElementById('rtrRestockItemId').value = itemId;
+        document.getElementById('rtrRestockItemName').innerText = item.name;
+        document.getElementById('rtrRestockItemCategory').innerText = item.category || (isSub ? 'Semi-Finished Gravy Base' : 'Raw Ingredient');
+        const unit = item.consumption_unit || item.yield_unit || 'units';
+        document.getElementById('rtrRestockItemUnit').innerText = unit;
+        document.getElementById('rtrRestockCurrentStock').innerText = `${item.current_stock} ${unit}`;
+        document.getElementById('rtrRestockQtyInput').value = '';
+        document.getElementById('rtrRestockCostInput').value = item.cost_per_unit || (item.unit_production_cost || 100);
+        document.getElementById('rtrRestockSupplierInput').value = item.supplier || 'Kolkata Fresh Veggies Mandi';
+        document.getElementById('rtrRestockTotalExpense').innerText = '₹0.00';
+
+        modal.style.display = 'flex';
+    }
+
+    function recalcRestockTotal() {
+        const qty = parseFloat(document.getElementById('rtrRestockQtyInput')?.value) || 0;
+        const rate = parseFloat(document.getElementById('rtrRestockCostInput')?.value) || 0;
+        const total = qty * rate;
+        const display = document.getElementById('rtrRestockTotalExpense');
+        if (display) display.innerText = `₹${total.toFixed(2)}`;
+    }
+
+    async function submitRestockExpense() {
+        const itemId = document.getElementById('rtrRestockItemId')?.value;
+        const qty = parseFloat(document.getElementById('rtrRestockQtyInput')?.value);
+        const rate = parseFloat(document.getElementById('rtrRestockCostInput')?.value) || 0;
+        const supplier = document.getElementById('rtrRestockSupplierInput')?.value;
+
+        if (!itemId || isNaN(qty) || qty <= 0) {
+            if (typeof showToast === 'function') showToast('⚠️ Please enter a valid quantity.');
+            return;
+        }
+
+        let item = rawMaterials.find(m => m.id === itemId) || subRecipes.find(s => s.id === itemId);
+        if (item) {
+            item.current_stock = Math.round((item.current_stock + qty) * 100) / 100;
+            if (rate > 0) item.cost_per_unit = rate;
+        }
+
+        try {
+            await fetch('/api/inventory/restock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ material_id: itemId, quantity: qty, unit_cost: rate, supplier })
+            });
+        } catch (e) {}
+
+        persistLocalSnapshot();
+        closeRestockModal();
+        renderActiveSubTab();
+        if (typeof showToast === 'function') showToast(`📥 Added +${qty} to stock! Kitchen stock updated.`);
+    }
+
+    function closeRestockModal() {
+        const modal = document.getElementById('restockExpenseModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function syncMenuItems() {
+        loadAllInventoryData();
+        if (typeof showToast === 'function') showToast('🔄 RTR Tracker synchronized with Menu items!');
     }
 
     // --- TAB 1: RAW MATERIALS & BAR LIQUID MATRIX ---
@@ -978,6 +1780,66 @@
     async function deductOrder(order) {
         if (!order) return;
         try {
+            const items = Array.isArray(order.rawItems) ? order.rawItems : (Array.isArray(order.items) ? order.items : []);
+            
+            // Immediate optimistic local deduction
+            items.forEach(cartItem => {
+                const dishName = (cartItem.name || '').toLowerCase().trim();
+                const itemId = cartItem.id ? String(cartItem.id) : null;
+                const qty = parseInt(cartItem.qty || cartItem.quantity || 1, 10);
+
+                let rec = null;
+                if (itemId) {
+                    rec = recipes.find(r => String(r.menu_item_id) === itemId || String(r.id) === itemId);
+                }
+                if (!rec) {
+                    rec = recipes.find(r => (r.dish_name || '').toLowerCase().trim() === dishName);
+                }
+                if (!rec) {
+                    rec = recipes.find(r => {
+                        const rName = (r.dish_name || '').toLowerCase().trim();
+                        return dishName.includes(rName) || rName.includes(dishName);
+                    });
+                }
+
+                if (rec && Array.isArray(rec.components)) {
+                    rec.components.forEach(comp => {
+                        if (comp.type === 'sub_recipe') {
+                            const sub = subRecipes.find(s => s.id === comp.id);
+                            if (sub) {
+                                sub.current_stock = Math.max(0, Math.round((sub.current_stock - (comp.exact_quantity * qty)) * 100) / 100);
+                            }
+                        } else {
+                            const rm = rawMaterials.find(m => m.id === comp.id);
+                            if (rm) {
+                                rm.current_stock = Math.max(0, Math.round((rm.current_stock - (comp.exact_quantity * qty)) * 100) / 100);
+                            }
+                        }
+                    });
+                } else {
+                    // Fallback core staple deduction
+                    if (dishName.includes('paneer')) {
+                        const p = rawMaterials.find(m => m.id === 'RM-PANEER'); if (p) p.current_stock = Math.max(0, Math.round((p.current_stock - 0.15 * qty) * 100) / 100);
+                        const o = rawMaterials.find(m => m.id === 'RM-OIL'); if (o) o.current_stock = Math.max(0, Math.round((o.current_stock - 0.02 * qty) * 100) / 100);
+                        const s = subRecipes.find(sub => sub.id === 'SUB-MAK-01'); if (s) s.current_stock = Math.max(0, Math.round((s.current_stock - 0.20 * qty) * 100) / 100);
+                    } else if (dishName.includes('chicken')) {
+                        const c = rawMaterials.find(m => m.id === 'RM-CHICKEN'); if (c) c.current_stock = Math.max(0, Math.round((c.current_stock - 0.20 * qty) * 100) / 100);
+                        const o = rawMaterials.find(m => m.id === 'RM-OIL'); if (o) o.current_stock = Math.max(0, Math.round((o.current_stock - 0.02 * qty) * 100) / 100);
+                        const s = subRecipes.find(sub => sub.id === 'SUB-BROWN-01'); if (s) s.current_stock = Math.max(0, Math.round((s.current_stock - 0.22 * qty) * 100) / 100);
+                    } else if (dishName.includes('roll') || dishName.includes('roti') || dishName.includes('naan')) {
+                        const f = rawMaterials.find(m => m.id === 'RM-MAIDA'); if (f) f.current_stock = Math.max(0, Math.round((f.current_stock - 0.08 * qty) * 100) / 100);
+                        const o = rawMaterials.find(m => m.id === 'RM-OIL'); if (o) o.current_stock = Math.max(0, Math.round((o.current_stock - 0.02 * qty) * 100) / 100);
+                    }
+                }
+            });
+
+            persistLocalSnapshot();
+            const contentArea = document.getElementById('culinarySubTabContent');
+            if (contentArea && activeSubTab === 'rtr_tracker') {
+                renderRtrTrackerTab(contentArea);
+            }
+
+            // Sync with backend engine
             await fetch('/api/inventory/pos-deduct', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -985,7 +1847,7 @@
             });
             loadAllInventoryData();
         } catch (e) {
-            console.warn('[Culinary Inventory] Async POS deduction notice:', e);
+            console.warn('[Culinary Inventory] POS live deduction notice:', e);
         }
     }
 
@@ -1006,7 +1868,25 @@
         updateAuditVariance,
         submitAudit,
         deductOrder,
-        refreshCosting: loadAllInventoryData
+        refreshCosting: loadAllInventoryData,
+        // RTR Tracker & Recipe Config API
+        openDishRecipeModal,
+        triggerApproxAutoFill,
+        recalcRecipeModalCost,
+        setRecipeField,
+        saveCurrentRecipeModal,
+        closeDishRecipeModal,
+        openItemAlertModal,
+        saveItemAlertSettings,
+        closeItemAlertModal,
+        openRestockModal,
+        recalcRestockTotal,
+        submitRestockExpense,
+        closeRestockModal,
+        filterRtrDishes,
+        syncMenuItems,
+        getCoreStaples,
+        getAllMenuDishes
     };
 
     // Auto-init on load
