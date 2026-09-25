@@ -102,6 +102,40 @@ const DEFAULT_SUB_RECIPES = [
 
 const DEFAULT_RECIPES = [
   {
+    id: 'REC-SAMOSA',
+    dish_name: 'Samosa',
+    menu_category: 'Snacks',
+    selling_price: 15,
+    gst_percentage: 5,
+    components: [
+      { type: 'raw', id: 'RM-MAIDA', name: 'Refined Wheat Flour (Maida)', exact_quantity: 0.05, unit: 'kg' },
+      { type: 'raw', id: 'RM-OIL', name: 'Sunflower Oil', exact_quantity: 0.02, unit: 'Litre' }
+    ]
+  },
+  {
+    id: 'REC-TEA',
+    dish_name: 'Tea',
+    menu_category: 'Beverages',
+    selling_price: 10,
+    gst_percentage: 5,
+    components: [
+      { type: 'raw', id: 'RM-MILK', name: 'Cow Milk', exact_quantity: 0.08, unit: 'Litre' },
+      { type: 'raw', id: 'RM-TEA-LEAVES', name: 'CTC Assam Tea Leaves', exact_quantity: 0.005, unit: 'kg' }
+    ]
+  },
+  {
+    id: 'REC-CHICKEN-CURRY',
+    dish_name: 'Chicken Curry',
+    menu_category: 'Main Course',
+    selling_price: 150,
+    gst_percentage: 5,
+    components: [
+      { type: 'sub_recipe', id: 'SUB-BROWN-01', name: 'Bhuna Brown Gravy Base', exact_quantity: 0.15, unit: 'Litre' },
+      { type: 'raw', id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', exact_quantity: 0.18, unit: 'kg' },
+      { type: 'raw', id: 'RM-OIL', name: 'Sunflower Oil', exact_quantity: 0.015, unit: 'Litre' }
+    ]
+  },
+  {
     id: 'REC-PBM',
     dish_name: 'Paneer Butter Masala',
     menu_category: 'Main Course',
@@ -1180,6 +1214,40 @@ export function getApproxAutoFill(dishName = '', category = '') {
       flour_qty: 0.09, // Maida/Atta
       butter_qty: 0.01,
       confidence: 'High (Bread / Roll Base)'
+    };
+  }
+
+  // 6. Samosa / Snacks
+  if (name.includes('samosa') || cat.includes('snack')) {
+    return {
+      gravy_id: '',
+      gravy_name: 'None (Deep Fry Snack)',
+      gravy_qty: 0.0,
+      protein_id: 'RM-ONION',
+      protein_name: 'Spiced Potato & Peas Masala',
+      protein_qty: 0.06,
+      oil_qty: 0.02,
+      veggie_qty: 0.03,
+      flour_qty: 0.05,
+      butter_qty: 0.0,
+      confidence: 'High (Snacks / Samosa)'
+    };
+  }
+
+  // 7. Tea / Chai / Beverages
+  if (name.includes('tea') || name.includes('chai') || cat.includes('tea') || cat.includes('beverage')) {
+    return {
+      gravy_id: '',
+      gravy_name: 'None (Hot Beverage)',
+      gravy_qty: 0.0,
+      protein_id: 'RM-MILK',
+      protein_name: 'Cow Milk (Full Cream)',
+      protein_qty: 0.08,
+      oil_qty: 0.0,
+      veggie_qty: 0.0,
+      flour_qty: 0.0,
+      butter_qty: 0.0,
+      confidence: 'High (Hot Chai / Beverage)'
     };
   }
 

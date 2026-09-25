@@ -12,7 +12,7 @@ import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
 import { parseMenuFromText, generateDefaultMenuTemplate } from './server/menu-parser.js';
-import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser } from './server/auth-service.js';
+import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData } from './server/auth-service.js';
 import {
   getRawMaterials,
   updateRawMaterialStock,
@@ -522,6 +522,48 @@ app.post('/api/auth/sessions/revoke', (req, res) => {
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to revoke session' });
+  }
+});
+
+// 6B. Store Reset Data (Wipes server & cloud database and reseeds clean demo items)
+app.post('/api/store/reset-data', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || req.headers['x-session-token'];
+    let storeCode = req.body?.storeCode;
+    if (!storeCode && authHeader) {
+      const sessRes = verifySession(authHeader);
+      if (sessRes.status === 200 && sessRes.data?.storeCode) {
+        storeCode = sessRes.data.storeCode;
+      }
+    }
+    const result = resetStoreCloudData(storeCode);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to reset store data' });
+  }
+});
+
+// 6C. Subscription & Plan Features API
+app.get('/api/subscription/features', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      plan: 'Pro Plan',
+      tier: 'pro',
+      status: 'active',
+      validUntil: '2026-12-31',
+      features: {
+        culinaryBatchEngine: true,
+        aiMenuOcr: true,
+        barLiquidTelemetry: true,
+        centralKitchenTransfers: true,
+        whatsAppMarketing: true,
+        liveFoodCosting: true,
+        predictiveForecasting: true
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to load subscription' });
   }
 });
 

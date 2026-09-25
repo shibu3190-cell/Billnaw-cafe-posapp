@@ -224,6 +224,11 @@ function logoutShop() {
     if (typeof openShopAuthModal === 'function') {
         openShopAuthModal();
     }
+    if (typeof window !== 'undefined' && window.location) {
+        setTimeout(() => {
+            window.location.replace(window.location.origin + window.location.pathname + '?auth=login');
+        }, 120);
+    }
 }
 window.logoutShop = logoutShop;
 window.logoutShopCloudAccount = logoutShop;
@@ -256,9 +261,11 @@ async function initApp() {
             renderInventoryTelemetryUI();
         }
 
-        // Present Shop Auth Modal on first cold boot if not yet authenticated or bypassed
+        // Present Shop Auth Modal if query string contains ?auth=login or on first cold boot if unauthenticated
+        const hasAuthLoginParam = window.location.search && window.location.search.includes('auth=login');
         const authMode = localStorage.getItem('billnaw_auth_mode');
-        if (!authMode && typeof openShopAuthModal === 'function') {
+
+        if ((hasAuthLoginParam || !authMode) && typeof openShopAuthModal === 'function') {
             setTimeout(() => {
                 const actOverlay = document.getElementById('activationOverlay');
                 const logOverlay = document.getElementById('loginOverlay');
@@ -266,8 +273,11 @@ async function initApp() {
                 const isLoginShowing = logOverlay && logOverlay.style.display !== 'none';
                 if (!isActivationShowing && !isLoginShowing) {
                     openShopAuthModal();
+                    if (hasAuthLoginParam) {
+                        try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+                    }
                 }
-            }, 150);
+            }, 120);
         }
     } catch (err) {
         console.error("Initialization error:", err);

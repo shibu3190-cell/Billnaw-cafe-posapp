@@ -116,9 +116,11 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid)
     staff: [
       { id: 1, name: 'Store Owner', role: 'Admin', pin: '1234', phone: '+91 98765 43210', status: 'Active' }
     ],
-    categories: ['All', 'Tea/Coffee', 'Food', 'Cigarettes', 'Other'],
+    categories: ['All', 'Snacks', 'Beverages', 'Main Course'],
     menu: [
-      { id: 1, name: 'Masala Chai', category: 'Tea/Coffee', price: 20, stock: 100, gstRate: 5 }
+      { id: 1, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
+      { id: 2, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
+      { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5 }
     ],
     tables: {},
     history: [],
@@ -173,6 +175,41 @@ export function resolveShopTenant(storeCode, shopName, ownerEmail, ownerUid) {
   }
 
   return shop;
+}
+
+/**
+ * Resets all server-side and cloud stored data for a store to clean slate with 2 demo items.
+ */
+export function resetStoreCloudData(storeCode) {
+  const code = storeCode || 'SHOP-BILLNAW-01';
+  const cleanDemoMenu = [
+    { id: 1, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
+    { id: 2, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
+    { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5 }
+  ];
+  const cleanCategories = ['All', 'Snacks', 'Beverages', 'Main Course'];
+
+  let shop = shopStore.get(code);
+  if (shop) {
+    shop.menu = cleanDemoMenu;
+    shop.categories = cleanCategories;
+    shop.history = [];
+    shop.expenses = [];
+    shop.tables = {};
+    shop.customers = [];
+    shop.updatedAt = new Date().toISOString();
+  } else {
+    shop = createDefaultShopDocument(code, 'Billnaw Cafe', '', '');
+    shopStore.set(code, shop);
+  }
+
+  syncShopToFirestore(code, shop);
+  return {
+    success: true,
+    message: 'Store data wiped and re-seeded with clean demo items on server and cloud.',
+    storeCode: code,
+    menu: cleanDemoMenu
+  };
 }
 
 /**

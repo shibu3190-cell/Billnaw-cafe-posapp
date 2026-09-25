@@ -142,82 +142,349 @@ function filterCatalogTable() {
 }
 window.filterCatalogTable = filterCatalogTable;
 
+let catalogActiveCategoryFilter = 'All';
+
+function filterCatalogByCategory(cat) {
+    catalogActiveCategoryFilter = cat;
+    renderMenuCatalogUI();
+}
+window.filterCatalogByCategory = filterCatalogByCategory;
+
+function switchMenuSubTab(subTab) {
+    const invView = document.getElementById('menuInventorySubView');
+    const catView = document.getElementById('menuCategoriesSubView');
+    const invBtn = document.getElementById('tabMenuInventoryBtn');
+    const catBtn = document.getElementById('tabMenuCategoriesBtn');
+
+    if (subTab === 'categories') {
+        if (invView) invView.style.display = 'none';
+        if (catView) catView.style.display = 'block';
+        if (invBtn) invBtn.classList.remove('active');
+        if (catBtn) catBtn.classList.add('active');
+        renderCategoryListUI();
+    } else {
+        if (invView) invView.style.display = 'block';
+        if (catView) catView.style.display = 'none';
+        if (invBtn) invBtn.classList.add('active');
+        if (catBtn) catBtn.classList.remove('active');
+        renderMenuCatalogUI();
+    }
+}
+window.switchMenuSubTab = switchMenuSubTab;
+
 function renderMenuCatalogUI() {
     const menuTable = document.getElementById('menuTableBody');
-    if (!menuTable) return;
+    const cleanCardsContainer = document.getElementById('cleanItemCardsList');
     const { mode: gstCurrentMode, defaultRate: gstStoreRate } = getStoreGstConfig();
 
+    // 1. Update count badges
+    const invCountEl = document.getElementById('menuInventoryCount');
+    if (invCountEl) invCountEl.innerText = menuItems.length;
+
+    const catCountEl = document.getElementById('menuCategoriesCount');
+    if (catCountEl) catCountEl.innerText = menuCategories.filter(c => c !== 'All').length;
+
+    const countBadge = document.getElementById('catalogItemCountBadge');
+    if (countBadge) {
+        countBadge.innerText = `${menuItems.length} Item${menuItems.length === 1 ? '' : 's'}`;
+    }
+
+    // 2. Render Category Filter Chips
+    const chipsContainer = document.getElementById('catalogCategoryChips');
+    if (chipsContainer) {
+        chipsContainer.innerHTML = menuCategories.map(cat => `
+            <button type="button" class="btn btn-outline" onclick="filterCatalogByCategory('${escapeHtml(cat)}')" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; ${catalogActiveCategoryFilter === cat ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'color: #4B5563; background: #FFFFFF;'}">
+                ${escapeHtml(cat)}
+            </button>
+        `).join('');
+    }
+
+    // 3. Search and Category Filter
     const searchInput = document.getElementById('catalogSearchInput');
     const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
 
     let itemsToRender = menuItems;
+    if (catalogActiveCategoryFilter && catalogActiveCategoryFilter !== 'All') {
+        itemsToRender = itemsToRender.filter(i => i.category === catalogActiveCategoryFilter);
+    }
     if (query) {
-        itemsToRender = menuItems.filter(i => 
+        itemsToRender = itemsToRender.filter(i => 
             (i.name && i.name.toLowerCase().includes(query)) ||
             (i.category && i.category.toLowerCase().includes(query))
         );
     }
 
-    const countBadge = document.getElementById('catalogItemCountBadge');
-    if (countBadge) {
-        countBadge.innerText = query ? `${itemsToRender.length} of ${menuItems.length} Items` : `${menuItems.length} Item${menuItems.length === 1 ? '' : 's'}`;
-    }
-
-    if (itemsToRender.length === 0) {
-        menuTable.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 32px 16px; color: var(--text-muted); font-size: 13px;">No menu items found matching "${escapeHtml(query)}".</td></tr>`;
-        return;
-    }
-
-    menuTable.innerHTML = itemsToRender.map(item => {
-        let gstDisplay = '';
-        if (gstCurrentMode === 'none') {
-            gstDisplay = '<span class="stock-pill stock-pill-unlimited">0% Exempt</span>';
-        } else if (gstCurrentMode === 'exclusive') {
-            const r = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : gstStoreRate;
-            gstDisplay = `<span class="stock-pill stock-pill-low">+${r}% Excl</span>`;
-        } else {
-            const r = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : gstStoreRate;
-            gstDisplay = `<span class="stock-pill stock-pill-in">${r}% Incl</span>`;
-        }
-
-        let stockDisplay = '';
-        if (!item.trackStock) {
-            stockDisplay = '<span class="stock-pill stock-pill-unlimited">∞ Unlimited</span>';
-        } else if (item.stockQty > 5) {
-            stockDisplay = `<span class="stock-pill stock-pill-in">${item.stockQty} in stock</span>`;
-        } else if (item.stockQty > 0) {
-            stockDisplay = `<span class="stock-pill stock-pill-low">${item.stockQty} low</span>`;
-        } else {
-            stockDisplay = '<span class="stock-pill stock-pill-out">Out of stock</span>';
-        }
-
-        const thumbSrc = item.image || generateFallbackImage(item.name);
-        return `<tr>
-            <td style="width: 48px;">
-                <img src="${thumbSrc}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display: block;" onerror="this.src=generateFallbackImage('${escapeHtml(item.name)}')">
-            </td>
-            <td>
-                <div style="font-weight: 700; color: var(--text-dark);">${escapeHtml(item.name)}</div>
-                ${item.badge ? `<span style="font-size: 9px; font-weight: 800; color: var(--accent); text-transform: uppercase;">${escapeHtml(item.badge)}</span>` : ''}
-            </td>
-            <td><span class="cat-label" style="display:inline-block; font-size:11px; padding: 2px 6px; background: #FAF7F4; border-radius: 6px; border: 1px solid var(--border);">${escapeHtml(item.category)}</span></td>
-            <td style="font-weight:700; color:var(--primary); font-size:14px; font-variant-numeric: tabular-nums;">₹${Number(item.price).toFixed(2)}</td>
-            <td>${gstDisplay}</td>
-            <td>${stockDisplay}</td>
-            <td>
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <button type="button" class="catalog-action-btn" onclick="editMenuItem(${item.id})" title="Edit Item ${escapeHtml(item.name)}">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-                    </button>
-                    <button type="button" class="catalog-action-btn delete-btn" onclick="deleteMenuItem(${item.id})" title="Delete Item">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
+    // 4. Render Clean Item Cards matching Screenshot 1
+    if (cleanCardsContainer) {
+        if (itemsToRender.length === 0) {
+            cleanCardsContainer.innerHTML = `
+                <div style="text-align: center; padding: 36px 16px; background: #FFFFFF; border: 1.5px dashed #E5E7EB; border-radius: 14px; color: var(--text-muted); font-size: 13px;">
+                    No menu items found matching current search.
                 </div>
-            </td>
-        </tr>`;
-    }).join('');
+            `;
+        } else {
+            cleanCardsContainer.innerHTML = itemsToRender.map(item => {
+                let stockClass = 'unlimited';
+                let stockLabel = '∞ Unlimited';
+                if (item.trackStock) {
+                    if (item.stockQty > 5) {
+                        stockClass = 'in-stock';
+                        stockLabel = `${item.stockQty} in stock`;
+                    } else if (item.stockQty > 0) {
+                        stockClass = 'low-stock';
+                        stockLabel = `${item.stockQty} low`;
+                    } else {
+                        stockClass = 'out-stock';
+                        stockLabel = 'Out of stock';
+                    }
+                }
+
+                const thumbSrc = item.image || generateFallbackImage(item.name);
+                return `
+                <div class="clean-item-card">
+                    <div class="clean-item-left">
+                        <img src="${thumbSrc}" class="clean-item-thumb" alt="${escapeHtml(item.name)}" onerror="this.src=generateFallbackImage('${escapeHtml(item.name)}')">
+                        <div class="clean-item-info">
+                            <div class="clean-item-title-row">
+                                <span class="clean-item-name">${escapeHtml(item.name)}</span>
+                                <span class="clean-item-category-tag">${escapeHtml(item.category || 'General')}</span>
+                            </div>
+                            <div class="clean-item-meta-row">
+                                <span class="clean-item-price">₹ ${Number(item.price).toFixed(2)}</span>
+                                <span class="clean-item-stock-tag ${stockClass}">${stockLabel}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="clean-item-right">
+                        <button type="button" class="adjust-stock-btn" onclick="openQuickAdjustStockModal(${item.id})">
+                            Adjust Stock
+                        </button>
+                        <button type="button" class="clean-item-action-btn" onclick="editMenuItem(${item.id})" title="Edit Item">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </button>
+                        <button type="button" class="clean-item-action-btn delete-btn" onclick="deleteMenuItem(${item.id})" title="Delete Item">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+    }
+
+    // 5. Fallback Table Rendering for backward compatibility
+    if (menuTable) {
+        if (itemsToRender.length === 0) {
+            menuTable.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 24px 16px; color: var(--text-muted); font-size: 13px;">No menu items found.</td></tr>`;
+            return;
+        }
+
+        menuTable.innerHTML = itemsToRender.map(item => {
+            let gstDisplay = '';
+            if (gstCurrentMode === 'none') {
+                gstDisplay = '<span class="stock-pill stock-pill-unlimited">0% Exempt</span>';
+            } else if (gstCurrentMode === 'exclusive') {
+                const r = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : gstStoreRate;
+                gstDisplay = `<span class="stock-pill stock-pill-low">+${r}% Excl</span>`;
+            } else {
+                const r = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : gstStoreRate;
+                gstDisplay = `<span class="stock-pill stock-pill-in">${r}% Incl</span>`;
+            }
+
+            let stockDisplay = '';
+            if (!item.trackStock) {
+                stockDisplay = '<span class="stock-pill stock-pill-unlimited">∞ Unlimited</span>';
+            } else if (item.stockQty > 5) {
+                stockDisplay = `<span class="stock-pill stock-pill-in">${item.stockQty} in stock</span>`;
+            } else if (item.stockQty > 0) {
+                stockDisplay = `<span class="stock-pill stock-pill-low">${item.stockQty} low</span>`;
+            } else {
+                stockDisplay = '<span class="stock-pill stock-pill-out">Out of stock</span>';
+            }
+
+            const thumbSrc = item.image || generateFallbackImage(item.name);
+            return `<tr>
+                <td style="width: 48px;">
+                    <img src="${thumbSrc}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display: block;" onerror="this.src=generateFallbackImage('${escapeHtml(item.name)}')">
+                </td>
+                <td>
+                    <div style="font-weight: 700; color: var(--text-dark);">${escapeHtml(item.name)}</div>
+                    ${item.badge ? `<span style="font-size: 9px; font-weight: 800; color: var(--accent); text-transform: uppercase;">${escapeHtml(item.badge)}</span>` : ''}
+                </td>
+                <td><span class="cat-label" style="display:inline-block; font-size:11px; padding: 2px 6px; background: #FAF7F4; border-radius: 6px; border: 1px solid var(--border);">${escapeHtml(item.category)}</span></td>
+                <td style="font-weight:700; color:var(--primary); font-size:14px; font-variant-numeric: tabular-nums;">₹${Number(item.price).toFixed(2)}</td>
+                <td>${gstDisplay}</td>
+                <td>${stockDisplay}</td>
+                <td>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button type="button" class="catalog-action-btn" onclick="editMenuItem(${item.id})" title="Edit Item ${escapeHtml(item.name)}">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                        </button>
+                        <button type="button" class="catalog-action-btn delete-btn" onclick="deleteMenuItem(${item.id})" title="Delete Item">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+    }
 }
 window.renderMenuCatalogUI = renderMenuCatalogUI;
+
+// 📸 Upload Menu Choice Dialog Handlers
+function openUploadMenuChoiceModal() {
+    const modal = document.getElementById('uploadMenuChoiceModal');
+    if (modal) modal.style.display = 'flex';
+}
+window.openUploadMenuChoiceModal = openUploadMenuChoiceModal;
+
+function closeUploadMenuChoiceModal() {
+    const modal = document.getElementById('uploadMenuChoiceModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeUploadMenuChoiceModal = closeUploadMenuChoiceModal;
+
+// 📊 Excel / Spreadsheet Menu Upload Handler
+async function handleExcelMenuUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    closeUploadMenuChoiceModal();
+    showToast(`Parsing ${file.name}...`, 'info');
+
+    try {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+        let importedCount = 0;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const parts = line.split(/[,\t]/).map(p => p.trim().replace(/^["']|["']$/g, ''));
+            if (parts.length >= 2) {
+                const name = parts[0];
+                const price = parseFloat(parts[1]);
+                const category = parts[2] || 'Imported';
+                if (name && !isNaN(price) && price > 0 && name.toLowerCase() !== 'dish' && name.toLowerCase() !== 'item') {
+                    const newItem = {
+                        id: Date.now() + i,
+                        name,
+                        price,
+                        category,
+                        stock: 50,
+                        stockQty: 50,
+                        trackStock: true,
+                        gstRate: 5,
+                        image: generateFallbackImage(name)
+                    };
+                    menuItems.push(newItem);
+                    if (!menuCategories.includes(category)) {
+                        menuCategories.push(category);
+                    }
+                    importedCount++;
+                }
+            }
+        }
+
+        if (importedCount > 0) {
+            persistMenu();
+            persistCategories();
+            renderCategoryDropdown();
+            renderCategoryFilters();
+            renderMenuUI();
+            showToast(`Successfully imported ${importedCount} items from spreadsheet!`, 'success');
+        } else {
+            showToast('No valid dish rows found in spreadsheet. Ensure Column 1 = Name, Column 2 = Price.', 'warning');
+        }
+    } catch(err) {
+        console.error('Spreadsheet parse error:', err);
+        showToast('Failed to parse spreadsheet: ' + err.message, 'error');
+    }
+}
+window.handleExcelMenuUpload = handleExcelMenuUpload;
+
+// ⚙️ Quick Stock Adjust Modal Handlers
+let activeAdjustingItem = null;
+
+function openQuickAdjustStockModal(itemId) {
+    const item = menuItems.find(i => i.id === itemId);
+    if (!item) return;
+    activeAdjustingItem = item;
+
+    const modal = document.getElementById('quickAdjustStockModal');
+    const nameEl = document.getElementById('quickAdjustItemName');
+    const catEl = document.getElementById('quickAdjustItemCategory');
+    const idEl = document.getElementById('quickAdjustItemId');
+    const inputEl = document.getElementById('quickAdjustStockInput');
+
+    if (nameEl) nameEl.innerText = item.name;
+    if (catEl) catEl.innerText = `${item.category} • Current: ${item.trackStock ? item.stockQty + ' in stock' : 'Unlimited'}`;
+    if (idEl) idEl.value = item.id;
+    if (inputEl) inputEl.value = item.trackStock ? (item.stockQty || 0) : 100;
+
+    if (modal) modal.style.display = 'flex';
+}
+window.openQuickAdjustStockModal = openQuickAdjustStockModal;
+
+function closeQuickAdjustStockModal() {
+    const modal = document.getElementById('quickAdjustStockModal');
+    if (modal) modal.style.display = 'none';
+    activeAdjustingItem = null;
+}
+window.closeQuickAdjustStockModal = closeQuickAdjustStockModal;
+
+function stepAdjustStock(delta) {
+    const inputEl = document.getElementById('quickAdjustStockInput');
+    if (!inputEl) return;
+    let val = parseInt(inputEl.value, 10) || 0;
+    val = Math.max(0, val + delta);
+    inputEl.value = val;
+}
+window.stepAdjustStock = stepAdjustStock;
+
+function setStockQuick(amount) {
+    const inputEl = document.getElementById('quickAdjustStockInput');
+    if (!inputEl) return;
+    let val = parseInt(inputEl.value, 10) || 0;
+    inputEl.value = val + amount;
+}
+window.setStockQuick = setStockQuick;
+
+function toggleStockUnlimited() {
+    if (!activeAdjustingItem) return;
+    activeAdjustingItem.trackStock = false;
+    persistMenu();
+    renderMenuUI();
+    closeQuickAdjustStockModal();
+    showToast(`${activeAdjustingItem.name} stock set to Unlimited.`, 'success');
+}
+window.toggleStockUnlimited = toggleStockUnlimited;
+
+function saveQuickStockAdjustment() {
+    if (!activeAdjustingItem) return;
+    const inputEl = document.getElementById('quickAdjustStockInput');
+    const newQty = parseInt(inputEl ? inputEl.value : '0', 10);
+    
+    activeAdjustingItem.trackStock = true;
+    activeAdjustingItem.stockQty = isNaN(newQty) ? 0 : Math.max(0, newQty);
+    activeAdjustingItem.stock = activeAdjustingItem.stockQty;
+
+    persistMenu();
+    renderMenuUI();
+    closeQuickAdjustStockModal();
+    showToast(`Updated ${activeAdjustingItem.name} stock to ${activeAdjustingItem.stockQty}.`, 'success');
+}
+window.saveQuickStockAdjustment = saveQuickStockAdjustment;
+
+// ✨ For You Modal Handlers
+function openForYouModal() {
+    const modal = document.getElementById('forYouModal');
+    if (modal) modal.style.display = 'flex';
+}
+window.openForYouModal = openForYouModal;
+
+function closeForYouModal() {
+    const modal = document.getElementById('forYouModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeForYouModal = closeForYouModal;
 
 function syncMenuUIQuantities() {
     let currentCart = tablesInfo[activeTable]?.items || [];

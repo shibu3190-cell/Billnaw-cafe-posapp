@@ -820,6 +820,7 @@ function switchTab(tabId) {
     if (tabId === 'settings') {
         if (typeof refreshAiQuotaDisplay === 'function') refreshAiQuotaDisplay();
         if (typeof generateSettingsQRPreview === 'function') generateSettingsQRPreview();
+        if (typeof renderSettingsProfileHeader === 'function') renderSettingsProfileHeader();
     }
 }
 window.switchTab = switchTab;
@@ -832,6 +833,86 @@ function factoryReset() {
     }
 }
 window.factoryReset = factoryReset;
+
+function openClearAllDataModal() {
+    const modal = document.getElementById('clearAllDataConfirmModal');
+    if (modal) modal.style.display = 'flex';
+}
+window.openClearAllDataModal = openClearAllDataModal;
+
+function closeClearAllDataModal() {
+    const modal = document.getElementById('clearAllDataConfirmModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeClearAllDataModal = closeClearAllDataModal;
+
+async function confirmClearAllData() {
+    closeClearAllDataModal();
+    try {
+        const activeToken = localStorage.getItem('billnaw_auth_token');
+        const activeStoreCode = (window.shopProfile && window.shopProfile.storeCode) || localStorage.getItem('billnaw_store_code') || window.myClientID;
+
+        // 1. Wipe cloud server store collections & reseed on server
+        if (typeof fetch === 'function') {
+            await fetch('/api/store/reset-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+                },
+                body: JSON.stringify({ storeCode: activeStoreCode })
+            }).catch(e => console.warn('Server reset-data error:', e));
+        }
+
+        // 2. Wipe local IndexedDB tables & re-seed exactly 2 demo items
+        if (typeof idb !== 'undefined') {
+            const cleanDemoItems = [
+                { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
+                { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
+                { id: 3, name: "Chicken Curry", category: "Main Course", price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") }
+            ];
+            const cleanCats = ["All", "Snacks", "Beverages", "Main Course"];
+
+            await idb.set('cafe_menu', cleanDemoItems);
+            await idb.set('cafe_categories', cleanCats);
+            await idb.set('cafe_history', []);
+            await idb.set('cafe_expenses', []);
+            await idb.set('cafe_customers', []);
+
+            window.menuItems = cleanDemoItems;
+            window.menuCategories = cleanCats;
+            window.orderHistory = [];
+            window.dailyExpenses = [];
+            window.customersList = [];
+        }
+
+        if (typeof renderMenuUI === 'function') renderMenuUI();
+        if (typeof showToast === 'function') {
+            showToast('All store data deleted from local terminal and cloud server.', 'success');
+        }
+        setTimeout(() => location.reload(), 500);
+    } catch (err) {
+        console.error('Clear all data error:', err);
+        showToast('Reset failed: ' + err.message, 'error');
+    }
+}
+window.confirmClearAllData = confirmClearAllData;
+
+function renderSettingsProfileHeader() {
+    const avatar = document.getElementById('settingsStoreAvatar');
+    const nameEl = document.getElementById('settingsStoreName');
+    const phoneEl = document.getElementById('settingsStorePhone');
+    if (avatar && window.shopProfile) {
+        avatar.innerText = (window.shopProfile.name ? window.shopProfile.name.charAt(0) : 'B').toUpperCase();
+    }
+    if (nameEl && window.shopProfile) {
+        nameEl.innerText = window.shopProfile.name || 'Billnaw Cafe';
+    }
+    if (phoneEl && window.shopProfile) {
+        phoneEl.innerText = `${window.shopProfile.phone || '+91 98765 43210'} • Active Terminal`;
+    }
+}
+window.renderSettingsProfileHeader = renderSettingsProfileHeader;
 
 // ============================================================
 // 🚀 ONBOARDING: GOAL GRADIENT 2-STEP SETUP WIZARD

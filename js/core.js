@@ -807,6 +807,29 @@ async function initDatabase() {
         if (!shopProfile.startInvoiceNo) shopProfile.startInvoiceNo = 1001;
         window.shopProfile = shopProfile;
     }
+    // Multi-Account Device Isolation: Clear device cache when a different email logs in
+    try {
+        const currentEmail = localStorage.getItem('billnaw_auth_email') || '';
+        const lastDeviceEmail = localStorage.getItem('billnaw_last_device_email') || '';
+        if (lastDeviceEmail && currentEmail && lastDeviceEmail.toLowerCase().trim() !== currentEmail.toLowerCase().trim()) {
+            console.log(`[AUTH ISOLATION] Account switch detected (${lastDeviceEmail} -> ${currentEmail}). Wiping device local storage.`);
+            if (typeof idb !== 'undefined' && idb.clear) {
+                await idb.clear('cafe_menu');
+                await idb.clear('cafe_history');
+                await idb.clear('cafe_tables');
+                await idb.clear('cafe_customers');
+                await idb.clear('cafe_expenses');
+                await idb.clear('cafe_staff');
+                await idb.clear('cafe_categories');
+            }
+        }
+        if (currentEmail) {
+            localStorage.setItem('billnaw_last_device_email', currentEmail.toLowerCase().trim());
+        }
+    } catch(err) {
+        console.warn('Device isolation error:', err);
+    }
+
     // Restore authenticated store profile if saved in session
     try {
         const authMode = localStorage.getItem('billnaw_auth_mode');
@@ -829,11 +852,9 @@ async function initDatabase() {
         window.menuItems = menuItems;
     } else {
         menuItems = [
-            { id: 1, name: "Masala Chai", category: "Tea/Coffee", price: 20, stock: 100, gstRate: 5, image: generateFallbackImage("Masala Chai") },
-            { id: 2, name: "Filter Coffee", category: "Tea/Coffee", price: 30, stock: 100, gstRate: 5, image: generateFallbackImage("Filter Coffee") },
-            { id: 3, name: "Egg Roll", category: "Food", price: 60, stock: 50, gstRate: 5, image: generateFallbackImage("Egg Roll") },
-            { id: 4, name: "Chicken Cutlet", category: "Food", price: 80, stock: 40, gstRate: 5, image: generateFallbackImage("Chicken Cutlet") },
-            { id: 5, name: "Mughlai Paratha", category: "Food", price: 120, stock: 30, gstRate: 5, image: generateFallbackImage("Mughlai Paratha") }
+            { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
+            { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
+            { id: 3, name: "Chicken Curry", category: "Main Course", price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") }
         ];
         window.menuItems = menuItems;
         await idb.set('cafe_menu', menuItems);
@@ -842,6 +863,10 @@ async function initDatabase() {
     if (storedCats && Array.isArray(storedCats) && storedCats.length > 0) {
         menuCategories = storedCats;
         window.menuCategories = menuCategories;
+    } else {
+        menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
+        window.menuCategories = menuCategories;
+        await idb.set('cafe_categories', menuCategories);
     }
     const storedHistory = await idb.get('cafe_history');
     if (storedHistory && Array.isArray(storedHistory)) {
@@ -852,6 +877,10 @@ async function initDatabase() {
     if (storedExpenses && Array.isArray(storedExpenses)) {
         dailyExpenses = storedExpenses;
         window.dailyExpenses = dailyExpenses;
+    } else {
+        dailyExpenses = [];
+        window.dailyExpenses = dailyExpenses;
+        await idb.set('cafe_expenses', dailyExpenses);
     }
     const storedTables = await idb.get('cafe_tables');
     if (storedTables && typeof storedTables === 'object') {
