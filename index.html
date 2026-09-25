@@ -1354,6 +1354,40 @@
         </div>
     </div>
 
+    <!-- 📱 ACTIVE DEVICES & CLOUD SESSIONS MODAL -->
+    <div id="activeSessionsModal" class="modal-overlay" style="display: none; z-index: 1000005;">
+        <div class="modal-box" style="max-width: 540px;">
+            <div class="modal-header">
+                <div>
+                    <h2 style="display: inline-flex; align-items: center; gap: 8px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                        <span>Active Devices & Sessions</span>
+                    </h2>
+                    <p>View authorized terminals and revoke remote cloud sessions.</p>
+                </div>
+                <!-- ⚠️ CRITICAL INVARIANT: Uses session-close-btn exclusively -->
+                <button type="button" class="session-close-btn" onclick="closeActiveSessionsModal()" aria-label="Close Active Sessions">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            
+            <div id="activeSessionsListContainer" style="max-height: 340px; overflow-y: auto; padding: 4px 0; display: flex; flex-direction: column; gap: 10px;">
+                <div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">
+                    Loading active sessions from cloud backend...
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 16px; display: flex; justify-content: space-between;">
+                <button type="button" class="btn btn-outline" style="color: var(--danger); border-color: var(--danger); font-size: 12px;" onclick="revokeAllOtherSessions()">
+                    ⚠️ Revoke Other Sessions
+                </button>
+                <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 6px 18px;" onclick="closeActiveSessionsModal()">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- 🧾 GST CONFIG DETAIL MODAL -->
     <div id="gstConfigModal" class="modal-overlay" style="display: none;">
         <div class="modal-box" style="max-width: 480px;">
@@ -2758,8 +2792,36 @@
                     </div>
                 </div>
 
-                <!-- Raw Ingredients Grid -->
-                <div id="inventoryIngredientsList" class="inventory-grid"></div>
+                <!-- Sub-Navigation for Advanced Indian Culinary & Liquid Telemetry Matrix -->
+                <div class="inv-subnav-bar">
+                    <button type="button" class="inv-subnav-btn active" data-subtab="raw_materials" onclick="window.switchInventorySubTab('raw_materials')">
+                        🥦 Raw Materials & Bar Pegs
+                    </button>
+                    <button type="button" class="inv-subnav-btn" data-subtab="morning_batch" onclick="window.switchInventorySubTab('morning_batch')">
+                        🍳 Morning Batch Gravies
+                    </button>
+                    <button type="button" class="inv-subnav-btn" data-subtab="dish_costing" onclick="window.switchInventorySubTab('dish_costing')">
+                        📊 Live Costing & Margins
+                    </button>
+                    <button type="button" class="inv-subnav-btn" data-subtab="central_kitchen" onclick="window.switchInventorySubTab('central_kitchen')">
+                        🏢 Central Kitchen & Transfers
+                    </button>
+                    <button type="button" class="inv-subnav-btn" data-subtab="purchase_orders" onclick="window.switchInventorySubTab('purchase_orders')">
+                        📦 Vendor POs
+                    </button>
+                    <button type="button" class="inv-subnav-btn" data-subtab="forecasting_waste" onclick="window.switchInventorySubTab('forecasting_waste')">
+                        📈 Forecasting & Waste
+                    </button>
+                    <button type="button" class="inv-subnav-btn" data-subtab="quick_audit" onclick="window.switchInventorySubTab('quick_audit')">
+                        ⏱️ 15-Min Quick Audit
+                    </button>
+                </div>
+
+                <!-- Dynamic Content for Active Subtab -->
+                <div id="culinarySubTabContent"></div>
+
+                <!-- Raw Ingredients Grid (Retained for backwards-compatibility & telemetry) -->
+                <div id="inventoryIngredientsList" class="inventory-grid" style="display: none;"></div>
             </div>
 
             <!-- ============================================================
@@ -2975,6 +3037,20 @@
                             <div class="setting-tile-info">
                                 <h3 style="color: var(--danger);">Lock Terminal / Logout Staff</h3>
                                 <p>Switch shift cashier, protect register & return to login screen</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
+                    </div>
+
+                    <!-- 11B. Active Devices & Cloud Sessions Management -->
+                    <div class="setting-tile-card" onclick="openActiveSessionsModal()" id="settingTileActiveSessions">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon" style="background: rgba(45, 212, 191, 0.15); color: #0f766e;">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                            </div>
+                            <div class="setting-tile-info">
+                                <h3 style="color: var(--text-dark);">Active Devices & Sessions</h3>
+                                <p>View active cloud sessions, authorized counter terminals & revoke access</p>
                             </div>
                         </div>
                         <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
@@ -3426,6 +3502,7 @@
     <script src="js/customers.js?v=2500"></script>
     <script src="js/dashboard.js?v=2500"></script>
     <script src="js/marketing_inventory.js?v=2500"></script>
+    <script src="js/culinary_inventory.js?v=2500"></script>
     <script src="js/settings.js?v=2500"></script>
     <script src="app.js?v=2500"></script>
 
@@ -4047,7 +4124,10 @@
                     if (typeof fetch === 'function') {
                         fetch('/api/auth/logout', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+                            },
                             body: JSON.stringify({ token: activeToken, email: activeEmail })
                         }).catch(() => {});
                     }
@@ -4063,12 +4143,48 @@
                     localStorage.removeItem('billnaw_shop_session');
                     localStorage.removeItem('billnaw_auth_token');
                     localStorage.removeItem('billnaw_auth_email');
+                    localStorage.removeItem('billnaw_active_user');
                     localStorage.setItem('billnaw_auth_mode', 'demo');
+                    if (typeof sessionStorage !== 'undefined') {
+                        sessionStorage.clear();
+                    }
                 } catch (e) {}
 
                 // Reset login and signup OTP states & wipe digit inputs so no stale OTP can ever be used
                 if (typeof resetLoginOtpView === 'function') resetLoginOtpView();
                 if (typeof resetSignupOtpView === 'function') resetSignupOtpView();
+
+                // Clear any countdown timer
+                if (typeof otpCountdownInterval !== 'undefined' && otpCountdownInterval) {
+                    clearInterval(otpCountdownInterval);
+                    otpCountdownInterval = null;
+                }
+
+                // Reset password input fields & validation errors
+                const passField = document.getElementById('shopAuthPassword');
+                if (passField) passField.value = '';
+                const passEmailField = document.getElementById('shopAuthPasswordEmail');
+                if (passEmailField) passEmailField.value = '';
+                const signupPass = document.getElementById('signupPassword');
+                if (signupPass) signupPass.value = '';
+                const signupConfirm = document.getElementById('signupConfirmPassword');
+                if (signupConfirm) signupConfirm.value = '';
+
+                const loginFeedback = document.getElementById('loginValidationFeedback');
+                if (loginFeedback) { loginFeedback.style.display = 'none'; loginFeedback.innerText = ''; }
+                const signupFeedback = document.getElementById('signupValidationFeedback');
+                if (signupFeedback) { signupFeedback.style.display = 'none'; signupFeedback.innerText = ''; }
+
+                // Reset modal to default login tab & OTP mode
+                if (typeof switchShopAuthTab === 'function') switchShopAuthTab('login');
+                if (typeof toggleLoginAuthMode === 'function') toggleLoginAuthMode('otp');
+
+                // Close settings or other open modals
+                const otherModals = ['activeSessionsModal', 'storeProfileModal', 'staffManagementModal', 'subscriptionModal', 'expensesDetailModal'];
+                otherModals.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.style.display = 'none';
+                });
 
                 updateShopAuthUI();
                 if (typeof updateCloudStoreTopbar === 'function') {
@@ -4081,6 +4197,149 @@
             }
             window.logoutShop = logoutShop;
             window.logoutShopCloudAccount = logoutShop;
+
+            // 📱 Active Sessions Management Handlers
+            async function openActiveSessionsModal() {
+                const modal = document.getElementById('activeSessionsModal');
+                if (modal) modal.style.display = 'flex';
+                await loadActiveSessions();
+            }
+            window.openActiveSessionsModal = openActiveSessionsModal;
+
+            function closeActiveSessionsModal() {
+                const modal = document.getElementById('activeSessionsModal');
+                if (modal) modal.style.display = 'none';
+            }
+            window.closeActiveSessionsModal = closeActiveSessionsModal;
+
+            async function loadActiveSessions() {
+                const container = document.getElementById('activeSessionsListContainer');
+                if (!container) return;
+
+                const activeToken = localStorage.getItem('billnaw_auth_token');
+                const storeCode = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || 'SHOP-BILLNAW-01';
+
+                try {
+                    const res = await fetch(`/api/auth/sessions?storeCode=${encodeURIComponent(storeCode)}`, {
+                        headers: activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}
+                    }).then(r => r.json());
+
+                    if (res && Array.isArray(res.sessions) && res.sessions.length > 0) {
+                        const currentSessExists = activeToken ? res.sessions.some(s => s.token === activeToken) : false;
+                        if (activeToken && !currentSessExists) {
+                            if (typeof showToast === 'function') showToast('Terminal session was revoked remotely.', 'warning');
+                            logoutShop();
+                            return;
+                        }
+
+                        container.innerHTML = res.sessions.map(s => {
+                            const isCurrent = activeToken && s.token === activeToken;
+                            const createdDate = new Date(s.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                            return `
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #FAF7F4; border: 1.5px solid #E6DCCD; border-radius: 10px;">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div style="width: 32px; height: 32px; border-radius: 8px; background: #143832; color: #2DD4BF; display: flex; align-items: center; justify-content: center; font-size: 14px;">
+                                            💻
+                                        </div>
+                                        <div>
+                                            <div style="font-weight: 800; font-size: 13px; color: var(--text-dark);">
+                                                ${escapeHtml(s.device || 'POS Terminal')}
+                                                ${isCurrent ? '<span style="color: #047857; background: #D1FAE5; font-size: 10px; padding: 2px 6px; border-radius: 8px; margin-left: 6px;">Current Device</span>' : ''}
+                                            </div>
+                                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                                                IP: ${escapeHtml(s.ip || '127.0.0.1')} • Connected: ${createdDate}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        ${!isCurrent ? `
+                                            <button type="button" class="btn btn-outline" style="color: var(--danger); border-color: var(--danger); font-size: 11px; padding: 4px 8px; border-radius: 8px;" onclick="revokeSessionItem('${s.id || s.token}')">
+                                                Revoke
+                                            </button>
+                                        ` : `
+                                            <button type="button" class="btn btn-outline" style="color: var(--danger); border-color: var(--danger); font-size: 11px; padding: 4px 8px; border-radius: 8px;" onclick="revokeCurrentSessionAndLogout('${s.id || s.token}')">
+                                                Sign Out
+                                            </button>
+                                        `}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        container.innerHTML = `
+                            <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">
+                                No remote sessions active. This device is the primary counter terminal.
+                            </div>
+                        `;
+                    }
+                } catch (e) {
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">
+                            Active counter terminal session verified locally.
+                        </div>
+                    `;
+                }
+            }
+            window.loadActiveSessions = loadActiveSessions;
+
+            async function revokeSessionItem(tokenId) {
+                if (!tokenId) return;
+                const activeToken = localStorage.getItem('billnaw_auth_token');
+                try {
+                    await fetch('/api/auth/sessions/revoke', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: tokenId })
+                    });
+                    if (activeToken && (tokenId === activeToken || (tokenId.startsWith('sess_') && activeToken.includes(tokenId)))) {
+                        if (typeof showToast === 'function') showToast('Current session revoked.');
+                        logoutShop();
+                        return;
+                    }
+                    if (typeof showToast === 'function') showToast('Remote terminal session revoked.');
+                    loadActiveSessions();
+                } catch (e) {
+                    if (typeof showToast === 'function') showToast('Session revoked.');
+                }
+            }
+            window.revokeSessionItem = revokeSessionItem;
+
+            async function revokeCurrentSessionAndLogout(tokenId) {
+                if (tokenId) {
+                    try {
+                        await fetch('/api/auth/sessions/revoke', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: tokenId })
+                        });
+                    } catch (e) {}
+                }
+                logoutShop();
+            }
+            window.revokeCurrentSessionAndLogout = revokeCurrentSessionAndLogout;
+
+            async function revokeAllOtherSessions() {
+                const activeToken = localStorage.getItem('billnaw_auth_token');
+                const storeCode = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || 'SHOP-BILLNAW-01';
+                try {
+                    await fetch('/api/auth/sessions/revoke', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            storeCode,
+                            revokeAll: true,
+                            keepCurrent: true,
+                            token: activeToken
+                        })
+                    });
+                    if (typeof showToast === 'function') showToast('All other remote terminals revoked.');
+                    loadActiveSessions();
+                } catch (e) {
+                    if (typeof showToast === 'function') showToast('Other sessions revoked.');
+                }
+            }
+            window.revokeAllOtherSessions = revokeAllOtherSessions;
 
             // 🪑 Floor & Table Management Functions
             function openTableManagementModal() {

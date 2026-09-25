@@ -173,6 +173,27 @@ window.restoreShopSession = restoreShopSession;
 
 // Sign out of Cloud Shop and return to Demo POS / Auth screen
 function logoutShop() {
+    if (typeof window.logoutShopCloudAccount === 'function' && window.logoutShopCloudAccount !== logoutShop) {
+        return window.logoutShopCloudAccount();
+    }
+
+    const activeToken = localStorage.getItem('billnaw_auth_token');
+    const activeEmail = localStorage.getItem('billnaw_auth_email');
+
+    // Notify backend to purge session and active OTP
+    try {
+        if (typeof fetch === 'function') {
+            fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+                },
+                body: JSON.stringify({ token: activeToken, email: activeEmail })
+            }).catch(() => {});
+        }
+    } catch (e) {}
+
     if (window.auth && typeof window.firebaseSignOut === 'function') {
         try {
             window.firebaseSignOut(window.auth).catch(() => {});
@@ -182,21 +203,30 @@ function logoutShop() {
     try {
         localStorage.removeItem('billnaw_shop_session');
         localStorage.removeItem('billnaw_auth_token');
+        localStorage.removeItem('billnaw_auth_email');
+        localStorage.removeItem('billnaw_active_user');
         localStorage.setItem('billnaw_auth_mode', 'demo');
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.clear();
+        }
     } catch (e) {}
+
+    if (typeof resetLoginOtpView === 'function') resetLoginOtpView();
+    if (typeof resetSignupOtpView === 'function') resetSignupOtpView();
 
     updateCloudStoreTopbar(null, false, 'demo');
     if (typeof updateShopAuthUI === 'function') {
         updateShopAuthUI();
     }
     if (typeof showToast === 'function') {
-        showToast('Logged out of cloud shop. Operating in Demo POS.', 'info');
+        showToast('Logged out of cloud shop. Session destroyed.', 'info');
     }
     if (typeof openShopAuthModal === 'function') {
         openShopAuthModal();
     }
 }
 window.logoutShop = logoutShop;
+window.logoutShopCloudAccount = logoutShop;
 
 // App Bootstrap Initialization
 async function initApp() {

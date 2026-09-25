@@ -722,6 +722,9 @@ export function verifySession(rawToken) {
     return { status: 401, data: { success: false, error: 'Invalid or expired session' } };
   }
 
+  // Update terminal activity timestamp
+  session.lastActive = Date.now();
+
   const user = userStore.get(session.email);
   const shop = resolveShopTenant(session.storeCode, user?.shopName, session.email, session.uid);
 
@@ -764,17 +767,144 @@ export function verifySession(rawToken) {
  */
 export function logoutSession(rawToken, email) {
   let token = rawToken;
+  let targetEmail = email ? normalizeEmail(email) : '';
   if (token && typeof token === 'string') {
     if (token.startsWith('Bearer ')) token = token.slice(7).trim();
+    const existing = sessionStore.get(token);
+    if (existing && existing.email && !targetEmail) {
+      targetEmail = normalizeEmail(existing.email);
+    }
     sessionStore.delete(token);
   }
-  if (email) {
-    const normEmail = normalizeEmail(email);
-    otpStore.delete(normEmail);
+  if (targetEmail) {
+    otpStore.delete(targetEmail);
   }
   return {
     status: 200,
     data: { success: true, message: 'Logged out successfully. Session and OTP purged.' }
+  };
+}
+
+/**
+ * Lists active sessions, filtering out expired ones.
+ * Can filter by storeCode or email.
+ */
+export function listActiveSessions(storeCode, email) {
+  const now = Date.now();
+  const normEmail = email ? normalizeEmail(email) : null;
+  const sessions = [];
+
+  for (const [token, sess] of sessionStore.entries()) {
+    if (now > sess.expiresAt) {
+      sessionStore.delete(token);
+      continue;
+    }
+    if (storeCode && sess.storeCode !== storeCode) continue;
+    if (normEmail && sess.email !== normEmail) continue;
+
+    const id = 'sess_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
+    const maskedToken = token.length > 14 ? `${token.slice(0, 8)}...${token.slice(-6)}` : token;
+
+    sessions.push({
+      id,
+      token,
+      maskedToken,
+      storeCode: sess.storeCode,
+      email: sess.email,
+      uid: sess.uid,
+      createdAt: new Date(sess.createdAt).toISOString(),
+      expiresAt: new Date(sess.expiresAt).toISOString(),
+      lastActive: new Date(sess.lastActive || sess.createdAt).toISOString(),
+      ip: sess.ip || '127.0.0.1',
+      device: sess.userAgent || 'Web POS Terminal',
+      active: true
+    });
+  }
+
+  return sessions;
+}
+
+/**
+ * Revokes a single session by token or session id.
+ */
+export function revokeSession(tokenOrId) {
+  if (!tokenOrId || typeof tokenOrId !== 'string') {
+    return { status: 400, data: { success: false, error: 'Token or Session ID is required' } };
+  }
+
+  let clean = tokenOrId.startsWith('Bearer ') ? tokenOrId.slice(7).trim() : tokenOrId.trim();
+
+  // Try direct delete
+  if (sessionStore.has(clean)) {
+    const sess = sessionStore.get(clean);
+    if (sess?.email) otpStore.delete(normalizeEmail(sess.email));
+    sessionStore.delete(clean);
+    return { status: 200, data: { success: true, message: 'Session revoked successfully' } };
+  }
+
+  // Try matching by hashed id
+  for (const [token, sess] of sessionStore.entries()) {
+    const id = 'sess_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
+    if (id === clean) {
+      if (sess?.email) otpStore.delete(normalizeEmail(sess.email));
+      sessionStore.delete(token);
+      return { status: 200, data: { success: true, message: 'Session revoked successfully' } };
+    }
+  }
+
+  return { status: 404, data: { success: false, error: 'Session not found or already expired' } };
+}
+
+/**
+ * Revokes all sessions for a specific storeCode, optionally preserving current token.
+ */
+export function revokeSessionsForStore(storeCode, exceptToken) {
+  if (!storeCode) return { status: 400, data: { success: false, error: 'storeCode is required' } };
+  let cleanExcept = exceptToken && typeof exceptToken === 'string'
+    ? (exceptToken.startsWith('Bearer ') ? exceptToken.slice(7).trim() : exceptToken.trim())
+    : null;
+
+  let revokedCount = 0;
+  for (const [token, sess] of sessionStore.entries()) {
+    const sessId = 'sess_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
+    const isExcept = cleanExcept && (token === cleanExcept || sessId === cleanExcept);
+    if (sess.storeCode === storeCode && !isExcept) {
+      if (sess.email) otpStore.delete(normalizeEmail(sess.email));
+      sessionStore.delete(token);
+      revokedCount++;
+    }
+  }
+
+  return {
+    status: 200,
+    data: { success: true, message: `Revoked ${revokedCount} session(s) for store ${storeCode}`, revokedCount }
+  };
+}
+
+/**
+ * Revokes all sessions for a specific user email.
+ */
+export function revokeSessionsForUser(email, exceptToken) {
+  const normEmail = normalizeEmail(email);
+  if (!normEmail) return { status: 400, data: { success: false, error: 'email is required' } };
+  let cleanExcept = exceptToken && typeof exceptToken === 'string'
+    ? (exceptToken.startsWith('Bearer ') ? exceptToken.slice(7).trim() : exceptToken.trim())
+    : null;
+
+  let revokedCount = 0;
+  for (const [token, sess] of sessionStore.entries()) {
+    const sessId = 'sess_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
+    const isExcept = cleanExcept && (token === cleanExcept || sessId === cleanExcept);
+    if (sess.email === normEmail && !isExcept) {
+      sessionStore.delete(token);
+      revokedCount++;
+    }
+  }
+  otpStore.delete(normEmail);
+
+  return {
+    status: 200,
+    data: { success: true, message: `Revoked ${revokedCount} session(s) for user ${normEmail}`, revokedCount }
   };
 }
 

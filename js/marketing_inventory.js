@@ -653,11 +653,16 @@ window.promptRestockIngredient = promptRestockIngredient;
 
 // Deduct inventory ingredients when an order is completed using dish recipes
 function deductInventoryForOrder(order) {
-    if (!order || !Array.isArray(order.rawItems)) return;
+    if (!order) return;
+    if (window.culinaryInventory && typeof window.culinaryInventory.deductOrder === 'function') {
+        window.culinaryInventory.deductOrder(order);
+    }
+    const orderItems = Array.isArray(order.rawItems) ? order.rawItems : (Array.isArray(order.items) ? order.items : []);
+    if (!orderItems.length) return;
     
-    order.rawItems.forEach(cartItem => {
+    orderItems.forEach(cartItem => {
         const dishName = (cartItem.name || '').toLowerCase().trim();
-        const qty = cartItem.qty || 1;
+        const qty = cartItem.qty || cartItem.quantity || 1;
 
         // 1. Try exact or partial match from defaultDishRecipes
         let recipe = defaultDishRecipes[dishName];

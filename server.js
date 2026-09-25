@@ -12,7 +12,27 @@ import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
 import { parseMenuFromText, generateDefaultMenuTemplate } from './server/menu-parser.js';
-import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession } from './server/auth-service.js';
+import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser } from './server/auth-service.js';
+import {
+  getRawMaterials,
+  updateRawMaterialStock,
+  updateRawMaterialPrice,
+  getSubRecipes,
+  produceMorningBatch,
+  getDishRecipes,
+  deductOrderInventory,
+  calculateDishCosting,
+  getTransfers,
+  createTransfer,
+  receiveTransfer,
+  getPurchaseOrders,
+  createPurchaseOrder,
+  updatePurchaseOrderStatus,
+  getPredictiveForecast,
+  logWastage,
+  getWastageHistory,
+  performStockAudit
+} from './server/inventory-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -441,6 +461,233 @@ app.post('/api/auth/logout', (req, res) => {
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Logout failed' });
+  }
+});
+
+// 6. Active Sessions Management (List and Revoke per store / user)
+app.get('/api/auth/sessions', (req, res) => {
+  try {
+    let { storeCode, email } = req.query || {};
+
+    // If neither storeCode nor email is provided in query, attempt to resolve from auth header
+    if (!storeCode && !email) {
+      const authHeader = req.headers.authorization || req.headers['x-session-token'];
+      if (authHeader) {
+        const sessRes = verifySession(authHeader);
+        if (sessRes.status === 200 && sessRes.data?.storeCode) {
+          storeCode = sessRes.data.storeCode;
+        }
+      }
+    }
+
+    const sessions = listActiveSessions(storeCode, email);
+    res.json({
+      success: true,
+      storeCode: storeCode || null,
+      count: sessions.length,
+      sessions
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to list active sessions' });
+  }
+});
+
+app.post('/api/auth/sessions/revoke', (req, res) => {
+  try {
+    const { token, sessionId, storeCode, email, revokeAll, keepCurrent } = req.body || {};
+    const callerToken = req.headers.authorization || req.headers['x-session-token'];
+
+    if (revokeAll) {
+      const except = keepCurrent ? (token || callerToken) : null;
+      if (storeCode) {
+        const result = revokeSessionsForStore(storeCode, except);
+        return res.status(result.status).json(result.data);
+      } else if (email) {
+        const result = revokeSessionsForUser(email, except);
+        return res.status(result.status).json(result.data);
+      }
+    }
+
+    const targetToken = token || sessionId;
+    if (!targetToken) {
+      return res.status(400).json({ success: false, error: 'target token or sessionId is required' });
+    }
+
+    const result = revokeSession(targetToken);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to revoke session' });
+  }
+});
+
+// ==========================================
+// 7. Restaurant Inventory & Indian Culinary Architecture API
+// ==========================================
+
+// Raw materials
+app.get('/api/inventory/raw-materials', (req, res) => {
+  try {
+    res.json({ success: true, materials: getRawMaterials() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/inventory/raw-materials/stock', (req, res) => {
+  try {
+    const { materialId, adjustment, isAbsolute } = req.body || {};
+    const result = updateRawMaterialStock(materialId, adjustment, isAbsolute);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/inventory/raw-materials/price', (req, res) => {
+  try {
+    const { materialId, price } = req.body || {};
+    const result = updateRawMaterialPrice(materialId, price);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Sub-recipes (Nested batching & morning commissary)
+app.get('/api/inventory/sub-recipes', (req, res) => {
+  try {
+    res.json({ success: true, sub_recipes: getSubRecipes() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/inventory/batch-produce', (req, res) => {
+  try {
+    const { subRecipeId, quantity } = req.body || {};
+    const result = produceMorningBatch(subRecipeId, quantity);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Dish recipes mapping
+app.get('/api/inventory/recipes', (req, res) => {
+  try {
+    res.json({ success: true, recipes: getDishRecipes() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Live order deduction (nested sub-recipes + exact liquid peg ml + draft beer froth buffer %)
+app.post('/api/inventory/pos-deduct', (req, res) => {
+  try {
+    const result = deductOrderInventory(req.body?.order || req.body);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Live food costing & real-time gross margin calculation
+app.get('/api/inventory/costing', (req, res) => {
+  try {
+    const costing = calculateDishCosting();
+    res.json({ success: true, costing });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Central kitchen inter-outlet transfers
+app.get('/api/inventory/transfers', (req, res) => {
+  try {
+    res.json({ success: true, transfers: getTransfers() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/inventory/transfers', (req, res) => {
+  try {
+    const result = createTransfer(req.body || {});
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/inventory/transfers/:id/receive', (req, res) => {
+  try {
+    const result = receiveTransfer(req.params.id);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Purchase Order (PO) management
+app.get('/api/inventory/purchase-orders', (req, res) => {
+  try {
+    res.json({ success: true, purchase_orders: getPurchaseOrders() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/inventory/purchase-orders', (req, res) => {
+  try {
+    const result = createPurchaseOrder(req.body || {});
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/inventory/purchase-orders/:id/status', '/api/inventory/purchase-orders/:id'], (req, res) => {
+  try {
+    const result = updatePurchaseOrderStatus(req.params.id, req.body?.status);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Predictive inventory forecasting & wastage
+app.get('/api/inventory/forecast', (req, res) => {
+  try {
+    res.json({ success: true, forecast: getPredictiveForecast() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/inventory/wastage', (req, res) => {
+  try {
+    res.json({ success: true, ...getWastageHistory() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/inventory/wastage', (req, res) => {
+  try {
+    const result = logWastage(req.body || {});
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Speed & Efficiency (<15 min stock audit)
+app.post('/api/inventory/audit', (req, res) => {
+  try {
+    const result = performStockAudit(req.body?.entries || []);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

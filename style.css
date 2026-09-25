@@ -3237,3 +3237,58 @@ body.printing { background: #fff !important; }
     border-color: #143832;
 }
 
+/* Session Management Modal Close Button */
+.session-close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: #FAF7F4;
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dark);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.session-close-btn:hover {
+    background: #EBE6DF;
+    color: var(--primary);
+}
+
+/* Indian Culinary & Liquid Telemetry Hub Subnav */
+.inv-subnav-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+}
+.inv-subnav-btn {
+    padding: 8px 16px;
+    background: #FAF7F4;
+    border: 1.5px solid #E6DCCD;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dark);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.inv-subnav-btn:hover {
+    background: #F3ECE2;
+    border-color: #D8C7B4;
+}
+.inv-subnav-btn.active {
+    background: #143832;
+    border-color: #143832;
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(20, 56, 50, 0.2);
+}
+
+
