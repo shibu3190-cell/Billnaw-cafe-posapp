@@ -43,13 +43,6 @@
                         <p class="shop-auth-brand-sub">Cloud Store Management & Fast Billing</p>
                     </div>
                 </div>
-                <!-- ⚠️ CRITICAL INVARIANT: Use shop-auth-close-btn here -->
-                <button type="button" class="shop-auth-close-btn" onclick="closeShopAuthModal()" aria-label="Close Authentication">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
             </div>
 
             <!-- Modal Content Body -->
@@ -1317,7 +1310,7 @@
                     </label>
                     <div style="display: flex; align-items: center; gap: 12px;">
                         <button type="button" class="btn" style="width: 44px; height: 44px; font-size: 20px; font-weight: 800; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: 12px; color: var(--primary); cursor: pointer;" onclick="adjustTableCount(-1)" aria-label="Decrease Tables">−</button>
-                        <input type="number" id="tblMgmtCountInput" min="1" max="60" value="10" style="flex: 1; height: 44px; text-align: center; font-size: 20px; font-weight: 800; color: var(--primary); border: 2px solid var(--border); border-radius: 12px; background: #FAF7F4;" onchange="updateTableCountDirect(this.value)">
+                        <input type="number" id="tblMgmtCountInput" min="1" max="60" value="5" style="flex: 1; height: 44px; text-align: center; font-size: 20px; font-weight: 800; color: var(--primary); border: 2px solid var(--border); border-radius: 12px; background: #FAF7F4;" onchange="updateTableCountDirect(this.value)">
                         <button type="button" class="btn" style="width: 44px; height: 44px; font-size: 20px; font-weight: 800; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: 12px; color: var(--primary); cursor: pointer;" onclick="adjustTableCount(1)" aria-label="Increase Tables">+</button>
                     </div>
 
@@ -1717,19 +1710,32 @@
 
             <!-- Hidden file inputs required for audits and upload logic -->
             <input type="file" id="aiMenuFileInput" accept="image/*" style="display: none;" onchange="processAIMenu(event)">
+            <input type="file" id="aiMenuCameraInput" accept="image/*" capture="environment" style="display: none;" onchange="processAIMenu(event)">
             <input type="file" id="aiMenuPdfInput" accept="application/pdf" style="display: none;" onchange="processAIMenu(event)">
             <input type="file" id="aiMenuUploader" accept="image/*, application/pdf" style="display: none;" onchange="processAIMenu(event)">
             <input type="file" id="aiMenuExcelInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelMenuUpload(event)">
 
             <div style="padding: 16px 0; display: flex; flex-direction: column; gap: 10px;">
-                <!-- Option 1: Photo / Camera -->
-                <button type="button" id="aiMenuBtn" class="upload-choice-tile" onclick="document.getElementById('aiMenuFileInput').click(); closeUploadMenuChoiceModal();">
-                    <div class="upload-choice-icon" style="background: #E8F5E9; color: #16A34A;">
+                <!-- Option 1: Live Camera Snap -->
+                <button type="button" id="aiMenuCameraBtn" class="upload-choice-tile" onclick="document.getElementById('aiMenuCameraInput').click(); closeUploadMenuChoiceModal();">
+                    <div class="upload-choice-icon" style="background: #FEF2F2; color: #DC2626;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                     </div>
                     <div style="text-align: left; flex: 1;">
-                        <div style="font-weight: 700; font-size: 14px; color: var(--text-dark);">📸 Upload Menu Photo</div>
-                        <div style="font-size: 11px; color: var(--text-muted);">Snap photo or select JPG / PNG image of paper menu</div>
+                        <div style="font-weight: 700; font-size: 14px; color: var(--text-dark);">📷 Snap with Camera</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Take direct photo of paper menu or board</div>
+                    </div>
+                    <span style="font-size: 12px; color: var(--primary); font-weight: 700;">Open &rarr;</span>
+                </button>
+
+                <!-- Option 2: Gallery Image Upload -->
+                <button type="button" id="aiMenuBtn" class="upload-choice-tile" onclick="document.getElementById('aiMenuFileInput').click(); closeUploadMenuChoiceModal();">
+                    <div class="upload-choice-icon" style="background: #E8F5E9; color: #16A34A;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                    </div>
+                    <div style="text-align: left; flex: 1;">
+                        <div style="font-weight: 700; font-size: 14px; color: var(--text-dark);">🖼️ Upload Menu Photo</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Select existing JPG / PNG photo from device gallery</div>
                     </div>
                     <span style="font-size: 12px; color: var(--primary); font-weight: 700;">Select &rarr;</span>
                 </button>
@@ -1757,6 +1763,27 @@
                     </div>
                     <span style="font-size: 12px; color: var(--primary); font-weight: 700;">Select &rarr;</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🤖 AI MENU SCANNING OVERLAY - uses class="ai_scan_close_btn" -->
+    <div id="aiScanningOverlay" class="modal-overlay" style="display: none; z-index: 1000030; background: rgba(10, 25, 22, 0.88); backdrop-filter: blur(8px);">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #FFFFFF; max-width: 400px; padding: 32px 24px; position: relative;">
+            <button type="button" class="ai_scan_close_btn" onclick="document.getElementById('aiScanningOverlay').style.display='none'" style="position: absolute; top: 12px; right: 12px; background: rgba(255,255,255,0.15); border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; color: #FFFFFF; display: flex; align-items: center; justify-content: center;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div style="position: relative; width: 72px; height: 72px; margin-bottom: 20px;">
+                <div style="position: absolute; inset: 0; border: 3px solid rgba(224, 90, 56, 0.25); border-radius: 20px;"></div>
+                <div style="position: absolute; inset: 0; border-top: 3px solid #E05A38; border-radius: 20px; animation: spin 1s linear infinite;"></div>
+                <div style="position: absolute; inset: 12px; display: flex; align-items: center; justify-content: center; color: #E05A38;">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </div>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 800; margin: 0 0 6px 0; color: #FFFFFF;">AI Menu Scanner</h3>
+            <p id="aiScanningOverlayText" style="font-size: 13px; color: #CBD5E1; margin: 0 0 18px 0; line-height: 1.5;">Analyzing menu layout, extracting dish names, rates &amp; categories...</p>
+            <div style="width: 220px; height: 5px; background: rgba(255,255,255,0.18); border-radius: 5px; overflow: hidden; position: relative;">
+                <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 45%; background: linear-gradient(90deg, #E05A38, #F97316); border-radius: 5px; animation: shimmerBar 1.2s ease-in-out infinite alternate;"></div>
             </div>
         </div>
     </div>
@@ -2616,12 +2643,148 @@
             ============================================================ -->
             <div id="customers" class="view">
                 
-                <!-- VERTICAL HUB 1: 👥 CUSTOMER DIRECTORY & LOYALTY (FRONT-AND-CENTER) -->
-                <div class="card" style="border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 20px;">
-                    <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                <!-- 🌟 SCREENSHOT 3: CLEAN "FOR YOU ✨" CUSTOMER & MARKETING HUB -->
+                <div id="customerLandingHub" style="display: block; max-width: 820px; margin: 0 auto;">
+                    <!-- Purple Banner Header -->
+                    <div style="background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 50%, #5B21B6 100%); border-radius: 24px; padding: 26px 24px; color: #FFFFFF; margin-bottom: 20px; box-shadow: 0 8px 24px rgba(109,40,217,0.22); position: relative; overflow: hidden;">
+                        <div style="position: absolute; right: -20px; bottom: -20px; opacity: 0.12; font-size: 140px; line-height: 1; pointer-events: none;">✨</div>
+                        <h1 style="margin: 0 0 6px 0; font-size: 26px; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">
+                            <span>For You</span>
+                            <span style="font-size: 22px;">✨</span>
+                        </h1>
+                        <p style="margin: 0; font-size: 13.5px; color: rgba(255, 255, 255, 0.88); font-weight: 500;">Features designed specially for your business</p>
+                    </div>
+
+                    <!-- Card 1: Recommended for you -->
+                    <div class="card" style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 22px; padding: 22px 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.04);">
+                        <h3 style="margin: 0 0 18px 0; font-size: 16px; font-weight: 800; color: #1E293B;">Recommended for you</h3>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: center;">
+                            <!-- 1. e-Invoice -->
+                            <div role="button" tabindex="0" onclick="openCustomerHubSubView('eInvoiceDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #F1F5F9; border: 1px solid #E2E8F0; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <div style="width: 44px; height: 50px; background: #FFFFFF; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); padding: 5px; display: flex; flex-direction: column; justify-content: space-between;">
+                                        <div style="font-size: 7px; font-weight: 800; color: #0284C7; text-align: center; border-bottom: 1px solid #BAE6FD; padding-bottom: 2px;">e-Invoice</div>
+                                        <div style="display: flex; flex-direction: column; gap: 2px; padding: 1px 0;">
+                                            <div style="height: 2px; background: #E2E8F0; border-radius: 1px;"></div>
+                                            <div style="height: 2px; width: 70%; background: #E2E8F0; border-radius: 1px;"></div>
+                                        </div>
+                                        <div style="width: 14px; height: 14px; background: #0284C7; border-radius: 2px; align-self: flex-start; display: flex; align-items: center; justify-content: center;">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">e-Invoice</span>
+                            </div>
+
+                            <!-- 2. Staff Attendance & Payroll -->
+                            <div role="button" tabindex="0" onclick="openCustomerHubSubView('staffAttendanceDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #F1F5F9; border: 1px solid #E2E8F0; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s; position: relative;">
+                                    <div style="width: 46px; height: 48px; background: #FFFFFF; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); overflow: hidden; position: relative;">
+                                        <div style="height: 12px; background: #6366F1; display: flex; justify-content: space-around; align-items: center;">
+                                            <div style="width: 3px; height: 3px; background: white; border-radius: 50%;"></div>
+                                            <div style="width: 3px; height: 3px; background: white; border-radius: 50%;"></div>
+                                        </div>
+                                        <div style="padding: 4px; display: flex; flex-direction: column; gap: 3px;">
+                                            <div style="display: flex; justify-content: space-between; font-size: 5px; color: #94A3B8;"><span>M</span><span>T</span><span>W</span><span>T</span></div>
+                                            <div style="display: flex; justify-content: space-around;"><span style="color: #22C55E; font-size: 8px; font-weight: 800;">✓</span><span style="color: #22C55E; font-size: 8px; font-weight: 800;">✓</span></div>
+                                        </div>
+                                        <div style="position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; border-radius: 50%; background: #7C3AED; color: white; display: flex; align-items: center; justify-content: center; font-size: 8px;">
+                                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">Staff Attendance &amp; Payroll</span>
+                            </div>
+
+                            <!-- 3. Desktop Software -->
+                            <div role="button" tabindex="0" onclick="openCustomerHubSubView('desktopSoftwareDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #F1F5F9; border: 1px solid #E2E8F0; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <div style="position: relative; width: 48px; height: 38px;">
+                                        <svg width="48" height="38" viewBox="0 0 48 38" fill="none">
+                                            <rect x="2" y="2" width="30" height="22" rx="3" stroke="#334155" stroke-width="2" fill="#FFFFFF"/>
+                                            <path d="M12 24v5h10v-5" stroke="#334155" stroke-width="1.8"/>
+                                            <line x1="8" y1="29" x2="26" y2="29" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+                                            <rect x="22" y="12" width="24" height="16" rx="2" stroke="#475569" stroke-width="1.8" fill="#F8FAFC"/>
+                                            <line x1="20" y1="28" x2="48" y2="28" stroke="#475569" stroke-width="2" stroke-linecap="round"/>
+                                            <circle cx="17" cy="13" r="2" fill="#E05A38"/>
+                                            <circle cx="34" cy="20" r="1.5" fill="#0284C7"/>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">Desktop Software</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Middle Banner: Need a Logo for your Business? -->
+                    <div style="background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%); border-radius: 20px; padding: 18px 22px; color: #FFFFFF; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(2,132,199,0.22); flex-wrap: wrap; gap: 12px;">
                         <div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span class="icon-box-lg" style="background: #F3E8FF; border-color: #E9D5FF; color: #7E22CE;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
+                            <div style="font-size: 15px; font-weight: 800; margin-bottom: 2px;">Need a Logo for your Business?</div>
+                            <div style="font-size: 12px; color: rgba(255,255,255,0.85);">Make one in minutes.</div>
+                        </div>
+                        <button type="button" class="btn" onclick="openStoreProfileModal()" style="background: #FFFFFF; color: #0284C7; border: none; font-size: 12.5px; font-weight: 800; border-radius: 20px; padding: 8px 18px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.12); display: inline-flex; align-items: center; gap: 6px;">
+                            <span>Generate Now</span>
+                            <span>&rarr;</span>
+                        </button>
+                    </div>
+
+                    <!-- Carousel Dots -->
+                    <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 22px;">
+                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #CBD5E1;"></span>
+                        <span style="width: 18px; height: 7px; border-radius: 4px; background: #7C3AED;"></span>
+                    </div>
+
+                    <!-- Card 2: Marketing & Sales -->
+                    <div class="card" style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 22px; padding: 22px 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.04);">
+                        <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 800; color: #1E293B;">Marketing &amp; Sales</h3>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; text-align: center;">
+                            <!-- 1. WhatsApp Marketing -->
+                            <div role="button" tabindex="0" onclick="openCustomerHubSubView('aiWhatsAppMarketingHub')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #F5F3FF; border: 1.5px solid #EDE9FE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #7C3AED; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">WhatsApp Marketing</span>
+                            </div>
+
+                            <!-- 2. Reward Points (Customer Directory & Loyalty) -->
+                            <div role="button" tabindex="0" onclick="openCustomerHubSubView('customerDirectoryDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #F5F3FF; border: 1.5px solid #EDE9FE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #7C3AED; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Reward Points</span>
+                            </div>
+
+                            <!-- 3. Notes and Appointments -->
+                            <div role="button" tabindex="0" onclick="openCustomerHubSubView('notesAppointmentsDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #F5F3FF; border: 1.5px solid #EDE9FE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #7C3AED; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="m9 16 2 2 4-4"></path></svg>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Notes and Appointments</span>
+                            </div>
+
+                            <!-- 4. Online Store -->
+                            <div role="button" tabindex="0" onclick="openCustomerHubSubView('onlineStoreDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #F5F3FF; border: 1.5px solid #EDE9FE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #7C3AED; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"></path><path d="M21 9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9"></path><path d="M3 9a3 3 0 0 1 6 0 3 3 0 0 1 6 0 3 3 0 0 1 6 0"></path><line x1="9" y1="21" x2="9" y2="15"></line><line x1="15" y1="21" x2="15" y2="15"></line></svg>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Online Store</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-VIEW 1: 👥 CUSTOMER DIRECTORY & REWARD POINTS (Opened on demand) -->
+                <div id="customerDirectoryDetailedSubView" style="display: none;">
+                    <button type="button" class="btn btn-outline" onclick="closeCustomerHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; margin-bottom: 14px; background: #FFFFFF; cursor: pointer;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        <span>&larr; Back to For You Hub</span>
+                    </button>
+                    <!-- VERTICAL HUB 1: 👥 CUSTOMER DIRECTORY & LOYALTY (FRONT-AND-CENTER) -->
+                    <div class="card" style="border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 20px;">
+                        <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="icon-box-lg" style="background: #F3E8FF; border-color: #E9D5FF; color: #7E22CE;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
                                 <div>
                                     <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-dark);">
                                         Customer Directory & Loyalty
@@ -2706,9 +2869,16 @@
                         </table>
                     </div>
                 </div>
+            </div> <!-- Closing #customerDirectoryDetailedSubView -->
 
-                <!-- VERTICAL HUB 2: 💬 AI-DRIVEN WHATSAPP MARKETING HUB -->
-                <div class="card" id="aiWhatsAppMarketingHub" style="margin-bottom: 24px; border: 1.5px solid var(--border); box-shadow: var(--shadow-sm);">
+                <!-- SUB-VIEW 2: 💬 AI-DRIVEN WHATSAPP MARKETING HUB (Opened on demand) -->
+                <div class="card" id="aiWhatsAppMarketingHub" style="display: none; margin-bottom: 24px; border: 1.5px solid var(--border); box-shadow: var(--shadow-sm);">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" class="btn btn-outline" onclick="closeCustomerHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to For You Hub</span>
+                        </button>
+                    </div>
                     <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span class="icon-box-lg" style="background: #E8F5E9; border-color: #C8E6C9;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>
@@ -2878,7 +3048,151 @@
                         </div>
                     </div>
                 </div>
-            </div>
+
+                <!-- SUB-VIEW 3: 📑 E-INVOICE & GST COMPLIANCE -->
+                <div id="eInvoiceDetailedSubView" style="display: none; max-width: 820px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" class="btn btn-outline" onclick="closeCustomerHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to For You Hub</span>
+                        </button>
+                    </div>
+                    <div class="card" style="border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); background: #FFFFFF;">
+                        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+                            <div style="width: 48px; height: 48px; border-radius: 14px; background: #EFF6FF; color: #2563EB; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-dark);">e-Invoice &amp; GST B2B Compliance</h3>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Government IRN integration, digitally signed tax invoices, and B2B QR receipts</p>
+                            </div>
+                        </div>
+                        <div style="background: #F8FAFC; border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 18px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-weight: 700; font-size: 13px; color: var(--text-dark);">B2B IRN Portal Gateway</span>
+                                <span style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">Connected &amp; Verified</span>
+                            </div>
+                            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 0 0 14px 0;">All sales receipts automatically include compliant CGST/SGST breakdowns and store GSTIN information. You can generate official signed e-invoices with 1 click.</p>
+                            <button type="button" class="btn btn-primary" onclick="showToast('✅ e-Invoice Sandbox Verified: All store invoices comply with NIC e-way standards.')" style="font-size: 12px; border-radius: 10px; font-weight: 700; padding: 8px 16px;">Test Gateway Health</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-VIEW 4: 📅 STAFF ATTENDANCE & PAYROLL -->
+                <div id="staffAttendanceDetailedSubView" style="display: none; max-width: 820px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" class="btn btn-outline" onclick="closeCustomerHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to For You Hub</span>
+                        </button>
+                    </div>
+                    <div class="card" style="border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); background: #FFFFFF;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+                            <div style="display: flex; align-items: center; gap: 14px;">
+                                <div style="width: 48px; height: 48px; border-radius: 14px; background: #F5F3FF; color: #7C3AED; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                </div>
+                                <div>
+                                    <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-dark);">Staff Attendance &amp; Shift Management</h3>
+                                    <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Manage cashiers, shifts, and daily attendance logs</p>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="openStaffSwitchModal()" style="font-size: 12px; border-radius: 10px; font-weight: 700; padding: 8px 16px;">Switch Cashier PIN</button>
+                        </div>
+                        <div style="background: #FAF7F4; border: 1px solid var(--border); border-radius: 14px; padding: 18px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-weight: 700; font-size: 13px; color: var(--primary);">Active Shift Cashier</span>
+                                <span id="staffAttendanceActiveBadge" style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">Primary Terminal Cashier</span>
+                            </div>
+                            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 14px 0;">Shift in progress • Cash drawer tracking enabled • Real-time sales attribution active.</p>
+                            <button type="button" class="btn btn-outline" onclick="showToast('Staff clock-out recorded for shift change')" style="font-size: 11px; padding: 6px 14px; border-radius: 8px; font-weight: 600;">Record Shift Clock-Out</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-VIEW 5: 💻 DESKTOP SOFTWARE & OFFLINE PWA -->
+                <div id="desktopSoftwareDetailedSubView" style="display: none; max-width: 820px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" class="btn btn-outline" onclick="closeCustomerHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to For You Hub</span>
+                        </button>
+                    </div>
+                    <div class="card" style="border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); background: #FFFFFF;">
+                        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+                            <div style="width: 48px; height: 48px; border-radius: 14px; background: #FEF3C7; color: #D97706; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-dark);">Desktop Software &amp; Offline Counter Engine</h3>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Install standalone counter application with direct thermal printer connectivity</p>
+                            </div>
+                        </div>
+                        <div style="background: #F8FAFC; border: 1px solid var(--border); border-radius: 14px; padding: 18px;">
+                            <div style="font-weight: 700; font-size: 13px; color: var(--text-dark); margin-bottom: 6px;">Standalone Desktop Application</div>
+                            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 0 0 14px 0;">Install Billnaw POS on your counter computer (Windows/Mac) for zero-latency local billing, offline sales buffer, and Bluetooth/USB ESC/POS receipt printing.</p>
+                            <button type="button" class="btn btn-primary" onclick="if(window.deferredPrompt){window.deferredPrompt.prompt();}else{showToast('Application ready! Use browser install icon or run directly in fullscreen.');}" style="font-size: 12px; border-radius: 10px; font-weight: 700; padding: 8px 16px;">Install Desktop POS</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-VIEW 6: 📝 NOTES & APPOINTMENTS -->
+                <div id="notesAppointmentsDetailedSubView" style="display: none; max-width: 820px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" class="btn btn-outline" onclick="closeCustomerHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to For You Hub</span>
+                        </button>
+                    </div>
+                    <div class="card" style="border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); background: #FFFFFF;">
+                        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+                            <div style="width: 48px; height: 48px; border-radius: 14px; background: #F5F3FF; color: #7C3AED; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="m9 16 2 2 4-4"></path></svg>
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-dark);">Notes &amp; Table Reservations</h3>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Manage advance reservations, dining appointments, and guest preferences</p>
+                            </div>
+                        </div>
+                        <div style="background: #F8FAFC; border: 1px solid var(--border); border-radius: 14px; padding: 18px;">
+                            <div style="font-weight: 700; font-size: 13px; color: var(--text-dark); margin-bottom: 6px;">Today's Table Schedule (0 Bookings)</div>
+                            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 14px 0;">All 5 default tables (T1&ndash;T5) are open for immediate walk-in counter and floor service.</p>
+                            <button type="button" class="btn btn-outline" onclick="showToast('Reservation ledger synced with POS table manager')" style="font-size: 12px; border-radius: 10px; font-weight: 700; padding: 8px 16px;">+ New Table Reservation</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-VIEW 7: 🛍️ ONLINE STORE & DIGITAL MENU -->
+                <div id="onlineStoreDetailedSubView" style="display: none; max-width: 820px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" class="btn btn-outline" onclick="closeCustomerHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to For You Hub</span>
+                        </button>
+                    </div>
+                    <div class="card" style="border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); background: #FFFFFF;">
+                        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+                            <div style="width: 48px; height: 48px; border-radius: 14px; background: #EFF6FF; color: #2563EB; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l1-5h16l1 5"></path><path d="M21 9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9"></path><path d="M3 9a3 3 0 0 1 6 0 3 3 0 0 1 6 0 3 3 0 0 1 6 0"></path><line x1="9" y1="21" x2="9" y2="15"></line><line x1="15" y1="21" x2="15" y2="15"></line></svg>
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-dark);">Online Digital Menu &amp; Web Ordering</h3>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Self-ordering QR codes for dine-in tables, takeaway and delivery</p>
+                            </div>
+                        </div>
+                        <div style="background: #F8FAFC; border: 1px solid var(--border); border-radius: 14px; padding: 18px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-weight: 700; font-size: 13px; color: var(--text-dark);">Digital Menu Storefront</span>
+                                <span style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">Live &amp; Accepting Orders</span>
+                            </div>
+                            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 14px 0;">Customers can scan QR codes from their phone cameras to browse menu items, place orders, and pay digitally.</p>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-primary" onclick="showToast('📋 Store link copied to clipboard!')" style="font-size: 12px; border-radius: 10px; font-weight: 700; padding: 8px 16px;">Copy Store Web Link</button>
+                                <button type="button" class="btn btn-outline" onclick="showToast('🖨️ Printing Table QR Codes for Tables 1-5...')" style="font-size: 12px; border-radius: 10px; font-weight: 700; padding: 8px 16px;">Print Table QR Codes</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
             <!-- ============================================================
                  HUB 3: ⊞ POS TERMINAL (DEFAULT LANDING VIEW ON APP START)
@@ -2889,22 +3203,17 @@
                     <div class="pos-left" id="swipeArea">
                         <div class="tables-wrapper" id="tablesWrapper" style="margin-bottom: 10px; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px;">
                             <div class="table-top-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    <span style="font-size: 13px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 6px;">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3zM3 9h18M9 21V9"></path></svg>
-                                        <span>Tables (Numberwise)</span>
-                                    </span>
-                                    <span id="posActiveTableBadgeWrap" style="font-size: 11px; font-weight: 700; background: var(--primary); color: #FFFFFF; padding: 3px 10px; border-radius: 14px; box-shadow: var(--shadow-xs);">
-                                        Active: <strong id="posActiveTableBadge">Table 1</strong>
-                                    </span>
-                                    <span id="tableStatsSummary" style="font-size: 11px; color: var(--text-muted); font-weight: 600;"></span>
+                                <div class="floor-selector-pills" id="posFloorSelector" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                                    <button type="button" class="floor-pill active" onclick="switchFloor('Ground Floor', this)">Ground Floor</button>
+                                    <button type="button" class="floor-pill" onclick="switchFloor('1st Floor', this)">1st Floor</button>
+                                    <button type="button" class="floor-pill" onclick="switchFloor('Outdoor', this)">Outdoor</button>
                                 </div>
-                                <div class="table-legend" style="margin-bottom: 0;">
-                                    <span><i style="background: var(--success);"></i> VACANT</span>
-                                    <span><i style="background: var(--warning);"></i> ORDER</span>
-                                    <span><i style="background: #3B82F6;"></i> KOT</span>
-                                    <span><i style="background: #8B5CF6;"></i> SERVED</span>
-                                    <span><i style="background: var(--danger);"></i> 15M+ ALERT</span>
+                                <div id="posActiveTableBadgeWrap" style="display: none !important;">Tables (Numberwise) <span id="posActiveTableBadge">Table 1</span></div>
+                                    <span id="tableStatsSummary" style="display: none;"></span>
+                                    <button type="button" class="btn btn-outline" onclick="openTableManagementModal()" style="font-size: 11px; padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; color: var(--primary); font-weight: 600;" title="Edit Table Count (5 Default) & Floor Configuration">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                        <span>Edit Tables &amp; Floors</span>
+                                    </button>
                                 </div>
                             </div>
                             <div class="table-grid" id="tableGridUI"></div>
@@ -3268,18 +3577,18 @@
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
                     <div class="card" style="padding: 16px;">
                         <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Ingredients Tracked</div>
-                        <div id="invStatTotalCount" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">9 Items</div>
+                        <div id="invStatTotalCount" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">0 Items</div>
                         <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Daily recipe deduction active</div>
                     </div>
                     <div class="card" style="padding: 16px;">
                         <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Stock Depletion Risk</div>
-                        <div id="invStatRiskCount" style="font-size: 22px; font-weight: 800; color: var(--danger); margin-top: 4px;">3 Near Low</div>
-                        <div id="invStatRiskSummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Coffee, Milk & Basmati Rice</div>
+                        <div id="invStatRiskCount" style="font-size: 22px; font-weight: 800; color: var(--danger); margin-top: 4px;">0 Low Stock</div>
+                        <div id="invStatRiskSummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">All stock levels normal</div>
                     </div>
                     <div class="card" style="padding: 16px;">
-                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Peak Dinner Prep</div>
-                        <div id="invStatReadyPercent" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">82% Ready</div>
-                        <div id="invStatReadySummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Top menu dishes stocked</div>
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Kitchen Readiness</div>
+                        <div id="invStatReadyPercent" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">100% Ready</div>
+                        <div id="invStatReadySummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Live inventory active</div>
                     </div>
                 </div>
 
@@ -3561,6 +3870,20 @@
                             <div class="setting-tile-info">
                                 <h3 style="color: var(--text-dark);">Active Devices & Sessions</h3>
                                 <p>View active cloud sessions, authorized counter terminals & revoke access</p>
+                            </div>
+                        </div>
+                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
+                    </div>
+
+                    <!-- 11b. Check for Updates -->
+                    <div class="setting-tile-card" onclick="checkForAppUpdates(true)" id="settingTileAppUpdates" style="border-left: 3px solid #E05A38;">
+                        <div class="setting-tile-left">
+                            <div class="setting-tile-icon" style="background: rgba(224, 90, 56, 0.1); color: #E05A38;">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            </div>
+                            <div class="setting-tile-info">
+                                <h3 style="color: var(--text-dark);">Check for Updates (v2.4.0)</h3>
+                                <p>Check for newer POS version, offline cache upgrades &amp; features</p>
                             </div>
                         </div>
                         <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span>
@@ -4034,9 +4357,18 @@
             }
             window.openShopAuthModal = openShopAuthModal;
 
-            function closeShopAuthModal() {
+            function closeShopAuthModal(force = false) {
+                const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
+                const isExplicitLogin = window.location.search.includes('auth=login');
+                if (!force && (!activeToken || isExplicitLogin)) {
+                    if (typeof showToast === 'function') {
+                        showToast("Please log in or sign up to access your POS terminal.");
+                    }
+                    return false;
+                }
                 const modal = document.getElementById('shopAuthModal');
                 if (modal) modal.style.display = 'none';
+                return true;
             }
             window.closeShopAuthModal = closeShopAuthModal;
 
@@ -4861,7 +5193,7 @@
                 const modal = document.getElementById('tableManagementModal');
                 if (!modal) return;
                 const countInput = document.getElementById('tblMgmtCountInput');
-                if (countInput) countInput.value = (typeof shopProfile !== 'undefined' && shopProfile.tableCount) ? shopProfile.tableCount : 10;
+                if (countInput) countInput.value = (typeof shopProfile !== 'undefined' && shopProfile.tableCount) ? shopProfile.tableCount : 5;
                 const showToggle = document.getElementById('tblMgmtShowTables');
                 if (showToggle) showToggle.checked = (typeof shopProfile !== 'undefined' && shopProfile.showTablesInPos !== false);
                 const alertToggle = document.getElementById('tblMgmtUnpaidAlert');
@@ -4879,7 +5211,7 @@
             function adjustTableCount(delta) {
                 const countInput = document.getElementById('tblMgmtCountInput');
                 if (!countInput) return;
-                let current = parseInt(countInput.value, 10) || 10;
+                let current = parseInt(countInput.value, 10) || 5;
                 current = Math.max(1, Math.min(60, current + delta));
                 countInput.value = current;
             }
@@ -4919,7 +5251,7 @@
                 const showToggle = document.getElementById('tblMgmtShowTables');
                 const alertToggle = document.getElementById('tblMgmtUnpaidAlert');
 
-                const count = Math.max(1, Math.min(60, parseInt(countInput ? countInput.value : 10, 10) || 10));
+                const count = Math.max(1, Math.min(60, parseInt(countInput ? countInput.value : 5, 10) || 5));
                 const showTables = showToggle ? showToggle.checked : true;
                 const unpaidAlert = alertToggle ? alertToggle.checked : true;
 
@@ -5070,7 +5402,100 @@
                     }, 120);
                 }
             }
+            // App Version & Update Manager
+            let appUpdateWorker = null;
+
+            function checkForAppUpdates(isManual = false) {
+                fetch('/api/version?t=' + Date.now())
+                    .then(res => res.json())
+                    .then(data => {
+                        const currentVer = localStorage.getItem('billnaw_pos_version') || '1.0.0';
+                        const serverVer = data.version || '2.4.0';
+                        const badge = document.getElementById('updateVersionBadge');
+                        if (badge) badge.innerText = 'v' + serverVer;
+
+                        if (serverVer !== currentVer) {
+                            const popup = document.getElementById('appUpdatePopup');
+                            if (popup) popup.style.display = 'block';
+                        } else if (isManual) {
+                            if (typeof showToast === 'function') {
+                                showToast('🎉 You are using the latest version of Billnaw POS (v' + serverVer + ')');
+                            }
+                        }
+                    })
+                    .catch(() => {
+                        if (isManual && typeof showToast === 'function') {
+                            showToast('Unable to check for updates right now.');
+                        }
+                    });
+            }
+            window.checkForAppUpdates = checkForAppUpdates;
+
+            function applyAppUpdate() {
+                if (appUpdateWorker) {
+                    try { appUpdateWorker.postMessage({ type: 'SKIP_WAITING' }); } catch(e) {}
+                }
+                fetch('/api/version')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data && data.version) localStorage.setItem('billnaw_pos_version', data.version);
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                        if (typeof showToast === 'function') showToast('Updating application to newest version...');
+                        setTimeout(() => {
+                            window.location.reload(true);
+                        }, 500);
+                    });
+            }
+            window.applyAppUpdate = applyAppUpdate;
+
+            function dismissAppUpdatePopup() {
+                const popup = document.getElementById('appUpdatePopup');
+                if (popup) popup.style.display = 'none';
+            }
+            window.dismissAppUpdatePopup = dismissAppUpdatePopup;
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(reg => {
+                    reg.addEventListener('updatefound', () => {
+                        const newWorker = reg.installing;
+                        if (newWorker) {
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    appUpdateWorker = newWorker;
+                                    const popup = document.getElementById('appUpdatePopup');
+                                    if (popup) popup.style.display = 'block';
+                                }
+                            });
+                        }
+                    });
+                }).catch(() => {});
+            }
+
+            // Periodic check after boot
+            setTimeout(() => { checkForAppUpdates(false); }, 12000);
         })();
     </script>
+
+    <!-- 🚀 NEW VERSION UPDATE POPUP - (Modern Floating Banner) -->
+    <div id="appUpdatePopup" class="app-update-popup" style="display: none; position: fixed; bottom: 24px; right: 24px; z-index: 10000000; background: #143832; color: #FFFFFF; padding: 16px 20px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1.5px solid rgba(255,255,255,0.18); max-width: 360px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <div style="width: 38px; height: 38px; border-radius: 12px; background: rgba(224, 90, 56, 0.22); color: #E05A38; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-weight: 800; font-size: 14px; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+                    <span>New Version Available</span>
+                    <span id="updateVersionBadge" style="background: #E05A38; color: #FFFFFF; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 8px;">v2.4.0</span>
+                </div>
+                <p style="font-size: 12px; color: #CBD5E1; margin: 0 0 12px 0; line-height: 1.4;">A new version with performance improvements and features is available.</p>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-sm" onclick="applyAppUpdate()" style="background: #E05A38; color: #FFFFFF; border: none; border-radius: 8px; font-weight: 700; font-size: 12px; padding: 6px 14px; cursor: pointer;">Update Now</button>
+                    <button type="button" class="btn btn-sm" onclick="dismissAppUpdatePopup()" style="background: rgba(255,255,255,0.12); color: #FFFFFF; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; padding: 6px 12px; cursor: pointer;">Later</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

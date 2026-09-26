@@ -738,30 +738,18 @@ function parseLocalMenuFallback(payload) {
     }
 
     if (categories.length === 0) {
-        categories.push({
-            name: "Hot & Cold Beverages",
-            items: [
-                { name: "Espresso", price: 120, image: generateFallbackImage("Espresso") },
-                { name: "Cappuccino", price: 160, image: generateFallbackImage("Cappuccino") },
-                { name: "Cold Coffee", price: 180, image: generateFallbackImage("Cold Coffee") },
-                { name: "Masala Chai", price: 60, image: generateFallbackImage("Masala Chai") }
-            ]
-        });
-        categories.push({
-            name: "Quick Bites & Meals",
-            items: [
-                { name: "Paneer Roll", price: 140, image: generateFallbackImage("Paneer Roll") },
-                { name: "Chicken Biryani", price: 280, image: generateFallbackImage("Chicken Biryani") },
-                { name: "Veg Burger", price: 130, image: generateFallbackImage("Veg Burger") },
-                { name: "French Fries", price: 90, image: generateFallbackImage("French Fries") }
-            ]
-        });
+        return {
+            success: false,
+            isFallback: true,
+            warning: "No items could be auto-detected from this document. Please ensure the menu photo is clear, or add items manually.",
+            categories: []
+        };
     }
 
     return {
         success: true,
         isFallback: true,
-        warning: "Extracted via Smart Layout OCR. Review and customize before import.",
+        warning: "Extracted via Smart Layout Parser. Review and customize before import.",
         categories: categories
     };
 }
@@ -772,6 +760,13 @@ async function processAIMenu(event) {
     if (!file) return;
     const btn = document.getElementById('aiMenuBtn'); 
     if (btn) { btn.disabled = true; btn.innerText = "⏳ Preparing document..."; }
+
+    const scanOverlay = document.getElementById('aiScanningOverlay');
+    const scanText = document.getElementById('aiScanningOverlayText');
+    if (scanOverlay) {
+        scanOverlay.style.display = 'flex';
+        if (scanText) scanText.innerText = "Uploading & analyzing menu document...";
+    }
 
     try {
         let base64Data = ""; 
@@ -937,6 +932,14 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
             });
         }
 
+        const scanOverlay = document.getElementById('aiScanningOverlay');
+        if (scanOverlay) scanOverlay.style.display = 'none';
+
+        if (pendingAiItems.length === 0) {
+            showToast("ℹ️ No clear dishes detected. Please upload a high resolution photo or add items manually.");
+            return;
+        }
+
         renderAiPreviewModal();
         const prevModal = document.getElementById('aiPreviewModal');
         if (prevModal) prevModal.style.display = 'flex';
@@ -944,9 +947,13 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
         console.warn("Execute Menu Extraction Error:", error.message);
         showToast("⚠️ " + error.message);
     } finally {
+        const scanOverlay = document.getElementById('aiScanningOverlay');
+        if (scanOverlay) scanOverlay.style.display = 'none';
         if (btn) { btn.disabled = false; btn.innerText = "Upload Menu Photo"; }
         const uploader = document.getElementById('aiMenuFileInput') || document.getElementById('aiMenuUploader');
         if (uploader) uploader.value = '';
+        const camUploader = document.getElementById('aiMenuCameraInput');
+        if (camUploader) camUploader.value = '';
     }
 }
 window.executeMenuExtraction = executeMenuExtraction;

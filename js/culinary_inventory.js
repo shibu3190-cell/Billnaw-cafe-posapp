@@ -19,30 +19,30 @@
     let costingReport = [];
     let activeSubTab = 'rtr_tracker';
 
-    // Offline / Local defaults fallback
+    // Offline / Local defaults fallback (Clean Zero-Stock Baseline until recorded via purchase/expenses)
     const DEFAULT_LOCAL_MATERIALS = [
-        { id: 'RM-TOMATO', name: 'Vine-Ripe Tomatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 50.0, min_threshold: 15.0, cost_per_unit: 40, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-ONION', name: 'Red Onions', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 45.0, min_threshold: 12.0, cost_per_unit: 35, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-GINGER-GARLIC', name: 'Ginger-Garlic Paste', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 150, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-BUTTER', name: 'Dairy Butter (Amul/Dairy)', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 20.0, min_threshold: 5.0, cost_per_unit: 520, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-CREAM', name: 'Fresh Dairy Malai / Cream', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 220, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-PANEER', name: 'Malai Paneer Blocks', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 25.0, min_threshold: 6.0, cost_per_unit: 380, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 30.0, min_threshold: 8.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
-        { id: 'RM-OIL', name: 'Refined Sunflower Oil', category: 'Pantry', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 40.0, min_threshold: 10.0, cost_per_unit: 135, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-CASHEW', name: 'Premium Cashew Paste', category: 'Dry Fruits', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 2.5, cost_per_unit: 720, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-KASURI-METHI', name: 'Kasuri Methi', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 4.0, min_threshold: 1.0, cost_per_unit: 320, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-GARAM-MASALA', name: 'Royal Garam Masala', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 5.0, min_threshold: 1.5, cost_per_unit: 850, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-KASHMIRI-MIRCH', name: 'Kashmiri Degi Mirch', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 6.0, min_threshold: 1.5, cost_per_unit: 480, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-BASMATI-RICE', name: 'Dum Biryani Basmati Rice', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 60.0, min_threshold: 15.0, cost_per_unit: 115, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-MILK', name: 'Full Cream Milk', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 40.0, min_threshold: 10.0, cost_per_unit: 64, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-COFFEE-BEANS', name: 'Arabica Coffee Beans', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 8.0, min_threshold: 2.5, cost_per_unit: 750, supplier: 'Specialty Roasters', unit_type: 'raw' },
-        { id: 'RM-TEA-LEAVES', name: 'CTC Assam Tea Leaves', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 3.0, cost_per_unit: 380, supplier: 'Assam Tea Direct', unit_type: 'raw' },
-        { id: 'RM-MAIDA', name: 'Refined Flour (Maida)', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 35.0, min_threshold: 10.0, cost_per_unit: 45, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-TOMATO', name: 'Vine-Ripe Tomatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 15.0, cost_per_unit: 40, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+        { id: 'RM-ONION', name: 'Red Onions', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 12.0, cost_per_unit: 35, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+        { id: 'RM-GINGER-GARLIC', name: 'Ginger-Garlic Paste', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 4.0, cost_per_unit: 150, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+        { id: 'RM-BUTTER', name: 'Dairy Butter (Amul/Dairy)', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 5.0, cost_per_unit: 520, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+        { id: 'RM-CREAM', name: 'Fresh Dairy Malai / Cream', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 0.0, min_threshold: 4.0, cost_per_unit: 220, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+        { id: 'RM-PANEER', name: 'Malai Paneer Blocks', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 6.0, cost_per_unit: 380, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+        { id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 8.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
+        { id: 'RM-OIL', name: 'Refined Sunflower Oil', category: 'Pantry', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 0.0, min_threshold: 10.0, cost_per_unit: 135, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-CASHEW', name: 'Premium Cashew Paste', category: 'Dry Fruits', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 2.5, cost_per_unit: 720, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-KASURI-METHI', name: 'Kasuri Methi', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 1.0, cost_per_unit: 320, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-GARAM-MASALA', name: 'Royal Garam Masala', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 1.5, cost_per_unit: 850, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-KASHMIRI-MIRCH', name: 'Kashmiri Degi Mirch', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 1.5, cost_per_unit: 480, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-BASMATI-RICE', name: 'Dum Biryani Basmati Rice', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 15.0, cost_per_unit: 115, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-MILK', name: 'Full Cream Milk', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 0.0, min_threshold: 10.0, cost_per_unit: 64, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+        { id: 'RM-COFFEE-BEANS', name: 'Arabica Coffee Beans', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 2.5, cost_per_unit: 750, supplier: 'Specialty Roasters', unit_type: 'raw' },
+        { id: 'RM-TEA-LEAVES', name: 'CTC Assam Tea Leaves', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 3.0, cost_per_unit: 380, supplier: 'Assam Tea Direct', unit_type: 'raw' },
+        { id: 'RM-MAIDA', name: 'Refined Flour (Maida)', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 10.0, cost_per_unit: 45, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
         // Liquid Spirits & Draught Beer Kegs
-        { id: 'RM-WHISKY-750', name: 'Premium Scotch Whisky', category: 'Bar & Spirits', purchase_unit: '750ml Bottle', consumption_unit: 'ml', conversion_factor: 750, current_stock: 3750, min_threshold: 1500, cost_per_unit: 2600, supplier: 'United Spirits Distributor', unit_type: 'spirit' },
-        { id: 'RM-RUM-750', name: 'Dark Spiced Rum', category: 'Bar & Spirits', purchase_unit: '750ml Bottle', consumption_unit: 'ml', conversion_factor: 750, current_stock: 4500, min_threshold: 1500, cost_per_unit: 900, supplier: 'United Spirits Distributor', unit_type: 'spirit' },
-        { id: 'RM-CRAFT-BEER-KEG', name: 'German Wheat Draught Keg', category: 'Brewery & Kegs', purchase_unit: '50L Keg', consumption_unit: 'ml', conversion_factor: 50000, current_stock: 50000, min_threshold: 10000, cost_per_unit: 8500, supplier: 'Craft Brewery Tap Lines', unit_type: 'draught_beer', default_froth_buffer: 6.0 },
-        { id: 'RM-IPA-BEER-KEG', name: 'Hazy IPA Keg', category: 'Brewery & Kegs', purchase_unit: '30L Keg', consumption_unit: 'ml', conversion_factor: 30000, current_stock: 30000, min_threshold: 8000, cost_per_unit: 6200, supplier: 'Craft Brewery Tap Lines', unit_type: 'draught_beer', default_froth_buffer: 7.0 }
+        { id: 'RM-WHISKY-750', name: 'Premium Scotch Whisky', category: 'Bar & Spirits', purchase_unit: '750ml Bottle', consumption_unit: 'ml', conversion_factor: 750, current_stock: 0.0, min_threshold: 1500, cost_per_unit: 2600, supplier: 'United Spirits Distributor', unit_type: 'spirit' },
+        { id: 'RM-RUM-750', name: 'Dark Spiced Rum', category: 'Bar & Spirits', purchase_unit: '750ml Bottle', consumption_unit: 'ml', conversion_factor: 750, current_stock: 0.0, min_threshold: 1500, cost_per_unit: 900, supplier: 'United Spirits Distributor', unit_type: 'spirit' },
+        { id: 'RM-CRAFT-BEER-KEG', name: 'German Wheat Draught Keg', category: 'Brewery & Kegs', purchase_unit: '50L Keg', consumption_unit: 'ml', conversion_factor: 50000, current_stock: 0.0, min_threshold: 10000, cost_per_unit: 8500, supplier: 'Craft Brewery Tap Lines', unit_type: 'draught_beer', default_froth_buffer: 6.0 },
+        { id: 'RM-IPA-BEER-KEG', name: 'Hazy IPA Keg', category: 'Brewery & Kegs', purchase_unit: '30L Keg', consumption_unit: 'ml', conversion_factor: 30000, current_stock: 0.0, min_threshold: 8000, cost_per_unit: 6200, supplier: 'Craft Brewery Tap Lines', unit_type: 'draught_beer', default_froth_buffer: 7.0 }
     ];
 
     const DEFAULT_LOCAL_SUB_RECIPES = [
@@ -51,7 +51,7 @@
             name: 'Makhani Gravy Base (Shahi Butter Masala Gravy)',
             yield_quantity: 20.0,
             yield_unit: 'Litre',
-            current_stock: 20.0,
+            current_stock: 0.0,
             min_threshold: 5.0,
             unit_production_cost: 132.5,
             ingredients: [
@@ -71,7 +71,7 @@
             name: 'Bhuna Onion-Tomato Gravy Base',
             yield_quantity: 15.0,
             yield_unit: 'Litre',
-            current_stock: 15.0,
+            current_stock: 0.0,
             min_threshold: 4.0,
             unit_production_cost: 98.0,
             ingredients: [
@@ -88,7 +88,7 @@
             name: 'Dum Biryani Yakhni / Meat Stock Base',
             yield_quantity: 10.0,
             yield_unit: 'kg',
-            current_stock: 10.0,
+            current_stock: 0.0,
             min_threshold: 3.0,
             unit_production_cost: 248.0,
             ingredients: [
@@ -104,7 +104,7 @@
             name: 'Dal Makhani Slow-Cook Base',
             yield_quantity: 15.0,
             yield_unit: 'Litre',
-            current_stock: 15.0,
+            current_stock: 0.0,
             min_threshold: 4.0,
             unit_production_cost: 85.0,
             ingredients: [
@@ -275,10 +275,10 @@
         const staples = getCoreStaples();
         const dishes = getAllMenuDishes();
 
-        // Quick aggregate KPI counts
-        const oilItem = rawMaterials.find(m => m.id === 'RM-OIL') || { current_stock: 40, min_threshold: 10, consumption_unit: 'Litre' };
-        const paneerItem = rawMaterials.find(m => m.id === 'RM-PANEER') || { current_stock: 25, min_threshold: 6, consumption_unit: 'kg' };
-        const chickenItem = rawMaterials.find(m => m.id === 'RM-CHICKEN') || { current_stock: 30, min_threshold: 8, consumption_unit: 'kg' };
+        // Quick aggregate KPI counts (Clean 0 Baseline if unentered)
+        const oilItem = rawMaterials.find(m => m.id === 'RM-OIL') || { current_stock: 0, min_threshold: 10, consumption_unit: 'Litre' };
+        const paneerItem = rawMaterials.find(m => m.id === 'RM-PANEER') || { current_stock: 0, min_threshold: 6, consumption_unit: 'kg' };
+        const chickenItem = rawMaterials.find(m => m.id === 'RM-CHICKEN') || { current_stock: 0, min_threshold: 8, consumption_unit: 'kg' };
         const totalGravyStock = subRecipes.reduce((sum, s) => sum + (s.current_stock || 0), 0);
         const configuredCount = dishes.filter(d => !!d.recipe).length;
 

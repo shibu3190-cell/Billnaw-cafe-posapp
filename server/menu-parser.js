@@ -75,7 +75,7 @@ export function parseMenuFromText(rawText) {
     return { categories, source: 'local_text_parser' };
   }
 
-  return generateDefaultMenuTemplate();
+  return { categories: [], source: 'empty' };
 }
 
 function cleanItemName(str) {

@@ -486,24 +486,16 @@ window.copyWhatsAppCampaignText = copyWhatsAppCampaignText;
 
 
 // --- 3. INVENTORY TELEMETRY & RAW INGREDIENTS ENGINE ---
+// Clean Zero-Stock Baseline: Real purchases and recipe consumption populate live inventory
 const defaultInventoryData = [
-    { id: 1, name: "Special Roast Coffee Beans", category: "Beverages", stock: 1.2, minThreshold: 3.0, unit: "kg", costPerUnit: 750, dailyUsage: "0.8 kg/day", impactedDishes: ["Espresso", "Cold Coffee", "Cappuccino"], status: "critical" },
-    { id: 2, name: "Fresh Cow Milk (Dairy)", category: "Dairy", stock: 2.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 64, dailyUsage: "6.5 L/day", impactedDishes: ["Masala Chai", "Cold Coffee", "Paneer Rolls"], status: "critical" },
-    { id: 3, name: "Aromatic Basmati Rice", category: "Grains", stock: 3.5, minThreshold: 8.0, unit: "kg", costPerUnit: 110, dailyUsage: "4.0 kg/day", impactedDishes: ["Chicken Biryani", "Special Fried Rice"], status: "critical" },
-    { id: 4, name: "Refined Sunflower Oil", category: "Pantry", stock: 6.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 135, dailyUsage: "1.5 L/day", impactedDishes: ["Fried Rice", "Cutlets", "Paneer Rolls"], status: "low" },
-    { id: 5, name: "Premium CTC Tea Leaves", category: "Beverages", stock: 4.5, minThreshold: 2.5, unit: "kg", costPerUnit: 380, dailyUsage: "0.5 kg/day", impactedDishes: ["Masala Chai", "Lemon Tea"], status: "good" },
-    { id: 6, name: "Fresh Farm Chicken", category: "Meat", stock: 8.0, minThreshold: 4.0, unit: "kg", costPerUnit: 220, dailyUsage: "5.0 kg/day", impactedDishes: ["Chicken Biryani", "Chicken Rolls"], status: "good" },
-    { id: 7, name: "Fresh Dairy Paneer", category: "Dairy", stock: 2.8, minThreshold: 2.0, unit: "kg", costPerUnit: 360, dailyUsage: "1.5 kg/day", impactedDishes: ["Paneer Rolls", "Paneer Sandwich"], status: "good" },
-    { id: 8, name: "Refined White Sugar", category: "Pantry", stock: 9.0, minThreshold: 5.0, unit: "kg", costPerUnit: 44, dailyUsage: "1.2 kg/day", impactedDishes: ["Tea", "Coffee", "Mocktails"], status: "good" },
-    { id: 9, name: "Refined Wheat & All-Purpose Flour", category: "Grains & Bakery", stock: 12.0, minThreshold: 6.0, unit: "kg", costPerUnit: 45, dailyUsage: "3.0 kg/day", impactedDishes: ["Paneer Rolls", "Veg Burger", "Samosa", "Sandwich"], status: "good" }
+    { id: 4, name: "Refined Sunflower Oil", category: "Pantry", stock: 0.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 135, dailyUsage: "0 L/day", impactedDishes: ["Samosa", "Chicken Curry"], status: "low" },
+    { id: 9, name: "Refined Wheat & All-Purpose Flour (Maida)", category: "Grains & Bakery", stock: 0.0, minThreshold: 5.0, unit: "kg", costPerUnit: 45, dailyUsage: "0 kg/day", impactedDishes: ["Samosa"], status: "low" },
+    { id: 6, name: "Fresh Farm Chicken", category: "Meat", stock: 0.0, minThreshold: 4.0, unit: "kg", costPerUnit: 220, dailyUsage: "0 kg/day", impactedDishes: ["Chicken Curry"], status: "low" },
+    { id: 5, name: "Premium CTC Tea Leaves", category: "Beverages", stock: 0.0, minThreshold: 2.0, unit: "kg", costPerUnit: 380, dailyUsage: "0 kg/day", impactedDishes: ["Tea"], status: "low" },
+    { id: 2, name: "Fresh Cow Milk (Dairy)", category: "Dairy", stock: 0.0, minThreshold: 3.0, unit: "Litre", costPerUnit: 64, dailyUsage: "0 L/day", impactedDishes: ["Tea"], status: "low" }
 ];
 
 let inventoryTelemetryData = JSON.parse(localStorage.getItem('bongbhoj_inventory_telemetry') || 'null') || defaultInventoryData;
-
-// Ensure Flour (id 9) exists if loaded from older localStorage
-if (Array.isArray(inventoryTelemetryData) && !inventoryTelemetryData.find(i => i.id === 9)) {
-    inventoryTelemetryData.push({ id: 9, name: "Refined Wheat & All-Purpose Flour", category: "Grains & Bakery", stock: 12.0, minThreshold: 6.0, unit: "kg", costPerUnit: 45, dailyUsage: "3.0 kg/day", impactedDishes: ["Paneer Rolls", "Veg Burger", "Samosa", "Sandwich"], status: "good" });
-}
 
 // Pre-configured default dish recipes for existing menu items (ingredientId: amountPerPortion)
 const defaultDishRecipes = {
@@ -568,7 +560,7 @@ function renderInventoryTelemetryUI() {
     const lowCount = criticalItems.length;
     const itemsSummary = criticalItems.map(i => i.name.split(' ')[0]).slice(0, 3).join(', ');
     const stockedCount = inventoryTelemetryData.filter(i => i.stock > i.minThreshold).length;
-    const readyPercent = Math.round((stockedCount / totalCount) * 100);
+    const readyPercent = totalCount > 0 ? Math.round((stockedCount / totalCount) * 100) : 100;
 
     const totalEl = document.getElementById('invStatTotalCount');
     if (totalEl) totalEl.innerText = `${totalCount} Items`;
@@ -583,13 +575,28 @@ function renderInventoryTelemetryUI() {
 
     if (!container) return;
 
+    if (inventoryTelemetryData.length === 0) {
+        container.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 32px 16px; background: #FAF7F4; border: 1.5px dashed var(--border); border-radius: 14px;">
+                <div style="font-size: 26px; margin-bottom: 6px;">🥦</div>
+                <div style="font-weight: 800; font-size: 14px; color: var(--text-dark);">No Ingredients Tracked Yet</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Record a market purchase or configure recipes to monitor live stock.</div>
+            </div>
+        `;
+        return;
+    }
+
     container.innerHTML = inventoryTelemetryData.map(item => {
         const percent = Math.min(100, Math.round((item.stock / (item.minThreshold * 2.5)) * 100));
         let barColor = 'var(--success)';
         let badgeCls = 'stock-good';
         let statusLabel = 'Optimal';
 
-        if (item.stock <= item.minThreshold * 0.7) {
+        if (item.stock === 0) {
+            barColor = 'var(--danger)';
+            badgeCls = 'stock-critical';
+            statusLabel = 'EMPTY / RESTOCK';
+        } else if (item.stock <= item.minThreshold * 0.7) {
             barColor = 'var(--danger)';
             badgeCls = 'stock-critical';
             statusLabel = 'CRITICAL LOW';

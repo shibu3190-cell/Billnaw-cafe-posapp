@@ -1056,6 +1056,51 @@ function toggleMobileSlideMenu(forcedState) {
 }
 window.toggleMobileSlideMenu = toggleMobileSlideMenu;
 
+// Customer Landing Hub Navigation (Screenshot 3 Flow)
+function openCustomerHubSubView(subViewId) {
+    const hub = document.getElementById('customerLandingHub');
+    if (hub) hub.style.display = 'none';
+    const allViews = [
+        'customerDirectoryDetailedSubView',
+        'aiWhatsAppMarketingHub',
+        'eInvoiceDetailedSubView',
+        'staffAttendanceDetailedSubView',
+        'desktopSoftwareDetailedSubView',
+        'notesAppointmentsDetailedSubView',
+        'onlineStoreDetailedSubView'
+    ];
+    allViews.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.style.display = (id === subViewId) ? 'block' : 'none';
+        }
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.openCustomerHubSubView = openCustomerHubSubView;
+
+function closeCustomerHubSubView() {
+    const hub = document.getElementById('customerLandingHub');
+    if (hub) hub.style.display = 'block';
+    const allViews = [
+        'customerDirectoryDetailedSubView',
+        'aiWhatsAppMarketingHub',
+        'eInvoiceDetailedSubView',
+        'staffAttendanceDetailedSubView',
+        'desktopSoftwareDetailedSubView',
+        'notesAppointmentsDetailedSubView',
+        'onlineStoreDetailedSubView'
+    ];
+    allViews.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.style.display = 'none';
+        }
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.closeCustomerHubSubView = closeCustomerHubSubView;
+
 // Initialize on script load
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {

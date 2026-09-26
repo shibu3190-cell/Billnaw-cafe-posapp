@@ -2,11 +2,20 @@
 // 🛒 JS/POS.JS - Table Management, Cart, Checkout & Thermal Printing
 // ============================================================
 
+function switchFloor(floorName, btnEl) {
+    if (typeof shopProfile !== 'undefined') shopProfile.activeFloor = floorName;
+    const pills = document.querySelectorAll('#posFloorSelector .floor-pill');
+    pills.forEach(p => p.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+    if (typeof showToast === 'function') showToast(`Floor switched: ${floorName}`);
+}
+window.switchFloor = switchFloor;
+
 function renderTables() {
     const grid = document.getElementById('tableGridUI');
     if (!grid) return;
     grid.innerHTML = '';
-    const totalTables = shopProfile.tableCount || 10;
+    const totalTables = shopProfile.tableCount || 5;
 
     const tablesWrapper = document.getElementById('tablesWrapper');
     if (tablesWrapper) {
@@ -63,9 +72,9 @@ function renderTables() {
         grid.innerHTML += `
             <button type="button" id="table-btn-${i}" class="${classes}" onclick="selectTable(${i})" title="Table ${escapeHtml(tableName)}">
                 <div class="table-status-dot"></div>
+                <span class="table-num-pill">${i}</span>
                 <span class="table-t-code">T${i}</span>
                 <span class="table-status-tag">${statusTag}</span>
-                <span class="table-num-pill">${i}</span>
                 <span class="table-btn-name" style="display:none;">${escapeHtml(tableName)}</span>
                 ${countBadge}
             </button>
@@ -75,7 +84,7 @@ function renderTables() {
 window.renderTables = renderTables;
 
 function syncTableUI() {
-    const totalTables = shopProfile.tableCount || 10;
+    const totalTables = shopProfile.tableCount || 5;
     let occupiedCount = 0;
 
     const tablesWrapper = document.getElementById('tablesWrapper');
@@ -695,7 +704,7 @@ setInterval(() => {
     if (shopProfile.unpaidTableAlert === false) return;
     const now = Date.now(); 
     let needsSync = false; 
-    const total = shopProfile.tableCount || 10;
+    const total = shopProfile.tableCount || 5;
     for(let i = 1; i <= total; i++) { 
         let tInfo = tablesInfo[i]; 
         if(tInfo && (tInfo.status === 'served' || tInfo.status === 'alert' || tInfo.status === 'saved' || tInfo.status === 'occupied')) { 

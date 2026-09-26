@@ -499,14 +499,14 @@ window.closePaymentConfigModal = closePaymentConfigModal;
 // ============================================================
 // 🪑 TABLE TABS & SEATING CONFIGURATION HANDLERS
 // ============================================================
-let draftTableCount = 10;
+let draftTableCount = 5;
 let draftCustomNames = {};
 
 function openTableConfigModal() {
     const modal = document.getElementById('tableConfigModal');
     if (!modal) return;
     
-    draftTableCount = parseInt(shopProfile.tableCount, 10) || 10;
+    draftTableCount = parseInt(shopProfile.tableCount, 10) || 5;
     draftCustomNames = JSON.parse(JSON.stringify(shopProfile.customTableNames || {}));
     
     const countInput = document.getElementById('settingTableCountInput');
