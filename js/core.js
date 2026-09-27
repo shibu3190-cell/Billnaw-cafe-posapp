@@ -159,54 +159,379 @@ function showToast(message) {
 }
 window.showToast = showToast;
 
-// 🖼️ ASSET & IMAGE OPTIMIZATION ENGINE
-function generateFallbackImage(name) {
-    const canvas = document.createElement('canvas');
-    // High-density, compact 160x120 canvas (super lightweight ~2KB data URI vs 400x300 ~35KB)
-    canvas.width = 160;
-    canvas.height = 120;
-    const ctx = canvas.getContext('2d');
-    
-    // Warm gourmet culinary gradient
-    const gradient = ctx.createLinearGradient(0, 0, 160, 120);
-    gradient.addColorStop(0, '#5A3D31');
-    gradient.addColorStop(1, '#2E1E17'); 
-    ctx.fillStyle = gradient; 
-    ctx.fillRect(0, 0, 160, 120);
-    
-    // Clean accent circle
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(80, 50, 30, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Dish Initial Emblem
-    ctx.fillStyle = '#FFFFFF'; 
-    ctx.font = 'bold 34px sans-serif';
-    ctx.textAlign = 'center'; 
-    ctx.textBaseline = 'middle';
-    ctx.fillText((name || "D").charAt(0).toUpperCase(), 80, 48);
-    
-    // Dish Name Label
-    ctx.font = '600 11px sans-serif';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    const cleanLabel = (name || "Dish").substring(0, 16);
-    ctx.fillText(cleanLabel, 80, 96);
-
-    try {
-        return canvas.toDataURL('image/webp', 0.8);
-    } catch(e) {
-        return canvas.toDataURL('image/jpeg', 0.7);
+// 🖼️ GOURMET CULINARY FOOD PHOTO & ASSET ENGINE
+const CULINARY_PHOTO_MAP = [
+    // 1. Samosa & Crispy Snacks
+    {
+        keys: ['samosa', 'singara', 'samosha', 'aloo samosa', 'samosa chaat', 'samosachaat', 'punjabi samosa'],
+        url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80',
+        icon: '🥟',
+        theme: 'snack',
+        grad: ['#6B3811', '#3D1C06'],
+        badge: 'CRISPY'
+    },
+    // 2. Tea, Chai & Hot Beverages
+    {
+        keys: ['tea', 'chai', 'masala chai', 'ginger tea', 'cutting chai', 'hot tea', 'kulhad chai', 'kadak chai', 'green tea', 'elaichi chai'],
+        url: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80',
+        icon: '☕',
+        theme: 'hot_bev',
+        grad: ['#4E2F1D', '#2B160C'],
+        badge: 'AROMATIC'
+    },
+    // 3. Chicken Curry & Non-Veg Gravies
+    {
+        keys: ['chicken curry', 'butter chicken', 'chicken masala', 'murgh kari', 'chicken handi', 'kadai chicken', 'mutton curry', 'chicken korma', 'chicken tikka masala', 'chicken'],
+        url: 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80',
+        icon: '🍗',
+        theme: 'curry',
+        grad: ['#691B14', '#390A06'],
+        badge: 'GOURMET'
+    },
+    // 4. Masala Coke, Cola & Fizzy Refreshers
+    {
+        keys: ['masala coke', 'masala cola', 'spiced coke', 'spiced cola', 'coke', 'coca cola', 'cola', 'pepsi', 'thums up', 'lemon coke', 'diet coke', 'cold drink', 'fizz'],
+        url: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80',
+        icon: '🥤',
+        theme: 'cold_bev',
+        grad: ['#1A0F0A', '#381C10'],
+        badge: 'CHILLED'
+    },
+    // 5. Biryani & Royal Rice
+    {
+        keys: ['biryani', 'chicken biryani', 'mutton biryani', 'veg biryani', 'hyderabadi biryani', 'dum biryani', 'pulao', 'jeera rice', 'fried rice'],
+        url: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=600&auto=format&fit=crop&q=80',
+        icon: '🍛',
+        theme: 'curry',
+        grad: ['#6B4412', '#3B2205'],
+        badge: 'ROYAL'
+    },
+    // 6. Paneer & Veg Main Courses
+    {
+        keys: ['paneer', 'paneer butter masala', 'paneer tikka', 'shahi paneer', 'kadai paneer', 'matar paneer', 'palak paneer', 'paneer makhani'],
+        url: 'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=600&auto=format&fit=crop&q=80',
+        icon: '🧀',
+        theme: 'curry',
+        grad: ['#6E3314', '#381706'],
+        badge: 'SAVORY'
+    },
+    // 7. Cold Coffee, Frappes & Shakes
+    {
+        keys: ['cold coffee', 'iced coffee', 'frappe', 'iced latte', 'cold brew', 'ice coffee', 'mocha frappe', 'shake', 'milkshake'],
+        url: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=600&auto=format&fit=crop&q=80',
+        icon: '🧋',
+        theme: 'cold_bev',
+        grad: ['#3D2519', '#1C0E07'],
+        badge: 'FROTHY'
+    },
+    // 8. Hot Coffee, Cappuccino & Espresso
+    {
+        keys: ['coffee', 'cappuccino', 'espresso', 'latte', 'hot coffee', 'americano', 'filter coffee', 'mocha'],
+        url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
+        icon: '☕',
+        theme: 'hot_bev',
+        grad: ['#422415', '#241006'],
+        badge: 'BARISTA'
+    },
+    // 9. Burgers
+    {
+        keys: ['burger', 'veg burger', 'chicken burger', 'cheese burger', 'crispy burger', 'aloo tikki burger'],
+        url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=80',
+        icon: '🍔',
+        theme: 'fastfood',
+        grad: ['#5E2C0F', '#331404'],
+        badge: 'JUICY'
+    },
+    // 10. Pizza
+    {
+        keys: ['pizza', 'margherita', 'margherita pizza', 'paneer pizza', 'cheese pizza', 'farmhouse pizza', 'pepperoni'],
+        url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=80',
+        icon: '🍕',
+        theme: 'fastfood',
+        grad: ['#6B1F0F', '#380B02'],
+        badge: 'WOODFIRED'
+    },
+    // 11. French Fries & Finger Snacks
+    {
+        keys: ['fries', 'french fries', 'peri peri fries', 'potato wedges', 'nuggets', 'cheese balls', 'finger chips'],
+        url: 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=600&auto=format&fit=crop&q=80',
+        icon: '🍟',
+        theme: 'snack',
+        grad: ['#69440D', '#3B2404'],
+        badge: 'CRISPY'
+    },
+    // 12. Sandwiches
+    {
+        keys: ['sandwich', 'grilled sandwich', 'club sandwich', 'cheese sandwich', 'veg sandwich', 'paneer sandwich', 'toast'],
+        url: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=600&auto=format&fit=crop&q=80',
+        icon: '🥪',
+        theme: 'snack',
+        grad: ['#5E3612', '#331C06'],
+        badge: 'TOASTED'
+    },
+    // 13. Momos & Dim Sums
+    {
+        keys: ['momo', 'momos', 'steamed momos', 'fried momos', 'veg momos', 'chicken momos', 'dim sum', 'dumpling'],
+        url: 'https://images.unsplash.com/photo-1625220194771-7ebdea0b70b9?w=600&auto=format&fit=crop&q=80',
+        icon: '🥟',
+        theme: 'snack',
+        grad: ['#5A2D16', '#2E1408'],
+        badge: 'STEAMED'
+    },
+    // 14. South Indian (Dosa, Idli)
+    {
+        keys: ['dosa', 'masala dosa', 'plain dosa', 'ghee roast', 'paper dosa', 'paneer dosa', 'idli', 'vada', 'medu vada', 'sambar'],
+        url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80',
+        icon: '🥞',
+        theme: 'snack',
+        grad: ['#634114', '#382206'],
+        badge: 'AUTHENTIC'
+    },
+    // 15. Lassi, Smoothies
+    {
+        keys: ['lassi', 'mango lassi', 'sweet lassi', 'rose lassi', 'smoothie'],
+        url: 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600&auto=format&fit=crop&q=80',
+        icon: '🧋',
+        theme: 'cold_bev',
+        grad: ['#5C3612', '#301A06'],
+        badge: 'CREAMY'
+    },
+    // 16. Dal, Curries & Gravies
+    {
+        keys: ['dal', 'dal makhani', 'dal tadka', 'yellow dal', 'dal fry', 'chole', 'rajma', 'curry'],
+        url: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80',
+        icon: '🍲',
+        theme: 'curry',
+        grad: ['#692E11', '#381605'],
+        badge: 'SIMMERED'
+    },
+    // 17. Noodles, Pasta & Chinese
+    {
+        keys: ['noodles', 'hakka noodles', 'chowmein', 'veg noodles', 'schezwan noodles', 'pasta', 'manchurian', 'chilli chicken', 'chilli paneer'],
+        url: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=600&auto=format&fit=crop&q=80',
+        icon: '🍜',
+        theme: 'curry',
+        grad: ['#5C2510', '#301105'],
+        badge: 'WOK-TOSSED'
+    },
+    // 18. Rolls & Wraps
+    {
+        keys: ['roll', 'kathi roll', 'egg roll', 'paneer roll', 'chicken roll', 'wrap', 'frankie', 'shawarma'],
+        url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=600&auto=format&fit=crop&q=80',
+        icon: '🌯',
+        theme: 'snack',
+        grad: ['#593414', '#2E1906'],
+        badge: 'FLAKY'
+    },
+    // 19. Desserts & Cakes
+    {
+        keys: ['pastry', 'cake', 'chocolate cake', 'brownie', 'ice cream', 'sundae', 'cheesecake', 'waffle', 'pancake', 'muffin', 'dessert'],
+        url: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=600&auto=format&fit=crop&q=80',
+        icon: '🍰',
+        theme: 'dessert',
+        grad: ['#4A152D', '#240715'],
+        badge: 'SWEET'
+    },
+    // 20. Indian Sweets (Gulab Jamun, etc.)
+    {
+        keys: ['gulab jamun', 'rasgulla', 'kheer', 'halwa', 'gajar halwa', 'jalebi', 'sweet', 'mithai'],
+        url: 'https://images.unsplash.com/photo-1605197584547-c93de1a00564?w=600&auto=format&fit=crop&q=80',
+        icon: '🍯',
+        theme: 'dessert',
+        grad: ['#542512', '#2B1106'],
+        badge: 'TRADITIONAL'
+    },
+    // 21. Mocktails & Juices
+    {
+        keys: ['mojito', 'virgin mojito', 'mocktail', 'lemonade', 'fresh lime soda', 'nimbu pani', 'juice', 'orange juice', 'watermelon juice'],
+        url: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=600&auto=format&fit=crop&q=80',
+        icon: '🍹',
+        theme: 'cold_bev',
+        grad: ['#0F382E', '#061C16'],
+        badge: 'REFRESHING'
+    },
+    // 22. Soups
+    {
+        keys: ['soup', 'tomato soup', 'sweet corn soup', 'hot and sour soup', 'manchow soup', 'chicken soup', 'clear soup'],
+        url: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=600&auto=format&fit=crop&q=80',
+        icon: '🥣',
+        theme: 'curry',
+        grad: ['#5E2B12', '#301305'],
+        badge: 'WARMING'
     }
+];
+window.CULINARY_PHOTO_MAP = CULINARY_PHOTO_MAP;
+
+function getCuratedFoodPhoto(name, category = '') {
+    if (!name && !category) return null;
+    const cleanName = String(name || '').toLowerCase().trim();
+    const cleanCat = String(category || '').toLowerCase().trim();
+
+    // 1. Direct or substring matching against culinary keyword registry
+    for (const entry of CULINARY_PHOTO_MAP) {
+        for (const k of entry.keys) {
+            if (cleanName === k || cleanName.includes(k) || k.includes(cleanName)) {
+                return entry.url;
+            }
+        }
+    }
+
+    // 2. Tokenized word-level match
+    const words = cleanName.split(/[\s,_\-\/]+/);
+    for (const entry of CULINARY_PHOTO_MAP) {
+        for (const k of entry.keys) {
+            if (words.some(w => w.length > 2 && k.includes(w))) {
+                return entry.url;
+            }
+        }
+    }
+
+    // 3. Category level matching
+    if (cleanCat.includes('beverage') || cleanCat.includes('drink')) {
+        return 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80';
+    }
+    if (cleanCat.includes('snack') || cleanCat.includes('starter')) {
+        return 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80';
+    }
+    if (cleanCat.includes('main') || cleanCat.includes('curry') || cleanCat.includes('course')) {
+        return 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80';
+    }
+    if (cleanCat.includes('dessert') || cleanCat.includes('sweet')) {
+        return 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=600&auto=format&fit=crop&q=80';
+    }
+
+    return null;
+}
+window.getCuratedFoodPhoto = getCuratedFoodPhoto;
+
+function getCulinaryThemeMeta(name, category = '') {
+    const cleanName = String(name || '').toLowerCase().trim();
+    for (const entry of CULINARY_PHOTO_MAP) {
+        for (const k of entry.keys) {
+            if (cleanName === k || cleanName.includes(k) || k.includes(cleanName)) {
+                return entry;
+            }
+        }
+    }
+    const cleanCat = String(category || '').toLowerCase().trim();
+    if (cleanCat.includes('beverage') || cleanCat.includes('drink')) {
+        return { icon: '☕', grad: ['#4E2F1D', '#2B160C'], badge: 'BEVERAGE' };
+    }
+    if (cleanCat.includes('snack') || cleanCat.includes('starter')) {
+        return { icon: '🥟', grad: ['#6B3811', '#3D1C06'], badge: 'SNACK' };
+    }
+    if (cleanCat.includes('main') || cleanCat.includes('curry')) {
+        return { icon: '🍗', grad: ['#691B14', '#390A06'], badge: 'MAIN' };
+    }
+    if (cleanCat.includes('dessert') || cleanCat.includes('sweet')) {
+        return { icon: '🍰', grad: ['#4A152D', '#240715'], badge: 'DESSERT' };
+    }
+    return { icon: '🍽️', grad: ['#4A3B32', '#241B15'], badge: 'CAFE' };
+}
+
+function generateFallbackImage(name, category = '') {
+    const dishTitle = (name || "Dish").trim();
+    const meta = getCulinaryThemeMeta(dishTitle, category);
+
+    // Browser Canvas Generation
+    if (typeof document !== 'undefined' && document.createElement) {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 240;
+            canvas.height = 180;
+            const ctx = canvas.getContext('2d');
+            
+            // 1. Rich 2-point culinary gradient
+            const gradient = ctx.createLinearGradient(0, 0, 240, 180);
+            gradient.addColorStop(0, meta.grad ? meta.grad[0] : '#5A3D31');
+            gradient.addColorStop(1, meta.grad ? meta.grad[1] : '#24160E'); 
+            ctx.fillStyle = gradient; 
+            ctx.fillRect(0, 0, 240, 180);
+            
+            // 2. Ceramic plate concentric rings
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(120, 75, 48, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(120, 75, 40, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 3. Central Food Icon / Emoji
+            ctx.font = '40px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+            ctx.textAlign = 'center'; 
+            ctx.textBaseline = 'middle';
+            ctx.fillText(meta.icon || '🍽️', 120, 75);
+            
+            // 4. Frosted Title Pill
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(14, 138, 212, 28, 6);
+            } else {
+                ctx.rect(14, 138, 212, 28);
+            }
+            ctx.fill();
+
+            // 5. Dish Name Label
+            ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillStyle = '#FFFFFF';
+            const cleanLabel = dishTitle.length > 22 ? dishTitle.substring(0, 20) + '..' : dishTitle;
+            ctx.fillText(cleanLabel, 120, 154);
+
+            // 6. Top Badge Indicator
+            if (meta.badge) {
+                ctx.font = '900 8.5px sans-serif';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+                ctx.textAlign = 'right';
+                ctx.fillText(meta.badge, 226, 18);
+            }
+
+            try {
+                return canvas.toDataURL('image/webp', 0.85);
+            } catch(e) {
+                return canvas.toDataURL('image/jpeg', 0.8);
+            }
+        } catch(canvasErr) {
+            // Fall through to SVG data URI
+        }
+    }
+
+    // Universal SVG fallback for headless/Node contexts
+    const icon = meta.icon || '🍽️';
+    const c1 = meta.grad ? meta.grad[0] : '#5A3D31';
+    const c2 = meta.grad ? meta.grad[1] : '#24160E';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180">
+        <defs>
+            <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="${c1}"/>
+                <stop offset="100%" stop-color="${c2}"/>
+            </linearGradient>
+        </defs>
+        <rect width="240" height="180" fill="url(#g)"/>
+        <circle cx="120" cy="75" r="44" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+        <text x="120" y="86" font-size="38" text-anchor="middle" font-family="sans-serif">${icon}</text>
+        <rect x="14" y="138" width="212" height="28" rx="6" fill="rgba(0,0,0,0.45)"/>
+        <text x="120" y="156" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle" font-family="sans-serif">${dishTitle.substring(0, 20)}</text>
+    </svg>`;
+    return `data:image/svg+xml;base64,${typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg).toString('base64')}`;
 }
 window.generateFallbackImage = generateFallbackImage;
 
+function getGourmetFoodImage(name, category = '') {
+    return getCuratedFoodPhoto(name, category) || generateFallbackImage(name, category);
+}
+window.getGourmetFoodImage = getGourmetFoodImage;
+
 const defaultMenu = [
-    { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
-    { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
-    { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") },
-    { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: generateFallbackImage("Masala Coke") }
+    { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
+    { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
+    { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
+    { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
 ];
 window.defaultMenu = defaultMenu;
 
@@ -490,10 +815,10 @@ function handleRemoteFirestoreUpdate(data) {
         menuItems = data.menu;
     } else if (isLegacyRemoteMock || !Array.isArray(menuItems) || menuItems.length === 0) {
         const cleanDefaultMenu = [
-            { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
-            { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
-            { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") },
-            { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: generateFallbackImage("Masala Coke") }
+            { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
+            { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
+            { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
+            { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
         ];
         menuItems = cleanDefaultMenu;
         window.menuItems = menuItems;
@@ -897,10 +1222,10 @@ async function initDatabase() {
     } catch(e) {}
     const storedMenu = await idb.get('cafe_menu');
     const defaultMenu = [
-        { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
-        { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
-        { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") },
-        { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: generateFallbackImage("Masala Coke") }
+        { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
+        { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
+        { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
+        { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
     ];
     const isLegacyMockMenu = storedMenu && Array.isArray(storedMenu) && (
         storedMenu.some(i => i.name === 'Steam Rice' || i.name === 'Espresso Coffee' || i.name === 'Chicken Roll' || i.name === 'Masala Chai') ||

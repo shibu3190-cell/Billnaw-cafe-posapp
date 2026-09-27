@@ -161,10 +161,10 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid)
     ],
     categories: ['All', 'Snacks', 'Beverages', 'Main Course'],
     menu: [
-      { id: 1, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
-      { id: 2, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
-      { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5 },
-      { id: 4, name: 'Masala Coke', category: 'Beverages', price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5 }
+      { id: 1, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80' },
+      { id: 2, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80' },
+      { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80' },
+      { id: 4, name: 'Masala Coke', category: 'Beverages', price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80' }
     ],
     tables: {},
     history: [],

@@ -221,14 +221,59 @@ Output the final result ONLY as a valid JSON object adhering strictly to this sc
   }
 }
 
+const SERVER_CULINARY_PHOTO_MAP = [
+  { keys: ['samosa', 'singara', 'samosha', 'aloo samosa', 'samosa chaat'], url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['tea', 'chai', 'masala chai', 'ginger tea', 'cutting chai', 'hot tea', 'kulhad chai', 'kadak chai'], url: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['chicken curry', 'butter chicken', 'chicken masala', 'murgh kari', 'chicken handi', 'kadai chicken', 'mutton curry', 'chicken'], url: 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['masala coke', 'masala cola', 'spiced coke', 'coke', 'coca cola', 'cola', 'pepsi', 'thums up', 'cold drink', 'fizz'], url: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['biryani', 'chicken biryani', 'mutton biryani', 'veg biryani', 'hyderabadi biryani', 'pulao', 'fried rice'], url: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['paneer', 'paneer butter masala', 'paneer tikka', 'shahi paneer', 'kadai paneer', 'paneer makhani'], url: 'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['cold coffee', 'iced coffee', 'frappe', 'iced latte', 'cold brew', 'shake', 'milkshake'], url: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['coffee', 'cappuccino', 'espresso', 'latte', 'hot coffee', 'americano', 'filter coffee'], url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['burger', 'veg burger', 'chicken burger', 'cheese burger'], url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['pizza', 'margherita', 'margherita pizza', 'paneer pizza', 'cheese pizza'], url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['fries', 'french fries', 'peri peri fries', 'nuggets'], url: 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['sandwich', 'grilled sandwich', 'club sandwich', 'cheese sandwich', 'veg sandwich', 'toast'], url: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['momo', 'momos', 'steamed momos', 'fried momos', 'dim sum'], url: 'https://images.unsplash.com/photo-1625220194771-7ebdea0b70b9?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['dosa', 'masala dosa', 'idli', 'vada', 'sambar'], url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['lassi', 'mango lassi', 'sweet lassi', 'smoothie'], url: 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['dal', 'dal makhani', 'dal tadka', 'chole'], url: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['noodles', 'chowmein', 'hakka noodles', 'pasta', 'manchurian'], url: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['roll', 'kathi roll', 'egg roll', 'paneer roll', 'chicken roll', 'wrap'], url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['pastry', 'cake', 'chocolate cake', 'brownie', 'ice cream', 'dessert'], url: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['gulab jamun', 'rasgulla', 'kheer', 'halwa', 'sweet', 'mithai'], url: 'https://images.unsplash.com/photo-1605197584547-c93de1a00564?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['mojito', 'mocktail', 'lemonade', 'juice'], url: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=600&auto=format&fit=crop&q=80' },
+  { keys: ['soup', 'tomato soup', 'manchow soup'], url: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=600&auto=format&fit=crop&q=80' }
+];
+
+export function getCuratedFoodPhotoServer(name) {
+  if (!name) return null;
+  const clean = String(name).toLowerCase().trim();
+  for (const entry of SERVER_CULINARY_PHOTO_MAP) {
+    for (const k of entry.keys) {
+      if (clean === k || clean.includes(k) || k.includes(clean)) {
+        return entry.url;
+      }
+    }
+  }
+  const words = clean.split(/[\s,_\-\/]+/);
+  for (const entry of SERVER_CULINARY_PHOTO_MAP) {
+    for (const k of entry.keys) {
+      if (words.some(w => w.length > 2 && k.includes(w))) {
+        return entry.url;
+      }
+    }
+  }
+  return null;
+}
+
 /**
- * Generates gourmet photo for menu item using gemini-3.1-flash-lite-image
- * with automatic high quality culinary fallback
+ * Generates gourmet photo for menu item with automatic high quality culinary fallback
  */
 export async function generateMenuItemImage({ prompt, itemName, apiKey }) {
   const queryPrompt = prompt || `Professional gourmet photography of ${itemName || 'delicious culinary dish'}, warm studio lighting, appetizing presentation, plated on ceramic dish, 4k quality`;
 
-  // Try server-side Gemini image generation if key is verified operational
+  // 1. Try server-side Gemini image generation if key is verified operational
   const effectiveKey = apiKey || CONFIG.gemini.apiKey;
   if (effectiveKey && await isGeminiKeyOperational(effectiveKey)) {
     try {
@@ -257,29 +302,21 @@ export async function generateMenuItemImage({ prompt, itemName, apiKey }) {
         }
       }
     } catch (geminiErr) {
-      // Seamlessly fall through to culinary proxy
+      // Seamlessly fall through to curated culinary library
     }
   }
 
-  // High quality culinary proxy fallback
-  try {
-    const encoded = encodeURIComponent(queryPrompt);
-    const pollUrl = `https://image.pollinations.ai/prompt/${encoded}?width=400&height=300&nologo=true`;
-    const imgRes = await fetch(pollUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    if (imgRes.ok) {
-      const buffer = await imgRes.arrayBuffer();
-      const b64 = Buffer.from(buffer).toString('base64');
-      const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-      return {
-        imageUrl: `data:${contentType};base64,${b64}`,
-        source: 'cloud-ai'
-      };
-    }
-  } catch (fallbackErr) {
-    // Graceful fallback to client vector visual
+  // 2. High quality curated culinary library matching (100% reliable, zero 403 errors)
+  const curatedUrl = getCuratedFoodPhotoServer(itemName || prompt);
+  if (curatedUrl) {
+    return {
+      imageUrl: curatedUrl,
+      source: 'curated-culinary',
+      success: true
+    };
   }
 
-  return { imageUrl: null, message: 'Use instant generated vector fallback.' };
+  return { imageUrl: null, message: 'Use instant generated vector fallback.', success: true };
 }
 
 /**

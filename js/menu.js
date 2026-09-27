@@ -94,10 +94,10 @@ function renderMenuUI() {
             menuItems = [...window.defaultMenu];
         } else {
             menuItems = [
-                { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: typeof generateFallbackImage === 'function' ? generateFallbackImage("Samosa") : "" },
-                { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: typeof generateFallbackImage === 'function' ? generateFallbackImage("Tea") : "" },
-                { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: typeof generateFallbackImage === 'function' ? generateFallbackImage("Chicken Curry") : "" },
-                { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: typeof generateFallbackImage === 'function' ? generateFallbackImage("Masala Coke") : "" }
+                { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
+                { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
+                { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
+                { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
             ];
         }
         window.menuItems = menuItems;
@@ -138,13 +138,8 @@ function renderMenuUI() {
             stockIndicator = item.stockQty > 0 ? `<span class="stock-indicator green"><i></i> In Stock</span>` : `<span class="stock-indicator red"><i></i> Out of Stock</span>`;
         }
 
-        let imageHtml = '';
-        if (item.image && item.image.startsWith('data:image')) {
-            imageHtml = `<img src="${item.image}" class="card-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                <div class="card-img-placeholder" style="display: none; background: linear-gradient(#8D5B4C, #3B2A22); color: white;">${item.name.charAt(0).toUpperCase()}</div>`;
-        } else {
-            imageHtml = `<div class="card-img-placeholder" style="display: flex; background: linear-gradient(#8D5B4C, #3B2A22); color: white;">${item.name.charAt(0).toUpperCase()}</div>`;
-        }
+        const thumbSrc = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
+        const imageHtml = `<img src="${thumbSrc}" class="card-img" alt="${escapeHtml(item.name)}" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">`;
 
         posGrid.innerHTML += `
         <div class="menu-card" onclick="addToCart(${item.id}, event)">
@@ -277,11 +272,11 @@ function renderMenuCatalogUI() {
                     }
                 }
 
-                const thumbSrc = item.image || generateFallbackImage(item.name);
+                const thumbSrc = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
                 return `
                 <div class="clean-item-card">
                     <div class="clean-item-left">
-                        <img src="${thumbSrc}" class="clean-item-thumb" alt="${escapeHtml(item.name)}" onerror="this.src=generateFallbackImage('${escapeHtml(item.name)}')">
+                        <img src="${thumbSrc}" class="clean-item-thumb" alt="${escapeHtml(item.name)}" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">
                         <div class="clean-item-info">
                             <div class="clean-item-title-row">
                                 <span class="clean-item-name">${escapeHtml(item.name)}</span>
@@ -339,10 +334,10 @@ function renderMenuCatalogUI() {
                 stockDisplay = '<span class="stock-pill stock-pill-out">Out of stock</span>';
             }
 
-            const thumbSrc = item.image || generateFallbackImage(item.name);
+            const thumbSrc = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
             return `<tr>
                 <td style="width: 48px;">
-                    <img src="${thumbSrc}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display: block;" onerror="this.src=generateFallbackImage('${escapeHtml(item.name)}')">
+                    <img src="${thumbSrc}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display: block;" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">
                 </td>
                 <td>
                     <div style="font-weight: 700; color: var(--text-dark);">${escapeHtml(item.name)}</div>
@@ -567,68 +562,89 @@ function handleItemImageUpload(event) {
 window.handleItemImageUpload = handleItemImageUpload;
 
 async function fetchImageAsBase64(promptText, itemName = '') {
+    const dishName = itemName || promptText || '';
+
+    // 1. Try Backend Image Generator Route first
     try {
         const res = await fetch('/api/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 prompt: promptText,
-                itemName: itemName,
+                itemName: dishName,
                 clientId: myClientID
             })
         });
         if (res.ok) {
             const data = await res.json();
-            if (data.imageUrl && data.imageUrl.startsWith('data:image')) {
+            if (data.imageUrl && (data.imageUrl.startsWith('data:image') || data.imageUrl.startsWith('http'))) {
                 return data.imageUrl;
             }
         }
     } catch (apiErr) {
-        console.warn("Backend AI image route failed, attempting cloud fallback:", apiErr.message);
+        console.warn("Backend AI image route fallback:", apiErr.message);
     }
 
-    const prompt = encodeURIComponent(promptText || itemName);
-    const url = `https://image.pollinations.ai/prompt/${prompt}?width=400&height=300&nologo=true&n=1`;
-    try {
-        const res = await fetch(url);
-        if(!res.ok) throw new Error("Direct fetch failed");
-        const blob = await res.blob();
-        if (!blob.type.startsWith('image/')) throw new Error("Network blocked image stream"); 
-        return await new Promise(r => { const reader = new FileReader(); reader.onloadend = () => r(reader.result); reader.readAsDataURL(blob); });
-    } catch(e1) {
-        try {
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const res2 = await fetch(proxyUrl);
-            if(!res2.ok) throw new Error("Proxy fetch failed");
-            const blob2 = await res2.blob();
-            if (!blob2.type.startsWith('image/')) throw new Error("Proxy blocked image stream");
-            return await new Promise(r => { const reader = new FileReader(); reader.onloadend = () => r(reader.result); reader.readAsDataURL(blob2); });
-        } catch(e2) { 
-            return generateFallbackImage(itemName || promptText);
-        }
+    // 2. Curated Gourmet Culinary Photo Library matching (100% reliable, authentic food photos)
+    if (typeof getCuratedFoodPhoto === 'function') {
+        const curatedUrl = getCuratedFoodPhoto(dishName);
+        if (curatedUrl) return curatedUrl;
     }
+
+    // 3. High-Definition Canvas Culinary Graphics Fallback (zero network errors)
+    if (typeof generateFallbackImage === 'function') {
+        return generateFallbackImage(dishName);
+    }
+
+    return "";
 }
 window.fetchImageAsBase64 = fetchImageAsBase64;
 
 async function generateAIImage() {
-    const name = document.getElementById('newItemName').value.trim();
+    const nameInput = document.getElementById('newItemName');
+    const name = nameInput ? nameInput.value.trim() : '';
     if (!name) return showToast("⚠️ Enter an Item Name first to generate image!");
     
-    const btn = document.getElementById('btnGenerateAI'); const preview = document.getElementById('newItemImagePreview');
-    btn.innerText = "⏳ Generating..."; btn.disabled = true;
+    const btn = document.getElementById('btnGenerateAI'); 
+    const preview = document.getElementById('newItemImagePreview');
+    if (btn) {
+        btn.innerText = "⏳ Generating..."; 
+        btn.disabled = true;
+    }
     
-    currentItemImageBase64 = generateFallbackImage(name);
-    preview.src = currentItemImageBase64; preview.style.display = "block"; preview.style.opacity = "0.7";
+    // Immediate instant responsive preview
+    const instantPreview = typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name) : (typeof generateFallbackImage === 'function' ? generateFallbackImage(name) : '');
+    if (preview && instantPreview) {
+        preview.src = instantPreview; 
+        preview.style.display = "block"; 
+        preview.style.opacity = "0.75";
+    }
     
     try {
         const promptStr = `Gourmet culinary photography of ${name}, elegant plating, cafe presentation, natural studio lighting, 4k quality`;
-        currentItemImageBase64 = await fetchImageAsBase64(promptStr, name);
-        preview.src = currentItemImageBase64; preview.style.opacity = "1";
-        btn.innerText = "✨ AI Generate"; btn.disabled = false; showToast("✅ Image Generated!");
+        const generatedImg = await fetchImageAsBase64(promptStr, name);
+        currentItemImageBase64 = generatedImg || instantPreview;
+        if (preview && currentItemImageBase64) {
+            preview.src = currentItemImageBase64; 
+            preview.style.opacity = "1";
+        }
+        if (btn) {
+            btn.innerText = "✨ AI Photo"; 
+            btn.disabled = false;
+        }
+        showToast("✅ Gourmet dish photo selected!");
     } catch (error) { 
-        console.warn(error.message); 
-        preview.style.opacity = "1"; btn.innerText = "✨ AI Generate"; btn.disabled = false; 
-        showToast("✅ Generated gourmet visual placeholder.");
+        console.warn("AI Image note:", error.message); 
+        currentItemImageBase64 = instantPreview;
+        if (preview && instantPreview) {
+            preview.src = instantPreview;
+            preview.style.opacity = "1";
+        }
+        if (btn) {
+            btn.innerText = "✨ AI Photo"; 
+            btn.disabled = false;
+        }
+        showToast("✅ Applied gourmet dish visual.");
     }
 }
 window.generateAIImage = generateAIImage;
@@ -665,7 +681,7 @@ function editMenuItem(id) {
         document.getElementById('newItemStock').value = item.stockQty || '';
         
         currentItemImageBase64 = item.image || "";
-        if(currentItemImageBase64 && currentItemImageBase64.startsWith('data:image')) { 
+        if(currentItemImageBase64 && (currentItemImageBase64.startsWith('data:image') || currentItemImageBase64.startsWith('http') || currentItemImageBase64.startsWith('/'))) { 
             document.getElementById('newItemImagePreview').src = currentItemImageBase64; 
             document.getElementById('newItemImagePreview').style.display = "block"; 
             document.getElementById('newItemImagePreview').style.opacity = "1";
@@ -773,7 +789,7 @@ function parseLocalMenuFallback(payload) {
             const cleanName = line.replace(/(?:₹|rs\.?|inr)?\s*\d{2,4}/gi, '').replace(/[-–:•]/g, '').trim();
             if (cleanName.length >= 2) {
                 const isBeverage = /coffee|tea|chai|shake|latte|espresso|brew|drink|water|juice/i.test(cleanName);
-                const itemObj = { name: cleanName, price: price, image: generateFallbackImage(cleanName) };
+                const itemObj = { name: cleanName, price: price, image: (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(cleanName, isBeverage ? 'Beverages' : 'Snacks') : generateFallbackImage(cleanName)) };
                 if (isBeverage) beverageItems.push(itemObj);
                 else foodItems.push(itemObj);
             }
@@ -963,7 +979,7 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
                         const rawPrice = parseFloat(item.price !== undefined ? item.price : (item.Price !== undefined ? item.Price : 0)) || 0;
                         const prompt = item.image_prompt || `${rawName} gourmet cafe food dish photography`;
                         const hasImg = Boolean(item.image && typeof item.image === 'string' && (item.image.startsWith('data:image') || item.image.startsWith('http')));
-                        const initialImg = hasImg ? item.image : generateFallbackImage(rawName);
+                        const initialImg = hasImg ? item.image : (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(rawName, catName) : generateFallbackImage(rawName, catName));
 
                         pendingAiItems.push({
                             name: rawName,
@@ -1086,12 +1102,12 @@ function renderAiPreviewModal() {
         const safeName = escapeHtml(item.name || '');
         const safeCat = escapeHtml(item.category || '');
         const safePrice = (item.price !== undefined && item.price !== null) ? item.price : 0;
-        const imgDisplay = item.image || generateFallbackImage(item.name || 'Item');
+        const imgDisplay = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name || 'Item', item.category) : generateFallbackImage(item.name || 'Item', item.category));
 
         html += `
         <div class="ai-review-item" id="ai-item-row-${index}">
             <div class="ai-item-thumb" onclick="triggerAiItemImageUpload(${index})" title="Click to upload or replace dish photo">
-                <img id="ai-item-img-${index}" src="${imgDisplay}" alt="${safeName}" onerror="this.src=generateFallbackImage('${safeName}')">
+                <img id="ai-item-img-${index}" src="${imgDisplay}" alt="${safeName}" onerror="this.onerror=null; this.src=generateFallbackImage('${safeName}', '${safeCat}');">
                 <div class="ai-thumb-badge" title="Upload dish photo"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></div>
             </div>
 
@@ -1227,7 +1243,7 @@ function addManualPendingAiItem() {
         name: "",
         price: 0,
         category: menuCategories.find(c => c !== 'All') || "Food",
-        image: generateFallbackImage("New Item"),
+        image: (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage("New Item") : generateFallbackImage("New Item")),
         image_prompt: "",
         hasCustomImage: false
     });
@@ -1273,7 +1289,7 @@ async function confirmAiImport() {
             }
 
             const itemRate = parseFloat(item.price) || 0;
-            const finalImage = item.image || generateFallbackImage(rawName);
+            const finalImage = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(rawName, catName) : generateFallbackImage(rawName, catName));
 
             const newItem = {
                 id: Date.now() + (itemIndex * 100) + Math.floor(Math.random() * 1000),
