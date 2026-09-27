@@ -1049,9 +1049,11 @@ function toggleMobileSlideMenu(forcedState) {
     if (shouldOpen) {
         drawer.classList.add('open');
         overlay.classList.add('open');
+        overlay.classList.add('show');
     } else {
         drawer.classList.remove('open');
         overlay.classList.remove('open');
+        overlay.classList.remove('show');
     }
 }
 window.toggleMobileSlideMenu = toggleMobileSlideMenu;

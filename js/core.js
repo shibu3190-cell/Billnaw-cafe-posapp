@@ -463,11 +463,32 @@ function handleRemoteFirestoreUpdate(data) {
     if (Array.isArray(data.staff) && data.staff.length > 0) {
         staffList = data.staff;
     }
-    if (Array.isArray(data.menu) && data.menu.length > 0) {
+    const isLegacyRemoteMock = Array.isArray(data.menu) && (
+        data.menu.some(i => i.name === 'Steam Rice' || i.name === 'Espresso Coffee' || i.name === 'Chicken Roll' || i.name === 'Masala Chai' || i.name === 'Club Sandwich') ||
+        (data.menu.length >= 30)
+    );
+
+    if (Array.isArray(data.menu) && data.menu.length > 0 && !isLegacyRemoteMock) {
         menuItems = data.menu;
+    } else if (isLegacyRemoteMock || !Array.isArray(menuItems) || menuItems.length === 0) {
+        const cleanDefaultMenu = [
+            { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
+            { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
+            { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") },
+            { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: generateFallbackImage("Masala Coke") }
+        ];
+        menuItems = cleanDefaultMenu;
+        window.menuItems = menuItems;
+        if (isLegacyRemoteMock) {
+            console.log("⚡ Sanitized legacy mock menu from remote store; persisting pristine 4-item baseline to cloud");
+            setTimeout(() => persistAllToFirestore(), 400);
+        }
     }
-    if (Array.isArray(data.categories) && data.categories.length > 0) {
+    if (Array.isArray(data.categories) && data.categories.length > 0 && !isLegacyRemoteMock) {
         menuCategories = data.categories;
+    } else if (isLegacyRemoteMock) {
+        menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
+        window.menuCategories = menuCategories;
     }
     if (Array.isArray(data.customers) && data.customers.length > 0) {
         customersList = data.customers;
@@ -488,6 +509,9 @@ function handleRemoteFirestoreUpdate(data) {
             if(fetchedTables[i]) { 
                 tablesInfo[i] = fetchedTables[i]; 
                 if(!tablesInfo[i].items) tablesInfo[i].items = []; 
+                if (isLegacyRemoteMock || tablesInfo[i].items.some(it => it.name === 'Steam Rice' || it.name === 'Espresso Coffee' || it.name === 'Masala Chai')) {
+                    tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
+                }
             } else { 
                 if (!tablesInfo[i]) tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null }; 
             }
@@ -855,7 +879,11 @@ async function initDatabase() {
         { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") },
         { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: generateFallbackImage("Masala Coke") }
     ];
-    if (storedMenu && Array.isArray(storedMenu) && storedMenu.length >= 4) {
+    const isLegacyMockMenu = storedMenu && Array.isArray(storedMenu) && (
+        storedMenu.some(i => i.name === 'Steam Rice' || i.name === 'Espresso Coffee' || i.name === 'Chicken Roll' || i.name === 'Masala Chai') ||
+        (storedMenu.length >= 30) // old 36-item mock list
+    );
+    if (storedMenu && Array.isArray(storedMenu) && storedMenu.length >= 4 && !isLegacyMockMenu) {
         menuItems = storedMenu;
         window.menuItems = menuItems;
     } else {
@@ -864,7 +892,7 @@ async function initDatabase() {
         await idb.set('cafe_menu', menuItems);
     }
     const storedCats = await idb.get('cafe_categories');
-    if (storedCats && Array.isArray(storedCats) && storedCats.length > 0) {
+    if (storedCats && Array.isArray(storedCats) && storedCats.length > 0 && !isLegacyMockMenu) {
         menuCategories = storedCats;
         window.menuCategories = menuCategories;
     } else {
@@ -892,9 +920,12 @@ async function initDatabase() {
         window.tablesInfo = tablesInfo;
     }
     for (let i = 1; i <= (shopProfile.tableCount || 10); i++) {
-        if (!tablesInfo[i]) {
+        if (!tablesInfo[i] || (tablesInfo[i].items && tablesInfo[i].items.some(it => it.name === 'Steam Rice' || it.name === 'Espresso Coffee'))) {
             tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
         }
+    }
+    if (isLegacyMockMenu) {
+        await idb.set('cafe_tables', tablesInfo);
     }
     const storedCustomers = await idb.get('cafe_customers');
     if (storedCustomers && Array.isArray(storedCustomers)) {

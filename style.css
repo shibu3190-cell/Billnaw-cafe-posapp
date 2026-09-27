@@ -2199,7 +2199,8 @@ input:focus, select:focus, textarea:focus { outline: none; }
     pointer-events: none;
     transition: opacity 0.25s ease;
 }
-.slide-menu-overlay.open {
+.slide-menu-overlay.open,
+.slide-menu-overlay.show {
     opacity: 1;
     pointer-events: auto;
 }

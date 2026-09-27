@@ -1786,17 +1786,19 @@ function renderLowStockNotifications() {
     const unpaidListEl = document.getElementById('unpaidTableAlertsList');
     let unpaidHtml = '';
     const now = Date.now();
+    const currentTables = window.tablesInfo || {};
     for (let t = 1; t <= 12; t++) {
-        const table = tableData[t];
-        if (table && table.status === 'occupied' && table.occupiedSince) {
-            const elapsedMins = Math.floor((now - table.occupiedSince) / 60000);
+        const table = currentTables[t];
+        const startTime = table ? (table.occupiedSince || table.savedTime) : null;
+        if (table && table.status === 'occupied' && startTime) {
+            const elapsedMins = Math.floor((now - startTime) / 60000);
             if (elapsedMins >= 15) {
                 alertCount++;
                 unpaidHtml += `
                     <div style="display: flex; align-items: center; justify-content: space-between; background: #EFF6FF; border: 1px solid #BFDBFE; padding: 10px 12px; border-radius: 10px;">
                         <div>
                             <div style="font-size: 13px; font-weight: 700; color: #1E40AF;">🪑 Table ${t} (${elapsedMins}m)</div>
-                            <div style="font-size: 11px; color: #3B82F6;">Occupied since ${new Date(table.occupiedSince).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                            <div style="font-size: 11px; color: #3B82F6;">Occupied since ${new Date(startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>
                         <button type="button" class="btn btn-outline" style="font-size: 11px; padding: 4px 8px; border-radius: 6px; font-weight: 700; background: #FFFFFF; color: #1E40AF; border-color: #BFDBFE;" onclick="selectTable(${t}); toggleNotificationDrawer(false);">View</button>
                     </div>
