@@ -105,6 +105,20 @@
                                 <button type="button" id="btnResendOtp" class="btn-resend-link" disabled onclick="handleResendOtpCode()">Resend Code</button>
                             </div>
 
+                            <!-- 1-Tap Auto-Fill Code Banner (instant fallback if email delayed) -->
+                            <div id="otpAutoFillBanner" style="display: none; margin: 10px 0; background: #ECFDF5; border: 1.5px solid #10B981; border-radius: 12px; padding: 10px 14px; align-items: center; justify-content: space-between; gap: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 18px;">🔑</span>
+                                    <div>
+                                        <div style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Auto-Fill Code</div>
+                                        <div style="font-size: 15px; font-weight: 800; color: #065F46; letter-spacing: 3px; font-family: monospace;" id="otpAutoFillCodeText">------</div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-emerald" onclick="triggerAutoFillOtp('login')" style="padding: 6px 12px; font-size: 11px; font-weight: 800; border-radius: 8px; box-shadow: 0 2px 6px rgba(16,185,129,0.25);">
+                                    ⚡ 1-Tap Fill &amp; Sign In
+                                </button>
+                            </div>
+
                             <button type="button" id="btnVerifyOtpSubmit" class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="handleVerifyOtpCode()">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                                 <span>Verify & Sign In</span>
@@ -220,16 +234,38 @@
                             <button type="button" id="btnSignupResendOtp" class="btn-resend-link" disabled onclick="handleResendSignupOtp()">Resend Code</button>
                         </div>
 
+                        <!-- 1-Tap Auto-Fill Code Banner for Signup -->
+                        <div id="signupOtpAutoFillBanner" style="display: none; margin: 10px 0; background: #ECFDF5; border: 1.5px solid #10B981; border-radius: 12px; padding: 10px 14px; align-items: center; justify-content: space-between; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 18px;">🔑</span>
+                                <div>
+                                    <div style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Auto-Fill Code</div>
+                                    <div style="font-size: 15px; font-weight: 800; color: #065F46; letter-spacing: 3px; font-family: monospace;" id="signupOtpAutoFillCodeText">------</div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-emerald" onclick="triggerAutoFillOtp('signup')" style="padding: 6px 12px; font-size: 11px; font-weight: 800; border-radius: 8px; box-shadow: 0 2px 6px rgba(16,185,129,0.25);">
+                                ⚡ Auto-Fill &amp; Register
+                            </button>
+                        </div>
+
                         <button type="button" id="btnVerifySignupSubmit" class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="handleVerifyAndCreateAccount()">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                            <span>Verify OTP & Complete Shop Registration</span>
+                            <span>Verify OTP &amp; Complete Shop Registration</span>
+                        </button>
+                        <button type="button" class="btn btn-outline" style="width: 100%; margin-top: 8px; font-size: 11.5px; border-radius: 10px; font-weight: 700; background: #FFFFFF;" onclick="handleDirectSignupWithoutOtp()">
+                            ⚡ Skip OTP &amp; Create Profile Instantly
                         </button>
                     </div>
 
-                    <button type="button" id="btnSignupSubmit" class="btn btn-emerald" style="width: 100%; margin-top: 12px;" onclick="handleCreateShopAccount()">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
-                        <span>Verify Email & Create Shop</span>
-                    </button>
+                    <div style="display: flex; gap: 8px; margin-top: 12px;" id="signupActionRow">
+                        <button type="button" id="btnSignupSubmit" class="btn btn-emerald" style="flex: 1;" onclick="handleCreateShopAccount()">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
+                            <span>Verify Email &amp; Create Shop</span>
+                        </button>
+                        <button type="button" id="btnSignupDirect" class="btn btn-outline" style="border: 1.5px solid var(--border); font-size: 11.5px; font-weight: 700; padding: 8px 12px; border-radius: 12px; color: var(--text-dark); background: #FAF7F4;" onclick="handleDirectSignupWithoutOtp()" title="Create shop profile immediately without waiting for email">
+                            ⚡ Instant Setup
+                        </button>
+                    </div>
                 </div>
 
                 <!-- 3. PHONE & WHATSAPP OTP (COMING SOON FEATURE PREVIEW) -->
@@ -1081,6 +1117,7 @@
                 <div class="form-group" style="flex: 1;"><label>Customer Name</label><input type="text" id="editCustomerName"></div>
                 <div class="form-group" style="flex: 1;"><label>Biller Name</label><input type="text" id="editBillerName"></div>
             </div>
+            <div id="editOrderItemsContainer" class="form-group" style="margin-bottom: 14px;"></div>
             <div class="modal-actions">
                 <button class="btn btn-outline" onclick="document.getElementById('editOrderModal').style.display='none'">Cancel</button>
                 <button class="btn" style="flex: 2; background: var(--primary); display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="saveEditedOrder()">
@@ -2386,10 +2423,10 @@
             <span class="nav-text">Menu</span>
         </button>
 
-        <!-- Tab 3: WhatsApp Marketing Hub -->
-        <button class="nav-btn" id="nav-whatsapp" onclick="switchTab('whatsapp')" title="WhatsApp Marketing Campaigns">
-            <span class="icon-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>
-            <span class="nav-text">WhatsApp</span>
+        <!-- Tab 3: Dashboard & Revenue Reports -->
+        <button class="nav-btn" id="nav-dashboard" onclick="switchTab('dashboard')" title="Store Analytics & Revenue Reports">
+            <span class="icon-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>
+            <span class="nav-text">Report</span>
         </button>
 
         <!-- Tab 4: Inventory Telemetry -->
@@ -2398,22 +2435,22 @@
             <span class="nav-text">Inventory</span>
         </button>
 
-        <!-- Tab 5: Dashboard & Revenue Reports -->
-        <button class="nav-btn" id="nav-dashboard" onclick="switchTab('dashboard')" title="Store Analytics & Revenue Reports">
-            <span class="icon-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>
-            <span class="nav-text">Reports</span>
-        </button>
-
-        <!-- Tab 6: Customers Directory -->
+        <!-- Tab 5: Customers Directory -->
         <button class="nav-btn" id="nav-customers" onclick="switchTab('customers')" title="Customer Directory & Loyalty">
             <span class="icon-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
-            <span class="nav-text">Customers</span>
+            <span class="nav-text">Customer</span>
         </button>
 
-        <!-- Tab 7: Settings -->
+        <!-- Tab 6: Settings -->
         <button class="nav-btn" id="nav-settings" onclick="switchTab('settings')" title="Store Settings & Management">
             <span class="icon-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></span>
             <span class="nav-text">Settings</span>
+        </button>
+
+        <!-- Hidden Tab for WhatsApp (Accessible via Hub / Menu) -->
+        <button class="nav-btn" id="nav-whatsapp" onclick="switchTab('whatsapp')" title="WhatsApp Marketing Campaigns" style="display: none !important;">
+            <span class="icon-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>
+            <span class="nav-text">WhatsApp</span>
         </button>
         
         <div style="flex-grow: 1;" class="desktop-only"></div>
@@ -2434,13 +2471,13 @@
         <div class="topbar">
             <div class="topbar-brand-minimal">
                 <!-- Cafe Brand Icon Button (Pure Coffee Cup) -->
-                <button type="button" class="topbar-menu-icon-btn" onclick="toggleMobileSlideMenu()" aria-label="Open Navigation Menu" title="Open Navigation Menu">
+                <button type="button" class="topbar-menu-icon-btn" onclick="toggleMobileSlideMenu(true)" aria-label="Open Navigation Menu" title="Open Navigation Menu">
                     <svg class="menu-cafe-glyph" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
                 </button>
-                <div class="topbar-brand-texts" onclick="openStoreProfileModal()" title="Click to change business name">
+                <div class="topbar-brand-texts" onclick="toggleMobileSlideMenu(true)" title="Billnaw POS - Menu">
                     <span id="topbarShopName" class="brand-title">billnaw</span>
                     <span class="brand-subtitle">POS</span>
-                    <span class="brand-edit-hint" title="Change business name">
+                    <span class="brand-edit-hint" onclick="event.stopPropagation(); openStoreProfileModal();" title="Change business name">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     </span>
                 </div>
@@ -2453,15 +2490,24 @@
                     <strong id="topbarTableDisplay">Table 1</strong>
                 </div>
 
+                <!-- Sleek Bell Notification Icon Button & Unread Counter -->
+                <button type="button" id="topbarNotificationBellBtn" class="topbar-bell-btn" onclick="toggleNotificationDrawer(true)" aria-label="Notifications" title="System & Stock Alerts">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span id="topbarNotificationBadge" class="notification-badge">0</span>
+                </button>
+
                 <!-- Quick Expense Record Button -->
                 <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 20px; font-weight: 700; color: var(--danger); border-color: rgba(167,50,50,0.25); display: inline-flex; align-items: center; gap: 6px;" onclick="openQuickExpenseModal()" title="Record Daily Expense">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     <span>Expense</span>
                 </button>
 
-                <!-- Staff Switcher -->
+                <!-- Staff Switcher with Cashier Profile Avatar -->
                 <div id="topbarStaffDisplay" class="staff-pill-btn" onclick="openStaffSwitchModal()" title="Current Active Staff (Click to Switch)" style="display: inline-flex; align-items: center; gap: 6px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    <span class="cashier-avatar-circle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span>
                     <span id="activeStaffName">Admin</span>
                 </div>
 
@@ -2493,13 +2539,19 @@
                     </div>
 
                     <!-- Sticky Quick Date Range Filters -->
-                    <div class="filter-pills-bar" style="margin-bottom: 0;">
+                    <div class="filter-pills-bar" style="margin-bottom: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
                         <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-right: 4px;">Date Range:</span>
                         <button class="filter-pill active" id="fRange-today" onclick="setDashboardDateRange('today')">Today</button>
                         <button class="filter-pill" id="fRange-yesterday" onclick="setDashboardDateRange('yesterday')">Yesterday</button>
                         <button class="filter-pill" id="fRange-week" onclick="setDashboardDateRange('week')">This Week</button>
                         <button class="filter-pill" id="fRange-month" onclick="setDashboardDateRange('month')">This Month</button>
                         <button class="filter-pill" id="fRange-all" onclick="setDashboardDateRange('all')">All Time</button>
+                        <button class="filter-pill" id="fRange-custom" onclick="setDashboardDateRange('custom')">Custom</button>
+                        <div id="reportCustomDateWrap" style="display: none; align-items: center; gap: 6px; margin-left: 6px;">
+                            <input type="date" id="reportCustomStartDate" class="form-input" style="padding: 4px 8px; font-size: 11px; height: 28px; width: auto;" onchange="applyCustomDashboardDateRange()">
+                            <span style="font-size: 11px; color: var(--text-muted); font-weight: 700;">to</span>
+                            <input type="date" id="reportCustomEndDate" class="form-input" style="padding: 4px 8px; font-size: 11px; height: 28px; width: auto;" onchange="applyCustomDashboardDateRange()">
+                        </div>
                     </div>
                 </div>
                 
@@ -2737,16 +2789,8 @@
                     <!-- Card 2: Marketing & Sales -->
                     <div class="card" style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 22px; padding: 22px 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.04);">
                         <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 800; color: #1E293B;">Marketing &amp; Sales</h3>
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; text-align: center;">
-                            <!-- 1. WhatsApp Marketing -->
-                            <div role="button" tabindex="0" onclick="openCustomerHubSubView('aiWhatsAppMarketingHub')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
-                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #F5F3FF; border: 1.5px solid #EDE9FE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #7C3AED; transition: transform 0.2s, box-shadow 0.2s;">
-                                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                                </div>
-                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">WhatsApp Marketing</span>
-                            </div>
-
-                            <!-- 2. Reward Points (Customer Directory & Loyalty) -->
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: center;">
+                            <!-- 1. Reward Points (Customer Directory & Loyalty) -->
                             <div role="button" tabindex="0" onclick="openCustomerHubSubView('customerDirectoryDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
                                 <div style="width: 64px; height: 64px; border-radius: 50%; background: #F5F3FF; border: 1.5px solid #EDE9FE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #7C3AED; transition: transform 0.2s, box-shadow 0.2s;">
                                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
@@ -2754,7 +2798,7 @@
                                 <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Reward Points</span>
                             </div>
 
-                            <!-- 3. Notes and Appointments -->
+                            <!-- 2. Notes and Appointments -->
                             <div role="button" tabindex="0" onclick="openCustomerHubSubView('notesAppointmentsDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
                                 <div style="width: 64px; height: 64px; border-radius: 50%; background: #F5F3FF; border: 1.5px solid #EDE9FE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #7C3AED; transition: transform 0.2s, box-shadow 0.2s;">
                                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="m9 16 2 2 4-4"></path></svg>
@@ -2762,7 +2806,7 @@
                                 <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Notes and Appointments</span>
                             </div>
 
-                            <!-- 4. Online Store -->
+                            <!-- 3. Online Store -->
                             <div role="button" tabindex="0" onclick="openCustomerHubSubView('onlineStoreDetailedSubView')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
                                 <div style="width: 64px; height: 64px; border-radius: 50%; background: #F5F3FF; border: 1.5px solid #EDE9FE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #7C3AED; transition: transform 0.2s, box-shadow 0.2s;">
                                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"></path><path d="M21 9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9"></path><path d="M3 9a3 3 0 0 1 6 0 3 3 0 0 1 6 0 3 3 0 0 1 6 0"></path><line x1="9" y1="21" x2="9" y2="15"></line><line x1="15" y1="21" x2="15" y2="15"></line></svg>
@@ -3242,8 +3286,8 @@
                                     <span class="icon-box" style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span> History (Last 2):
                                 </span>
                                 <div id="quickVoicePillsContainer" style="display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                                    <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('two cold coffee')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 3px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>"2 Cold Coffee"</button>
-                                    <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('one chicken biryani')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 3px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>"1 Chicken Biryani"</button>
+                                    <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('2 Hot Chai')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 3px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>"2 Hot Chai"</button>
+                                    <button type="button" class="quick-voice-chip" onclick="parseAndPushVoiceOrder('2 Samosa')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 3px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>"2 Samosa"</button>
                                 </div>
                             </div>
 
@@ -3299,7 +3343,7 @@
                         </div>
 
                         <!-- 🧠 Factor 3: Psychological Loss Aversion Alert -->
-                        <div id="cartLossAversionAlert" class="loss-aversion-banner" style="display: none;">
+                        <div id="cartLossAversionAlert" style="display: none;" class="loss-aversion-banner">
                             <div class="la-content">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="la-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                                 <div class="la-text-wrap">
@@ -3348,7 +3392,7 @@
                                 ₹ <span id="fc-total">0</span>
                             </div>
                             <button class="sc-right" onclick="openCheckoutModal()" style="display: inline-flex; align-items: center; gap: 6px;">
-                                <span>CHECKOUT</span>
+                                <span>CHECKOUT →</span>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                             </button>
                         </div>
@@ -3449,182 +3493,457 @@
                  HUB 3: 💬 WHATSAPP MARKETING HUB & CAMPAIGNS
             ============================================================ -->
             <div id="whatsapp" class="view">
-                <div class="card" style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="icon-box-lg" style="background: #E8F5E9; border-color: #C8E6C9; color: #16A34A;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>
+                
+                <!-- 🌟 MODERN LANDING HUB (Screenshot 3 & For You Aesthetic) -->
+                <div id="whatsappLandingHub" style="display: block; max-width: 840px; margin: 0 auto 24px auto;">
+                    
+                    <!-- Emerald Gradient Banner Header -->
+                    <div style="background: linear-gradient(135deg, #059669 0%, #047857 50%, #064E3B 100%); border-radius: 24px; padding: 26px 24px; color: #FFFFFF; margin-bottom: 20px; box-shadow: 0 8px 24px rgba(5,150,105,0.22); position: relative; overflow: hidden;">
+                        <div style="position: absolute; right: -20px; bottom: -20px; opacity: 0.12; font-size: 140px; line-height: 1; pointer-events: none;">💬</div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; position: relative; z-index: 1;">
                             <div>
-                                <h2 style="font-size: 18px; font-weight: 800; color: var(--text-dark); margin: 0;">WhatsApp Marketing Hub</h2>
-                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
-                                    Select marketing templates, customize offers in real-time, and dispatch campaigns directly to your customers.
+                                <h1 style="margin: 0 0 6px 0; font-size: 26px; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">
+                                    <span>WhatsApp Marketing Hub</span>
+                                    <span style="font-size: 22px;">✨</span>
+                                </h1>
+                                <p style="margin: 0; font-size: 13.5px; color: rgba(255, 255, 255, 0.92); font-weight: 500;">
+                                    High-conversion promotions, customer loyalty specials, and 1-tap WhatsApp broadcast campaigns.
                                 </p>
                             </div>
+                            <button type="button" class="btn" onclick="openWhatsAppHubSubView('studio')" style="background: #FFFFFF; color: #047857; font-weight: 800; border-radius: 20px; font-size: 12px; padding: 8px 18px; border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12); display: inline-flex; align-items: center; gap: 6px;">
+                                <span>Open Studio</span>
+                                <span>&rarr;</span>
+                            </button>
                         </div>
-                        <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="copyWhatsAppCampaignText()">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                            <span>Copy Message</span>
+                    </div>
+
+                    <!-- Card 1: Curated Campaign Templates -->
+                    <div class="card" style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 22px; padding: 22px 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.04);">
+                        <h3 style="margin: 0 0 18px 0; font-size: 16px; font-weight: 800; color: #1E293B;">Recommended for you</h3>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: center;">
+                            <!-- 1. Festival Special -->
+                            <div role="button" tabindex="0" onclick="openWhatsAppHubSubView('studio', 'festival')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #ECFDF5; border: 1px solid #A7F3D0; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <div style="width: 44px; height: 44px; border-radius: 12px; background: #059669; color: white; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 6px rgba(5,150,105,0.25);">
+                                        🎁
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">Festival &amp; Holiday Deals</span>
+                            </div>
+
+                            <!-- 2. Daily Chef Combos -->
+                            <div role="button" tabindex="0" onclick="openWhatsAppHubSubView('studio', 'combos')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #FEF3C7; border: 1px solid #FDE68A; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <div style="width: 44px; height: 44px; border-radius: 12px; background: #D97706; color: white; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 6px rgba(217,119,6,0.25);">
+                                        ☕
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">Daily Combos &amp; Snacks</span>
+                            </div>
+
+                            <!-- 3. VIP Loyalty Appreciation -->
+                            <div role="button" tabindex="0" onclick="openWhatsAppHubSubView('studio', 'loyalty')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #F5F3FF; border: 1px solid #DDD6FE; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <div style="width: 44px; height: 44px; border-radius: 12px; background: #7C3AED; color: white; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 6px rgba(124,58,237,0.25);">
+                                        👑
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">VIP Regulars Loyalty</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Middle Banner: Instant WhatsApp Marketing -->
+                    <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); border-radius: 20px; padding: 18px 22px; color: #FFFFFF; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(16,185,129,0.22); flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <div style="font-size: 15px; font-weight: 800; margin-bottom: 2px;">Broadcast to Customer Directory</div>
+                            <div style="font-size: 12px; color: rgba(255,255,255,0.9);">1-tap delivery directly to saved diner WhatsApp numbers.</div>
+                        </div>
+                        <button type="button" class="btn" onclick="openWhatsAppHubSubView('broadcast')" style="background: #FFFFFF; color: #047857; border: none; font-size: 12.5px; font-weight: 800; border-radius: 20px; padding: 8px 18px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.12); display: inline-flex; align-items: center; gap: 6px;">
+                            <span>View Queue</span>
+                            <span>&rarr;</span>
                         </button>
                     </div>
+
+                    <!-- Carousel Dots -->
+                    <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 22px;">
+                        <span style="width: 18px; height: 7px; border-radius: 4px; background: #059669;"></span>
+                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #CBD5E1;"></span>
+                    </div>
+
+                    <!-- Card 2: Marketing Channels & Studio Tools -->
+                    <div class="card" style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 22px; padding: 22px 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.04);">
+                        <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 800; color: #1E293B;">Marketing &amp; Channels</h3>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: center;">
+                            <!-- 1. Interactive Studio & Simulator -->
+                            <div role="button" tabindex="0" onclick="openWhatsAppHubSubView('studio')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #ECFDF5; border: 1.5px solid #D1FAE5; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #059669; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Interactive Message Studio</span>
+                            </div>
+
+                            <!-- 2. 1-Tap Broadcast Dispatcher -->
+                            <div role="button" tabindex="0" onclick="openWhatsAppHubSubView('broadcast')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #EFF6FF; border: 1.5px solid #DBEAFE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #2563EB; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">1-Tap Broadcast Dispatcher</span>
+                            </div>
+
+                            <!-- 3. Table QR & Digital Menu -->
+                            <div role="button" tabindex="0" onclick="openWhatsAppHubSubView('qr')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #FDF2F8; border: 1.5px solid #FCE7F3; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #DB2777; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Table QR &amp; Ordering</span>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
-                <div class="wa-hub-grid">
-                    <!-- Left: Selectable Templates & Customizer -->
-                    <div>
-                        <!-- Selectable Templates -->
-                        <div class="card" style="margin-bottom: 16px;">
-                            <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 10px; color: var(--primary);">1. Choose Campaign Template</h3>
-                            <div id="waTemplatesListContainer"></div>
+                <!-- SUB-VIEW 1: 💬 CAMPAIGN STUDIO & LIVE PHONE SIMULATOR -->
+                <div id="waCampaignStudioSubView" style="display: none; max-width: 900px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <button type="button" class="btn btn-outline" onclick="closeWhatsAppHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to WhatsApp Hub</span>
+                        </button>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" class="btn btn-outline" onclick="copyWhatsAppCampaignText()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                <span>Copy Text</span>
+                            </button>
+                            <button type="button" class="btn btn-emerald" onclick="openWhatsAppHubSubView('broadcast')" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px;">
+                                <span>Go to Dispatch Queue &rarr;</span>
+                            </button>
                         </div>
+                    </div>
 
-                        <!-- Inline Template Customizer -->
-                        <div class="card" style="margin-bottom: 16px;">
-                            <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--primary);">2. Personalize Offer Details</h3>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                                <div>
-                                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Discount Percentage (%)</label>
-                                    <input type="number" id="waInputDiscount" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; font-weight: 700;" oninput="updateWhatsAppCustomValue('discountPercent', parseFloat(this.value) || 0)">
+                    <div class="wa-hub-grid">
+                        <!-- Left Column: Templates & Personalize -->
+                        <div>
+                            <div class="card" style="margin-bottom: 16px;">
+                                <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 10px; color: var(--primary);">1. Choose Campaign Template</h3>
+                                <div id="waTemplatesListContainer"></div>
+                            </div>
+
+                            <div class="card">
+                                <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--primary);">2. Personalize Offer Details</h3>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                                    <div>
+                                        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Discount (%)</label>
+                                        <input type="number" id="waInputDiscount" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; font-weight: 700;" oninput="updateWhatsAppCustomValue('discountPercent', parseFloat(this.value) || 0)">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Min Order (₹)</label>
+                                        <input type="number" id="waInputMinOrder" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; font-weight: 700;" oninput="updateWhatsAppCustomValue('minOrder', parseFloat(this.value) || 0)">
+                                    </div>
+                                </div>
+                                <div style="margin-bottom: 12px;">
+                                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Valid Till / Timing</label>
+                                    <input type="text" id="waInputValidTill" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px;" oninput="updateWhatsAppCustomValue('validTill', this.value)">
                                 </div>
                                 <div>
-                                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Min Order Value (₹)</label>
-                                    <input type="number" id="waInputMinOrder" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; font-weight: 700;" oninput="updateWhatsAppCustomValue('minOrder', parseFloat(this.value) || 0)">
+                                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Custom Greeting / Note</label>
+                                    <input type="text" id="waInputNote" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px;" oninput="updateWhatsAppCustomValue('customNote', this.value)">
                                 </div>
                             </div>
-                            <div style="margin-bottom: 12px;">
-                                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Valid Till / Event Timing</label>
-                                <input type="text" id="waInputValidTill" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px;" oninput="updateWhatsAppCustomValue('validTill', this.value)">
+                        </div>
+
+                        <!-- Right Column: Smartphone Simulator Bubble -->
+                        <div>
+                            <div class="wa-phone-mockup">
+                                <div class="wa-phone-header">
+                                    <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white; display: inline-flex; align-items: center; justify-content: center;">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                                    </span>
+                                    <div>
+                                        <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                                            <span id="waPreviewStoreName">billnaw</span>
+                                            <span style="font-size: 11px; color: #86EFAC;">✓</span>
+                                        </div>
+                                        <div style="font-size: 10px; opacity: 0.85;">Official Restaurant Account • Online</div>
+                                    </div>
+                                </div>
+                                <div class="wa-phone-body">
+                                    <div class="wa-bubble">
+                                        <div id="waBubbleMessageContent" style="white-space: pre-wrap; font-size: 12px;"></div>
+                                        <div class="wa-bubble-meta">
+                                            <span id="waBubbleTimeDisplay">10:45 AM</span>
+                                            <span style="color: #34B7F1; font-size: 11px;">✓✓</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="padding: 12px 16px; background: #FFFFFF; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Simulated Customer View</span>
+                                    <button type="button" class="btn btn-success" style="padding: 6px 14px; font-size: 11px; border-radius: 16px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyWhatsAppCampaignText()">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <span>Copy Text</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-VIEW 2: 📢 1-TAP BROADCAST DISPATCHER -->
+                <div id="waBroadcastSubView" style="display: none; max-width: 840px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" class="btn btn-outline" onclick="closeWhatsAppHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to WhatsApp Hub</span>
+                        </button>
+                    </div>
+                    <div class="card">
+                        <div class="card-header" style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                            <div>
+                                <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0;">Customer Contacts Broadcast Dispatch</h3>
+                                <p style="font-size: 12px; color: var(--text-muted); margin: 3px 0 0 0;">Dispatch active promotional offer directly to your customer directory</p>
+                            </div>
+                            <button type="button" class="btn btn-outline" style="font-size: 12px; padding: 6px 14px; border-radius: 12px;" onclick="copyWhatsAppCampaignText()">
+                                Copy Active Message
+                            </button>
+                        </div>
+                        <div id="waCustomerBroadcastList" style="max-height: 480px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+
+                <!-- SUB-VIEW 3: 📱 TABLE QR CODE & DIGITAL MENU LINK -->
+                <div id="waQrSubView" style="display: none; max-width: 840px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" class="btn btn-outline" onclick="closeWhatsAppHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to WhatsApp Hub</span>
+                        </button>
+                    </div>
+                    <div class="card" style="border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); background: #FFFFFF;">
+                        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+                            <div style="width: 48px; height: 48px; border-radius: 14px; background: #ECFDF5; color: #059669; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                             </div>
                             <div>
-                                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">Owner Custom Note / Greeting</label>
-                                <input type="text" id="waInputNote" class="form-group" style="width: 100%; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px;" oninput="updateWhatsAppCustomValue('customNote', this.value)">
+                                <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-dark);">WhatsApp Table QR &amp; Self-Ordering</h3>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Enable diners to browse digital menu &amp; submit orders via WhatsApp directly from their tables</p>
                             </div>
                         </div>
-
-                        <!-- Customer List Dispatch Action -->
-                        <div class="card">
-                            <div class="card-header" style="margin-bottom: 10px;">
-                                <h3 style="font-size: 14px; font-weight: 700; color: var(--primary); margin: 0;">3. Customer Contacts Campaign Dispatch</h3>
-                                <span style="font-size: 11px; color: var(--text-muted);">1-Tap Send</span>
+                        <div style="background: #F8FAFC; border: 1px solid var(--border); border-radius: 14px; padding: 18px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-weight: 700; font-size: 13px; color: var(--text-dark);">Dine-In Table QR Dispatch</span>
+                                <span style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">Active on Tables 1-5</span>
                             </div>
-                            <div id="waCustomerBroadcastList" style="max-height: 280px; overflow-y: auto;"></div>
-                        </div>
-                    </div>
-
-                    <!-- Right: Live WhatsApp Phone Simulation Bubble -->
-                    <div>
-                        <div class="wa-phone-mockup">
-                            <div class="wa-phone-header">
-                                <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white; display: inline-flex; align-items: center; justify-content: center;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                                </span>
-                                <div>
-                                    <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
-                                        <span id="waPreviewStoreName">billnaw</span>
-                                        <span style="font-size: 11px; color: #86EFAC;">✓</span>
-                                    </div>
-                                    <div style="font-size: 10px; opacity: 0.85;">Official Restaurant Account • Online</div>
-                                </div>
-                            </div>
-                            <div class="wa-phone-body">
-                                <div class="wa-bubble">
-                                    <div id="waBubbleMessageContent" style="white-space: pre-wrap; font-size: 12px;"></div>
-                                    <div class="wa-bubble-meta">
-                                        <span id="waBubbleTimeDisplay">10:45 AM</span>
-                                        <span style="color: #34B7F1; font-size: 11px;">✓✓</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div style="padding: 12px 16px; background: #FFFFFF; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Simulated Customer View</span>
-                                <button class="btn btn-success" style="padding: 6px 14px; font-size: 11px; border-radius: 16px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyWhatsAppCampaignText()">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    <span>Copy Text</span>
-                                </button>
+                            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 14px 0;">Customers scan table QR code to open your store's live menu and send billing items via WhatsApp.</p>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-emerald" onclick="showToast('📋 WhatsApp ordering link copied to clipboard!')" style="font-size: 12px; border-radius: 10px; font-weight: 700; padding: 8px 16px;">Copy Store Link</button>
+                                <button type="button" class="btn btn-outline" onclick="showToast('🖨️ Printing Table QR Codes for Tables 1-5...')" style="font-size: 12px; border-radius: 10px; font-weight: 700; padding: 8px 16px;">Print Table QR Codes</button>
                             </div>
                         </div>
                     </div>
                 </div>
+
             </div>
 
             <!-- ============================================================
                  HUB 4: 📦 INVENTORY TELEMETRY & INGREDIENT CONSUMPTION
             ============================================================ -->
             <div id="inventory" class="view">
-                <div class="card" style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="icon-box-lg" style="background: #FEF3C7; border-color: #FDE68A; color: #D97706;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></span>
+                
+                <!-- 🌟 MODERN LANDING HUB (Screenshot 3 & For You Aesthetic) -->
+                <div id="inventoryLandingHub" style="display: block; max-width: 840px; margin: 0 auto 24px auto;">
+                    
+                    <!-- Deep Emerald Gradient Header Banner -->
+                    <div style="background: linear-gradient(135deg, #143832 0%, #0F2D28 50%, #0A1F1B 100%); border-radius: 24px; padding: 26px 24px; color: #FFFFFF; margin-bottom: 20px; box-shadow: 0 8px 24px rgba(20,56,50,0.25); position: relative; overflow: hidden;">
+                        <div style="position: absolute; right: -20px; bottom: -20px; opacity: 0.12; font-size: 140px; line-height: 1; pointer-events: none;">📦</div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; position: relative; z-index: 1;">
                             <div>
-                                <h2 style="font-size: 18px; font-weight: 800; color: var(--text-dark); margin: 0;">Inventory Telemetry & Ingredients</h2>
-                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
-                                    Real-time raw ingredient tracking, safety threshold monitors, and loss-aversion alerts aligned to order volumes.
+                                <h1 style="margin: 0 0 6px 0; font-size: 26px; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px;">
+                                    <span>Inventory &amp; Culinary Hub</span>
+                                    <span style="font-size: 22px;">📦</span>
+                                </h1>
+                                <p style="margin: 0; font-size: 13.5px; color: rgba(255, 255, 255, 0.92); font-weight: 500;">
+                                    Real-time raw ingredient tracking, morning commissary batching, bar liquid matrix &amp; live food costing.
                                 </p>
                             </div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button type="button" class="btn" onclick="renderInventoryTelemetryUI(); if(typeof showToast==='function') showToast('Stock telemetry refreshed ✓');" style="background: rgba(255,255,255,0.15); color: #FFFFFF; font-weight: 700; border-radius: 20px; font-size: 12px; padding: 8px 14px; border: 1px solid rgba(255,255,255,0.25); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                    <span>Refresh</span>
+                                </button>
+                                <button type="button" class="btn" onclick="openRestockExpenseModal()" style="background: #2DD4BF; color: #0D2622; font-weight: 800; border-radius: 20px; font-size: 12px; padding: 8px 16px; border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(45,212,191,0.3); display: inline-flex; align-items: center; gap: 6px;">
+                                    <span>+ Quick Restock</span>
+                                </button>
+                            </div>
                         </div>
-                        <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="renderInventoryTelemetryUI()">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    </div>
+
+                    <!-- Loss Aversion Banner -->
+                    <div id="inventoryLossAversionBanner" class="loss-aversion-banner" style="display: none; margin-bottom: 20px;">
+                        <div class="loss-alert-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
+                        <div id="inventoryLossAlertText" style="font-size: 13px; color: #7F1D1D; line-height: 1.45;"></div>
+                    </div>
+
+                    <!-- Telemetry Stats Cards -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                        <div class="card" style="padding: 16px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.03);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Ingredients Tracked</div>
+                            <div id="invStatTotalCount" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">0 Items</div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Daily recipe deduction active</div>
+                        </div>
+                        <div class="card" style="padding: 16px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.03);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Stock Depletion Risk</div>
+                            <div id="invStatRiskCount" style="font-size: 22px; font-weight: 800; color: var(--danger); margin-top: 4px;">0 Low Stock</div>
+                            <div id="invStatRiskSummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">All stock levels normal</div>
+                        </div>
+                        <div class="card" style="padding: 16px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.03);">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Kitchen Readiness</div>
+                            <div id="invStatReadyPercent" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">100% Ready</div>
+                            <div id="invStatReadySummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Live inventory active</div>
+                        </div>
+                    </div>
+
+                    <!-- Card 1: Culinary Production & Recipes -->
+                    <div class="card" style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 22px; padding: 22px 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.04);">
+                        <h3 style="margin: 0 0 18px 0; font-size: 16px; font-weight: 800; color: #1E293B;">Kitchen Production &amp; Recipes</h3>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: center;">
+                            <!-- 1. RTR Raw Materials Tracker -->
+                            <div role="button" tabindex="0" onclick="openInventoryHubSubView('rtr_tracker')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #F0FDF4; border: 1px solid #BBF7D0; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <div style="width: 44px; height: 44px; border-radius: 12px; background: #15803D; color: white; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 6px rgba(21,128,61,0.25);">
+                                        🥘
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">RTR Stock Tracker</span>
+                            </div>
+
+                            <!-- 2. Morning Batch Gravies -->
+                            <div role="button" tabindex="0" onclick="openInventoryHubSubView('morning_batch')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #FEF3C7; border: 1px solid #FDE68A; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <div style="width: 44px; height: 44px; border-radius: 12px; background: #D97706; color: white; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 6px rgba(217,119,6,0.25);">
+                                        🍳
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">Morning Batching</span>
+                            </div>
+
+                            <!-- 3. Dish Recipes & Composition -->
+                            <div role="button" tabindex="0" onclick="openInventoryHubSubView('raw_materials')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 76px; height: 76px; border-radius: 20px; background: #EFF6FF; border: 1px solid #BFDBFE; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <div style="width: 44px; height: 44px; border-radius: 12px; background: #2563EB; color: white; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">
+                                        🥦
+                                    </div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: #334155; line-height: 1.3;">Dish Recipes &amp; Portions</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Middle Banner: Live Food Costing Callout -->
+                    <div style="background: linear-gradient(135deg, #0F766E 0%, #115E59 100%); border-radius: 20px; padding: 18px 22px; color: #FFFFFF; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(15,118,110,0.22); flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <div style="font-size: 15px; font-weight: 800; margin-bottom: 2px;">Dynamic Food Costing &amp; Profit Margins</div>
+                            <div style="font-size: 12px; color: rgba(255,255,255,0.9);">Live recalculation when raw ingredient market supplier prices fluctuate.</div>
+                        </div>
+                        <button type="button" class="btn" onclick="openInventoryHubSubView('dish_costing')" style="background: #FFFFFF; color: #0F766E; border: none; font-size: 12.5px; font-weight: 800; border-radius: 20px; padding: 8px 18px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.12); display: inline-flex; align-items: center; gap: 6px;">
+                            <span>View Margins</span>
+                            <span>&rarr;</span>
+                        </button>
+                    </div>
+
+                    <!-- Carousel Dots -->
+                    <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 22px;">
+                        <span style="width: 18px; height: 7px; border-radius: 4px; background: #143832;"></span>
+                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #CBD5E1;"></span>
+                    </div>
+
+                    <!-- Card 2: Bar, Costing & Procurement Operations -->
+                    <div class="card" style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 22px; padding: 22px 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.04);">
+                        <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 800; color: #1E293B;">Procurement, Bar &amp; Cost Analysis</h3>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; text-align: center;">
+                            <!-- 1. Liquid Bar Matrix -->
+                            <div role="button" tabindex="0" onclick="openInventoryHubSubView('raw_materials')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #FEF3C7; border: 1.5px solid #FDE68A; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #D97706; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <span style="font-size: 24px;">🍺</span>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Liquid Bar &amp; Spirits</span>
+                            </div>
+
+                            <!-- 2. Live Costing & Margins -->
+                            <div role="button" tabindex="0" onclick="openInventoryHubSubView('dish_costing')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #F0FDF4; border: 1.5px solid #BBF7D0; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #16A34A; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <span style="font-size: 24px;">📊</span>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Live Food Costing</span>
+                            </div>
+
+                            <!-- 3. Central Kitchen & POs -->
+                            <div role="button" tabindex="0" onclick="openInventoryHubSubView('central_kitchen')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #EFF6FF; border: 1.5px solid #BFDBFE; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #2563EB; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <span style="font-size: 24px;">🏢</span>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">Central Kitchen &amp; POs</span>
+                            </div>
+
+                            <!-- 4. 15-Min Quick Audit -->
+                            <div role="button" tabindex="0" onclick="openInventoryHubSubView('quick_audit')" style="display: flex; flex-direction: column; align-items: center; cursor: pointer; text-decoration: none;" class="hub-feature-tile">
+                                <div style="width: 64px; height: 64px; border-radius: 50%; background: #FDF2F8; border: 1.5px solid #FCE7F3; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; color: #DB2777; transition: transform 0.2s, box-shadow 0.2s;">
+                                    <span style="font-size: 24px;">⏱️</span>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 700; color: #475569; line-height: 1.25;">15-Min Rapid Audit</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- SUB-VIEW CONTAINER (Hidden by default, opened on tile tap) -->
+                <div id="inventoryDetailedSubView" style="display: none; max-width: 900px; margin: 0 auto 24px auto;">
+                    <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <button type="button" class="btn btn-outline" onclick="closeInventoryHubSubView()" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #FFFFFF; cursor: pointer;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>&larr; Back to Inventory Hub</span>
+                        </button>
+                        <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="renderInventoryTelemetryUI()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                             <span>Refresh Telemetry</span>
                         </button>
                     </div>
-                </div>
 
-                <!-- Loss Aversion Banner -->
-                <div id="inventoryLossAversionBanner" class="loss-aversion-banner" style="display: none;">
-                    <div class="loss-alert-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
-                    <div id="inventoryLossAlertText" style="font-size: 13px; color: #7F1D1D; line-height: 1.45;"></div>
-                </div>
-
-                <!-- Telemetry Stats Cards -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
-                    <div class="card" style="padding: 16px;">
-                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Ingredients Tracked</div>
-                        <div id="invStatTotalCount" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">0 Items</div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Daily recipe deduction active</div>
+                    <!-- Sub-Navigation for Advanced Indian Culinary & Liquid Telemetry Matrix -->
+                    <div class="inv-subnav-bar">
+                        <button type="button" class="inv-subnav-btn active" data-subtab="rtr_tracker" onclick="window.switchInventorySubTab('rtr_tracker')">
+                            🥘 RTR Raw &amp; Recipe Tracker
+                        </button>
+                        <button type="button" class="inv-subnav-btn" data-subtab="raw_materials" onclick="window.switchInventorySubTab('raw_materials')">
+                            🥦 Raw Materials &amp; Bar Pegs
+                        </button>
+                        <button type="button" class="inv-subnav-btn" data-subtab="morning_batch" onclick="window.switchInventorySubTab('morning_batch')">
+                            🍳 Morning Batch Gravies
+                        </button>
+                        <button type="button" class="inv-subnav-btn" data-subtab="dish_costing" onclick="window.switchInventorySubTab('dish_costing')">
+                            📊 Live Costing &amp; Margins
+                        </button>
+                        <button type="button" class="inv-subnav-btn" data-subtab="central_kitchen" onclick="window.switchInventorySubTab('central_kitchen')">
+                            🏢 Central Kitchen &amp; Transfers
+                        </button>
+                        <button type="button" class="inv-subnav-btn" data-subtab="purchase_orders" onclick="window.switchInventorySubTab('purchase_orders')">
+                            📦 Vendor POs
+                        </button>
+                        <button type="button" class="inv-subnav-btn" data-subtab="forecasting_waste" onclick="window.switchInventorySubTab('forecasting_waste')">
+                            📈 Forecasting &amp; Waste
+                        </button>
+                        <button type="button" class="inv-subnav-btn" data-subtab="quick_audit" onclick="window.switchInventorySubTab('quick_audit')">
+                            ⏱️ 15-Min Quick Audit
+                        </button>
                     </div>
-                    <div class="card" style="padding: 16px;">
-                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Stock Depletion Risk</div>
-                        <div id="invStatRiskCount" style="font-size: 22px; font-weight: 800; color: var(--danger); margin-top: 4px;">0 Low Stock</div>
-                        <div id="invStatRiskSummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">All stock levels normal</div>
-                    </div>
-                    <div class="card" style="padding: 16px;">
-                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Kitchen Readiness</div>
-                        <div id="invStatReadyPercent" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">100% Ready</div>
-                        <div id="invStatReadySummary" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Live inventory active</div>
-                    </div>
+
+                    <!-- Dynamic Content for Active Subtab -->
+                    <div id="culinarySubTabContent"></div>
+
+                    <!-- Raw Ingredients Grid (Retained for backwards-compatibility & telemetry) -->
+                    <div id="inventoryIngredientsList" class="inventory-grid" style="display: none;"></div>
                 </div>
 
-                <!-- Sub-Navigation for Advanced Indian Culinary & Liquid Telemetry Matrix -->
-                <div class="inv-subnav-bar">
-                    <button type="button" class="inv-subnav-btn active" data-subtab="rtr_tracker" onclick="window.switchInventorySubTab('rtr_tracker')">
-                        🥘 RTR Raw & Recipe Tracker
-                    </button>
-                    <button type="button" class="inv-subnav-btn" data-subtab="raw_materials" onclick="window.switchInventorySubTab('raw_materials')">
-                        🥦 Raw Materials & Bar Pegs
-                    </button>
-                    <button type="button" class="inv-subnav-btn" data-subtab="morning_batch" onclick="window.switchInventorySubTab('morning_batch')">
-                        🍳 Morning Batch Gravies
-                    </button>
-                    <button type="button" class="inv-subnav-btn" data-subtab="dish_costing" onclick="window.switchInventorySubTab('dish_costing')">
-                        📊 Live Costing & Margins
-                    </button>
-                    <button type="button" class="inv-subnav-btn" data-subtab="central_kitchen" onclick="window.switchInventorySubTab('central_kitchen')">
-                        🏢 Central Kitchen & Transfers
-                    </button>
-                    <button type="button" class="inv-subnav-btn" data-subtab="purchase_orders" onclick="window.switchInventorySubTab('purchase_orders')">
-                        📦 Vendor POs
-                    </button>
-                    <button type="button" class="inv-subnav-btn" data-subtab="forecasting_waste" onclick="window.switchInventorySubTab('forecasting_waste')">
-                        📈 Forecasting & Waste
-                    </button>
-                    <button type="button" class="inv-subnav-btn" data-subtab="quick_audit" onclick="window.switchInventorySubTab('quick_audit')">
-                        ⏱️ 15-Min Quick Audit
-                    </button>
-                </div>
-
-                <!-- Dynamic Content for Active Subtab -->
-                <div id="culinarySubTabContent"></div>
-
-                <!-- Raw Ingredients Grid (Retained for backwards-compatibility & telemetry) -->
-                <div id="inventoryIngredientsList" class="inventory-grid" style="display: none;"></div>
             </div>
 
             <!-- ============================================================
@@ -4093,6 +4412,34 @@
         <div class="print-center" style="margin-top: 10px;"><p>*** END OF KOT ***</p></div>
     </div>
 
+    <!-- 🔔 NOTIFICATION & STOCK ALERT SLIDE DRAWER & OVERLAY -->
+    <div id="notificationDrawerOverlay" class="slide-menu-overlay" style="display: none;" onclick="toggleNotificationDrawer(false)"></div>
+    <div id="bellNotificationDrawer" class="slide-menu-drawer bell-drawer" style="display: none; right: 0; left: auto;">
+        <div class="slide-menu-header" style="background: linear-gradient(135deg, #143832 0%, #0F2D28 100%); color: #FFFFFF;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                </div>
+                <div>
+                    <div style="font-weight: 800; font-size: 15px; color: #FFFFFF;">System &amp; Stock Alerts</div>
+                    <div style="font-size: 11px; color: #2DD4BF;">Live Kitchen Telemetry</div>
+                </div>
+            </div>
+            <button type="button" class="drawer-close-btn" onclick="toggleNotificationDrawer(false)" style="background: none; border: none; color: #FFFFFF; font-size: 18px; cursor: pointer; padding: 4px 8px;">✕</button>
+        </div>
+        <div class="bell-drawer-content" style="padding: 16px; overflow-y: auto; max-height: calc(100vh - 80px);">
+            <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; letter-spacing: 0.5px;">Active Low-Stock Warnings</div>
+            <div id="lowStockAlertsList" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                <div style="font-size: 13px; color: var(--text-muted); padding: 12px; text-align: center; background: var(--bg); border-radius: 10px;">All stock levels optimal ✅</div>
+            </div>
+
+            <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; letter-spacing: 0.5px;">Table Occupancy Alerts</div>
+            <div id="unpaidTableAlertsList" style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="font-size: 13px; color: var(--text-muted); padding: 12px; text-align: center; background: var(--bg); border-radius: 10px;">No unpaid table alerts</div>
+            </div>
+        </div>
+    </div>
+
     <!-- 📱 MOBILE SLIDE MENU DRAWER & OVERLAY -->
     <div id="mobileSlideMenuOverlay" class="slide-menu-overlay" onclick="toggleMobileSlideMenu(false)"></div>
     <div id="mobileSlideMenuDrawer" class="slide-menu-drawer">
@@ -4539,13 +4886,45 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email })
                     }).then(res => res.json()).then(data => {
-                        if (data && data.success && typeof showToast === 'function') {
-                            showToast('Verification code dispatched to ' + email, 'success');
+                        if (data && data.success) {
+                            if (typeof showToast === 'function') {
+                                showToast('Verification code dispatched to ' + email, 'success');
+                            }
+                            if (data.devOtp) {
+                                window._lastDevLoginOtp = data.devOtp;
+                                const banner = document.getElementById('otpAutoFillBanner');
+                                const codeText = document.getElementById('otpAutoFillCodeText');
+                                if (banner && codeText) {
+                                    codeText.innerText = data.devOtp;
+                                    banner.style.display = 'flex';
+                                }
+                            }
+                        } else if (data && data.error) {
+                            showValidationMsg('loginEmailValidationFeedback', data.error, 'error');
                         }
                     }).catch(() => {});
                 }
             }
             window.handleSendOtpCode = handleSendOtpCode;
+
+            function triggerAutoFillOtp(mode) {
+                const code = mode === 'signup' ? window._lastDevSignupOtp : window._lastDevLoginOtp;
+                if (!code) return;
+                if (mode === 'signup') {
+                    const inputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
+                    code.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
+                    if (typeof handleVerifyAndCreateAccount === 'function') {
+                        handleVerifyAndCreateAccount();
+                    }
+                } else {
+                    const inputs = Array.from(document.querySelectorAll('#otpBoxesContainer .otp-digit-input'));
+                    code.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
+                    if (typeof handleVerifyOtpCode === 'function') {
+                        handleVerifyOtpCode();
+                    }
+                }
+            }
+            window.triggerAutoFillOtp = triggerAutoFillOtp;
 
             function handleResendOtpCode() {
                 const resendBtn = document.getElementById('btnResendOtp');
@@ -4682,7 +5061,13 @@
                             if (typeof showToast === 'function') showToast('Signed in successfully', 'success');
                             closeShopAuthModal();
                         } else {
-                            alert((data && data.error) ? data.error : 'Invalid email or password');
+                            const errMsg = (data && data.error) ? data.error : 'Invalid email or password';
+                            alert(errMsg + '\n\nIf you have not registered your shop account yet, click "Sign Up" above to create your profile.');
+                            if (typeof switchShopAuthTab === 'function') {
+                                switchShopAuthTab('signup');
+                                const sEmail = document.getElementById('signupEmail');
+                                if (sEmail && email) sEmail.value = email;
+                            }
                         }
                     }).catch(() => {
                         try {
@@ -4753,6 +5138,8 @@
                 otpInputs.forEach(i => { i.value = ''; });
                 const otpSec = document.getElementById('signupOtpSection');
                 if (otpSec) otpSec.style.display = 'none';
+                const actionRow = document.getElementById('signupActionRow');
+                if (actionRow) actionRow.style.display = 'flex';
                 const signupBtn = document.getElementById('btnSignupSubmit');
                 if (signupBtn) signupBtn.style.display = 'block';
                 if (signupOtpCountdownInterval) {
@@ -4802,6 +5189,8 @@
                 const otpSec = document.getElementById('signupOtpSection');
                 if (otpSec) otpSec.style.display = 'block';
 
+                const actionRow = document.getElementById('signupActionRow');
+                if (actionRow) actionRow.style.display = 'none';
                 const signupBtn = document.getElementById('btnSignupSubmit');
                 if (signupBtn) signupBtn.style.display = 'none';
 
@@ -4818,8 +5207,21 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email, purpose: 'signup' })
                     }).then(res => res.json()).then(data => {
-                        if (data && data.success && typeof showToast === 'function') {
-                            showToast('Verification code sent to ' + email, 'success');
+                        if (data && data.success) {
+                            if (typeof showToast === 'function') {
+                                showToast('Verification code sent to ' + email, 'success');
+                            }
+                            if (data.devOtp) {
+                                window._lastDevSignupOtp = data.devOtp;
+                                const banner = document.getElementById('signupOtpAutoFillBanner');
+                                const codeText = document.getElementById('signupOtpAutoFillCodeText');
+                                if (banner && codeText) {
+                                    codeText.innerText = data.devOtp;
+                                    banner.style.display = 'flex';
+                                }
+                            }
+                        } else if (data && data.error) {
+                            alert(data.error);
                         }
                     }).catch(() => {});
                 }
@@ -4940,6 +5342,103 @@
                 }
             }
             window.handleVerifyAndCreateAccount = handleVerifyAndCreateAccount;
+
+            function handleDirectSignupWithoutOtp() {
+                const fn = document.getElementById('signupFirstName') ? document.getElementById('signupFirstName').value.trim() : '';
+                const ln = document.getElementById('signupLastName') ? document.getElementById('signupLastName').value.trim() : '';
+                const shop = document.getElementById('signupShopName') ? document.getElementById('signupShopName').value.trim() : '';
+                const email = document.getElementById('signupEmail') ? document.getElementById('signupEmail').value.trim() : '';
+                const phoneEl = document.getElementById('signupPhone');
+                const phone = phoneEl ? phoneEl.value.replace(/\D/g, '') : '';
+                const pass = document.getElementById('signupPassword') ? document.getElementById('signupPassword').value : '';
+                const confirm = document.getElementById('signupConfirmPassword') ? document.getElementById('signupConfirmPassword').value : '';
+
+                if (!fn || !shop || !email || !pass || !confirm) {
+                    alert('Please fill out all required fields');
+                    return;
+                }
+                if (!phone || phone.length < 10) {
+                    alert('Mobile phone number is mandatory (minimum 10 digits required)');
+                    if (phoneEl) phoneEl.focus();
+                    return;
+                }
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email) || email.includes('..')) {
+                    alert('Please enter a valid email address');
+                    return;
+                }
+                if (pass.length < 6) {
+                    alert('Password must be at least 6 characters');
+                    return;
+                }
+                if (pass !== confirm) {
+                    alert('Passwords do not match');
+                    return;
+                }
+
+                if (typeof fetch === 'function') {
+                    fetch('/api/auth/signup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            firstName: fn,
+                            lastName: ln,
+                            shopName: shop,
+                            email,
+                            phone,
+                            password: pass,
+                            confirmPassword: confirm
+                        })
+                    }).then(res => res.json()).then(async data => {
+                        if (data && data.success) {
+                            try {
+                                localStorage.setItem('billnaw_auth_mode', 'authenticated');
+                                if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
+                                if (email) localStorage.setItem('billnaw_auth_email', email);
+                                if (phone) localStorage.setItem('billnaw_auth_phone', phone);
+                                if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
+                                localStorage.setItem('billnaw_shop_session', JSON.stringify({
+                                    token: data.token,
+                                    customToken: data.customToken,
+                                    storeCode: data.storeCode,
+                                    shop: data.shop,
+                                    user: data.user,
+                                    loginAt: Date.now()
+                                }));
+                                localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email, phone }));
+                                if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
+                                    shopProfile.name = data.shop.name;
+                                    shopProfile.phone = phone;
+                                    shopProfile.ownerPhone = phone;
+                                    if (typeof persistProfile === 'function') persistProfile();
+                                }
+                            } catch (e) {}
+
+                            if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
+                                try {
+                                    await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
+                                } catch (fbErr) {}
+                            }
+
+                            if (typeof attachFirestoreListener === 'function') {
+                                attachFirestoreListener(data.storeCode);
+                            }
+
+                            updateShopAuthUI();
+                            if (typeof updateCloudStoreTopbar === 'function') {
+                                updateCloudStoreTopbar(email, true);
+                            }
+                            if (typeof showToast === 'function') showToast('Shop Profile Created! Welcome, ' + fn, 'success');
+                            closeShopAuthModal();
+                        } else {
+                            alert((data && data.error) ? data.error : 'Failed to create shop account');
+                        }
+                    }).catch(err => {
+                        alert('Signup error: ' + (err.message || 'Please check your connection and retry.'));
+                    });
+                }
+            }
+            window.handleDirectSignupWithoutOtp = handleDirectSignupWithoutOtp;
 
             // ⚡ 1-TAP DEMO BYPASS
             function skipShopAuthToDemo() {

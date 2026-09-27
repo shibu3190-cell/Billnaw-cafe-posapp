@@ -19,33 +19,97 @@
     let costingReport = [];
     let activeSubTab = 'rtr_tracker';
 
-    // Offline / Local defaults fallback (Clean Zero-Stock Baseline until recorded via purchase/expenses)
+    // 10 Matched Ingredients Strictly Required by the 4 Dishes
+    const MATCHED_RAW_MATERIALS_IDS = [
+        'RM-OIL', 'RM-MAIDA', 'RM-POTATO', 'RM-MILK', 'RM-TEA-LEAVES',
+        'RM-SUGAR', 'RM-POULTRY', 'RM-ONION-SPICES', 'RM-COLA', 'RM-CHAAT-MASALA'
+    ];
+
+    // Offline / Local defaults fallback (Clean Baseline for the 4 dishes)
     const DEFAULT_LOCAL_MATERIALS = [
-        { id: 'RM-TOMATO', name: 'Vine-Ripe Tomatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 15.0, cost_per_unit: 40, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-ONION', name: 'Red Onions', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 12.0, cost_per_unit: 35, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-GINGER-GARLIC', name: 'Ginger-Garlic Paste', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 4.0, cost_per_unit: 150, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-BUTTER', name: 'Dairy Butter (Amul/Dairy)', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 5.0, cost_per_unit: 520, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-CREAM', name: 'Fresh Dairy Malai / Cream', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 0.0, min_threshold: 4.0, cost_per_unit: 220, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-PANEER', name: 'Malai Paneer Blocks', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 6.0, cost_per_unit: 380, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 8.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
-        { id: 'RM-OIL', name: 'Refined Sunflower Oil', category: 'Pantry', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 0.0, min_threshold: 10.0, cost_per_unit: 135, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-CASHEW', name: 'Premium Cashew Paste', category: 'Dry Fruits', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 2.5, cost_per_unit: 720, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-KASURI-METHI', name: 'Kasuri Methi', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 1.0, cost_per_unit: 320, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-GARAM-MASALA', name: 'Royal Garam Masala', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 1.5, cost_per_unit: 850, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-KASHMIRI-MIRCH', name: 'Kashmiri Degi Mirch', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 1.5, cost_per_unit: 480, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-BASMATI-RICE', name: 'Dum Biryani Basmati Rice', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 15.0, cost_per_unit: 115, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-MILK', name: 'Full Cream Milk', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 0.0, min_threshold: 10.0, cost_per_unit: 64, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-COFFEE-BEANS', name: 'Arabica Coffee Beans', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 2.5, cost_per_unit: 750, supplier: 'Specialty Roasters', unit_type: 'raw' },
-        { id: 'RM-TEA-LEAVES', name: 'CTC Assam Tea Leaves', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 3.0, cost_per_unit: 380, supplier: 'Assam Tea Direct', unit_type: 'raw' },
-        { id: 'RM-MAIDA', name: 'Refined Flour (Maida)', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 0.0, min_threshold: 10.0, cost_per_unit: 45, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        // Liquid Spirits & Draught Beer Kegs
-        { id: 'RM-WHISKY-750', name: 'Premium Scotch Whisky', category: 'Bar & Spirits', purchase_unit: '750ml Bottle', consumption_unit: 'ml', conversion_factor: 750, current_stock: 0.0, min_threshold: 1500, cost_per_unit: 2600, supplier: 'United Spirits Distributor', unit_type: 'spirit' },
-        { id: 'RM-RUM-750', name: 'Dark Spiced Rum', category: 'Bar & Spirits', purchase_unit: '750ml Bottle', consumption_unit: 'ml', conversion_factor: 750, current_stock: 0.0, min_threshold: 1500, cost_per_unit: 900, supplier: 'United Spirits Distributor', unit_type: 'spirit' },
-        { id: 'RM-CRAFT-BEER-KEG', name: 'German Wheat Draught Keg', category: 'Brewery & Kegs', purchase_unit: '50L Keg', consumption_unit: 'ml', conversion_factor: 50000, current_stock: 0.0, min_threshold: 10000, cost_per_unit: 8500, supplier: 'Craft Brewery Tap Lines', unit_type: 'draught_beer', default_froth_buffer: 6.0 },
-        { id: 'RM-IPA-BEER-KEG', name: 'Hazy IPA Keg', category: 'Brewery & Kegs', purchase_unit: '30L Keg', consumption_unit: 'ml', conversion_factor: 30000, current_stock: 0.0, min_threshold: 8000, cost_per_unit: 6200, supplier: 'Craft Brewery Tap Lines', unit_type: 'draught_beer', default_froth_buffer: 7.0 }
+        // 10 Core Ingredients for the 4 Dishes
+        { id: 'RM-OIL', name: 'Refined Cooking Oil', category: 'Pantry', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 25.0, min_threshold: 5.0, cost_per_unit: 135, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-MAIDA', name: 'Wheat Flour / Maida', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 20.0, min_threshold: 5.0, cost_per_unit: 45, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-POTATO', name: 'Spiced Potatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 25.0, min_threshold: 5.0, cost_per_unit: 30, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+        { id: 'RM-MILK', name: 'Fresh Cow Milk', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 20.0, min_threshold: 5.0, cost_per_unit: 64, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+        { id: 'RM-TEA-LEAVES', name: 'CTC Tea Leaves', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 5.0, min_threshold: 1.0, cost_per_unit: 380, supplier: 'Assam Tea Direct', unit_type: 'raw' },
+        { id: 'RM-SUGAR', name: 'Granulated Sugar', category: 'Pantry', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 2.0, cost_per_unit: 44, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-POULTRY', name: 'Fresh Farm Poultry', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
+        { id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
+        { id: 'RM-ONION-SPICES', name: 'Sliced Onions & Spices', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 3.0, cost_per_unit: 50, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+        { id: 'RM-ONION', name: 'Red Onions & Veggies', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 3.0, cost_per_unit: 35, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+        { id: 'RM-COLA', name: 'Classic Cola Cans/Syrup', category: 'Beverages', purchase_unit: 'units', consumption_unit: 'units', conversion_factor: 1, current_stock: 50.0, min_threshold: 10.0, cost_per_unit: 20, supplier: 'Beverage Distributor', unit_type: 'raw' },
+        { id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 2.0, min_threshold: 0.5, cost_per_unit: 300, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' }
+    ];
+
+    const DEFAULT_LOCAL_RECIPES = [
+        {
+            id: 'REC-SAMOSA',
+            menu_item_id: '1',
+            dish_name: 'Samosa',
+            menu_category: 'Snacks',
+            selling_price: 15,
+            gst_percentage: 5,
+            components: [
+                { type: 'raw', id: 'RM-MAIDA', name: 'Wheat Flour / Maida', exact_quantity: 0.04, unit: 'kg' },
+                { type: 'raw', id: 'RM-POTATO', name: 'Spiced Potatoes', exact_quantity: 0.05, unit: 'kg' },
+                { type: 'raw', id: 'RM-OIL', name: 'Refined Cooking Oil', exact_quantity: 0.015, unit: 'Litre' }
+            ]
+        },
+        {
+            id: 'REC-TEA',
+            menu_item_id: '2',
+            dish_name: 'Tea',
+            menu_category: 'Beverages',
+            selling_price: 10,
+            gst_percentage: 5,
+            components: [
+                { type: 'raw', id: 'RM-MILK', name: 'Fresh Cow Milk', exact_quantity: 0.08, unit: 'Litre' },
+                { type: 'raw', id: 'RM-TEA-LEAVES', name: 'CTC Tea Leaves', exact_quantity: 0.005, unit: 'kg' },
+                { type: 'raw', id: 'RM-SUGAR', name: 'Granulated Sugar', exact_quantity: 0.008, unit: 'kg' }
+            ]
+        },
+        {
+            id: 'REC-CHICKEN-CURRY',
+            menu_item_id: '3',
+            dish_name: 'Chicken Curry',
+            menu_category: 'Main Course',
+            selling_price: 140,
+            gst_percentage: 5,
+            components: [
+                { type: 'raw', id: 'RM-POULTRY', name: 'Fresh Farm Poultry', exact_quantity: 0.18, unit: 'kg' },
+                { type: 'raw', id: 'RM-ONION-SPICES', name: 'Sliced Onions & Spices', exact_quantity: 0.05, unit: 'kg' },
+                { type: 'sub_recipe', id: 'SUB-GRAVY-BASE', name: 'Cooking Oil / Gravy Base', exact_quantity: 0.15, unit: 'Litre' }
+            ]
+        },
+        {
+            id: 'REC-MASALA-COKE',
+            menu_item_id: '4',
+            dish_name: 'Masala Coke',
+            menu_category: 'Beverages',
+            selling_price: 40,
+            gst_percentage: 5,
+            components: [
+                { type: 'raw', id: 'RM-COLA', name: 'Classic Cola Cans/Syrup', exact_quantity: 1.0, unit: 'units' },
+                { type: 'raw', id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', exact_quantity: 0.005, unit: 'kg' }
+            ]
+        }
     ];
 
     const DEFAULT_LOCAL_SUB_RECIPES = [
+        {
+            id: 'SUB-GRAVY-BASE',
+            name: 'Cooking Oil / Gravy Base',
+            yield_quantity: 15.0,
+            yield_unit: 'Litre',
+            current_stock: 15.0,
+            min_threshold: 4.0,
+            unit_production_cost: 95.0,
+            ingredients: [
+                { material_id: 'RM-OIL', quantity: 2.0, unit: 'Litre' },
+                { material_id: 'RM-ONION-SPICES', quantity: 8.0, unit: 'kg' }
+            ]
+        },
         {
             id: 'SUB-MAK-01',
             name: 'Makhani Gravy Base (Shahi Butter Masala Gravy)',
@@ -207,12 +271,15 @@
         return [
             { id: 'RM-OIL', icon: '🛢️', title: 'Cooking Oil', subtitle: 'Refined Sunflower Cooking Oil', unit: 'Litre', isSub: false, capacity: 50 },
             { id: 'RM-MAIDA', icon: '🌾', title: 'Flour (Maida)', subtitle: 'Refined Wheat Flour & Grains', unit: 'kg', isSub: false, capacity: 50 },
-            { id: 'RM-ONION', icon: '🧅', title: 'Raw Veggies & Onions', subtitle: 'Fresh Red Onions & Veg', unit: 'kg', isSub: false, capacity: 60 },
-            { id: 'RM-CHICKEN', icon: '🍗', title: 'Fresh Chicken / Meat', subtitle: 'Poultry Curry Cut & Boneless', unit: 'kg', isSub: false, capacity: 40 },
-            { id: 'RM-PANEER', icon: '🧀', title: 'Malai Paneer', subtitle: 'Fresh Dairy Paneer Blocks', unit: 'kg', isSub: false, capacity: 35 },
-            { id: 'SUB-MAK-01', icon: '🍲', title: 'Makhani Gravy Base', subtitle: 'Shahi Butter Masala Gravy', unit: 'Litre', isSub: true, capacity: 30 },
-            { id: 'SUB-BROWN-01', icon: '🥘', title: 'Brown Curry Base', subtitle: 'Bhuna Onion-Tomato Gravy Base', unit: 'Litre', isSub: true, capacity: 25 },
-            { id: 'SUB-DAL-01', icon: '🍛', title: 'Dal Makhani Base', subtitle: 'Slow-Cooked Black Dal Base', unit: 'Litre', isSub: true, capacity: 20 }
+            { id: 'RM-POTATO', icon: '🥔', title: 'Spiced Potatoes', subtitle: 'Boiled & Seasoned Potatoes', unit: 'kg', isSub: false, capacity: 50 },
+            { id: 'RM-MILK', icon: '🥛', title: 'Cow Milk', subtitle: 'Fresh Pasteurized Dairy Milk', unit: 'Litre', isSub: false, capacity: 40 },
+            { id: 'RM-TEA-LEAVES', icon: '🍃', title: 'CTC Tea Leaves', subtitle: 'Strong Assam Chai Blend', unit: 'kg', isSub: false, capacity: 20 },
+            { id: 'RM-SUGAR', icon: '🍬', title: 'Granulated Sugar', subtitle: 'Pure Refined Cane Sugar', unit: 'kg', isSub: false, capacity: 30 },
+            { id: 'RM-POULTRY', icon: '🍗', title: 'Farm Poultry', subtitle: 'Fresh Curry Cut Farm Poultry', unit: 'kg', isSub: false, capacity: 40 },
+            { id: 'RM-ONION-SPICES', icon: '🧅', title: 'Onions & Spices', subtitle: 'Sliced Onions & Fresh Spices', unit: 'kg', isSub: false, capacity: 40 },
+            { id: 'SUB-GRAVY-BASE', icon: '🍲', title: 'Gravy Base', subtitle: 'Cooking Oil / Gravy Base', unit: 'Litre', isSub: true, capacity: 30 },
+            { id: 'RM-COLA', icon: '🥤', title: 'Classic Cola', subtitle: 'Chilled Cola Cans & Fountain', unit: 'units', isSub: false, capacity: 100 },
+            { id: 'RM-CHAAT-MASALA', icon: '🧂', title: 'Chaat Masala Blend', subtitle: 'Tangy Chatpata Spice Blend', unit: 'kg', isSub: false, capacity: 10 }
         ];
     }
 
@@ -275,11 +342,13 @@
         const staples = getCoreStaples();
         const dishes = getAllMenuDishes();
 
-        // Quick aggregate KPI counts (Clean 0 Baseline if unentered)
-        const oilItem = rawMaterials.find(m => m.id === 'RM-OIL') || { current_stock: 0, min_threshold: 10, consumption_unit: 'Litre' };
-        const paneerItem = rawMaterials.find(m => m.id === 'RM-PANEER') || { current_stock: 0, min_threshold: 6, consumption_unit: 'kg' };
-        const chickenItem = rawMaterials.find(m => m.id === 'RM-CHICKEN') || { current_stock: 0, min_threshold: 8, consumption_unit: 'kg' };
-        const totalGravyStock = subRecipes.reduce((sum, s) => sum + (s.current_stock || 0), 0);
+        // Quick aggregate KPI counts for 4 authentic dishes
+        const oilItem = rawMaterials.find(m => m.id === 'RM-OIL') || { current_stock: 0, min_threshold: 5, consumption_unit: 'Litre' };
+        const poultryItem = rawMaterials.find(m => m.id === 'RM-POULTRY' || m.id === 'RM-CHICKEN') || { current_stock: 0, min_threshold: 4, consumption_unit: 'kg' };
+        const potatoItem = rawMaterials.find(m => m.id === 'RM-POTATO') || { current_stock: 0, min_threshold: 5, consumption_unit: 'kg' };
+        const milkItem = rawMaterials.find(m => m.id === 'RM-MILK') || { current_stock: 0, min_threshold: 5, consumption_unit: 'Litre' };
+        const colaItem = rawMaterials.find(m => m.id === 'RM-COLA') || { current_stock: 0, min_threshold: 10, consumption_unit: 'units' };
+        const totalGravyStock = subRecipes.reduce((sum, s) => (s.id === 'SUB-GRAVY-BASE' || s.id === 'SUB-BROWN-01') ? sum + (s.current_stock || 0) : sum, 0);
         const configuredCount = dishes.filter(d => !!d.recipe).length;
 
         // Filter dishes by search term
@@ -302,7 +371,7 @@
                                 <span class="badge" style="background: #2DD4BF; color: #143832; font-size: 11px; font-weight: 800;">LIVE POS AUTO-DEDUCTION</span>
                             </div>
                             <p style="margin: 6px 0 0 0; font-size: 12px; color: #D1FAE5; max-width: 680px; line-height: 1.5;">
-                                Tracks exact consumption of Cooking Oil, Flour, Veggies/Onions, Meat/Paneer, and Gravy bases as POS bills are settled. Click any menu dish below to set portion quantities or use <strong>⚡ Approx Auto-Fill</strong>.
+                                Tracks exact consumption of Cooking Oil, Flour, Veggies/Onions, Poultry, Milk, and Gravy base as POS bills are settled. Click any menu dish below to set portion quantities or use <strong>⚡ Approx Auto-Fill</strong>.
                             </p>
                         </div>
                         <div style="display: flex; gap: 8px;">
@@ -319,25 +388,25 @@
                             <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
                                 ${oilItem.current_stock} <span style="font-size: 12px; font-weight: 600;">Litres</span>
                             </div>
-                            <div style="font-size: 11px; color: ${oilItem.current_stock <= (oilItem.min_threshold || 10) ? '#FCA5A5' : '#86EFAC'};">
-                                ${oilItem.current_stock <= (oilItem.min_threshold || 10) ? '⚠️ Alert: Reorder Required' : '🟢 Sufficient Kitchen Supply'}
+                            <div style="font-size: 11px; color: ${oilItem.current_stock <= (oilItem.min_threshold || 5) ? '#FCA5A5' : '#86EFAC'};">
+                                ${oilItem.current_stock <= (oilItem.min_threshold || 5) ? '⚠️ Alert: Reorder Required' : '🟢 Sufficient Kitchen Supply'}
                             </div>
                         </div>
 
                         <div style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px 14px;">
-                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🧀 Paneer & 🍗 Chicken</div>
+                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🍗 Poultry & 🥔 Potatoes</div>
                             <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
-                                ${paneerItem.current_stock} kg <span style="font-size: 12px; font-weight: 400; opacity: 0.8;">/</span> ${chickenItem.current_stock} kg
+                                ${poultryItem.current_stock} kg <span style="font-size: 12px; font-weight: 400; opacity: 0.8;">/</span> ${potatoItem.current_stock} kg
                             </div>
                             <div style="font-size: 11px; color: #D1FAE5;">
-                                Leftover fresh proteins in kitchen
+                                Leftover fresh poultry & potatoes
                             </div>
                         </div>
 
                         <div style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px 14px;">
-                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🍲 Gravy Bases Ready</div>
+                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🥛 Cow Milk & 🥤 Cola</div>
                             <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
-                                ${totalGravyStock.toFixed(1)} <span style="font-size: 12px; font-weight: 600;">Litres</span>
+                                ${milkItem.current_stock} L <span style="font-size: 12px; font-weight: 400; opacity: 0.8;">/</span> ${colaItem.current_stock} <span style="font-size: 12px; font-weight: 600;">units</span>
                             </div>
                             <div style="font-size: 11px; color: #D1FAE5;">
                                 ${configuredCount} of ${dishes.length} menu dishes mapped
@@ -364,7 +433,15 @@
                         ${staples.map(s => {
                             let item = s.isSub ? subRecipes.find(sub => sub.id === s.id) : rawMaterials.find(rm => rm.id === s.id);
                             if (!item) {
-                                item = { current_stock: 0, min_threshold: 10, cost_per_unit: 100, consumption_unit: s.unit };
+                                if (s.id === 'RM-POULTRY') item = rawMaterials.find(rm => rm.id === 'RM-CHICKEN');
+                                else if (s.id === 'RM-CHICKEN') item = rawMaterials.find(rm => rm.id === 'RM-POULTRY');
+                                else if (s.id === 'RM-ONION-SPICES') item = rawMaterials.find(rm => rm.id === 'RM-ONION');
+                                else if (s.id === 'RM-ONION') item = rawMaterials.find(rm => rm.id === 'RM-ONION-SPICES');
+                                else if (s.id === 'SUB-GRAVY-BASE') item = subRecipes.find(sub => sub.id === 'SUB-BROWN-01');
+                                else if (s.id === 'SUB-BROWN-01') item = subRecipes.find(sub => sub.id === 'SUB-GRAVY-BASE');
+                            }
+                            if (!item) {
+                                item = { current_stock: 0, min_threshold: 5, cost_per_unit: 100, consumption_unit: s.unit };
                             }
                             const stock = parseFloat(item.current_stock) || 0;
                             const thresh = parseFloat(item.min_threshold ?? item.minThreshold ?? 10);
@@ -455,20 +532,34 @@
                                 let totalCost = 0;
 
                                 rec.components.forEach(comp => {
-                                    if (comp.type === 'sub_recipe') {
+                                    if (comp.type === 'sub_recipe' || comp.id === 'SUB-GRAVY-BASE' || comp.id === 'SUB-BROWN-01') {
                                         pills.push(`<span class="rtr-recipe-pill">🍲 ${escapeHtml(comp.name || 'Gravy')}: ${comp.exact_quantity}L</span>`);
                                     } else if (comp.id === 'RM-OIL') {
                                         pills.push(`<span class="rtr-recipe-pill">🛢️ Oil: ${comp.exact_quantity}L</span>`);
+                                    } else if (comp.id === 'RM-MAIDA') {
+                                        pills.push(`<span class="rtr-recipe-pill">🌾 Maida: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-POTATO') {
+                                        pills.push(`<span class="rtr-recipe-pill">🥔 Potatoes: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-MILK') {
+                                        pills.push(`<span class="rtr-recipe-pill">🥛 Milk: ${comp.exact_quantity}L</span>`);
+                                    } else if (comp.id === 'RM-TEA-LEAVES') {
+                                        pills.push(`<span class="rtr-recipe-pill">🍃 Tea Leaves: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-SUGAR') {
+                                        pills.push(`<span class="rtr-recipe-pill">🍬 Sugar: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-POULTRY' || comp.id === 'RM-CHICKEN') {
+                                        pills.push(`<span class="rtr-recipe-pill">🍗 Poultry: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-ONION-SPICES' || comp.id === 'RM-ONION') {
+                                        pills.push(`<span class="rtr-recipe-pill">🧅 Onions & Spices: ${comp.exact_quantity}kg</span>`);
+                                    } else if (comp.id === 'RM-COLA') {
+                                        pills.push(`<span class="rtr-recipe-pill">🥤 Cola: ${comp.exact_quantity} units</span>`);
+                                    } else if (comp.id === 'RM-CHAAT-MASALA') {
+                                        pills.push(`<span class="rtr-recipe-pill">🧂 Chaat Masala: ${comp.exact_quantity}kg</span>`);
                                     } else if (comp.id === 'RM-PANEER') {
                                         pills.push(`<span class="rtr-recipe-pill">🧀 Paneer: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-CHICKEN') {
-                                        pills.push(`<span class="rtr-recipe-pill">🍗 Chicken: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-ONION') {
-                                        pills.push(`<span class="rtr-recipe-pill">🧅 Veggies: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-MAIDA') {
-                                        pills.push(`<span class="rtr-recipe-pill">🌾 Flour: ${comp.exact_quantity}kg</span>`);
                                     } else if (comp.id === 'RM-BUTTER') {
                                         pills.push(`<span class="rtr-recipe-pill">🧈 Butter: ${comp.exact_quantity}kg</span>`);
+                                    } else {
+                                        pills.push(`<span class="rtr-recipe-pill">📦 ${escapeHtml(comp.name || comp.id)}: ${comp.exact_quantity}${comp.unit || ''}</span>`);
                                     }
                                 });
                                 pillsHtml = pills.join(' ');
@@ -998,12 +1089,25 @@
         if (typeof showToast === 'function') showToast('🔄 RTR Tracker synchronized with Menu items!');
     }
 
-    // --- TAB 1: RAW MATERIALS & BAR LIQUID MATRIX ---
+    // --- TAB 1: RAW MATERIALS & INGREDIENT MATRIX ---
     function renderRawMaterialsTab(container) {
+        const matchedSet = new Set(MATCHED_RAW_MATERIALS_IDS);
+        matchedSet.add('RM-CHICKEN');
+        matchedSet.add('RM-ONION');
+        // Strictly filter to the 10 matched raw materials required by the 4 dishes
+        const kitchenRaws = rawMaterials.filter(m => {
+            if (!matchedSet.has(m.id)) return false;
+            // Prevent duplicate display if both alias IDs exist
+            if (m.id === 'RM-CHICKEN' && rawMaterials.some(x => x.id === 'RM-POULTRY')) return false;
+            if (m.id === 'RM-ONION' && rawMaterials.some(x => x.id === 'RM-ONION-SPICES')) return false;
+            return true;
+        });
+
         const spirits = rawMaterials.filter(m => m.unit_type === 'spirit' || m.unit_type === 'draught_beer');
-        const kitchenRaws = rawMaterials.filter(m => m.unit_type !== 'spirit' && m.unit_type !== 'draught_beer');
+        const showSpirits = spirits.length > 0 && spirits.some(s => s.current_stock > 0);
 
         container.innerHTML = `
+            ${showSpirits ? `
             <!-- Bar & Brewery Liquid Telemetry Row -->
             <div style="margin-bottom: 24px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -1058,6 +1162,7 @@
                     }).join('')}
                 </div>
             </div>
+            ` : ''}
 
             <!-- Indian Culinary Raw Materials Grid -->
             <div>
@@ -1802,36 +1907,81 @@
                     });
                 }
 
+                if (!rec) {
+                    rec = DEFAULT_LOCAL_RECIPES.find(r => {
+                        const rName = (r.dish_name || '').toLowerCase().trim();
+                        return dishName.includes(rName) || rName.includes(dishName);
+                    });
+                }
+
                 if (rec && Array.isArray(rec.components)) {
                     rec.components.forEach(comp => {
-                        if (comp.type === 'sub_recipe') {
-                            const sub = subRecipes.find(s => s.id === comp.id);
+                        const deductAmt = Math.round((comp.exact_quantity * qty) * 1000) / 1000;
+                        if (comp.type === 'sub_recipe' || (comp.id && comp.id.startsWith('SUB-'))) {
+                            let sub = subRecipes.find(s => s.id === comp.id);
+                            if (!sub && comp.id === 'SUB-GRAVY-BASE') sub = subRecipes.find(s => s.id === 'SUB-BROWN-01');
+                            if (!sub && comp.id === 'SUB-BROWN-01') sub = subRecipes.find(s => s.id === 'SUB-GRAVY-BASE');
                             if (sub) {
-                                sub.current_stock = Math.max(0, Math.round((sub.current_stock - (comp.exact_quantity * qty)) * 100) / 100);
+                                sub.current_stock = Math.max(0, Math.round((sub.current_stock - deductAmt) * 100) / 100);
                             }
                         } else {
-                            const rm = rawMaterials.find(m => m.id === comp.id);
+                            let rm = rawMaterials.find(m => m.id === comp.id);
+                            if (!rm && comp.id === 'RM-POULTRY') rm = rawMaterials.find(m => m.id === 'RM-CHICKEN');
+                            if (!rm && comp.id === 'RM-CHICKEN') rm = rawMaterials.find(m => m.id === 'RM-POULTRY');
+                            if (!rm && comp.id === 'RM-ONION-SPICES') rm = rawMaterials.find(m => m.id === 'RM-ONION');
+                            if (!rm && comp.id === 'RM-ONION') rm = rawMaterials.find(m => m.id === 'RM-ONION-SPICES');
                             if (rm) {
-                                rm.current_stock = Math.max(0, Math.round((rm.current_stock - (comp.exact_quantity * qty)) * 100) / 100);
+                                rm.current_stock = Math.max(0, Math.round((rm.current_stock - deductAmt) * 100) / 100);
                             }
                         }
                     });
                 } else {
-                    // Fallback core staple deduction
-                    if (dishName.includes('paneer')) {
+                    // Fallback deduction for the 4 dishes
+                    if (dishName.includes('samosa')) {
+                        const m = rawMaterials.find(rm => rm.id === 'RM-MAIDA'); if (m) m.current_stock = Math.max(0, Math.round((m.current_stock - 0.04 * qty) * 100) / 100);
+                        const p = rawMaterials.find(rm => rm.id === 'RM-POTATO'); if (p) p.current_stock = Math.max(0, Math.round((p.current_stock - 0.05 * qty) * 100) / 100);
+                        const o = rawMaterials.find(rm => rm.id === 'RM-OIL'); if (o) o.current_stock = Math.max(0, Math.round((o.current_stock - 0.015 * qty) * 100) / 100);
+                    } else if (dishName.includes('tea') || dishName.includes('chai')) {
+                        const ml = rawMaterials.find(rm => rm.id === 'RM-MILK'); if (ml) ml.current_stock = Math.max(0, Math.round((ml.current_stock - 0.08 * qty) * 100) / 100);
+                        const tl = rawMaterials.find(rm => rm.id === 'RM-TEA-LEAVES'); if (tl) tl.current_stock = Math.max(0, Math.round((tl.current_stock - 0.005 * qty) * 100) / 100);
+                        const sg = rawMaterials.find(rm => rm.id === 'RM-SUGAR'); if (sg) sg.current_stock = Math.max(0, Math.round((sg.current_stock - 0.008 * qty) * 100) / 100);
+                    } else if (dishName.includes('chicken')) {
+                        const ch = rawMaterials.find(rm => rm.id === 'RM-POULTRY' || rm.id === 'RM-CHICKEN'); if (ch) ch.current_stock = Math.max(0, Math.round((ch.current_stock - 0.18 * qty) * 100) / 100);
+                        const on = rawMaterials.find(rm => rm.id === 'RM-ONION-SPICES' || rm.id === 'RM-ONION'); if (on) on.current_stock = Math.max(0, Math.round((on.current_stock - 0.05 * qty) * 100) / 100);
+                        const gr = subRecipes.find(sub => sub.id === 'SUB-GRAVY-BASE' || sub.id === 'SUB-BROWN-01'); if (gr) gr.current_stock = Math.max(0, Math.round((gr.current_stock - 0.15 * qty) * 100) / 100);
+                    } else if (dishName.includes('coke') || dishName.includes('cola')) {
+                        const cl = rawMaterials.find(rm => rm.id === 'RM-COLA'); if (cl) cl.current_stock = Math.max(0, Math.round((cl.current_stock - 1.0 * qty) * 100) / 100);
+                        const cm = rawMaterials.find(rm => rm.id === 'RM-CHAAT-MASALA'); if (cm) cm.current_stock = Math.max(0, Math.round((cm.current_stock - 0.005 * qty) * 100) / 100);
+                    } else if (dishName.includes('paneer')) {
                         const p = rawMaterials.find(m => m.id === 'RM-PANEER'); if (p) p.current_stock = Math.max(0, Math.round((p.current_stock - 0.15 * qty) * 100) / 100);
                         const o = rawMaterials.find(m => m.id === 'RM-OIL'); if (o) o.current_stock = Math.max(0, Math.round((o.current_stock - 0.02 * qty) * 100) / 100);
                         const s = subRecipes.find(sub => sub.id === 'SUB-MAK-01'); if (s) s.current_stock = Math.max(0, Math.round((s.current_stock - 0.20 * qty) * 100) / 100);
-                    } else if (dishName.includes('chicken')) {
-                        const c = rawMaterials.find(m => m.id === 'RM-CHICKEN'); if (c) c.current_stock = Math.max(0, Math.round((c.current_stock - 0.20 * qty) * 100) / 100);
-                        const o = rawMaterials.find(m => m.id === 'RM-OIL'); if (o) o.current_stock = Math.max(0, Math.round((o.current_stock - 0.02 * qty) * 100) / 100);
-                        const s = subRecipes.find(sub => sub.id === 'SUB-BROWN-01'); if (s) s.current_stock = Math.max(0, Math.round((s.current_stock - 0.22 * qty) * 100) / 100);
-                    } else if (dishName.includes('roll') || dishName.includes('roti') || dishName.includes('naan')) {
-                        const f = rawMaterials.find(m => m.id === 'RM-MAIDA'); if (f) f.current_stock = Math.max(0, Math.round((f.current_stock - 0.08 * qty) * 100) / 100);
-                        const o = rawMaterials.find(m => m.id === 'RM-OIL'); if (o) o.current_stock = Math.max(0, Math.round((o.current_stock - 0.02 * qty) * 100) / 100);
                     }
                 }
             });
+
+            // Synchronize alias pairs locally
+            const poultry = rawMaterials.find(m => m.id === 'RM-POULTRY');
+            const chicken = rawMaterials.find(m => m.id === 'RM-CHICKEN');
+            if (poultry && chicken) {
+                const minVal = Math.min(poultry.current_stock, chicken.current_stock);
+                poultry.current_stock = minVal;
+                chicken.current_stock = minVal;
+            }
+            const onions = rawMaterials.find(m => m.id === 'RM-ONION-SPICES');
+            const onion = rawMaterials.find(m => m.id === 'RM-ONION');
+            if (onions && onion) {
+                const minVal = Math.min(onions.current_stock, onion.current_stock);
+                onions.current_stock = minVal;
+                onion.current_stock = minVal;
+            }
+            const gravy = subRecipes.find(s => s.id === 'SUB-GRAVY-BASE');
+            const brown = subRecipes.find(s => s.id === 'SUB-BROWN-01');
+            if (gravy && brown) {
+                const minVal = Math.min(gravy.current_stock, brown.current_stock);
+                gravy.current_stock = minVal;
+                brown.current_stock = minVal;
+            }
 
             persistLocalSnapshot();
             const contentArea = document.getElementById('culinarySubTabContent');
@@ -1888,6 +2038,11 @@
         getCoreStaples,
         getAllMenuDishes
     };
+
+    window.openRestockModal = openRestockModal;
+    window.closeRestockModal = closeRestockModal;
+    window.submitRestockExpense = submitRestockExpense;
+    window.recalcRestockTotal = recalcRestockTotal;
 
     // Auto-init on load
     document.addEventListener('DOMContentLoaded', () => {

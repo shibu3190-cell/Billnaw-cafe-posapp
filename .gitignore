@@ -51,10 +51,12 @@ __pycache__/
 .agents/sentinel*
 .agents/teamwork_preview_*
 .agents/victory_*
+.agents/teamwork/
 .agents/ORIGINAL_REQUEST.md
 ORIGINAL_REQUEST.md
 PROJECT.md
 TEST_INFRA.md
 TEST_READY.md
+data/
 
 

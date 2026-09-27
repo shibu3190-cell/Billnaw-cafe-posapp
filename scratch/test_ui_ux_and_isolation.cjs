@@ -193,7 +193,7 @@ async function runAudit() {
     authService.resolveShopTenant(testCode, 'Reset Cafe');
     const resetRes = authService.resetStoreCloudData(testCode);
     assert.strictEqual(resetRes.success, true);
-    assert.strictEqual(resetRes.menu.length, 3);
+    assert.strictEqual(resetRes.menu.length, 4);
     assert.strictEqual(resetRes.menu[0].name, 'Samosa');
   });
 

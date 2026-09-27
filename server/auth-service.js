@@ -3,15 +3,57 @@
 // Manages OTP lifecycle (generation, rate-limit cooldown, TTL, attempt throttling, single-use invalidation),
 // tenant resolution to shops/{storeCode}, password fallback authentication, and session persistence.
 
+import fs from 'fs';
+import path from 'path';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { CONFIG } from './config.js';
 
-// In-memory data repositories
+const DATA_DIR = path.resolve(process.cwd(), 'data');
+const AUTH_FILE = path.join(DATA_DIR, 'auth_store.json');
+
+// In-memory data repositories (backed by persistent JSON store)
 const otpStore = new Map();
 const userStore = new Map();
 const shopStore = new Map();
 const sessionStore = new Map();
+
+export function saveAuthStoreToDisk() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const data = {
+      users: Array.from(userStore.entries()),
+      shops: Array.from(shopStore.entries()),
+      sessions: Array.from(sessionStore.entries())
+    };
+    fs.writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[AUTH STORE] Disk write warning:', err.message);
+  }
+}
+
+export function loadAuthStoreFromDisk() {
+  try {
+    if (fs.existsSync(AUTH_FILE)) {
+      const raw = fs.readFileSync(AUTH_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.users)) {
+        data.users.forEach(([k, v]) => userStore.set(k, v));
+      }
+      if (Array.isArray(data.shops)) {
+        data.shops.forEach(([k, v]) => shopStore.set(k, v));
+      }
+      if (Array.isArray(data.sessions)) {
+        data.sessions.forEach(([k, v]) => sessionStore.set(k, v));
+      }
+    }
+  } catch (err) {
+    console.warn('[AUTH STORE] Disk load warning:', err.message);
+  }
+}
+loadAuthStoreFromDisk();
 
 // Configuration Constants
 const OTP_COOLDOWN_SECONDS = 60;
@@ -186,7 +228,8 @@ export function resetStoreCloudData(storeCode) {
   const cleanDemoMenu = [
     { id: 1, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
     { id: 2, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
-    { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5 }
+    { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5 },
+    { id: 4, name: 'Masala Coke', category: 'Beverages', price: 40, stock: 12, stockQty: 12, trackStock: true, gstRate: 5 }
   ];
   const cleanCategories = ['All', 'Snacks', 'Beverages', 'Main Course'];
 
@@ -205,6 +248,7 @@ export function resetStoreCloudData(storeCode) {
   }
 
   syncShopToFirestore(code, shop);
+  saveAuthStoreToDisk();
   return {
     success: true,
     message: 'Store data wiped and re-seeded with clean demo items on server and cloud.',
@@ -518,6 +562,8 @@ export function verifyOtp(email, otp, shopName) {
     expiresAt: now + (SESSION_TTL_SECONDS * 1000)
   });
 
+  saveAuthStoreToDisk();
+
   const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode });
 
   return {
@@ -642,6 +688,8 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
     expiresAt: now + (SESSION_TTL_SECONDS * 1000)
   });
 
+  saveAuthStoreToDisk();
+
   const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode });
 
   return {
@@ -707,6 +755,8 @@ export function loginWithPassword({ email, password }) {
     createdAt: now,
     expiresAt: now + (SESSION_TTL_SECONDS * 1000)
   });
+
+  saveAuthStoreToDisk();
 
   const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode });
 
@@ -817,6 +867,7 @@ export function logoutSession(rawToken, email) {
   if (targetEmail) {
     otpStore.delete(targetEmail);
   }
+  saveAuthStoreToDisk();
   return {
     status: 200,
     data: { success: true, message: 'Logged out successfully. Session and OTP purged.' }
@@ -877,6 +928,7 @@ export function revokeSession(tokenOrId) {
     const sess = sessionStore.get(clean);
     if (sess?.email) otpStore.delete(normalizeEmail(sess.email));
     sessionStore.delete(clean);
+    saveAuthStoreToDisk();
     return { status: 200, data: { success: true, message: 'Session revoked successfully' } };
   }
 
@@ -886,6 +938,7 @@ export function revokeSession(tokenOrId) {
     if (id === clean) {
       if (sess?.email) otpStore.delete(normalizeEmail(sess.email));
       sessionStore.delete(token);
+      saveAuthStoreToDisk();
       return { status: 200, data: { success: true, message: 'Session revoked successfully' } };
     }
   }
@@ -913,6 +966,8 @@ export function revokeSessionsForStore(storeCode, exceptToken) {
     }
   }
 
+  saveAuthStoreToDisk();
+
   return {
     status: 200,
     data: { success: true, message: `Revoked ${revokedCount} session(s) for store ${storeCode}`, revokedCount }
@@ -939,6 +994,7 @@ export function revokeSessionsForUser(email, exceptToken) {
     }
   }
   otpStore.delete(normEmail);
+  saveAuthStoreToDisk();
 
   return {
     status: 200,
@@ -962,25 +1018,29 @@ export function resetAuthStore() {
  */
 function seedDemoData() {
   const DEMO_STORE_CODE = 'SHOP-BILLNAW-01';
-  const demoSalt = crypto.randomBytes(16).toString('hex');
-  const demoPasswordHash = hashPassword('Password123!', demoSalt);
+  if (!userStore.has('demo@billnawcafe.com')) {
+    const demoSalt = crypto.randomBytes(16).toString('hex');
+    const demoPasswordHash = hashPassword('Password123!', demoSalt);
 
-  const demoUser = {
-    uid: 'usr_billnaw_demo',
-    email: 'demo@billnawcafe.com',
-    firstName: 'Demo',
-    lastName: 'Owner',
-    shopName: 'Billnaw Cafe',
-    storeCode: DEMO_STORE_CODE,
-    passwordHash: demoPasswordHash,
-    salt: demoSalt,
-    role: 'Owner',
-    createdAt: new Date().toISOString()
-  };
-  userStore.set('demo@billnawcafe.com', demoUser);
+    const demoUser = {
+      uid: 'usr_billnaw_demo',
+      email: 'demo@billnawcafe.com',
+      firstName: 'Demo',
+      lastName: 'Owner',
+      shopName: 'Billnaw Cafe',
+      storeCode: DEMO_STORE_CODE,
+      passwordHash: demoPasswordHash,
+      salt: demoSalt,
+      role: 'Owner',
+      createdAt: new Date().toISOString()
+    };
+    userStore.set('demo@billnawcafe.com', demoUser);
+  }
 
-  const demoShop = createDefaultShopDocument(DEMO_STORE_CODE, 'Billnaw Cafe', 'demo@billnawcafe.com', 'usr_billnaw_demo');
-  shopStore.set(DEMO_STORE_CODE, demoShop);
+  if (!shopStore.has(DEMO_STORE_CODE)) {
+    const demoShop = createDefaultShopDocument(DEMO_STORE_CODE, 'Billnaw Cafe', 'demo@billnawcafe.com', 'usr_billnaw_demo');
+    shopStore.set(DEMO_STORE_CODE, demoShop);
+  }
 }
 
 // Initial seed

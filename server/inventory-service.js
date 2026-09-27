@@ -7,26 +7,34 @@
 // ==========================================
 
 const DEFAULT_RAW_MATERIALS = [
-  // Indian Culinary Kitchen Raw Materials
-  { id: 'RM-TOMATO', name: 'Vine-Ripe Tomatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 50.0, min_threshold: 15.0, cost_per_unit: 40, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+  // 10 Matched Ingredients for the 4 Menu Dishes
+  { id: 'RM-OIL', name: 'Refined Cooking Oil', category: 'Pantry', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 40.0, min_threshold: 5.0, cost_per_unit: 135, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+  { id: 'RM-MAIDA', name: 'Wheat Flour / Maida', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 35.0, min_threshold: 5.0, cost_per_unit: 45, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+  { id: 'RM-POTATO', name: 'Spiced Potatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 25.0, min_threshold: 5.0, cost_per_unit: 30, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+  { id: 'RM-MILK', name: 'Fresh Cow Milk', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 40.0, min_threshold: 5.0, cost_per_unit: 64, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+  { id: 'RM-TEA-LEAVES', name: 'CTC Tea Leaves', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 1.0, cost_per_unit: 380, supplier: 'Assam Tea Direct', unit_type: 'raw' },
+  { id: 'RM-SUGAR', name: 'Granulated Sugar', category: 'Pantry', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 2.0, cost_per_unit: 44, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+  { id: 'RM-POULTRY', name: 'Fresh Farm Poultry', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 30.0, min_threshold: 4.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
+  { id: 'RM-CHICKEN', name: 'Fresh Farm Chicken (Curry Cut/Boneless)', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 30.0, min_threshold: 4.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
+  { id: 'RM-ONION-SPICES', name: 'Sliced Onions & Spices', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 20.0, min_threshold: 3.0, cost_per_unit: 50, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
   { id: 'RM-ONION', name: 'Red Onions', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 45.0, min_threshold: 12.0, cost_per_unit: 35, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+  { id: 'RM-COLA', name: 'Classic Cola Cans/Syrup', category: 'Beverages', purchase_unit: 'units', consumption_unit: 'units', conversion_factor: 1, current_stock: 50.0, min_threshold: 10.0, cost_per_unit: 20, supplier: 'Beverage Distributor', unit_type: 'raw' },
+  { id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 2.0, min_threshold: 0.5, cost_per_unit: 300, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+
+  // Kitchen Raw Materials (Retained for Catalog Depth & Legacy Tests)
+  { id: 'RM-TOMATO', name: 'Vine-Ripe Tomatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 50.0, min_threshold: 15.0, cost_per_unit: 40, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
   { id: 'RM-GINGER-GARLIC', name: 'Ginger-Garlic Paste', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 150, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
   { id: 'RM-BUTTER', name: 'Dairy Butter (Amul/Dairy)', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 20.0, min_threshold: 5.0, cost_per_unit: 520, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
   { id: 'RM-CREAM', name: 'Fresh Dairy Malai / Cream', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 220, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
   { id: 'RM-PANEER', name: 'Malai Paneer Blocks', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 25.0, min_threshold: 6.0, cost_per_unit: 380, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-  { id: 'RM-CHICKEN', name: 'Fresh Farm Chicken (Curry Cut/Boneless)', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 30.0, min_threshold: 8.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
-  { id: 'RM-OIL', name: 'Refined Sunflower Oil', category: 'Pantry', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 40.0, min_threshold: 10.0, cost_per_unit: 135, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
   { id: 'RM-CASHEW', name: 'Premium Cashew Nut Paste', category: 'Dry Fruits & Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 2.5, cost_per_unit: 720, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
   { id: 'RM-KASURI-METHI', name: 'Kasuri Methi (Fenugreek Leaves)', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 4.0, min_threshold: 1.0, cost_per_unit: 320, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
   { id: 'RM-GARAM-MASALA', name: 'Royal Shahi Garam Masala', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 5.0, min_threshold: 1.5, cost_per_unit: 850, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
   { id: 'RM-KASHMIRI-MIRCH', name: 'Kashmiri Degi Mirch Powder', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 6.0, min_threshold: 1.5, cost_per_unit: 480, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
   { id: 'RM-BASMATI-RICE', name: 'Royal Dum Biryani Basmati Rice', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 60.0, min_threshold: 15.0, cost_per_unit: 115, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-  { id: 'RM-MILK', name: 'Cow Milk (Full Cream)', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 40.0, min_threshold: 10.0, cost_per_unit: 64, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
   { id: 'RM-COFFEE-BEANS', name: 'Roast Arabica Coffee Beans', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 8.0, min_threshold: 2.5, cost_per_unit: 750, supplier: 'Specialty Roasters', unit_type: 'raw' },
-  { id: 'RM-TEA-LEAVES', name: 'CTC Assam Tea Leaves', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 3.0, cost_per_unit: 380, supplier: 'Assam Tea Direct', unit_type: 'raw' },
-  { id: 'RM-MAIDA', name: 'Refined Wheat Flour (Maida)', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 35.0, min_threshold: 10.0, cost_per_unit: 45, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
 
-  // Liquid Telemetry (Bar & Brewery Inventory)
+  // Liquid Telemetry (Bar & Brewery Inventory - Retained for legacy test compliance)
   { id: 'RM-WHISKY-750', name: 'Premium Blended Scotch Whisky', category: 'Bar & Spirits', purchase_unit: '750ml Bottle', consumption_unit: 'ml', conversion_factor: 750, current_stock: 3750, min_threshold: 1500, cost_per_unit: 2600, supplier: 'United Spirits Distributor', unit_type: 'spirit' },
   { id: 'RM-RUM-750', name: 'Dark Indian Spiced Rum', category: 'Bar & Spirits', purchase_unit: '750ml Bottle', consumption_unit: 'ml', conversion_factor: 750, current_stock: 4500, min_threshold: 1500, cost_per_unit: 900, supplier: 'United Spirits Distributor', unit_type: 'spirit' },
   { id: 'RM-CRAFT-BEER-KEG', name: 'German Wheat Draught Craft Beer Keg', category: 'Brewery & Kegs', purchase_unit: '50L Keg', consumption_unit: 'ml', conversion_factor: 50000, current_stock: 50000, min_threshold: 10000, cost_per_unit: 8500, supplier: 'Craft Brewery Tap Lines', unit_type: 'draught_beer', default_froth_buffer: 6.0 },
@@ -34,6 +42,19 @@ const DEFAULT_RAW_MATERIALS = [
 ];
 
 const DEFAULT_SUB_RECIPES = [
+  {
+    id: 'SUB-GRAVY-BASE',
+    name: 'Cooking Oil / Gravy Base',
+    yield_quantity: 15.0,
+    yield_unit: 'Litre',
+    current_stock: 15.0,
+    min_threshold: 4.0,
+    unit_production_cost: 95.0,
+    ingredients: [
+      { material_id: 'RM-OIL', quantity: 2.0, unit: 'Litre' },
+      { material_id: 'RM-ONION-SPICES', quantity: 8.0, unit: 'kg' }
+    ]
+  },
   {
     id: 'SUB-MAK-01',
     name: 'Makhani Gravy Base (Shahi Butter Masala Gravy)',
@@ -103,36 +124,53 @@ const DEFAULT_SUB_RECIPES = [
 const DEFAULT_RECIPES = [
   {
     id: 'REC-SAMOSA',
+    menu_item_id: '1',
     dish_name: 'Samosa',
     menu_category: 'Snacks',
     selling_price: 15,
     gst_percentage: 5,
     components: [
-      { type: 'raw', id: 'RM-MAIDA', name: 'Refined Wheat Flour (Maida)', exact_quantity: 0.05, unit: 'kg' },
-      { type: 'raw', id: 'RM-OIL', name: 'Sunflower Oil', exact_quantity: 0.02, unit: 'Litre' }
+      { type: 'raw', id: 'RM-MAIDA', name: 'Wheat Flour / Maida', exact_quantity: 0.04, unit: 'kg' },
+      { type: 'raw', id: 'RM-POTATO', name: 'Spiced Potatoes', exact_quantity: 0.05, unit: 'kg' },
+      { type: 'raw', id: 'RM-OIL', name: 'Refined Cooking Oil', exact_quantity: 0.015, unit: 'Litre' }
     ]
   },
   {
     id: 'REC-TEA',
+    menu_item_id: '2',
     dish_name: 'Tea',
     menu_category: 'Beverages',
     selling_price: 10,
     gst_percentage: 5,
     components: [
-      { type: 'raw', id: 'RM-MILK', name: 'Cow Milk', exact_quantity: 0.08, unit: 'Litre' },
-      { type: 'raw', id: 'RM-TEA-LEAVES', name: 'CTC Assam Tea Leaves', exact_quantity: 0.005, unit: 'kg' }
+      { type: 'raw', id: 'RM-MILK', name: 'Fresh Cow Milk', exact_quantity: 0.08, unit: 'Litre' },
+      { type: 'raw', id: 'RM-TEA-LEAVES', name: 'CTC Tea Leaves', exact_quantity: 0.005, unit: 'kg' },
+      { type: 'raw', id: 'RM-SUGAR', name: 'Granulated Sugar', exact_quantity: 0.008, unit: 'kg' }
     ]
   },
   {
     id: 'REC-CHICKEN-CURRY',
+    menu_item_id: '3',
     dish_name: 'Chicken Curry',
     menu_category: 'Main Course',
-    selling_price: 150,
+    selling_price: 140,
     gst_percentage: 5,
     components: [
-      { type: 'sub_recipe', id: 'SUB-BROWN-01', name: 'Bhuna Brown Gravy Base', exact_quantity: 0.15, unit: 'Litre' },
-      { type: 'raw', id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', exact_quantity: 0.18, unit: 'kg' },
-      { type: 'raw', id: 'RM-OIL', name: 'Sunflower Oil', exact_quantity: 0.015, unit: 'Litre' }
+      { type: 'raw', id: 'RM-POULTRY', name: 'Fresh Farm Poultry', exact_quantity: 0.18, unit: 'kg' },
+      { type: 'raw', id: 'RM-ONION-SPICES', name: 'Sliced Onions & Spices', exact_quantity: 0.05, unit: 'kg' },
+      { type: 'sub_recipe', id: 'SUB-GRAVY-BASE', name: 'Cooking Oil / Gravy Base', exact_quantity: 0.15, unit: 'Litre' }
+    ]
+  },
+  {
+    id: 'REC-MASALA-COKE',
+    menu_item_id: '4',
+    dish_name: 'Masala Coke',
+    menu_category: 'Beverages',
+    selling_price: 40,
+    gst_percentage: 5,
+    components: [
+      { type: 'raw', id: 'RM-COLA', name: 'Classic Cola Cans/Syrup', exact_quantity: 1.0, unit: 'units' },
+      { type: 'raw', id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', exact_quantity: 0.005, unit: 'kg' }
     ]
   },
   {
@@ -543,6 +581,41 @@ export function produceMorningBatch(subRecipeId, produceQuantity) {
 // 4. LIVE ORDER DEDUCTION & LIQUID TELEMETRY MATRIX
 // ==========================================
 
+export const MATCHED_RAW_MATERIALS_IDS = [
+  'RM-OIL',
+  'RM-MAIDA',
+  'RM-POTATO',
+  'RM-MILK',
+  'RM-TEA-LEAVES',
+  'RM-SUGAR',
+  'RM-POULTRY',
+  'RM-ONION-SPICES',
+  'RM-COLA',
+  'RM-CHAAT-MASALA'
+];
+
+function syncStockAliases(id, newStock) {
+  if (id === 'RM-POULTRY') {
+    const chk = rawMaterialsStore.get('RM-CHICKEN');
+    if (chk) chk.current_stock = newStock;
+  } else if (id === 'RM-CHICKEN') {
+    const p = rawMaterialsStore.get('RM-POULTRY');
+    if (p) p.current_stock = newStock;
+  } else if (id === 'RM-ONION-SPICES') {
+    const o = rawMaterialsStore.get('RM-ONION');
+    if (o) o.current_stock = newStock;
+  } else if (id === 'RM-ONION') {
+    const os = rawMaterialsStore.get('RM-ONION-SPICES');
+    if (os) os.current_stock = newStock;
+  } else if (id === 'SUB-GRAVY-BASE') {
+    const b = subRecipesStore.get('SUB-BROWN-01');
+    if (b) b.current_stock = newStock;
+  } else if (id === 'SUB-BROWN-01') {
+    const g = subRecipesStore.get('SUB-GRAVY-BASE');
+    if (g) g.current_stock = newStock;
+  }
+}
+
 export function getDishRecipes() {
   return Array.from(recipesStore.values());
 }
@@ -594,6 +667,10 @@ export function deductOrderInventory(order) {
     // 3. Indian culinary alias matching
     if (!recipe) {
       const aliasMap = [
+        { matches: ['samosa', 'hot samosa', 'singara', 'crispy samosa'], id: 'REC-SAMOSA' },
+        { matches: ['masala chai', 'chai', 'tea', 'kadak chai', 'hot chai', 'special tea', 'masala tea'], id: 'REC-TEA' },
+        { matches: ['chicken curry', 'curry chicken', 'murgh curry'], id: 'REC-CHICKEN-CURRY' },
+        { matches: ['masala coke', 'coke', 'cola', 'masala cola', 'spiced coke'], id: 'REC-MASALA-COKE' },
         { matches: ['makhani', 'butter masala', 'butter paneer', 'paneer makhani', 'shahi paneer'], id: 'REC-PBM' },
         { matches: ['butter chicken', 'murgh makhani', 'chicken makhani'], id: 'REC-BC' },
         { matches: ['dal makhani', 'makhani dal', 'black dal'], id: 'REC-DM' },
@@ -606,7 +683,6 @@ export function deductOrderInventory(order) {
         { matches: ['beer mug', 'craft beer mug', 'draught mug', 'draft mug', 'craft beer', 'draught beer', 'draft beer', 'beer'], id: 'REC-BEER-MUG' },
         { matches: ['ipa', 'hazy ipa', 'ipa glass'], id: 'REC-IPA-GLASS' },
         { matches: ['cold coffee', 'iced coffee', 'frappe'], id: 'REC-COLD-COFFEE' },
-        { matches: ['masala chai', 'chai', 'tea', 'kadak chai'], id: 'REC-MASALA-CHAI' },
         { matches: ['paneer roll', 'kathi roll', 'paneer wrap'], id: 'REC-PANEER-ROLL' }
       ];
 
@@ -622,10 +698,12 @@ export function deductOrderInventory(order) {
       recipe.components.forEach(comp => {
         if (comp.type === 'sub_recipe') {
           // Nested Sub-Recipe Deduction (Semi-finished base directly)
-          const sub = subRecipesStore.get(comp.id);
+          let sub = subRecipesStore.get(comp.id);
+          if (!sub && comp.id === 'SUB-GRAVY-BASE') sub = subRecipesStore.get('SUB-BROWN-01');
           const totalDeduct = Math.round(comp.exact_quantity * qty * 1000) / 1000;
           if (sub) {
             sub.current_stock = Math.max(0, Math.round((sub.current_stock - totalDeduct) * 1000) / 1000);
+            syncStockAliases(sub.id, sub.current_stock);
             deductions.push({
               dish: recipe.dish_name,
               component_type: 'sub_recipe',
@@ -674,10 +752,13 @@ export function deductOrderInventory(order) {
           }
         } else {
           // Standard Raw Material Deduction
-          const rm = rawMaterialsStore.get(comp.id);
+          let rm = rawMaterialsStore.get(comp.id);
+          if (!rm && comp.id === 'RM-POULTRY') rm = rawMaterialsStore.get('RM-CHICKEN');
+          if (!rm && comp.id === 'RM-ONION-SPICES') rm = rawMaterialsStore.get('RM-ONION');
           const totalDeduct = Math.round(comp.exact_quantity * qty * 1000) / 1000;
           if (rm) {
             rm.current_stock = Math.max(0, Math.round((rm.current_stock - totalDeduct) * 1000) / 1000);
+            syncStockAliases(rm.id, rm.current_stock);
             deductions.push({
               dish: recipe.dish_name,
               component_type: 'raw',
@@ -691,7 +772,80 @@ export function deductOrderInventory(order) {
       });
     } else {
       // 4. Fallback direct deduction from raw materials for unmapped menu items
-      if (dishName.includes('coffee')) {
+      if (dishName.includes('samosa')) {
+        const rmMaida = rawMaterialsStore.get('RM-MAIDA');
+        const rmPotato = rawMaterialsStore.get('RM-POTATO');
+        const rmOil = rawMaterialsStore.get('RM-OIL');
+        if (rmMaida) {
+          const d = Math.round(0.04 * qty * 1000) / 1000;
+          rmMaida.current_stock = Math.max(0, Math.round((rmMaida.current_stock - d) * 1000) / 1000);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmMaida.name, deducted: d, remaining_stock: rmMaida.current_stock, unit: rmMaida.consumption_unit });
+        }
+        if (rmPotato) {
+          const d = Math.round(0.05 * qty * 1000) / 1000;
+          rmPotato.current_stock = Math.max(0, Math.round((rmPotato.current_stock - d) * 1000) / 1000);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmPotato.name, deducted: d, remaining_stock: rmPotato.current_stock, unit: rmPotato.consumption_unit });
+        }
+        if (rmOil) {
+          const d = Math.round(0.015 * qty * 1000) / 1000;
+          rmOil.current_stock = Math.max(0, Math.round((rmOil.current_stock - d) * 1000) / 1000);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmOil.name, deducted: d, remaining_stock: rmOil.current_stock, unit: rmOil.consumption_unit });
+        }
+      } else if (dishName.includes('tea') || dishName.includes('chai')) {
+        const rmMilk = rawMaterialsStore.get('RM-MILK');
+        const rmTea = rawMaterialsStore.get('RM-TEA-LEAVES');
+        const rmSugar = rawMaterialsStore.get('RM-SUGAR');
+        if (rmMilk) {
+          const d = Math.round(0.08 * qty * 1000) / 1000;
+          rmMilk.current_stock = Math.max(0, Math.round((rmMilk.current_stock - d) * 1000) / 1000);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmMilk.name, deducted: d, remaining_stock: rmMilk.current_stock, unit: rmMilk.consumption_unit });
+        }
+        if (rmTea) {
+          const d = Math.round(0.005 * qty * 1000) / 1000;
+          rmTea.current_stock = Math.max(0, Math.round((rmTea.current_stock - d) * 1000) / 1000);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmTea.name, deducted: d, remaining_stock: rmTea.current_stock, unit: rmTea.consumption_unit });
+        }
+        if (rmSugar) {
+          const d = Math.round(0.008 * qty * 1000) / 1000;
+          rmSugar.current_stock = Math.max(0, Math.round((rmSugar.current_stock - d) * 1000) / 1000);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmSugar.name, deducted: d, remaining_stock: rmSugar.current_stock, unit: rmSugar.consumption_unit });
+        }
+      } else if (dishName.includes('chicken') || dishName.includes('curry')) {
+        let rmChk = rawMaterialsStore.get('RM-POULTRY') || rawMaterialsStore.get('RM-CHICKEN');
+        let rmOnion = rawMaterialsStore.get('RM-ONION-SPICES') || rawMaterialsStore.get('RM-ONION');
+        let subGravy = subRecipesStore.get('SUB-GRAVY-BASE') || subRecipesStore.get('SUB-BROWN-01');
+        if (rmChk) {
+          const d = Math.round(0.18 * qty * 1000) / 1000;
+          rmChk.current_stock = Math.max(0, Math.round((rmChk.current_stock - d) * 1000) / 1000);
+          syncStockAliases(rmChk.id, rmChk.current_stock);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmChk.name, deducted: d, remaining_stock: rmChk.current_stock, unit: rmChk.consumption_unit });
+        }
+        if (rmOnion) {
+          const d = Math.round(0.05 * qty * 1000) / 1000;
+          rmOnion.current_stock = Math.max(0, Math.round((rmOnion.current_stock - d) * 1000) / 1000);
+          syncStockAliases(rmOnion.id, rmOnion.current_stock);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmOnion.name, deducted: d, remaining_stock: rmOnion.current_stock, unit: rmOnion.consumption_unit });
+        }
+        if (subGravy) {
+          const d = Math.round(0.15 * qty * 1000) / 1000;
+          subGravy.current_stock = Math.max(0, Math.round((subGravy.current_stock - d) * 1000) / 1000);
+          syncStockAliases(subGravy.id, subGravy.current_stock);
+          deductions.push({ dish: cartItem.name, component_type: 'sub_recipe', name: subGravy.name, deducted: d, remaining_stock: subGravy.current_stock, unit: subGravy.yield_unit });
+        }
+      } else if (dishName.includes('coke') || dishName.includes('cola')) {
+        const rmCola = rawMaterialsStore.get('RM-COLA');
+        const rmChaat = rawMaterialsStore.get('RM-CHAAT-MASALA');
+        if (rmCola) {
+          const d = 1.0 * qty;
+          rmCola.current_stock = Math.max(0, Math.round((rmCola.current_stock - d) * 100) / 100);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmCola.name, deducted: d, remaining_stock: rmCola.current_stock, unit: rmCola.consumption_unit });
+        }
+        if (rmChaat) {
+          const d = Math.round(0.005 * qty * 1000) / 1000;
+          rmChaat.current_stock = Math.max(0, Math.round((rmChaat.current_stock - d) * 1000) / 1000);
+          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmChaat.name, deducted: d, remaining_stock: rmChaat.current_stock, unit: rmChaat.consumption_unit });
+        }
+      } else if (dishName.includes('coffee')) {
         const rmBeans = rawMaterialsStore.get('RM-COFFEE-BEANS');
         const rmMilk = rawMaterialsStore.get('RM-MILK');
         if (rmBeans) {
@@ -704,30 +858,7 @@ export function deductOrderInventory(order) {
           rmMilk.current_stock = Math.max(0, Math.round((rmMilk.current_stock - d) * 1000) / 1000);
           deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmMilk.name, deducted: d, remaining_stock: rmMilk.current_stock, unit: rmMilk.consumption_unit });
         }
-      }
-      if (dishName.includes('tea') || dishName.includes('chai')) {
-        const rmTea = rawMaterialsStore.get('RM-TEA-LEAVES');
-        const rmMilk = rawMaterialsStore.get('RM-MILK');
-        if (rmTea) {
-          const d = Math.round(0.01 * qty * 1000) / 1000;
-          rmTea.current_stock = Math.max(0, Math.round((rmTea.current_stock - d) * 1000) / 1000);
-          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmTea.name, deducted: d, remaining_stock: rmTea.current_stock, unit: rmTea.consumption_unit });
-        }
-        if (rmMilk) {
-          const d = Math.round(0.12 * qty * 1000) / 1000;
-          rmMilk.current_stock = Math.max(0, Math.round((rmMilk.current_stock - d) * 1000) / 1000);
-          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmMilk.name, deducted: d, remaining_stock: rmMilk.current_stock, unit: rmMilk.consumption_unit });
-        }
-      }
-      if (dishName.includes('chicken')) {
-        const rmChk = rawMaterialsStore.get('RM-CHICKEN');
-        if (rmChk) {
-          const d = Math.round(0.20 * qty * 1000) / 1000;
-          rmChk.current_stock = Math.max(0, Math.round((rmChk.current_stock - d) * 1000) / 1000);
-          deductions.push({ dish: cartItem.name, component_type: 'raw', name: rmChk.name, deducted: d, remaining_stock: rmChk.current_stock, unit: rmChk.consumption_unit });
-        }
-      }
-      if (dishName.includes('paneer')) {
+      } else if (dishName.includes('paneer')) {
         const rmPan = rawMaterialsStore.get('RM-PANEER');
         if (rmPan) {
           const d = Math.round(0.15 * qty * 1000) / 1000;
@@ -1248,6 +1379,23 @@ export function getApproxAutoFill(dishName = '', category = '') {
       flour_qty: 0.0,
       butter_qty: 0.0,
       confidence: 'High (Hot Chai / Beverage)'
+    };
+  }
+
+  // 8. Masala Coke / Cold Beverages
+  if (name.includes('coke') || name.includes('cola')) {
+    return {
+      gravy_id: '',
+      gravy_name: 'None (Chilled Soda / Beverage)',
+      gravy_qty: 0.0,
+      protein_id: 'RM-COLA',
+      protein_name: 'Classic Cola Cans/Syrup',
+      protein_qty: 1.0,
+      oil_qty: 0.0,
+      veggie_qty: 0.005,
+      flour_qty: 0.0,
+      butter_qty: 0.0,
+      confidence: 'High (Soda / Masala Coke)'
     };
   }
 

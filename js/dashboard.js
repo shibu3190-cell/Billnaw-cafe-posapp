@@ -127,7 +127,7 @@ window.saveQuickExpense = saveQuickExpense;
 
 function setDashboardDateRange(range) {
     currentDashboardRange = range;
-    ['today', 'yesterday', 'week', 'month', 'all'].forEach(r => {
+    ['today', 'yesterday', 'week', 'month', 'all', 'custom'].forEach(r => {
         const btn = document.getElementById(`fRange-${r}`);
         if (btn) {
             if (r === range) {
@@ -137,9 +137,19 @@ function setDashboardDateRange(range) {
             }
         }
     });
+    const customWrap = document.getElementById('reportCustomDateWrap');
+    if (customWrap) {
+        customWrap.style.display = (range === 'custom') ? 'inline-flex' : 'none';
+    }
     renderDashboardAnalytics();
 }
 window.setDashboardDateRange = setDashboardDateRange;
+
+function applyCustomDashboardDateRange() {
+    currentDashboardRange = 'custom';
+    renderDashboardAnalytics();
+}
+window.applyCustomDashboardDateRange = applyCustomDashboardDateRange;
 
 function filterDashboardByMetric(metric) {
     if (metric === 'expenses') {
@@ -162,12 +172,14 @@ window.filterDashboardByMetric = filterDashboardByMetric;
 
 function onDashboardMonthChanged() {
     currentDashboardRange = 'month';
-    ['today', 'yesterday', 'week', 'all'].forEach(r => {
+    ['today', 'yesterday', 'week', 'all', 'custom'].forEach(r => {
         const btn = document.getElementById(`fRange-${r}`);
         if (btn) btn.classList.remove('active');
     });
     const mBtn = document.getElementById('fRange-month');
     if (mBtn) mBtn.classList.add('active');
+    const customWrap = document.getElementById('reportCustomDateWrap');
+    if (customWrap) customWrap.style.display = 'none';
     renderDashboardAnalytics();
 }
 window.onDashboardMonthChanged = onDashboardMonthChanged;
@@ -183,6 +195,8 @@ async function renderDashboardAnalytics() {
     const weekAgoISO = getLocalISODate(weekAgo);
     
     const selectedMonth = document.getElementById('reportDateSelect')?.value || getLocalISOMonth();
+    const customStart = document.getElementById('reportCustomStartDate')?.value || '';
+    const customEnd = document.getElementById('reportCustomEndDate')?.value || '';
     
     // 1. Date Range Filtering
     let filteredOrders = orderHistory.filter(o => {
@@ -191,6 +205,12 @@ async function renderDashboardAnalytics() {
         if (currentDashboardRange === 'yesterday') return fDate === yesterdayISO;
         if (currentDashboardRange === 'week') return fDate >= weekAgoISO && fDate <= todayISO;
         if (currentDashboardRange === 'month') return fDate.startsWith(selectedMonth);
+        if (currentDashboardRange === 'custom') {
+            if (customStart && customEnd) return fDate >= customStart && fDate <= customEnd;
+            if (customStart) return fDate >= customStart;
+            if (customEnd) return fDate <= customEnd;
+            return true;
+        }
         return true;
     });
 
@@ -200,6 +220,12 @@ async function renderDashboardAnalytics() {
         if (currentDashboardRange === 'yesterday') return fDate === yesterdayISO;
         if (currentDashboardRange === 'week') return fDate >= weekAgoISO && fDate <= todayISO;
         if (currentDashboardRange === 'month') return fDate.startsWith(selectedMonth);
+        if (currentDashboardRange === 'custom') {
+            if (customStart && customEnd) return fDate >= customStart && fDate <= customEnd;
+            if (customStart) return fDate >= customStart;
+            if (customEnd) return fDate <= customEnd;
+            return true;
+        }
         return true;
     });
 
@@ -629,6 +655,44 @@ function printDailyZReport() {
 }
 window.printDailyZReport = printDailyZReport;
 
+let currentEditingOrderItems = [];
+
+function editOrderItemQty(index, delta) {
+    if (!currentEditingOrderItems[index]) return;
+    currentEditingOrderItems[index].qty = Math.max(0, (currentEditingOrderItems[index].qty || 1) + delta);
+    renderEditOrderItems();
+}
+window.editOrderItemQty = editOrderItemQty;
+
+function renderEditOrderItems() {
+    const container = document.getElementById('editOrderItemsContainer');
+    if (!container) return;
+    if (!currentEditingOrderItems || currentEditingOrderItems.length === 0) {
+        container.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">No items in this order.</div>';
+        return;
+    }
+    let html = '<div style="font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">Ordered Items & Quantities</div>';
+    html += '<div style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; padding: 4px;">';
+    currentEditingOrderItems.forEach((item, idx) => {
+        const itemTotal = (item.price || 0) * (item.qty || 0);
+        html += `
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border);">
+                <div>
+                    <div style="font-size: 13px; font-weight: 700; color: var(--text-main);">${item.name}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">₹${item.price} each • ₹${itemTotal}</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <button type="button" class="btn btn-outline" style="width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-weight: 800;" onclick="editOrderItemQty(${idx}, -1)">−</button>
+                    <span style="font-size: 13px; font-weight: 800; min-width: 20px; text-align: center;">${item.qty || 0}</span>
+                    <button type="button" class="btn btn-outline" style="width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-weight: 800;" onclick="editOrderItemQty(${idx}, 1)">+</button>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
 function openEditOrderModal(id) {
     const order = orderHistory.find(o => o.id === id); if(!order) return;
     document.getElementById('editOrderId').value = id; 
@@ -637,6 +701,8 @@ function openEditOrderModal(id) {
     selectPayment(order.paymentMode || 'Cash', 'edit'); 
     document.getElementById('editCustomerName').value = order.customer || ''; 
     document.getElementById('editBillerName').value = order.biller || ''; 
+    currentEditingOrderItems = JSON.parse(JSON.stringify(order.items || []));
+    renderEditOrderItems();
     document.getElementById('editOrderModal').style.display = 'flex';
 }
 window.openEditOrderModal = openEditOrderModal;
@@ -650,6 +716,10 @@ function saveEditedOrder() {
         order.customer = document.getElementById('editCustomerName').value.trim(); 
         order.biller = document.getElementById('editBillerName').value.trim();
         if(order.orderType === 'Takeaway') order.table = 'Takeaway'; 
+        if (currentEditingOrderItems && currentEditingOrderItems.length > 0) {
+            order.items = currentEditingOrderItems.filter(i => (i.qty || 0) > 0);
+            order.amount = Math.max(0, order.items.reduce((sum, i) => sum + ((i.price || 0) * (i.qty || 0)), 0));
+        }
         persistHistoryFirebase(); 
         renderDashboardAnalytics(); 
         showToast("Bill updated."); 

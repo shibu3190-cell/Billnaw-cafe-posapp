@@ -849,15 +849,17 @@ async function initDatabase() {
         }
     } catch(e) {}
     const storedMenu = await idb.get('cafe_menu');
-    if (storedMenu && Array.isArray(storedMenu) && storedMenu.length > 0) {
+    const defaultMenu = [
+        { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
+        { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
+        { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") },
+        { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: generateFallbackImage("Masala Coke") }
+    ];
+    if (storedMenu && Array.isArray(storedMenu) && storedMenu.length >= 4) {
         menuItems = storedMenu;
         window.menuItems = menuItems;
     } else {
-        menuItems = [
-            { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
-            { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
-            { id: 3, name: "Chicken Curry", category: "Main Course", price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") }
-        ];
+        menuItems = defaultMenu;
         window.menuItems = menuItems;
         await idb.set('cafe_menu', menuItems);
     }

@@ -15,10 +15,10 @@ try {
 } catch (e) {
     voiceLogHistory = [];
 }
-if (voiceLogHistory.length === 0) {
+if (voiceLogHistory.length === 0 || voiceLogHistory.some(v => v.text === 'two cold coffee' || v.text === 'one chicken biryani')) {
     voiceLogHistory = [
-        { text: 'two cold coffee', label: '2 Cold Coffee', time: '12:30 PM' },
-        { text: 'one chicken biryani', label: '1 Chicken Biryani', time: '12:35 PM' }
+        { text: '2 Hot Chai', label: '2 Hot Chai', time: '12:30 PM' },
+        { text: '2 Samosa', label: '2 Samosa', time: '12:35 PM' }
     ];
 }
 if (voiceLogHistory.length > 2) {
@@ -236,20 +236,38 @@ function parseAndPushVoiceOrder(phrase) {
                 }
             }
 
+            // Aliases mapping for common voice orders
+            let lookupName = dishNameCandidate.toLowerCase();
+            if (/^(hot\s+)?(chai|tea)$/i.test(lookupName) || /\b(hot\s+)?(chai|tea)\b/i.test(lookupName)) {
+                lookupName = 'tea';
+            } else if (/^samosa(s)?$/i.test(lookupName) || /\bsamosa(s)?\b/i.test(lookupName)) {
+                lookupName = 'samosa';
+            } else if (/^(chicken\s+curry|chicken)$/i.test(lookupName)) {
+                lookupName = 'chicken curry';
+            } else if (/^(masala\s+coke|coke|cola)$/i.test(lookupName)) {
+                lookupName = 'masala coke';
+            }
+
             // Find matching menu item
-            let matched = menuItems.find(m => m.name.toLowerCase() === dishNameCandidate);
+            let matched = menuItems.find(m => m.name.toLowerCase() === lookupName);
             if (!matched) {
-                matched = menuItems.find(m => dishNameCandidate.length >= 3 && m.name.toLowerCase().includes(dishNameCandidate));
+                matched = menuItems.find(m => m.name.toLowerCase() === dishNameCandidate.toLowerCase());
+            }
+            if (!matched) {
+                matched = menuItems.find(m => dishNameCandidate.length >= 3 && m.name.toLowerCase().includes(dishNameCandidate.toLowerCase()));
             }
             if (!matched) {
                 // Reverse search: does menu item name exist in candidate
-                matched = menuItems.find(m => trimmed.includes(m.name.toLowerCase()));
+                matched = menuItems.find(m => trimmed.toLowerCase().includes(m.name.toLowerCase()));
             }
 
             if (matched) {
                 // Add to active table ledger
                 if (!tablesInfo[activeTable]) {
-                    tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
+                    tablesInfo[activeTable] = { items: [], status: 'occupied', savedTime: Date.now(), lastReminder: null };
+                }
+                if (!tablesInfo[activeTable].savedTime) {
+                    tablesInfo[activeTable].savedTime = Date.now();
                 }
                 const existing = tablesInfo[activeTable].items.find(i => i.id === matched.id);
                 if (existing) {
@@ -263,7 +281,7 @@ function parseAndPushVoiceOrder(phrase) {
                         gstRate: matched.gstRate
                     });
                 }
-                tablesInfo[activeTable].status = 'saved';
+                tablesInfo[activeTable].status = 'occupied';
                 itemsAdded += qty;
                 addedSummary.push(`${qty}x ${matched.name}`);
             }
@@ -281,7 +299,7 @@ function parseAndPushVoiceOrder(phrase) {
         recordVoiceHistory(cleanPhrase, addedSummary.join(', '));
         setTimeout(() => updateVoiceIndicatorUI(false), 3000);
     } else {
-        showToast(`Could not recognize menu items in: "${phrase}". Try "2 Cold Coffee" or "1 Espresso"`);
+        showToast(`Could not recognize menu items in: "${phrase}". Try "2 Hot Chai" or "2 Samosa"`);
         updateVoiceIndicatorUI(true, `Unrecognized: "${phrase}"`);
         setTimeout(() => updateVoiceIndicatorUI(false), 2500);
     }
@@ -484,28 +502,131 @@ function copyWhatsAppCampaignText() {
 }
 window.copyWhatsAppCampaignText = copyWhatsAppCampaignText;
 
+// --- WHATSAPP LANDING HUB SUB-VIEW NAVIGATION ---
+function openWhatsAppHubSubView(viewType, templateKey) {
+    const hub = document.getElementById('whatsappLandingHub');
+    if (hub) hub.style.display = 'none';
+
+    const studioSub = document.getElementById('waCampaignStudioSubView');
+    const broadcastSub = document.getElementById('waBroadcastSubView');
+    const qrSub = document.getElementById('waQrSubView');
+
+    if (studioSub) studioSub.style.display = 'none';
+    if (broadcastSub) broadcastSub.style.display = 'none';
+    if (qrSub) qrSub.style.display = 'none';
+
+    if (templateKey) {
+        if (templateKey === 'festival') selectWhatsAppTemplate('weekend_feast');
+        else if (templateKey === 'combos') selectWhatsAppTemplate('evening_chai_snack');
+        else if (templateKey === 'loyalty') selectWhatsAppTemplate('vip_loyalty');
+        else selectWhatsAppTemplate(templateKey);
+    }
+
+    if (viewType === 'broadcast') {
+        if (broadcastSub) broadcastSub.style.display = 'block';
+    } else if (viewType === 'qr') {
+        if (qrSub) qrSub.style.display = 'block';
+    } else {
+        if (studioSub) studioSub.style.display = 'block';
+    }
+
+    if (typeof renderWhatsAppHubUI === 'function') {
+        renderWhatsAppHubUI();
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.openWhatsAppHubSubView = openWhatsAppHubSubView;
+
+function closeWhatsAppHubSubView() {
+    const hub = document.getElementById('whatsappLandingHub');
+    if (hub) hub.style.display = 'block';
+
+    const studioSub = document.getElementById('waCampaignStudioSubView');
+    const broadcastSub = document.getElementById('waBroadcastSubView');
+    const qrSub = document.getElementById('waQrSubView');
+
+    if (studioSub) studioSub.style.display = 'none';
+    if (broadcastSub) broadcastSub.style.display = 'none';
+    if (qrSub) qrSub.style.display = 'none';
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.closeWhatsAppHubSubView = closeWhatsAppHubSubView;
+
+// --- INVENTORY LANDING HUB SUB-VIEW NAVIGATION ---
+function openInventoryHubSubView(subtab) {
+    const hub = document.getElementById('inventoryLandingHub');
+    if (hub) hub.style.display = 'none';
+
+    const subView = document.getElementById('inventoryDetailedSubView');
+    if (subView) subView.style.display = 'block';
+
+    if (subtab && typeof window.switchInventorySubTab === 'function') {
+        const targetTab = (subtab === 'bar_matrix') ? 'raw_materials' : subtab;
+        window.switchInventorySubTab(targetTab);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.openInventoryHubSubView = openInventoryHubSubView;
+
+function closeInventoryHubSubView() {
+    const hub = document.getElementById('inventoryLandingHub');
+    if (hub) hub.style.display = 'block';
+
+    const subView = document.getElementById('inventoryDetailedSubView');
+    if (subView) subView.style.display = 'none';
+
+    if (typeof renderInventoryTelemetryUI === 'function') {
+        renderInventoryTelemetryUI();
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.closeInventoryHubSubView = closeInventoryHubSubView;
+
+function openRestockExpenseModal(itemId) {
+    if (window.culinaryInventory && typeof window.culinaryInventory.openRestockModal === 'function') {
+        window.culinaryInventory.openRestockModal(itemId || 'RM-OIL');
+    }
+}
+window.openRestockExpenseModal = openRestockExpenseModal;
+
+
 
 // --- 3. INVENTORY TELEMETRY & RAW INGREDIENTS ENGINE ---
 // Clean Zero-Stock Baseline: Real purchases and recipe consumption populate live inventory
 const defaultInventoryData = [
     { id: 4, name: "Refined Sunflower Oil", category: "Pantry", stock: 0.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 135, dailyUsage: "0 L/day", impactedDishes: ["Samosa", "Chicken Curry"], status: "low" },
     { id: 9, name: "Refined Wheat & All-Purpose Flour (Maida)", category: "Grains & Bakery", stock: 0.0, minThreshold: 5.0, unit: "kg", costPerUnit: 45, dailyUsage: "0 kg/day", impactedDishes: ["Samosa"], status: "low" },
-    { id: 6, name: "Fresh Farm Chicken", category: "Meat", stock: 0.0, minThreshold: 4.0, unit: "kg", costPerUnit: 220, dailyUsage: "0 kg/day", impactedDishes: ["Chicken Curry"], status: "low" },
+    { id: 10, name: "Spiced Potatoes", category: "Produce", stock: 0.0, minThreshold: 5.0, unit: "kg", costPerUnit: 30, dailyUsage: "0 kg/day", impactedDishes: ["Samosa"], status: "low" },
+    { id: 2, name: "Fresh Cow Milk (Dairy)", category: "Dairy", stock: 0.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 64, dailyUsage: "0 L/day", impactedDishes: ["Tea"], status: "low" },
     { id: 5, name: "Premium CTC Tea Leaves", category: "Beverages", stock: 0.0, minThreshold: 2.0, unit: "kg", costPerUnit: 380, dailyUsage: "0 kg/day", impactedDishes: ["Tea"], status: "low" },
-    { id: 2, name: "Fresh Cow Milk (Dairy)", category: "Dairy", stock: 0.0, minThreshold: 3.0, unit: "Litre", costPerUnit: 64, dailyUsage: "0 L/day", impactedDishes: ["Tea"], status: "low" }
+    { id: 8, name: "Granulated Sugar", category: "Pantry", stock: 0.0, minThreshold: 2.0, unit: "kg", costPerUnit: 44, dailyUsage: "0 kg/day", impactedDishes: ["Tea"], status: "low" },
+    { id: 6, name: "Fresh Farm Poultry / Chicken", category: "Meat", stock: 0.0, minThreshold: 4.0, unit: "kg", costPerUnit: 240, dailyUsage: "0 kg/day", impactedDishes: ["Chicken Curry"], status: "low" },
+    { id: 12, name: "Sliced Onions & Spices", category: "Produce", stock: 0.0, minThreshold: 3.0, unit: "kg", costPerUnit: 50, dailyUsage: "0 kg/day", impactedDishes: ["Chicken Curry"], status: "low" },
+    { id: 15, name: "Cooking Oil / Gravy Base", category: "Gravy", stock: 0.0, minThreshold: 4.0, unit: "Litre", costPerUnit: 95, dailyUsage: "0 L/day", impactedDishes: ["Chicken Curry"], status: "low" },
+    { id: 13, name: "Classic Cola Cans / Syrup", category: "Beverages", stock: 0.0, minThreshold: 10.0, unit: "units", costPerUnit: 20, dailyUsage: "0 units/day", impactedDishes: ["Masala Coke"], status: "low" },
+    { id: 14, name: "Chaat Masala Blend", category: "Spices", stock: 0.0, minThreshold: 0.5, unit: "kg", costPerUnit: 300, dailyUsage: "0 kg/day", impactedDishes: ["Masala Coke"], status: "low" }
 ];
 
 let inventoryTelemetryData = JSON.parse(localStorage.getItem('bongbhoj_inventory_telemetry') || 'null') || defaultInventoryData;
 
 // Pre-configured default dish recipes for existing menu items (ingredientId: amountPerPortion)
 const defaultDishRecipes = {
+    "samosa": { 9: 0.04, 10: 0.05, 4: 0.015 },
+    "tea": { 2: 0.08, 5: 0.005, 8: 0.008 },
+    "chai": { 2: 0.08, 5: 0.005, 8: 0.008 },
+    "hot chai": { 2: 0.08, 5: 0.005, 8: 0.008 },
+    "chicken curry": { 6: 0.18, 12: 0.05, 15: 0.15 },
+    "chicken": { 6: 0.18, 12: 0.05, 15: 0.15 },
+    "masala coke": { 13: 1.0, 14: 0.005 },
+    "coke": { 13: 1.0, 14: 0.005 },
+    "cola": { 13: 1.0, 14: 0.005 },
     "espresso": { 1: 0.018 },
     "cappuccino": { 1: 0.02, 2: 0.18, 8: 0.015 },
     "cold coffee": { 1: 0.02, 2: 0.22, 8: 0.02 },
     "coffee": { 1: 0.02, 2: 0.15, 8: 0.015 },
-    "masala chai": { 5: 0.01, 2: 0.12, 8: 0.015 },
-    "tea": { 5: 0.01, 2: 0.1, 8: 0.015 },
-    "lemon tea": { 5: 0.01, 8: 0.015 },
+    "masala chai": { 5: 0.005, 2: 0.08, 8: 0.008 },
+    "lemon tea": { 5: 0.005, 8: 0.008 },
     "chicken biryani": { 6: 0.25, 3: 0.20, 4: 0.03 },
     "chicken rolls": { 6: 0.15, 9: 0.08, 4: 0.02 },
     "paneer roll": { 7: 0.12, 9: 0.08, 4: 0.02 },
@@ -688,13 +809,28 @@ function deductInventoryForOrder(order) {
             });
         } else {
             // Heuristic deductions for unmapped dish components
+            if (dishName.includes('samosa')) {
+                const f = inventoryTelemetryData.find(i => i.id === 9); if (f) f.stock = Math.max(0, Math.round((f.stock - 0.04 * qty) * 100) / 100);
+                const p = inventoryTelemetryData.find(i => i.id === 10); if (p) p.stock = Math.max(0, Math.round((p.stock - 0.05 * qty) * 100) / 100);
+                const o = inventoryTelemetryData.find(i => i.id === 4); if (o) o.stock = Math.max(0, Math.round((o.stock - 0.015 * qty) * 100) / 100);
+            }
+            if (dishName.includes('tea') || dishName.includes('chai')) {
+                const m = inventoryTelemetryData.find(i => i.id === 2); if (m) m.stock = Math.max(0, Math.round((m.stock - 0.08 * qty) * 100) / 100);
+                const t = inventoryTelemetryData.find(i => i.id === 5); if (t) t.stock = Math.max(0, Math.round((t.stock - 0.005 * qty) * 100) / 100);
+                const s = inventoryTelemetryData.find(i => i.id === 8); if (s) s.stock = Math.max(0, Math.round((s.stock - 0.008 * qty) * 100) / 100);
+            }
+            if (dishName.includes('chicken')) {
+                const ch = inventoryTelemetryData.find(i => i.id === 6); if (ch) ch.stock = Math.max(0, Math.round((ch.stock - 0.18 * qty) * 100) / 100);
+                const on = inventoryTelemetryData.find(i => i.id === 12); if (on) on.stock = Math.max(0, Math.round((on.stock - 0.05 * qty) * 100) / 100);
+                const gr = inventoryTelemetryData.find(i => i.id === 15); if (gr) gr.stock = Math.max(0, Math.round((gr.stock - 0.15 * qty) * 100) / 100);
+            }
+            if (dishName.includes('coke') || dishName.includes('cola')) {
+                const cl = inventoryTelemetryData.find(i => i.id === 13); if (cl) cl.stock = Math.max(0, Math.round((cl.stock - 1.0 * qty) * 100) / 100);
+                const cm = inventoryTelemetryData.find(i => i.id === 14); if (cm) cm.stock = Math.max(0, Math.round((cm.stock - 0.005 * qty) * 100) / 100);
+            }
             if (dishName.includes('coffee')) {
                 const c = inventoryTelemetryData.find(i => i.id === 1); if (c) c.stock = Math.max(0, Math.round((c.stock - 0.02 * qty) * 100) / 100);
                 const m = inventoryTelemetryData.find(i => i.id === 2); if (m) m.stock = Math.max(0, Math.round((m.stock - 0.15 * qty) * 100) / 100);
-            }
-            if (dishName.includes('tea') || dishName.includes('chai')) {
-                const t = inventoryTelemetryData.find(i => i.id === 5); if (t) t.stock = Math.max(0, Math.round((t.stock - 0.01 * qty) * 100) / 100);
-                const m = inventoryTelemetryData.find(i => i.id === 2); if (m) m.stock = Math.max(0, Math.round((m.stock - 0.10 * qty) * 100) / 100);
             }
             if (dishName.includes('biryani')) {
                 const r = inventoryTelemetryData.find(i => i.id === 3); if (r) r.stock = Math.max(0, Math.round((r.stock - 0.25 * qty) * 100) / 100);

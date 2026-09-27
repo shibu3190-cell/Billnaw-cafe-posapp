@@ -42,21 +42,22 @@ function renderTables() {
         const tableName = getTableName(i);
         let classes = 'table-btn';
         let statusTag = 'VACANT';
-
         const hasItems = tInfo && tInfo.items && tInfo.items.length > 0;
         if (hasItems) {
-            if (tInfo.status === 'alert') {
-                classes += ' alert';
-                statusTag = '15M+ ALERT';
-            } else if (tInfo.status === 'served') {
-                classes += ' served';
-                statusTag = 'SERVED';
-            } else if (tInfo.status === 'saved' || tInfo.status === 'kot') {
-                classes += ' kot';
-                statusTag = 'KOT';
+            if (tInfo.status === 'billed' || tInfo.status === 'served') {
+                classes += ' billed';
+                statusTag = 'BILLED';
             } else {
                 classes += ' occupied';
-                statusTag = 'ORDER';
+                if (tInfo.status === 'alert') {
+                    classes += ' alert';
+                } else if (tInfo.status === 'saved' || tInfo.status === 'kot') {
+                    classes += ' kot';
+                }
+                const elapsedMinutes = tInfo.savedTime 
+                    ? Math.max(1, Math.floor((Date.now() - tInfo.savedTime) / 60000)) 
+                    : 1;
+                statusTag = `${elapsedMinutes}m`;
             }
         } else {
             classes += ' empty';
@@ -102,18 +103,20 @@ function syncTableUI() {
             let classes = 'table-btn';
             let statusTag = 'VACANT';
             if (hasItems) {
-                if (tInfo.status === 'alert') {
-                    classes += ' alert';
-                    statusTag = '15M+ ALERT';
-                } else if (tInfo.status === 'served') {
-                    classes += ' served';
-                    statusTag = 'SERVED';
-                } else if (tInfo.status === 'saved' || tInfo.status === 'kot') {
-                    classes += ' kot';
-                    statusTag = 'KOT';
+                if (tInfo.status === 'billed' || tInfo.status === 'served') {
+                    classes += ' billed';
+                    statusTag = 'BILLED';
                 } else {
                     classes += ' occupied';
-                    statusTag = 'ORDER';
+                    if (tInfo.status === 'alert') {
+                        classes += ' alert';
+                    } else if (tInfo.status === 'saved' || tInfo.status === 'kot') {
+                        classes += ' kot';
+                    }
+                    const elapsedMinutes = tInfo.savedTime 
+                        ? Math.max(1, Math.floor((Date.now() - tInfo.savedTime) / 60000)) 
+                        : 1;
+                    statusTag = `${elapsedMinutes}m`;
                 }
             } else {
                 classes += ' empty';
@@ -221,7 +224,8 @@ function addToCart(itemId, event) {
     const existing = tInfo.items.find(i => i.id === itemId);
     if (menuItem.trackStock && (existing ? existing.qty + 1 : 1) > menuItem.stockQty) return showToast(`Only ${menuItem.stockQty} left!`);
     if(existing) existing.qty++; else tInfo.items.push({ id: menuItem.id, name: menuItem.name, price: menuItem.price, gstRate: menuItem.gstRate, qty: 1 });
-    if(tInfo.status === 'empty' || tInfo.status === 'booked') tInfo.status = 'occupied'; 
+    if(tInfo.status === 'empty' || tInfo.status === 'booked' || !tInfo.status) tInfo.status = 'occupied'; 
+    if(!tInfo.savedTime) tInfo.savedTime = Date.now();
     persistTables(); 
     syncTableUI(); 
     updateCartUI(); 
@@ -243,6 +247,9 @@ function modifyQty(itemId, delta, event) {
             tInfo.status = 'empty'; 
             tInfo.savedTime = null; 
             tInfo.lastReminder = null; 
+        } else if (tInfo.items.length > 0 && !tInfo.savedTime) {
+            tInfo.savedTime = Date.now();
+            if (tInfo.status === 'empty') tInfo.status = 'occupied';
         }
         persistTables(); 
         syncTableUI(); 
@@ -1714,3 +1721,124 @@ function testThermalPrinter() {
     sendEscPosToPrinter(dummyOrder); 
 }
 window.testThermalPrinter = testThermalPrinter;
+
+function markBilled(tableId) {
+    const t = tableId || activeTable;
+    let tInfo = tablesInfo[t];
+    if (!tInfo || !tInfo.items || tInfo.items.length === 0) return (typeof showToast === 'function' ? showToast("Table empty!") : null);
+    tInfo.status = 'billed';
+    persistTables();
+    syncTableUI();
+    if (typeof showToast === 'function') showToast(`Table ${t} marked as Billed`);
+}
+window.markBilled = markBilled;
+
+function renderLowStockNotifications() {
+    const listEl = document.getElementById('lowStockAlertsList');
+    const badgeEl = document.getElementById('topbarNotificationBadge');
+    let alertCount = 0;
+    let alertsHtml = '';
+
+    // 1. Raw Materials Low Stock
+    const rawMaterials = window.rawMaterials || (window.CULINARY_INVENTORY_ENGINE && window.CULINARY_INVENTORY_ENGINE.rawMaterials) || [];
+    if (Array.isArray(rawMaterials)) {
+        rawMaterials.forEach(rm => {
+            const current = Number(rm.current_stock ?? rm.currentStock ?? 0);
+            const min = Number(rm.min_threshold ?? rm.minStock ?? 5);
+            if (current <= min) {
+                alertCount++;
+                alertsHtml += `
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: #FEF2F2; border: 1px solid #FECACA; padding: 10px 12px; border-radius: 10px;">
+                        <div>
+                            <div style="font-size: 13px; font-weight: 700; color: #991B1B;">⚠️ ${rm.name || rm.material_id}</div>
+                            <div style="font-size: 11px; color: #B91C1C;">Stock: ${current} ${rm.consumption_unit || rm.unit || 'units'} (Min: ${min})</div>
+                        </div>
+                        <button type="button" class="btn btn-outline" style="font-size: 11px; padding: 4px 8px; border-radius: 6px; font-weight: 700; background: #FFFFFF; color: #991B1B; border-color: #FECACA;" onclick="if(window.openRestockModal) window.openRestockModal('${rm.material_id || rm.id}')">Restock</button>
+                    </div>
+                `;
+            }
+        });
+    }
+
+    // 2. Menu Items Low Stock
+    const items = window.menuItems || [];
+    if (Array.isArray(items)) {
+        items.forEach(item => {
+            if (item.trackStock && (Number(item.stockQty ?? item.stock ?? 0) <= 3)) {
+                alertCount++;
+                alertsHtml += `
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: #FFFBEB; border: 1px solid #FDE68A; padding: 10px 12px; border-radius: 10px;">
+                        <div>
+                            <div style="font-size: 13px; font-weight: 700; color: #92400E;">📦 ${item.name}</div>
+                            <div style="font-size: 11px; color: #B45309;">Only ${item.stockQty ?? item.stock ?? 0} left in stock</div>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    }
+
+    if (listEl) {
+        listEl.innerHTML = alertsHtml || '<div style="font-size: 13px; color: var(--text-muted); padding: 12px; text-align: center; background: var(--bg); border-radius: 10px;">All stock levels optimal ✅</div>';
+    }
+
+    // 3. Unpaid Table Alerts (>15 mins)
+    const unpaidListEl = document.getElementById('unpaidTableAlertsList');
+    let unpaidHtml = '';
+    const now = Date.now();
+    for (let t = 1; t <= 12; t++) {
+        const table = tableData[t];
+        if (table && table.status === 'occupied' && table.occupiedSince) {
+            const elapsedMins = Math.floor((now - table.occupiedSince) / 60000);
+            if (elapsedMins >= 15) {
+                alertCount++;
+                unpaidHtml += `
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: #EFF6FF; border: 1px solid #BFDBFE; padding: 10px 12px; border-radius: 10px;">
+                        <div>
+                            <div style="font-size: 13px; font-weight: 700; color: #1E40AF;">🪑 Table ${t} (${elapsedMins}m)</div>
+                            <div style="font-size: 11px; color: #3B82F6;">Occupied since ${new Date(table.occupiedSince).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        </div>
+                        <button type="button" class="btn btn-outline" style="font-size: 11px; padding: 4px 8px; border-radius: 6px; font-weight: 700; background: #FFFFFF; color: #1E40AF; border-color: #BFDBFE;" onclick="selectTable(${t}); toggleNotificationDrawer(false);">View</button>
+                    </div>
+                `;
+            }
+        }
+    }
+    if (unpaidListEl) {
+        unpaidListEl.innerHTML = unpaidHtml || '<div style="font-size: 13px; color: var(--text-muted); padding: 12px; text-align: center; background: var(--bg); border-radius: 10px;">No unpaid table alerts</div>';
+    }
+
+    if (badgeEl) {
+        badgeEl.innerText = alertCount;
+        badgeEl.style.display = alertCount > 0 ? 'inline-flex' : 'none';
+    }
+}
+window.renderLowStockNotifications = renderLowStockNotifications;
+
+function toggleNotificationDrawer(openState) {
+    const drawer = document.getElementById('bellNotificationDrawer') || document.getElementById('notificationDrawer');
+    const overlay = document.getElementById('notificationDrawerOverlay');
+    const isOpen = drawer ? (drawer.classList.contains('open') || drawer.style.display === 'block') : false;
+    const shouldOpen = typeof openState === 'boolean' ? openState : !isOpen;
+    if (drawer) {
+        if (shouldOpen) {
+            renderLowStockNotifications();
+            drawer.style.display = 'block';
+            drawer.classList.add('open');
+        } else {
+            drawer.style.display = 'none';
+            drawer.classList.remove('open');
+        }
+    }
+    if (overlay) {
+        if (shouldOpen) {
+            overlay.style.display = 'block';
+            overlay.classList.add('show');
+        } else {
+            overlay.style.display = 'none';
+            overlay.classList.remove('show');
+        }
+    }
+}
+window.toggleNotificationDrawer = toggleNotificationDrawer;
+window.closeNotificationDrawer = () => toggleNotificationDrawer(false);
