@@ -84,55 +84,93 @@ window.filterMenu = filterMenu;
 
 function renderMenuUI() {
     const posGrid = document.getElementById('menuGridUI');
-    if (posGrid) {
-        posGrid.innerHTML = '';
-        const searchInput = document.getElementById('menuSearchInput');
-        const searchText = (searchInput ? searchInput.value : '').toLowerCase();
-        let filteredMenu = activeCategory === "All" ? menuItems : menuItems.filter(i => i.category === activeCategory);
-        if (searchText) filteredMenu = filteredMenu.filter(i => i.name.toLowerCase().includes(searchText));
+    if (!posGrid) return;
 
-        filteredMenu.forEach(item => {
-            let popularBadge = item.badge ? `<div class="badge-popular">${escapeHtml(item.badge)}</div>` : '';
-            let stockIndicator = '';
-            if(item.trackStock) {
-                stockIndicator = item.stockQty > 0 ? `<span class="stock-indicator green"><i></i> In Stock</span>` : `<span class="stock-indicator red"><i></i> Out of Stock</span>`;
-            }
-
-            let imageHtml = '';
-            if (item.image && item.image.startsWith('data:image')) {
-                imageHtml = `<img src="${item.image}" class="card-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                    <div class="card-img-placeholder" style="display: none; background: linear-gradient(#8D5B4C, #3B2A22); color: white;">${item.name.charAt(0).toUpperCase()}</div>`;
-            } else {
-                imageHtml = `<div class="card-img-placeholder" style="display: flex; background: linear-gradient(#8D5B4C, #3B2A22); color: white;">${item.name.charAt(0).toUpperCase()}</div>`;
-            }
-
-            posGrid.innerHTML += `
-            <div class="menu-card" onclick="addToCart(${item.id}, event)">
-                <div class="card-img-wrapper">
-                    ${imageHtml}
-                    ${popularBadge}
-                    ${item.trackStock && item.stockQty <= 5 && item.stockQty > 0 ? `<div class="stock-badge low">${item.stockQty} left</div>` : (item.trackStock && item.stockQty > 5 ? `<div class="stock-badge">${item.stockQty} left</div>` : '')}
-                    <div class="card-img-price-pill" style="display: none !important;">₹${Number(item.price).toFixed(0)}</div>
-                </div>
-                <div class="card-content">
-                    <div class="card-top-row">
-                        <span class="cat-label">${escapeHtml(item.category)}</span>
-                        ${item.trackStock && item.stockQty > 0 ? `<span class="stock-pill">+${item.stockQty}pc</span>` : ''}
-                    </div>
-                    <div class="name">${escapeHtml(item.name)}</div>
-                    <div class="card-bottom-row">
-                        <div class="card-price-col">
-                            <span class="price">₹ ${item.price}</span>
-                            ${stockIndicator}
-                        </div>
-                        <div id="menu-action-wrap-${item.id}"></div>
-                    </div>
-                </div>
-            </div>`;
-        });
-        syncMenuUIQuantities();
+    // Auto-heal empty menuItems
+    if (!Array.isArray(menuItems) || menuItems.length === 0) {
+        if (typeof defaultMenu !== 'undefined' && Array.isArray(defaultMenu) && defaultMenu.length > 0) {
+            menuItems = [...defaultMenu];
+        } else if (window.defaultMenu && Array.isArray(window.defaultMenu) && window.defaultMenu.length > 0) {
+            menuItems = [...window.defaultMenu];
+        } else {
+            menuItems = [
+                { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: typeof generateFallbackImage === 'function' ? generateFallbackImage("Samosa") : "" },
+                { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: typeof generateFallbackImage === 'function' ? generateFallbackImage("Tea") : "" },
+                { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: typeof generateFallbackImage === 'function' ? generateFallbackImage("Chicken Curry") : "" },
+                { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: typeof generateFallbackImage === 'function' ? generateFallbackImage("Masala Coke") : "" }
+            ];
+        }
+        window.menuItems = menuItems;
     }
 
+    // Auto-reset category if activeCategory has no matching items
+    if (activeCategory !== "All" && !menuItems.some(i => i.category === activeCategory)) {
+        activeCategory = "All";
+        window.activeCategory = "All";
+        if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
+    }
+
+    posGrid.innerHTML = '';
+    const searchInput = document.getElementById('menuSearchInput');
+    const searchText = (searchInput ? searchInput.value : '').toLowerCase().trim();
+    let filteredMenu = activeCategory === "All" ? menuItems : menuItems.filter(i => i.category === activeCategory);
+    if (searchText) filteredMenu = filteredMenu.filter(i => i.name.toLowerCase().includes(searchText));
+
+    if (filteredMenu.length === 0) {
+        posGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; padding: 36px 16px; text-align: center; color: var(--text-muted); background: var(--bg-surface); border-radius: var(--radius-lg); border: 1.5px dashed var(--border); margin: 8px 0;">
+                <div style="font-size: 32px; margin-bottom: 6px;">🍽️</div>
+                <div style="font-size: 14px; font-weight: 700; color: var(--text-dark);">No menu items found</div>
+                <div style="font-size: 12px; margin-top: 4px;">Click below to display all available dishes.</div>
+                <button type="button" class="btn btn-emerald" style="margin-top: 10px; border-radius: 20px; font-size: 11.5px; padding: 6px 16px;" onclick="if(document.getElementById('menuSearchInput')) document.getElementById('menuSearchInput').value=''; filterMenu('All');">
+                    Show All Dishes
+                </button>
+            </div>
+        `;
+        renderMenuCatalogUI();
+        return;
+    }
+
+    filteredMenu.forEach(item => {
+        let popularBadge = item.badge ? `<div class="badge-popular">${escapeHtml(item.badge)}</div>` : '';
+        let stockIndicator = '';
+        if(item.trackStock) {
+            stockIndicator = item.stockQty > 0 ? `<span class="stock-indicator green"><i></i> In Stock</span>` : `<span class="stock-indicator red"><i></i> Out of Stock</span>`;
+        }
+
+        let imageHtml = '';
+        if (item.image && item.image.startsWith('data:image')) {
+            imageHtml = `<img src="${item.image}" class="card-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="card-img-placeholder" style="display: none; background: linear-gradient(#8D5B4C, #3B2A22); color: white;">${item.name.charAt(0).toUpperCase()}</div>`;
+        } else {
+            imageHtml = `<div class="card-img-placeholder" style="display: flex; background: linear-gradient(#8D5B4C, #3B2A22); color: white;">${item.name.charAt(0).toUpperCase()}</div>`;
+        }
+
+        posGrid.innerHTML += `
+        <div class="menu-card" onclick="addToCart(${item.id}, event)">
+            <div class="card-img-wrapper">
+                ${imageHtml}
+                ${popularBadge}
+                ${item.trackStock && item.stockQty <= 5 && item.stockQty > 0 ? `<div class="stock-badge low">${item.stockQty} left</div>` : (item.trackStock && item.stockQty > 5 ? `<div class="stock-badge">${item.stockQty} left</div>` : '')}
+                <div class="card-img-price-pill" style="display: none !important;">₹${Number(item.price).toFixed(0)}</div>
+            </div>
+            <div class="card-content">
+                <div class="card-top-row">
+                    <span class="cat-label">${escapeHtml(item.category)}</span>
+                    ${item.trackStock && item.stockQty > 0 ? `<span class="stock-pill">+${item.stockQty}pc</span>` : ''}
+                </div>
+                <div class="name">${escapeHtml(item.name)}</div>
+                <div class="card-bottom-row">
+                    <div class="card-price-col">
+                        <span class="price">₹ ${item.price}</span>
+                        ${stockIndicator}
+                    </div>
+                    <div id="menu-action-wrap-${item.id}"></div>
+                </div>
+            </div>
+        </div>`;
+    });
+    syncMenuUIQuantities();
     renderMenuCatalogUI();
 }
 window.renderMenuUI = renderMenuUI;

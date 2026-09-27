@@ -1,5 +1,5 @@
-// billnaw POS - Service Worker v2.5.0
-const CACHE_VERSION = 'billnaw-pos-v2.5.0-' + Date.now();
+// billnaw POS - Service Worker v2.6.0
+const CACHE_VERSION = 'billnaw-pos-v2.6.0-' + Date.now();
 const STATIC_ASSETS = [
     './',
     './index.html',

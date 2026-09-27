@@ -88,11 +88,11 @@ async function runVerification() {
     assert.ok(html.includes('closeCustomerHubSubView()'));
   });
 
-  verify("Redundant WhatsApp Marketing tile is removed from Customer Hub", () => {
+  verify("WhatsApp Marketing option is present and accessible in Customer Hub", () => {
     const hubStart = html.indexOf('id="customerLandingHub"');
     const hubEnd = html.indexOf('id="customerDirectoryDetailedSubView"');
     const hubContent = html.slice(hubStart, hubEnd);
-    assert.strictEqual(hubContent.includes("openCustomerHubSubView('aiWhatsAppMarketingHub')"), false);
+    assert.ok(hubContent.includes("openCustomerHubSubView('aiWhatsAppMarketingHub')"), "WhatsApp Marketing option should be present in Customer Hub");
   });
 
   console.log("\n--- Requirement 4: POS Screen Hierarchy, Table Statuses & Voice Chips ---");

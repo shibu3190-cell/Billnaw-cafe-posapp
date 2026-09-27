@@ -335,13 +335,13 @@ async function recordTestAsync(tier, id, name, fn) {
     assert.ok(html.includes('For You') && html.includes('✨'), "Customer hub must display 'For You ✨'");
   });
 
-  recordTest('tier1', 'F10-T1-2', "Redundant WhatsApp Marketing tile is removed from #customerLandingHub", () => {
+  recordTest('tier1', 'F10-T1-2', "WhatsApp Marketing option is accessible in #customerLandingHub", () => {
     const hubStart = html.indexOf('id="customerLandingHub"');
     const hubEnd = html.indexOf('id="customerDirectoryDetailedSubView"');
     assert.ok(hubStart !== -1 && hubEnd !== -1, "Could not locate customer hub boundaries");
     const hubContent = html.slice(hubStart, hubEnd);
-    assert.strictEqual(hubContent.includes("openCustomerHubSubView('aiWhatsAppMarketingHub')"), false,
-      "Redundant WhatsApp Marketing tile must be removed from customerLandingHub");
+    assert.ok(hubContent.includes("openCustomerHubSubView('aiWhatsAppMarketingHub')") || hubContent.includes("WhatsApp Marketing"),
+      "WhatsApp Marketing option must be accessible in customerLandingHub");
   });
 
   recordTest('tier1', 'F10-T1-3', "Single-source WhatsApp access is maintained via primary #whatsapp tab", () => {

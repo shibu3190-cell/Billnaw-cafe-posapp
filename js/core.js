@@ -107,7 +107,7 @@ let menuItems = [];
 let orderHistory = [];
 let dailyExpenses = [];
 let tablesInfo = {};
-let menuCategories = ["All", "Tea/Coffee", "Food", "Cigarettes", "Other"];
+let menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
 let customersList = [];
 let selectedCustomerForOrder = null;
 let viewingHistoryCustomerId = null;
@@ -201,6 +201,24 @@ function generateFallbackImage(name) {
     }
 }
 window.generateFallbackImage = generateFallbackImage;
+
+const defaultMenu = [
+    { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Samosa") },
+    { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: generateFallbackImage("Tea") },
+    { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: generateFallbackImage("Chicken Curry") },
+    { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: generateFallbackImage("Masala Coke") }
+];
+window.defaultMenu = defaultMenu;
+
+// Immediate baseline seeding if empty
+if (!menuItems || menuItems.length === 0) {
+    menuItems = [...defaultMenu];
+    window.menuItems = menuItems;
+}
+if (!menuCategories || menuCategories.includes("Tea/Coffee") || menuCategories.includes("Food")) {
+    menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
+    window.menuCategories = menuCategories;
+}
 
 async function compressImageFile(file, maxWidth = 360, maxHeight = 360, quality = 0.75) {
     if (!file) return null;
@@ -892,7 +910,8 @@ async function initDatabase() {
         await idb.set('cafe_menu', menuItems);
     }
     const storedCats = await idb.get('cafe_categories');
-    if (storedCats && Array.isArray(storedCats) && storedCats.length > 0 && !isLegacyMockMenu) {
+    const hasLegacyCats = storedCats && Array.isArray(storedCats) && storedCats.some(c => c === 'Tea/Coffee' || c === 'Food' || c === 'Cigarettes');
+    if (storedCats && Array.isArray(storedCats) && storedCats.length > 0 && !isLegacyMockMenu && !hasLegacyCats) {
         menuCategories = storedCats;
         window.menuCategories = menuCategories;
     } else {
