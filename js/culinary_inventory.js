@@ -959,6 +959,93 @@
         if (modal) modal.style.display = 'none';
     }
 
+    async function registerNewDishRecipe(dish) {
+        if (!dish || !dish.name) return;
+        const strId = String(dish.id);
+        const dishNameClean = dish.name.trim();
+
+        // 1. Check if recipe already exists for this dish
+        const existing = recipes.find(r => String(r.menu_item_id) === strId || (r.dish_name && r.dish_name.toLowerCase() === dishNameClean.toLowerCase()));
+        if (existing) {
+            existing.menu_item_id = strId;
+            existing.dish_name = dishNameClean;
+            if (dish.price) existing.selling_price = dish.price;
+            if (dish.category) existing.menu_category = dish.category;
+            renderActiveSubTab();
+            return existing;
+        }
+
+        // 2. Fetch intelligent culinary auto-fill ratios
+        let fill = null;
+        try {
+            const afRes = await fetch(`/api/inventory/auto-fill?dish_name=${encodeURIComponent(dishNameClean)}&category=${encodeURIComponent(dish.category || '')}`).then(r => r.json());
+            if (afRes && afRes.auto_fill) fill = afRes.auto_fill;
+        } catch(e) {}
+
+        const gravyId = fill?.gravy_id || '';
+        const gravyQty = fill?.gravy_qty || 0;
+        const oilQty = (fill && fill.oil_qty !== undefined) ? fill.oil_qty : 0.02;
+        const proteinId = fill?.protein_id || '';
+        const proteinQty = fill?.protein_qty || 0;
+        const veggieQty = fill?.veggie_qty || 0;
+        const flourId = fill?.flour_id || 'RM-MAIDA';
+        const flourQty = fill?.flour_qty || 0;
+        const butterQty = fill?.butter_qty || 0;
+
+        const payload = {
+            id: 'REC-' + dishNameClean.toUpperCase().replace(/[^A-Z0-9]/g, '-').slice(0, 16) + '-' + Date.now().toString().slice(-4),
+            menu_item_id: strId,
+            dish_name: dishNameClean,
+            menu_category: dish.category || 'Main Course',
+            selling_price: dish.price || 0,
+            gravy_id: gravyId,
+            gravy_qty: gravyQty,
+            oil_qty: oilQty,
+            protein_id: proteinId,
+            protein_qty: proteinQty,
+            veggie_qty: veggieQty,
+            flour_id: flourId,
+            flour_qty: flourQty,
+            butter_qty: butterQty
+        };
+
+        try {
+            const res = await fetch('/api/inventory/recipes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json());
+            if (res && res.recipe) {
+                recipes.push(res.recipe);
+            }
+        } catch(e) {
+            const comps = [];
+            if (gravyId && gravyQty > 0) comps.push({ type: 'sub_recipe', id: gravyId, exact_quantity: gravyQty, unit: 'Litre' });
+            if (oilQty > 0) comps.push({ type: 'raw', id: 'RM-OIL', exact_quantity: oilQty, unit: 'Litre' });
+            if (proteinId && proteinQty > 0) comps.push({ type: 'raw', id: proteinId, exact_quantity: proteinQty, unit: 'kg' });
+            if (veggieQty > 0) comps.push({ type: 'raw', id: 'RM-ONION', exact_quantity: veggieQty, unit: 'kg' });
+            if (flourQty > 0) comps.push({ type: 'raw', id: flourId, exact_quantity: flourQty, unit: 'kg' });
+            if (butterQty > 0) comps.push({ type: 'raw', id: 'RM-BUTTER', exact_quantity: butterQty, unit: 'kg' });
+
+            const localRecipe = {
+                id: payload.id,
+                menu_item_id: payload.menu_item_id,
+                dish_name: payload.dish_name,
+                menu_category: payload.menu_category,
+                selling_price: payload.selling_price,
+                components: comps
+            };
+            recipes.push(localRecipe);
+        }
+
+        try {
+            localStorage.setItem('billnaw_culinary_recipes', JSON.stringify(recipes));
+        } catch (e) {}
+
+        renderActiveSubTab();
+        return payload;
+    }
+
     // --- ITEM ALERT MODAL CONTROLLER ---
     function openItemAlertModal(itemId) {
         let item = rawMaterials.find(m => m.id === itemId);
@@ -2036,7 +2123,8 @@
         filterRtrDishes,
         syncMenuItems,
         getCoreStaples,
-        getAllMenuDishes
+        getAllMenuDishes,
+        registerNewDishRecipe
     };
 
     window.openRestockModal = openRestockModal;

@@ -105,20 +105,6 @@
                                 <button type="button" id="btnResendOtp" class="btn-resend-link" disabled onclick="handleResendOtpCode()">Resend Code</button>
                             </div>
 
-                            <!-- 1-Tap Auto-Fill Code Banner (instant fallback if email delayed) -->
-                            <div id="otpAutoFillBanner" style="display: none; margin: 10px 0; background: #ECFDF5; border: 1.5px solid #10B981; border-radius: 12px; padding: 10px 14px; align-items: center; justify-content: space-between; gap: 8px;">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="font-size: 18px;">🔑</span>
-                                    <div>
-                                        <div style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Auto-Fill Code</div>
-                                        <div style="font-size: 15px; font-weight: 800; color: #065F46; letter-spacing: 3px; font-family: monospace;" id="otpAutoFillCodeText">------</div>
-                                    </div>
-                                </div>
-                                <button type="button" class="btn btn-sm btn-emerald" onclick="triggerAutoFillOtp('login')" style="padding: 6px 12px; font-size: 11px; font-weight: 800; border-radius: 8px; box-shadow: 0 2px 6px rgba(16,185,129,0.25);">
-                                    ⚡ 1-Tap Fill &amp; Sign In
-                                </button>
-                            </div>
-
                             <button type="button" id="btnVerifyOtpSubmit" class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="handleVerifyOtpCode()">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                                 <span>Verify & Sign In</span>
@@ -234,26 +220,9 @@
                             <button type="button" id="btnSignupResendOtp" class="btn-resend-link" disabled onclick="handleResendSignupOtp()">Resend Code</button>
                         </div>
 
-                        <!-- 1-Tap Auto-Fill Code Banner for Signup -->
-                        <div id="signupOtpAutoFillBanner" style="display: none; margin: 10px 0; background: #ECFDF5; border: 1.5px solid #10B981; border-radius: 12px; padding: 10px 14px; align-items: center; justify-content: space-between; gap: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 18px;">🔑</span>
-                                <div>
-                                    <div style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Auto-Fill Code</div>
-                                    <div style="font-size: 15px; font-weight: 800; color: #065F46; letter-spacing: 3px; font-family: monospace;" id="signupOtpAutoFillCodeText">------</div>
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-emerald" onclick="triggerAutoFillOtp('signup')" style="padding: 6px 12px; font-size: 11px; font-weight: 800; border-radius: 8px; box-shadow: 0 2px 6px rgba(16,185,129,0.25);">
-                                ⚡ Auto-Fill &amp; Register
-                            </button>
-                        </div>
-
                         <button type="button" id="btnVerifySignupSubmit" class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="handleVerifyAndCreateAccount()">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                             <span>Verify OTP &amp; Complete Shop Registration</span>
-                        </button>
-                        <button type="button" class="btn btn-outline" style="width: 100%; margin-top: 8px; font-size: 11.5px; border-radius: 10px; font-weight: 700; background: #FFFFFF;" onclick="handleDirectSignupWithoutOtp()">
-                            ⚡ Skip OTP &amp; Create Profile Instantly
                         </button>
                     </div>
 
@@ -261,9 +230,6 @@
                         <button type="button" id="btnSignupSubmit" class="btn btn-emerald" style="flex: 1;" onclick="handleCreateShopAccount()">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
                             <span>Verify Email &amp; Create Shop</span>
-                        </button>
-                        <button type="button" id="btnSignupDirect" class="btn btn-outline" style="border: 1.5px solid var(--border); font-size: 11.5px; font-weight: 700; padding: 8px 12px; border-radius: 12px; color: var(--text-dark); background: #FAF7F4;" onclick="handleDirectSignupWithoutOtp()" title="Create shop profile immediately without waiting for email">
-                            ⚡ Instant Setup
                         </button>
                     </div>
                 </div>
@@ -276,13 +242,6 @@
                         <span class="coming-soon-pill">Coming Soon</span>
                     </div>
                     <p class="phone-feature-sub">SMS & WhatsApp verification launching soon. Please sign in via registered Email + OTP above.</p>
-                </div>
-
-                <!-- 4. 1-TAP SKIP LOGIN BYPASS (DEMO POS) -->
-                <div style="margin-top: 14px; text-align: center;">
-                    <button type="button" id="shopAuthSkipBtn" class="btn btn-outline" style="width: 100%; padding: 10px; font-size: 12px; font-weight: 700; border-radius: 12px; color: var(--text-dark); background: #FAF7F4; border: 1.5px dashed var(--border);" onclick="closeShopAuthModal(true)" title="Skip login and enter Demo POS immediately">
-                        ⚡ Skip Login for Now (Demo POS)
-                    </button>
                 </div>
             </div>
         </div>
@@ -1130,6 +1089,115 @@
                 <button class="btn" style="flex: 2; background: var(--primary); display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="saveEditedOrder()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                     <span>Save Changes</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📅 INTERACTIVE CUSTOM DATE RANGE PICKER MODAL -->
+    <div id="reportCustomDatePickerModal" class="modal-overlay" style="display: none; z-index: 1000015;">
+        <div class="modal-box" style="max-width: 440px; border-radius: 18px; padding: 22px;">
+            <div class="modal-header" style="border-bottom: 1.5px solid var(--border); padding-bottom: 12px; margin-bottom: 16px;">
+                <div>
+                    <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                        <span>📅 Custom Date Range Picker</span>
+                    </h3>
+                    <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Select specific start and end dates or choose quick presets</p>
+                </div>
+                <button type="button" class="report-picker-close-btn" onclick="closeInteractiveCustomDatePicker()" aria-label="Close Date Picker" style="background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <!-- Quick Preset Chips -->
+            <div style="margin-bottom: 16px;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; display: block;">Quick Presets</label>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-outline" style="font-size: 11px; padding: 4px 10px; border-radius: 12px;" onclick="setCustomCalendarPreset('7days')">Last 7 Days</button>
+                    <button type="button" class="btn btn-outline" style="font-size: 11px; padding: 4px 10px; border-radius: 12px;" onclick="setCustomCalendarPreset('30days')">Last 30 Days</button>
+                    <button type="button" class="btn btn-outline" style="font-size: 11px; padding: 4px 10px; border-radius: 12px;" onclick="setCustomCalendarPreset('thisMonth')">This Month</button>
+                    <button type="button" class="btn btn-outline" style="font-size: 11px; padding: 4px 10px; border-radius: 12px;" onclick="setCustomCalendarPreset('lastMonth')">Last Month</button>
+                </div>
+            </div>
+
+            <!-- Date Inputs -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="calendarPickerStartDate" style="font-size: 12px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display: block;">Start Date</label>
+                    <input type="date" id="calendarPickerStartDate" class="form-input" style="width: 100%; padding: 8px 10px; font-size: 13px; font-weight: 600; border-radius: 10px; border: 1.5px solid var(--border);">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="calendarPickerEndDate" style="font-size: 12px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display: block;">End Date</label>
+                    <input type="date" id="calendarPickerEndDate" class="form-input" style="width: 100%; padding: 8px 10px; font-size: 13px; font-weight: 600; border-radius: 10px; border: 1.5px solid var(--border);">
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-outline" style="padding: 8px 16px; border-radius: 12px; font-weight: 700;" onclick="closeInteractiveCustomDatePicker()">Cancel</button>
+                <button type="button" class="btn btn-emerald" style="padding: 8px 20px; border-radius: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px;" onclick="applyInteractiveCustomDateRange()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>Apply Range</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧾 TRANSACTION MOBILE ACTION SHEET MODAL -->
+    <div id="transactionActionSheetModal" class="modal-overlay action-sheet-overlay" style="display: none; z-index: 1000016;">
+        <div class="modal-box action-sheet-box" style="max-width: 480px; border-radius: 22px; padding: 20px;">
+            <div class="modal-header" style="border-bottom: 1.5px solid var(--border); padding-bottom: 12px; margin-bottom: 14px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span id="txnSheetBillNo" style="font-size: 18px; font-weight: 800; color: #143832; font-family: monospace;">Bill #1001</span>
+                        <span id="txnSheetTableBadge" class="custom-pill table-pill-dinein" style="font-size: 11px; font-weight: 700;">🪑 Table 1</span>
+                    </div>
+                    <p id="txnSheetDateTime" style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">Timestamp</p>
+                </div>
+                <button type="button" class="txn-action-close-btn" onclick="closeTransactionActionSheet()" aria-label="Close Action Sheet" style="background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <!-- Transaction Summary Card -->
+            <div style="background: #FAF7F4; border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Customer</span>
+                    <span id="txnSheetCustomer" style="font-size: 13px; font-weight: 800; color: var(--text-dark);">Walk-in</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Payment Method</span>
+                    <span id="txnSheetPayment" class="custom-pill pay-badge-cash">Cash</span>
+                </div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);">
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Items Ordered</div>
+                    <div id="txnSheetItemsList" style="font-size: 13px; color: var(--text-dark); line-height: 1.4;">-</div>
+                </div>
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: baseline;">
+                    <span style="font-size: 13px; font-weight: 800; color: var(--text-dark);">Total Amount</span>
+                    <span id="txnSheetTotalAmount" style="font-size: 22px; font-weight: 800; color: var(--success);">₹0.00</span>
+                </div>
+            </div>
+
+            <!-- Direct Action Buttons Stack -->
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <button type="button" id="txnSheetBtnEdit" class="btn btn-outline" style="width: 100%; padding: 12px; border-radius: 12px; font-size: 13px; font-weight: 700; justify-content: center; display: inline-flex; align-items: center; gap: 8px; color: #143832; border: 1.5px solid var(--border);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                    <span>Edit Bill (Items, Discount &amp; Customer)</span>
+                </button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <button type="button" id="txnSheetBtnInvoice" class="btn btn-outline" style="padding: 10px; border-radius: 12px; font-size: 12px; font-weight: 700; justify-content: center; display: inline-flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        <span>View Bill Invoice</span>
+                    </button>
+                    <button type="button" id="txnSheetBtnPrint" class="btn btn-primary" style="padding: 10px; border-radius: 12px; font-size: 12px; font-weight: 700; justify-content: center; display: inline-flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                        <span>Print / Share</span>
+                    </button>
+                </div>
+                <button type="button" id="txnSheetBtnVoid" class="btn btn-outline" style="width: 100%; padding: 11px; border-radius: 12px; font-size: 12.5px; font-weight: 700; justify-content: center; display: inline-flex; align-items: center; gap: 6px; color: #DC2626; border: 1.5px solid #FCA5A5; background: #FEF2F2; margin-top: 4px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    <span>Cancel / Void Transaction</span>
                 </button>
             </div>
         </div>
@@ -2642,7 +2710,7 @@
                 </div>
 
                 <!-- Visual Charts Section -->
-                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px;">
+                <div class="dash-charts-grid" style="gap: 16px; margin-bottom: 20px;">
                     <div class="card" style="padding: 18px; margin-bottom: 0;">
                         <div class="card-header" style="margin-bottom: 12px;">
                             <h3 class="card-title" style="font-size: 15px;">Revenue vs Costs Timeline</h3>
@@ -3254,6 +3322,7 @@
                         </div>
                     </div>
                 </div>
+            </div> <!-- Closing #customers view -->
 
             <!-- ============================================================
                  HUB 3: ⊞ POS TERMINAL (DEFAULT LANDING VIEW ON APP START)
@@ -3269,7 +3338,8 @@
                                     <button type="button" class="floor-pill" onclick="switchFloor('1st Floor', this)">1st Floor</button>
                                     <button type="button" class="floor-pill" onclick="switchFloor('Outdoor', this)">Outdoor</button>
                                 </div>
-                                <div id="posActiveTableBadgeWrap" style="display: none !important;">Tables (Numberwise) <span id="posActiveTableBadge">Table 1</span></div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div id="posActiveTableBadgeWrap" style="display: none !important;">Tables (Numberwise) <span id="posActiveTableBadge">Table 1</span></div>
                                     <span id="tableStatsSummary" style="display: none;"></span>
                                     <button type="button" class="btn btn-outline" onclick="openTableManagementModal()" style="font-size: 11px; padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; color: var(--primary); font-weight: 600;" title="Edit Table Count (5 Default) & Floor Configuration">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -3881,8 +3951,8 @@
                         </div>
                     </div>
 
-                    <!-- Loss Aversion Banner -->
-                    <div id="inventoryLossAversionBanner" class="loss-aversion-banner" style="display: none; margin-bottom: 20px;">
+                    <!-- Loss Aversion Banner (Suppressed in favor of Topbar Notification Bell Drawer) -->
+                    <div id="inventoryLossAversionBanner" class="loss-aversion-banner" style="display: none !important; margin-bottom: 20px;">
                         <div class="loss-alert-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
                         <div id="inventoryLossAlertText" style="font-size: 13px; color: #7F1D1D; line-height: 1.45;"></div>
                     </div>

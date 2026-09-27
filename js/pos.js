@@ -538,6 +538,9 @@ function updateCartUI() {
     const cartDiv = document.getElementById('cartUI');
     if (!cartDiv) return;
     cartDiv.innerHTML = '';
+    if (!tablesInfo[activeTable]) {
+        tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
+    }
     let tInfo = tablesInfo[activeTable];
     let currentCart = tInfo?.items || [];
     let currentDiscount = tInfo?.discount || null;

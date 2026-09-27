@@ -799,6 +799,7 @@ function switchTab(tabId) {
         if (typeof renderCustomersUI === 'function') renderCustomersUI();
     }
     if (tabId === 'pos') {
+        if (typeof renderTables === 'function') renderTables();
         if (typeof renderMenuUI === 'function') renderMenuUI();
         if (typeof updateCartUI === 'function') updateCartUI();
     }

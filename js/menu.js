@@ -690,20 +690,28 @@ function addMenuItem() {
     const stockQty = parseInt(document.getElementById('newItemStock').value) || 0;
 
     if(name && !isNaN(price)) { 
+        let savedDishId = null;
         if (editingMenuItemId) {
             const index = menuItems.findIndex(i => i.id === editingMenuItemId);
             if(index > -1) { 
                 menuItems[index] = { id: editingMenuItemId, name, category, price, gstRate, trackStock, stockQty, image: currentItemImageBase64 }; 
+                savedDishId = editingMenuItemId;
             }
             showToast("✅ Item updated!");
         } else { 
-            menuItems.push({ id: Date.now(), name, category, price, gstRate, trackStock, stockQty, image: currentItemImageBase64 }); 
+            savedDishId = Date.now();
+            menuItems.push({ id: savedDishId, name, category, price, gstRate, trackStock, stockQty, image: currentItemImageBase64 }); 
             showToast("✅ Item added!"); 
         }
         persistMenu(); 
         renderMenuUI(); 
-        if (window.culinaryInventory && typeof window.culinaryInventory.syncMenuItems === 'function') {
-            window.culinaryInventory.syncMenuItems();
+        if (window.culinaryInventory) {
+            if (typeof window.culinaryInventory.registerNewDishRecipe === 'function') {
+                window.culinaryInventory.registerNewDishRecipe({ id: savedDishId, name, category, price });
+            }
+            if (typeof window.culinaryInventory.syncMenuItems === 'function') {
+                window.culinaryInventory.syncMenuItems();
+            }
         }
         document.getElementById('menuItemModal').style.display = 'none';
     } else { 

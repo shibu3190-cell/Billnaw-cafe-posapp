@@ -816,26 +816,31 @@ function saveToLocal() {
 window.saveToLocal = saveToLocal;
 
 function updateAllUI() {
-    if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
-    if (typeof renderCategoryDropdown === 'function') renderCategoryDropdown();
-    if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
-    if (typeof renderCategoryListUI === 'function') renderCategoryListUI();
-    if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
-    if (typeof renderMenuUI === 'function') renderMenuUI();
-    if (typeof syncTableUI === 'function') syncTableUI();
-    if (typeof updateCartUI === 'function') updateCartUI();
-    if (typeof renderExpensesUI === 'function') renderExpensesUI();
-    if (typeof renderCustomersUI === 'function') renderCustomersUI();
-    if (typeof populateCheckoutCustomerDropdown === 'function') populateCheckoutCustomerDropdown();
-    if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
-    if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
-    if (typeof generateSettingsQRPreview === 'function') generateSettingsQRPreview();
-    if (typeof refreshAiQuotaDisplay === 'function') refreshAiQuotaDisplay();
-    if (typeof renderDashboardAnalytics === 'function') {
-        const dashboardTab = document.getElementById('dashboard');
-        if (dashboardTab && dashboardTab.classList.contains('active')) {
-            renderDashboardAnalytics();
+    const safe = (fn) => { try { if (typeof fn === 'function') fn(); } catch(e) { console.warn('Render error:', e); } };
+    safe(updateProfileVisuals);
+    safe(renderCategoryDropdown);
+    safe(renderCategoryFilters);
+    safe(renderCategoryListUI);
+    safe(renderMenuCatalogUI);
+    safe(renderMenuUI);
+    safe(syncTableUI);
+    safe(updateCartUI);
+    safe(renderExpensesUI);
+    safe(renderCustomersUI);
+    safe(populateCheckoutCustomerDropdown);
+    safe(renderStaffManagementUI);
+    safe(renderLoginStaffPicker);
+    safe(generateSettingsQRPreview);
+    safe(refreshAiQuotaDisplay);
+    try {
+        if (typeof renderDashboardAnalytics === 'function') {
+            const dashboardTab = document.getElementById('dashboard');
+            if (dashboardTab && dashboardTab.classList.contains('active')) {
+                renderDashboardAnalytics();
+            }
         }
+    } catch(e) {
+        console.warn('Dashboard render error:', e);
     }
 }
 window.updateAllUI = updateAllUI;

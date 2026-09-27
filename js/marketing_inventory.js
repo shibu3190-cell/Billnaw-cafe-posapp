@@ -668,7 +668,7 @@ function renderInventoryTelemetryUI() {
 
     if (alertBanner && alertText) {
         if (metrics.criticalCount > 0) {
-            alertBanner.style.display = 'flex';
+            alertBanner.style.display = 'none'; // Alert handled in topbar notification bell drawer
             alertText.innerHTML = `<strong>⚠️ ${metrics.criticalCount} Low Ingredients may impact tonight's top best-sellers (${metrics.itemsSummary})</strong>. Estimated <span style="color: var(--danger); font-weight: 800;">₹${metrics.potentialLoss.toLocaleString('en-IN')} potential sales at risk</span> if unstocked before dinner rush.`;
         } else {
             alertBanner.style.display = 'none';

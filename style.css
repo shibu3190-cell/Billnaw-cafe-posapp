@@ -3862,3 +3862,103 @@ body.printing { background: #fff !important; }
         transform: translateY(0);
     }
 }
+
+/* 9. Visual Charts Responsive Grid */
+.dash-charts-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+/* 10. Modern Mobile-First UX for Reports Transactions & Customer Directory */
+@media screen and (max-width: 640px) {
+    .dash-charts-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .terminal-status-badge {
+        display: none !important;
+    }
+
+    #dashboard .table-responsive,
+    #customerDirectoryDetailedSubView .table-responsive {
+        overflow-x: visible !important;
+    }
+
+    #dashboard .data-table thead,
+    #customerDirectoryDetailedSubView .data-table thead {
+        display: none !important;
+    }
+
+    #dashboard .data-table,
+    #customerDirectoryDetailedSubView .data-table,
+    #dashboard .data-table tbody,
+    #customerDirectoryDetailedSubView .data-table tbody {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    #historyTableBody tr,
+    #customersTableBody tr {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        background: #FFFFFF !important;
+        border: 1.5px solid var(--border) !important;
+        border-radius: 14px !important;
+        padding: 14px !important;
+        margin-bottom: 12px !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+        transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+        cursor: pointer !important;
+        box-sizing: border-box !important;
+    }
+
+    #historyTableBody tr:active,
+    #customersTableBody tr:active {
+        transform: scale(0.985) !important;
+        background: #FAF7F4 !important;
+    }
+
+    #historyTableBody tr td,
+    #customersTableBody tr td {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 3px 0 !important;
+        border: none !important;
+        font-size: 13px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    #historyTableBody tr td:last-child,
+    #customersTableBody tr td:last-child {
+        margin-top: 6px !important;
+        padding-top: 8px !important;
+        border-top: 1px dashed var(--border) !important;
+        justify-content: flex-end !important;
+    }
+
+    /* Action Sheet Modal Bottom-Sheet Behavior */
+    .action-sheet-overlay {
+        justify-content: flex-end !important;
+        align-items: flex-end !important;
+        padding: 0 !important;
+    }
+
+    .action-sheet-box {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 24px 24px 0 0 !important;
+        margin: 0 !important;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25) !important;
+        animation: actionSheetSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    @keyframes actionSheetSlideUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+}

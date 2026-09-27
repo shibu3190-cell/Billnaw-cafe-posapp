@@ -125,7 +125,70 @@ function saveQuickExpense() {
 }
 window.saveQuickExpense = saveQuickExpense;
 
-function setDashboardDateRange(range) {
+function openInteractiveCustomDatePicker() {
+    const modal = document.getElementById('reportCustomDatePickerModal');
+    if (!modal) return;
+    const today = getLocalISODate();
+    const startInput = document.getElementById('calendarPickerStartDate');
+    const endInput = document.getElementById('calendarPickerEndDate');
+    const customStart = document.getElementById('reportCustomStartDate')?.value;
+    const customEnd = document.getElementById('reportCustomEndDate')?.value;
+    if (startInput) startInput.value = customStart || today;
+    if (endInput) endInput.value = customEnd || today;
+    modal.style.display = 'flex';
+}
+window.openInteractiveCustomDatePicker = openInteractiveCustomDatePicker;
+
+function closeInteractiveCustomDatePicker() {
+    const modal = document.getElementById('reportCustomDatePickerModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeInteractiveCustomDatePicker = closeInteractiveCustomDatePicker;
+
+function setCustomCalendarPreset(preset) {
+    const startInput = document.getElementById('calendarPickerStartDate');
+    const endInput = document.getElementById('calendarPickerEndDate');
+    if (!startInput || !endInput) return;
+    const now = new Date();
+    const todayISO = getLocalISODate(now);
+    endInput.value = todayISO;
+
+    if (preset === '7days') {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        startInput.value = getLocalISODate(d);
+    } else if (preset === '30days') {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        startInput.value = getLocalISODate(d);
+    } else if (preset === 'thisMonth') {
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        startInput.value = `${y}-${m}-01`;
+    } else if (preset === 'lastMonth') {
+        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const y = lastMonthDate.getFullYear();
+        const m = String(lastMonthDate.getMonth() + 1).padStart(2, '0');
+        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+        startInput.value = `${y}-${m}-01`;
+        endInput.value = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+    }
+}
+window.setCustomCalendarPreset = setCustomCalendarPreset;
+
+function applyInteractiveCustomDateRange() {
+    const startVal = document.getElementById('calendarPickerStartDate')?.value;
+    const endVal = document.getElementById('calendarPickerEndDate')?.value;
+    const repStart = document.getElementById('reportCustomStartDate');
+    const repEnd = document.getElementById('reportCustomEndDate');
+    if (repStart) repStart.value = startVal || '';
+    if (repEnd) repEnd.value = endVal || '';
+    closeInteractiveCustomDatePicker();
+    setDashboardDateRange('custom', true);
+}
+window.applyInteractiveCustomDateRange = applyInteractiveCustomDateRange;
+
+function setDashboardDateRange(range, fromCalendar = false) {
     currentDashboardRange = range;
     ['today', 'yesterday', 'week', 'month', 'all', 'custom'].forEach(r => {
         const btn = document.getElementById(`fRange-${r}`);
@@ -140,6 +203,14 @@ function setDashboardDateRange(range) {
     const customWrap = document.getElementById('reportCustomDateWrap');
     if (customWrap) {
         customWrap.style.display = (range === 'custom') ? 'inline-flex' : 'none';
+    }
+    if (range === 'custom' && !fromCalendar) {
+        const customStart = document.getElementById('reportCustomStartDate')?.value;
+        const customEnd = document.getElementById('reportCustomEndDate')?.value;
+        if (!customStart && !customEnd) {
+            openInteractiveCustomDatePicker();
+            return;
+        }
     }
     renderDashboardAnalytics();
 }
@@ -319,7 +390,7 @@ async function renderDashboardAnalytics() {
                     : '';
 
                 return `
-                    <tr>
+                    <tr onclick="openTransactionActionSheet(${order.id})" style="cursor: pointer;" title="Tap to view bill actions">
                         <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">${timeStr}</td>
                         <td><strong style="color: var(--primary); font-size: 14px; font-family: monospace;">#${order.billNo || '-'}</strong></td>
                         <td><span class="custom-pill ${badgeClass}">${tableLabel}</span></td>
@@ -330,7 +401,7 @@ async function renderDashboardAnalytics() {
                             <div>₹${Number(order.amount).toFixed(2)}</div>
                             ${discountBadge}
                         </td>
-                        <td style="text-align: center; white-space: nowrap;">
+                        <td style="text-align: center; white-space: nowrap;" onclick="event.stopPropagation();">
                             <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="viewOrderInvoiceModal(${order.id})" title="View Full Bill & Invoice Breakdown">🧾 Bill</button>
                             <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="openEditOrderModal(${order.id})">✏️ Edit</button>
                             <button class="btn btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="reprintReceipt(${order.id})">🖨️ Receipt</button>
@@ -732,3 +803,101 @@ function exportHistoryToExcel() {
     exportFilteredSalesCSV();
 }
 window.exportHistoryToExcel = exportHistoryToExcel;
+
+// --- MOBILE-FIRST TRANSACTION BOTTOM ACTION SHEET CONTROLLER ---
+let currentActionSheetOrderId = null;
+
+function openTransactionActionSheet(orderId) {
+    const order = orderHistory.find(o => String(o.id) === String(orderId));
+    if (!order) return;
+    currentActionSheetOrderId = order.id;
+
+    const modal = document.getElementById('transactionActionSheetModal');
+    if (!modal) return;
+
+    const billEl = document.getElementById('txnSheetBillNo');
+    if (billEl) billEl.innerText = `Bill #${order.billNo || order.id || '-'}`;
+
+    const tableBadge = document.getElementById('txnSheetTableBadge');
+    if (tableBadge) {
+        let tableStr = String(order.table || 'Takeaway');
+        tableBadge.innerText = tableStr === 'Takeaway' ? '🛍️ Takeaway' : (tableStr.startsWith('Table') ? tableStr : `🪑 ${tableStr}`);
+        tableBadge.className = tableStr === 'Takeaway' ? 'custom-pill table-pill-takeaway' : 'custom-pill table-pill-dinein';
+    }
+
+    const dateEl = document.getElementById('txnSheetDateTime');
+    if (dateEl) dateEl.innerText = order.date || '';
+
+    const custEl = document.getElementById('txnSheetCustomer');
+    if (custEl) custEl.innerText = order.customer || 'Walk-in';
+
+    const payEl = document.getElementById('txnSheetPayment');
+    if (payEl) {
+        payEl.innerText = order.paymentMode || 'Cash';
+        let payBadgeClass = 'pay-badge-cash';
+        if ((order.paymentMode || '').toLowerCase() === 'upi') payBadgeClass = 'pay-badge-upi';
+        if ((order.paymentMode || '').toLowerCase() === 'card') payBadgeClass = 'pay-badge-card';
+        payEl.className = `custom-pill ${payBadgeClass}`;
+    }
+
+    const itemsEl = document.getElementById('txnSheetItemsList');
+    if (itemsEl) itemsEl.innerText = order.items || '-';
+
+    const amtEl = document.getElementById('txnSheetTotalAmount');
+    if (amtEl) amtEl.innerText = `₹${Number(order.amount || 0).toFixed(2)}`;
+
+    // Direct Action Button bindings
+    const btnEdit = document.getElementById('txnSheetBtnEdit');
+    if (btnEdit) {
+        btnEdit.onclick = () => {
+            closeTransactionActionSheet();
+            openEditOrderModal(order.id);
+        };
+    }
+    const btnInvoice = document.getElementById('txnSheetBtnInvoice');
+    if (btnInvoice) {
+        btnInvoice.onclick = () => {
+            closeTransactionActionSheet();
+            viewOrderInvoiceModal(order.id);
+        };
+    }
+    const btnPrint = document.getElementById('txnSheetBtnPrint');
+    if (btnPrint) {
+        btnPrint.onclick = () => {
+            reprintReceipt(order.id);
+        };
+    }
+    const btnVoid = document.getElementById('txnSheetBtnVoid');
+    if (btnVoid) {
+        btnVoid.onclick = () => {
+            voidTransaction(order.id);
+        };
+    }
+
+    modal.style.display = 'flex';
+}
+window.openTransactionActionSheet = openTransactionActionSheet;
+
+function closeTransactionActionSheet() {
+    const modal = document.getElementById('transactionActionSheetModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeTransactionActionSheet = closeTransactionActionSheet;
+
+function voidTransaction(orderId) {
+    const order = orderHistory.find(o => String(o.id) === String(orderId));
+    if (!order) return;
+    const confirmVoid = confirm(`⚠️ Are you sure you want to cancel / void Bill #${order.billNo || order.id} (₹${order.amount})?\n\nThis will remove it from sales records and recalculate revenue.`);
+    if (!confirmVoid) return;
+
+    // Remove from orderHistory
+    orderHistory = orderHistory.filter(o => String(o.id) !== String(orderId));
+    saveToLocal();
+    if (typeof persistAllToFirestore === 'function') persistAllToFirestore();
+
+    closeTransactionActionSheet();
+    if (typeof showToast === 'function') showToast(`Bill #${order.billNo || orderId} has been cancelled / voided.`);
+    renderDashboardAnalytics();
+    if (typeof updateAllUI === 'function') updateAllUI();
+}
+window.voidTransaction = voidTransaction;
