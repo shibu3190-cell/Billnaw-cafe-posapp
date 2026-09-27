@@ -561,8 +561,12 @@ function handleItemImageUpload(event) {
 }
 window.handleItemImageUpload = handleItemImageUpload;
 
-async function fetchImageAsBase64(promptText, itemName = '') {
+let dishImageVariationCounters = {};
+window.dishImageVariationCounters = dishImageVariationCounters;
+
+async function fetchImageAsBase64(promptText, itemName = '', variationIndex = 0) {
     const dishName = itemName || promptText || '';
+    const vIdx = Math.max(0, parseInt(variationIndex, 10) || 0);
 
     // 1. Try Backend Image Generator Route first
     try {
@@ -572,6 +576,7 @@ async function fetchImageAsBase64(promptText, itemName = '') {
             body: JSON.stringify({
                 prompt: promptText,
                 itemName: dishName,
+                variation: vIdx,
                 clientId: myClientID
             })
         });
@@ -585,15 +590,15 @@ async function fetchImageAsBase64(promptText, itemName = '') {
         console.warn("Backend AI image route fallback:", apiErr.message);
     }
 
-    // 2. Curated Gourmet Culinary Photo Library matching (100% reliable, authentic food photos)
+    // 2. Curated Gourmet Culinary Photo Library matching with variation cycling
     if (typeof getCuratedFoodPhoto === 'function') {
-        const curatedUrl = getCuratedFoodPhoto(dishName);
+        const curatedUrl = getCuratedFoodPhoto(dishName, '', vIdx);
         if (curatedUrl) return curatedUrl;
     }
 
-    // 3. High-Definition Canvas Culinary Graphics Fallback (zero network errors)
+    // 3. High-Definition Canvas Culinary Graphics Fallback with variation styling
     if (typeof generateFallbackImage === 'function') {
-        return generateFallbackImage(dishName);
+        return generateFallbackImage(dishName, '', vIdx);
     }
 
     return "";
@@ -605,6 +610,9 @@ async function generateAIImage() {
     const name = nameInput ? nameInput.value.trim() : '';
     if (!name) return showToast("⚠️ Enter an Item Name first to generate image!");
     
+    const catInput = document.getElementById('newItemCategory');
+    const cat = catInput ? catInput.value : '';
+
     const btn = document.getElementById('btnGenerateAI'); 
     const preview = document.getElementById('newItemImagePreview');
     if (btn) {
@@ -612,8 +620,20 @@ async function generateAIImage() {
         btn.disabled = true;
     }
     
-    // Immediate instant responsive preview
-    const instantPreview = typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name) : (typeof generateFallbackImage === 'function' ? generateFallbackImage(name) : '');
+    // Cycle variation index on each successive click
+    const normKey = name.toLowerCase().trim();
+    if (dishImageVariationCounters[normKey] === undefined) {
+        dishImageVariationCounters[normKey] = 0;
+    } else {
+        dishImageVariationCounters[normKey] = dishImageVariationCounters[normKey] + 1;
+    }
+    const currentVarIndex = dishImageVariationCounters[normKey];
+
+    // Immediate instant responsive preview for the selected variation
+    const instantPreview = typeof getGourmetFoodImage === 'function' 
+        ? getGourmetFoodImage(name, cat, currentVarIndex) 
+        : (typeof generateFallbackImage === 'function' ? generateFallbackImage(name, cat, currentVarIndex) : '');
+    
     if (preview && instantPreview) {
         preview.src = instantPreview; 
         preview.style.display = "block"; 
@@ -621,18 +641,18 @@ async function generateAIImage() {
     }
     
     try {
-        const promptStr = `Gourmet culinary photography of ${name}, elegant plating, cafe presentation, natural studio lighting, 4k quality`;
-        const generatedImg = await fetchImageAsBase64(promptStr, name);
+        const promptStr = `Gourmet culinary photography of ${name}, variation ${currentVarIndex + 1}, elegant plating, cafe presentation, natural studio lighting, 4k quality`;
+        const generatedImg = await fetchImageAsBase64(promptStr, name, currentVarIndex);
         currentItemImageBase64 = generatedImg || instantPreview;
         if (preview && currentItemImageBase64) {
             preview.src = currentItemImageBase64; 
             preview.style.opacity = "1";
         }
         if (btn) {
-            btn.innerText = "✨ AI Photo"; 
+            btn.innerText = "🎲 Next Photo"; 
             btn.disabled = false;
         }
-        showToast("✅ Gourmet dish photo selected!");
+        showToast(`✅ Selected photo variation #${currentVarIndex + 1} for ${name}!`);
     } catch (error) { 
         console.warn("AI Image note:", error.message); 
         currentItemImageBase64 = instantPreview;
@@ -641,10 +661,10 @@ async function generateAIImage() {
             preview.style.opacity = "1";
         }
         if (btn) {
-            btn.innerText = "✨ AI Photo"; 
+            btn.innerText = "🎲 Next Photo"; 
             btn.disabled = false;
         }
-        showToast("✅ Applied gourmet dish visual.");
+        showToast(`✅ Applied photo variation #${currentVarIndex + 1}`);
     }
 }
 window.generateAIImage = generateAIImage;
@@ -663,6 +683,8 @@ function openAddMenuItemModal() {
     currentItemImageBase64 = ""; 
     document.getElementById('newItemImagePreview').src = ""; 
     document.getElementById('newItemImagePreview').style.display = "none";
+    const genBtn = document.getElementById('btnGenerateAI');
+    if (genBtn) genBtn.innerText = "✨ AI Photo";
     document.getElementById('menuItemModal').style.display = 'flex'; 
     setTimeout(() => { document.getElementById('newItemName').focus(); }, 100);
 }
@@ -1209,22 +1231,24 @@ async function generateAiItemPhoto(index) {
         btn.disabled = true;
         btn.innerText = "⏳ Generating...";
     }
-    showToast(`✨ Generating visual for ${item.name || 'item'}...`);
+    
+    item._varIndex = (item._varIndex !== undefined) ? (item._varIndex + 1) : 1;
+    showToast(`✨ Generating variation #${item._varIndex + 1} for ${item.name || 'item'}...`);
     try {
-        const prompt = item.image_prompt || `${item.name} gourmet cafe food dish photography`;
-        const base64 = await fetchImageAsBase64(prompt, item.name || 'item');
+        const prompt = item.image_prompt || `${item.name} gourmet cafe food dish photography variation ${item._varIndex + 1}`;
+        const base64 = await fetchImageAsBase64(prompt, item.name || 'item', item._varIndex);
         if (base64) {
             item.image = base64;
             item.hasCustomImage = true;
             renderAiPreviewModal();
-            showToast(`✨ Visual created for ${item.name}!`);
+            showToast(`✨ Applied variation #${item._varIndex + 1} for ${item.name}!`);
         }
     } catch (err) {
         console.warn("AI generation failed:", err);
         showToast("⚠️ Could not generate visual: " + err.message);
         if (btn) {
             btn.disabled = false;
-            btn.innerText = "✨ AI Visual";
+            btn.innerText = "🎲 Next Photo";
         }
     }
 }

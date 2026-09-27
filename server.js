@@ -301,7 +301,7 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
 // Protected Gemini Image Generation: AI key is read strictly server-side
 app.post('/api/generate-image', async (req, res) => {
   try {
-    const { prompt, itemName, clientId } = req.body;
+    const { prompt, itemName, variation, clientId } = req.body;
     let customKey = null;
     if (clientId) {
       const info = await getClientQuotaInfo(clientId).catch(() => null);
@@ -311,7 +311,7 @@ app.post('/api/generate-image', async (req, res) => {
       }
     }
 
-    const result = await generateMenuItemImage({ prompt, itemName, apiKey: customKey });
+    const result = await generateMenuItemImage({ prompt, itemName, variation, apiKey: customKey });
     res.json(result);
   } catch (error) {
     console.log('[Image Generator] Using culinary graphic placeholder.');
