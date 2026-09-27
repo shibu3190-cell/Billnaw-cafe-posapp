@@ -564,11 +564,18 @@ window.handleItemImageUpload = handleItemImageUpload;
 let dishImageVariationCounters = {};
 window.dishImageVariationCounters = dishImageVariationCounters;
 
-async function fetchImageAsBase64(promptText, itemName = '', variationIndex = 0) {
-    const dishName = itemName || promptText || '';
+async function fetchImageAsBase64(promptText, itemName = '', variationIndex = 0, category = '') {
+    const dishName = String(itemName || promptText || '').trim();
     const vIdx = Math.max(0, parseInt(variationIndex, 10) || 0);
+    const cat = String(category || '').trim();
 
-    // 1. Try Backend Image Generator Route first
+    // 1. Direct Curated Gourmet Culinary Photo Library matching locally
+    if (typeof getCuratedFoodPhoto === 'function') {
+        const directCurated = getCuratedFoodPhoto(dishName, cat, vIdx, false);
+        if (directCurated) return directCurated;
+    }
+
+    // 2. Try Backend AI Classifier / Image Generator Route
     try {
         const res = await fetch('/api/generate-image', {
             method: 'POST',
@@ -576,8 +583,9 @@ async function fetchImageAsBase64(promptText, itemName = '', variationIndex = 0)
             body: JSON.stringify({
                 prompt: promptText,
                 itemName: dishName,
+                category: cat,
                 variation: vIdx,
-                clientId: myClientID
+                clientId: typeof myClientID !== 'undefined' ? myClientID : ''
             })
         });
         if (res.ok) {
@@ -590,15 +598,16 @@ async function fetchImageAsBase64(promptText, itemName = '', variationIndex = 0)
         console.warn("Backend AI image route fallback:", apiErr.message);
     }
 
-    // 2. Curated Gourmet Culinary Photo Library matching with variation cycling
+    // 3. Category Fallback / High-Definition Canvas Culinary Graphics Fallback
     if (typeof getCuratedFoodPhoto === 'function') {
-        const curatedUrl = getCuratedFoodPhoto(dishName, '', vIdx);
-        if (curatedUrl) return curatedUrl;
+        const catFallback = getCuratedFoodPhoto(dishName, cat, vIdx, true);
+        if (catFallback) return catFallback;
     }
-
-    // 3. High-Definition Canvas Culinary Graphics Fallback with variation styling
+    if (typeof getGourmetFoodImage === 'function') {
+        return getGourmetFoodImage(dishName, cat, vIdx);
+    }
     if (typeof generateFallbackImage === 'function') {
-        return generateFallbackImage(dishName, '', vIdx);
+        return generateFallbackImage(dishName, cat, vIdx);
     }
 
     return "";
@@ -616,7 +625,7 @@ async function generateAIImage() {
     const btn = document.getElementById('btnGenerateAI'); 
     const preview = document.getElementById('newItemImagePreview');
     if (btn) {
-        btn.innerText = "⏳ Generating..."; 
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>⏳ Generating...</span>`; 
         btn.disabled = true;
     }
     
@@ -628,6 +637,8 @@ async function generateAIImage() {
         dishImageVariationCounters[normKey] = dishImageVariationCounters[normKey] + 1;
     }
     const currentVarIndex = dishImageVariationCounters[normKey];
+    const totalVars = typeof getDishVariationCount === 'function' ? getDishVariationCount(name, cat) : 4;
+    const varNum = (currentVarIndex % totalVars) + 1;
 
     // Immediate instant responsive preview for the selected variation
     const instantPreview = typeof getGourmetFoodImage === 'function' 
@@ -637,22 +648,23 @@ async function generateAIImage() {
     if (preview && instantPreview) {
         preview.src = instantPreview; 
         preview.style.display = "block"; 
-        preview.style.opacity = "0.75";
+        preview.style.opacity = "0.85";
     }
+    currentItemImageBase64 = instantPreview;
     
     try {
-        const promptStr = `Gourmet culinary photography of ${name}, variation ${currentVarIndex + 1}, elegant plating, cafe presentation, natural studio lighting, 4k quality`;
-        const generatedImg = await fetchImageAsBase64(promptStr, name, currentVarIndex);
+        const promptStr = `Gourmet culinary photography of ${name}, variation ${varNum}, elegant plating, cafe presentation, natural studio lighting, 4k quality`;
+        const generatedImg = await fetchImageAsBase64(promptStr, name, currentVarIndex, cat);
         currentItemImageBase64 = generatedImg || instantPreview;
         if (preview && currentItemImageBase64) {
             preview.src = currentItemImageBase64; 
             preview.style.opacity = "1";
         }
         if (btn) {
-            btn.innerText = "🎲 Next Photo"; 
+            btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>🎲 Next Photo</span>`; 
             btn.disabled = false;
         }
-        showToast(`✅ Selected photo variation #${currentVarIndex + 1} for ${name}!`);
+        showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${name}`);
     } catch (error) { 
         console.warn("AI Image note:", error.message); 
         currentItemImageBase64 = instantPreview;
@@ -661,10 +673,10 @@ async function generateAIImage() {
             preview.style.opacity = "1";
         }
         if (btn) {
-            btn.innerText = "🎲 Next Photo"; 
+            btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>🎲 Next Photo</span>`; 
             btn.disabled = false;
         }
-        showToast(`✅ Applied photo variation #${currentVarIndex + 1}`);
+        showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${name}`);
     }
 }
 window.generateAIImage = generateAIImage;
@@ -684,7 +696,10 @@ function openAddMenuItemModal() {
     document.getElementById('newItemImagePreview').src = ""; 
     document.getElementById('newItemImagePreview').style.display = "none";
     const genBtn = document.getElementById('btnGenerateAI');
-    if (genBtn) genBtn.innerText = "✨ AI Photo";
+    if (genBtn) {
+        genBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>AI Photo</span>`;
+        genBtn.disabled = false;
+    }
     document.getElementById('menuItemModal').style.display = 'flex'; 
     setTimeout(() => { document.getElementById('newItemName').focus(); }, 100);
 }
@@ -709,6 +724,12 @@ function editMenuItem(id) {
             document.getElementById('newItemImagePreview').style.opacity = "1";
         } else { 
             document.getElementById('newItemImagePreview').style.display = "none"; 
+        }
+        
+        const genBtn = document.getElementById('btnGenerateAI');
+        if (genBtn) {
+            genBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>🎲 Next Photo</span>`;
+            genBtn.disabled = false;
         }
         
         editingMenuItemId = id; 
@@ -1139,7 +1160,7 @@ function renderAiPreviewModal() {
                 <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px; flex-wrap: wrap;">
                     <button type="button" onclick="triggerAiItemImageUpload(${index})" style="background: none; border: none; font-size: 11px; color: var(--milk-choc); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>Upload Photo</button>
                     <span style="color: var(--border); font-size: 10px;">•</span>
-                    <button type="button" onclick="generateAiItemPhoto(${index})" id="ai-gen-btn-${index}" style="background: none; border: none; font-size: 11px; color: var(--success); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>AI Visual</button>
+                    <button type="button" onclick="generateAiItemPhoto(${index})" id="ai-gen-btn-${index}" style="background: none; border: none; font-size: 11px; color: var(--success); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>${item.hasCustomImage || item._varIndex ? '🎲 Next Photo' : 'AI Visual'}</button>
                     ${item.hasCustomImage ? '<span style="font-size: 10px; color: var(--success); font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">✓ Attached</span>' : ''}
                 </div>
             </div>
@@ -1229,27 +1250,39 @@ async function generateAiItemPhoto(index) {
     const btn = document.getElementById(`ai-gen-btn-${index}`);
     if (btn) {
         btn.disabled = true;
-        btn.innerText = "⏳ Generating...";
+        btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>⏳ Generating...`;
     }
     
     item._varIndex = (item._varIndex !== undefined) ? (item._varIndex + 1) : 1;
-    showToast(`✨ Generating variation #${item._varIndex + 1} for ${item.name || 'item'}...`);
+    const totalVars = typeof getDishVariationCount === 'function' ? getDishVariationCount(item.name, item.category) : 4;
+    const varNum = (item._varIndex % totalVars) + 1;
+
+    const instantPhoto = typeof getGourmetFoodImage === 'function'
+        ? getGourmetFoodImage(item.name || 'Item', item.category || '', item._varIndex)
+        : (typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name || 'Item', item.category || '', item._varIndex) : '');
+    
+    if (instantPhoto) {
+        item.image = instantPhoto;
+        item.hasCustomImage = true;
+        const imgEl = document.getElementById(`ai-item-img-${index}`);
+        if (imgEl) {
+            imgEl.src = instantPhoto;
+        }
+    }
+
     try {
-        const prompt = item.image_prompt || `${item.name} gourmet cafe food dish photography variation ${item._varIndex + 1}`;
-        const base64 = await fetchImageAsBase64(prompt, item.name || 'item', item._varIndex);
+        const prompt = item.image_prompt || `${item.name} gourmet cafe food dish photography variation ${varNum}`;
+        const base64 = await fetchImageAsBase64(prompt, item.name || 'item', item._varIndex, item.category || '');
         if (base64) {
             item.image = base64;
             item.hasCustomImage = true;
-            renderAiPreviewModal();
-            showToast(`✨ Applied variation #${item._varIndex + 1} for ${item.name}!`);
         }
+        renderAiPreviewModal();
+        showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${item.name || 'item'}`);
     } catch (err) {
-        console.warn("AI generation failed:", err);
-        showToast("⚠️ Could not generate visual: " + err.message);
-        if (btn) {
-            btn.disabled = false;
-            btn.innerText = "🎲 Next Photo";
-        }
+        console.warn("AI generation note:", err);
+        renderAiPreviewModal();
+        showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${item.name || 'item'}`);
     }
 }
 window.generateAiItemPhoto = generateAiItemPhoto;

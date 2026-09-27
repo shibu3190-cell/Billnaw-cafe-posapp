@@ -7,7 +7,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { CONFIG } from './server/config.js';
-import { extractMenuFromDocument, generateMenuItemImage, generateMarketingCampaign, isGeminiKeyOperational, clearGeminiCaches } from './server/gemini-service.js';
+import { extractMenuFromDocument, generateMenuItemImage, getCuratedFoodPhotoServer, generateMarketingCampaign, isGeminiKeyOperational, clearGeminiCaches } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
@@ -301,7 +301,7 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
 // Protected Gemini Image Generation: AI key is read strictly server-side
 app.post('/api/generate-image', async (req, res) => {
   try {
-    const { prompt, itemName, variation, clientId } = req.body;
+    const { prompt, itemName, category, variation, clientId } = req.body;
     let customKey = null;
     if (clientId) {
       const info = await getClientQuotaInfo(clientId).catch(() => null);
@@ -311,11 +311,12 @@ app.post('/api/generate-image', async (req, res) => {
       }
     }
 
-    const result = await generateMenuItemImage({ prompt, itemName, variation, apiKey: customKey });
+    const result = await generateMenuItemImage({ prompt, itemName, category, variation, apiKey: customKey });
     res.json(result);
   } catch (error) {
-    console.log('[Image Generator] Using culinary graphic placeholder.');
-    res.json({ success: false, fallback: true, error: error.message });
+    console.log('[Image Generator] Using culinary graphic placeholder:', error.message);
+    const fallbackUrl = getCuratedFoodPhotoServer(req.body?.itemName || req.body?.prompt, req.body?.category, req.body?.variation || 0);
+    res.json({ success: true, imageUrl: fallbackUrl || null, fallback: true, error: error.message });
   }
 });
 
