@@ -619,6 +619,7 @@ function syncStockAliases(id, newStock) {
 export function getDishRecipes() {
   return Array.from(recipesStore.values());
 }
+export const getRecipes = getDishRecipes;
 
 /**
  * Deducts inventory upon live POS dish orders:

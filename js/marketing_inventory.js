@@ -555,13 +555,12 @@ window.closeWhatsAppHubSubView = closeWhatsAppHubSubView;
 
 // --- INVENTORY LANDING HUB SUB-VIEW NAVIGATION ---
 function openInventoryHubSubView(subtab) {
-    const hub = document.getElementById('inventoryLandingHub');
-    if (hub) hub.style.display = 'none';
-
-    const subView = document.getElementById('inventoryDetailedSubView');
-    if (subView) subView.style.display = 'block';
-
-    if (subtab && typeof window.switchInventorySubTab === 'function') {
+    if (typeof window.switchInventoryHubTab === 'function') {
+        const targetTab = (subtab === 'morning_batch') ? 'morning_batch'
+            : (subtab === 'dish_costing' || subtab === 'central_kitchen' || subtab === 'purchase_orders' || subtab === 'forecasting_waste') ? 'dish_costing'
+            : 'raw_stock';
+        window.switchInventoryHubTab(targetTab);
+    } else if (typeof window.switchInventorySubTab === 'function') {
         const targetTab = (subtab === 'bar_matrix') ? 'raw_materials' : subtab;
         window.switchInventorySubTab(targetTab);
     }
@@ -570,12 +569,9 @@ function openInventoryHubSubView(subtab) {
 window.openInventoryHubSubView = openInventoryHubSubView;
 
 function closeInventoryHubSubView() {
-    const hub = document.getElementById('inventoryLandingHub');
-    if (hub) hub.style.display = 'block';
-
-    const subView = document.getElementById('inventoryDetailedSubView');
-    if (subView) subView.style.display = 'none';
-
+    if (typeof window.switchInventoryHubTab === 'function') {
+        window.switchInventoryHubTab('raw_stock');
+    }
     if (typeof renderInventoryTelemetryUI === 'function') {
         renderInventoryTelemetryUI();
     }

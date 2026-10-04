@@ -133,9 +133,36 @@ function renderCustomersUI() {
                             <span>WhatsApp</span>
                         </a>` : ''}
                         <button type="button" class="btn btn-outline" style="padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 16px; color: var(--primary); display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openCustomerActionHub(${cust.id})" title="Manage Customer & Message">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0 .33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                             <span>Manage & Message</span>
                         </button>
+                        <div class="action-dropdown" style="display: inline-block; position: relative;">
+                            <button type="button" class="btn btn-outline action-dropdown-btn" onclick="event.stopPropagation(); toggleCustomerActionDropdown(event, ${cust.id})" style="padding: 6px 8px; font-size: 11px; border-radius: 8px; color: var(--text-dark); display: inline-flex; align-items: center;" title="More Actions">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle><circle cx="5" cy="12" r="1.5"></circle></svg>
+                            </button>
+                            <div class="action-dropdown-menu" id="custActionDropdown-${cust.id}" style="display: none; position: absolute; right: 0; top: 100%; z-index: 1000; min-width: 180px;">
+                                <button type="button" class="action-dropdown-item" onclick="event.stopPropagation(); closeAllCustomerActionDropdowns(); openCustomerWhatsAppDirect(${cust.id});">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                                    <span>Send WhatsApp Message</span>
+                                </button>
+                                <button type="button" class="action-dropdown-item" onclick="event.stopPropagation(); closeAllCustomerActionDropdowns(); openAddKhataModal('customer', ${cust.id});">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"></path></svg>
+                                    <span>Add Udhar / Due</span>
+                                </button>
+                                <button type="button" class="action-dropdown-item" onclick="event.stopPropagation(); closeAllCustomerActionDropdowns(); openCustomerHistoryModal(${cust.id});">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                                    <span>View Orders</span>
+                                </button>
+                                <button type="button" class="action-dropdown-item" onclick="event.stopPropagation(); closeAllCustomerActionDropdowns(); openEditCustomerModal(${cust.id});">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                    <span>Edit</span>
+                                </button>
+                                <button type="button" class="action-dropdown-item danger" onclick="event.stopPropagation(); closeAllCustomerActionDropdowns(); deleteCustomer(${cust.id});">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    <span>Delete</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </td>
             </tr>
@@ -1058,7 +1085,74 @@ function toggleMobileSlideMenu(forcedState) {
 }
 window.toggleMobileSlideMenu = toggleMobileSlideMenu;
 
-// Customer Landing Hub Navigation (Screenshot 3 Flow)
+// ============================================================
+// 🌟 UNIFIED CUSTOMER HUB - 3 SEGMENTED TABS ENGINE
+// ============================================================
+
+function switchCustomerHubTab(tabName) {
+    const activeTab = (tabName === 'whatsapp') ? 'marketing' : tabName;
+    
+    // Update segmented tab buttons
+    const tabBtns = {
+        directory: document.getElementById('custTabBtn-directory'),
+        khata: document.getElementById('custTabBtn-khata'),
+        marketing: document.getElementById('custTabBtn-marketing')
+    };
+    
+    Object.keys(tabBtns).forEach(key => {
+        const btn = tabBtns[key];
+        if (btn) {
+            if (key === activeTab) {
+                btn.classList.add('active');
+                btn.setAttribute('aria-selected', 'true');
+            } else {
+                btn.classList.remove('active');
+                btn.setAttribute('aria-selected', 'false');
+            }
+        }
+    });
+
+    // Update tab panes
+    const panes = {
+        directory: document.getElementById('custTabDirectory'),
+        khata: document.getElementById('custTabKhata'),
+        marketing: document.getElementById('custTabMarketing')
+    };
+
+    Object.keys(panes).forEach(key => {
+        const pane = panes[key];
+        if (pane) {
+            pane.style.display = (key === activeTab) ? 'block' : 'none';
+            if (key === activeTab) pane.classList.add('active');
+            else pane.classList.remove('active');
+        }
+    });
+
+    // Sub-view backward compatibility
+    const legacyDirSubView = document.getElementById('customerDirectoryDetailedSubView');
+    if (legacyDirSubView) {
+        legacyDirSubView.style.display = (activeTab === 'directory') ? 'block' : 'none';
+    }
+    const legacyWaHub = document.getElementById('aiWhatsAppMarketingHub');
+    if (legacyWaHub) {
+        legacyWaHub.style.display = (activeTab === 'marketing') ? 'block' : 'none';
+    }
+
+    if (activeTab === 'directory') {
+        renderCustomersUI();
+    } else if (activeTab === 'khata') {
+        renderKhataUI();
+    } else if (activeTab === 'marketing') {
+        if (typeof renderAiWhatsAppHubUI === 'function') {
+            renderAiWhatsAppHubUI();
+        }
+    }
+}
+window.switchCustomerHubTab = switchCustomerHubTab;
+window.switchCustomerTab = switchCustomerHubTab;
+window.selectCustomerTab = switchCustomerHubTab;
+
+// Customer Landing Hub Navigation (Backward-compatibility Flow)
 function openCustomerHubSubView(subViewId) {
     const hub = document.getElementById('customerLandingHub');
     if (hub) hub.style.display = 'none';
@@ -1077,6 +1171,13 @@ function openCustomerHubSubView(subViewId) {
             el.style.display = (id === subViewId) ? 'block' : 'none';
         }
     });
+    if (subViewId === 'aiWhatsAppMarketingHub' || subViewId === 'marketing') {
+        switchCustomerHubTab('marketing');
+    } else if (subViewId === 'customerDirectoryDetailedSubView' || subViewId === 'directory') {
+        switchCustomerHubTab('directory');
+    } else if (subViewId === 'khata') {
+        switchCustomerHubTab('khata');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 window.openCustomerHubSubView = openCustomerHubSubView;
@@ -1099,15 +1200,598 @@ function closeCustomerHubSubView() {
             el.style.display = 'none';
         }
     });
+    switchCustomerHubTab('directory');
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 window.closeCustomerHubSubView = closeCustomerHubSubView;
+
+// ============================================================
+// 🎯 CUSTOMER ACTION DROPDOWN & QUICK ACTIONS
+// ============================================================
+
+function toggleCustomerActionDropdown(event, custId) {
+    if (event) event.stopPropagation();
+    const dropdownMenu = document.getElementById(`custActionDropdown-${custId}`);
+    const isVisible = dropdownMenu && dropdownMenu.style.display === 'block';
+    closeAllCustomerActionDropdowns();
+    if (dropdownMenu && !isVisible) {
+        dropdownMenu.style.display = 'block';
+    }
+}
+window.toggleCustomerActionDropdown = toggleCustomerActionDropdown;
+
+function closeAllCustomerActionDropdowns() {
+    document.querySelectorAll('.action-dropdown-menu').forEach(el => {
+        el.style.display = 'none';
+    });
+}
+window.closeAllCustomerActionDropdowns = closeAllCustomerActionDropdowns;
+
+// Dismiss dropdowns on document click
+document.addEventListener('click', () => {
+    closeAllCustomerActionDropdowns();
+});
+
+function openCustomerWhatsAppDirect(custId) {
+    const cust = customersList.find(c => c.id === custId || String(c.id) === String(custId));
+    if (!cust || !cust.phone) return showToast("No phone number recorded for this customer");
+    const cleanPhone = cust.phone.replace(/\D/g, '').slice(-10);
+    const storeName = (window.shopProfile && window.shopProfile.name) || "Billnaw Cafe";
+    const msg = `Hello ${cust.name}, greetings from ${storeName}! Thank you for dining with us.`;
+    window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+window.openCustomerWhatsAppDirect = openCustomerWhatsAppDirect;
+
+function quickAddNewCustomerFromCheckout() {
+    openAddCustomerModal();
+}
+window.quickAddNewCustomerFromCheckout = quickAddNewCustomerFromCheckout;
+
+function renderWhatsAppHubUI() {
+    if (typeof switchTab === 'function') switchTab('customers');
+    switchCustomerHubTab('marketing');
+}
+window.renderWhatsAppHubUI = renderWhatsAppHubUI;
+
+// ============================================================
+// 💳 KHATA & DUE LEDGER ENGINE (CUSTOMER UDHAR / SUPPLIER DUES)
+// ============================================================
+
+let khataList = [];
+let currentKhataType = 'customer'; // 'customer' | 'supplier'
+let currentKhataFilter = 'all'; // 'all' | 'pending' | 'overdue' | 'cleared'
+window.khataList = khataList;
+window.currentKhataType = currentKhataType;
+window.currentKhataFilter = currentKhataFilter;
+
+function evaluateKhataStatus(dueDateStr, balanceDue, todayStr) {
+    if (balanceDue <= 0) return 'Cleared';
+    if (!dueDateStr) return 'Pending';
+    const today = todayStr || new Date().toISOString().split('T')[0];
+    return dueDateStr < today ? 'Overdue' : 'Pending';
+}
+window.evaluateKhataStatus = evaluateKhataStatus;
+
+function getKhataStatus(entry) {
+    if (!entry) return 'Pending';
+    return evaluateKhataStatus(entry.dueDate, Number(entry.balanceDue) || 0);
+}
+window.getKhataStatus = getKhataStatus;
+
+function formatKhataReminder(entry) {
+    if (!entry) return '';
+    const storeName = (window.shopProfile && window.shopProfile.name) || "Billnaw Cafe";
+    const dueStr = entry.dueDate || 'soon';
+    return `Dear ${entry.name}, your pending bill of ₹${entry.balanceDue} at ${storeName} is due on ${dueStr}. Kindly clear your balance. Thank you! - ${storeName}`;
+}
+window.formatKhataReminder = formatKhataReminder;
+
+function sendKhataWhatsAppReminder(entryId) {
+    const entry = khataList.find(k => k.id === entryId || String(k.id) === String(entryId));
+    if (!entry) return showToast("Khata entry not found");
+    if (entry.balanceDue <= 0) return showToast("Dues already cleared for this party.");
+    if (!entry.phone) return showToast("No phone number recorded for this entry.");
+    const cleanPhone = entry.phone.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length < 10) return showToast("Invalid phone number recorded.");
+    const reminderText = formatKhataReminder(entry);
+    window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(reminderText)}`, '_blank');
+}
+window.sendKhataWhatsAppReminder = sendKhataWhatsAppReminder;
+
+async function initKhataEngine() {
+    try {
+        let stored = null;
+        if (typeof idb !== 'undefined' && idb.get) {
+            stored = await idb.get('cafe_khata');
+        }
+        if (!stored) {
+            const local = localStorage.getItem('cafe_khata');
+            if (local) {
+                try { stored = JSON.parse(local); } catch(e) {}
+            }
+        }
+        if (Array.isArray(stored) && stored.length > 0) {
+            khataList = stored;
+        } else {
+            seedInitialKhata();
+        }
+    } catch (err) {
+        console.warn("Khata IDB load fallback:", err);
+        seedInitialKhata();
+    }
+    window.khataList = khataList;
+    renderKhataUI();
+}
+window.initKhataEngine = initKhataEngine;
+
+function seedInitialKhata() {
+    const today = new Date();
+    const pastDate = new Date(today.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const futureDate = new Date(today.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    khataList = [
+        {
+            id: "KHATA-1728038400001",
+            type: "customer",
+            entityId: 101,
+            name: "Rajesh Kumar",
+            phone: "9876543210",
+            billNo: "BILL-1042",
+            amount: 450,
+            balanceDue: 450,
+            dueDate: futureDate,
+            status: "Pending",
+            createdDate: new Date().toISOString(),
+            notes: "Dinner bill credit"
+        },
+        {
+            id: "KHATA-1728038400002",
+            type: "customer",
+            entityId: 102,
+            name: "Rohan Mehra",
+            phone: "9811122334",
+            billNo: "BILL-1038",
+            amount: 1000,
+            balanceDue: 1000,
+            dueDate: pastDate,
+            status: "Overdue",
+            createdDate: new Date(today.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+            notes: "Catering advance balance"
+        },
+        {
+            id: "KHATA-1728038400003",
+            type: "supplier",
+            entityId: null,
+            name: "Metro Cash & Carry",
+            phone: "9822233445",
+            billNo: "INV-8891",
+            amount: 2400,
+            balanceDue: 2400,
+            dueDate: futureDate,
+            status: "Pending",
+            createdDate: new Date().toISOString(),
+            notes: "Dairy & Beverage crates"
+        },
+        {
+            id: "KHATA-1728038400004",
+            type: "supplier",
+            entityId: null,
+            name: "Dairy Co-op",
+            phone: "9833344556",
+            billNo: "INV-7721",
+            amount: 950,
+            balanceDue: 950,
+            dueDate: pastDate,
+            status: "Overdue",
+            createdDate: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+            notes: "Fresh whole milk 20L delivery"
+        }
+    ];
+    persistKhata();
+}
+
+function persistKhata() {
+    window.khataList = khataList;
+    try {
+        localStorage.setItem('cafe_khata', JSON.stringify(khataList));
+    } catch(e) {}
+    if (typeof idb !== 'undefined' && idb.set) {
+        try {
+            idb.set('cafe_khata', khataList);
+        } catch(e) {}
+    }
+}
+window.persistKhata = persistKhata;
+
+function switchKhataType(type) {
+    currentKhataType = type || 'customer';
+    window.currentKhataType = currentKhataType;
+    const custBtn = document.getElementById('khataToggleCustomer');
+    const suppBtn = document.getElementById('khataToggleSupplier');
+    if (custBtn && suppBtn) {
+        if (currentKhataType === 'customer') {
+            custBtn.classList.add('active');
+            suppBtn.classList.remove('active');
+        } else {
+            suppBtn.classList.add('active');
+            custBtn.classList.remove('active');
+        }
+    }
+    renderKhataUI();
+}
+window.switchKhataType = switchKhataType;
+window.switchKhataToggle = switchKhataType;
+
+function filterKhataByStatus(status) {
+    currentKhataFilter = status || 'all';
+    window.currentKhataFilter = currentKhataFilter;
+    ['all', 'pending', 'overdue', 'cleared'].forEach(s => {
+        const btn = document.getElementById(`khataFilter-${s}`);
+        if (btn) {
+            if (s === currentKhataFilter) btn.classList.add('active');
+            else btn.classList.remove('active');
+        }
+    });
+    renderKhataUI();
+}
+window.filterKhataByStatus = filterKhataByStatus;
+
+function filterKhataList() {
+    renderKhataUI();
+}
+window.filterKhataList = filterKhataList;
+
+function renderKhataUI() {
+    const tbody = document.getElementById('khataTableBody');
+    if (!tbody) return;
+
+    // Filter by current party type (customer or supplier)
+    const typeEntries = khataList.filter(k => k.type === currentKhataType);
+
+    // Compute telemetry metrics
+    const totalDue = typeEntries.reduce((sum, item) => sum + (Number(item.balanceDue) || 0), 0);
+    const overdueCount = typeEntries.filter(item => getKhataStatus(item) === 'Overdue').length;
+    const clearedCount = typeEntries.filter(item => getKhataStatus(item) === 'Cleared').length;
+
+    const statTotalDue = document.getElementById('khataStatTotalDue');
+    const statOverdue = document.getElementById('khataStatOverdueCount');
+    const statCleared = document.getElementById('khataStatClearedCount');
+    if (statTotalDue) statTotalDue.innerText = `₹${totalDue.toLocaleString()}`;
+    if (statOverdue) statOverdue.innerText = overdueCount;
+    if (statCleared) statCleared.innerText = clearedCount;
+
+    // Overdue badge on main tab button
+    const totalOverdueAll = khataList.filter(k => getKhataStatus(k) === 'Overdue').length;
+    const overdueBadge = document.getElementById('khataOverdueBadge');
+    if (overdueBadge) {
+        if (totalOverdueAll > 0) {
+            overdueBadge.innerText = totalOverdueAll;
+            overdueBadge.style.display = 'inline-flex';
+        } else {
+            overdueBadge.style.display = 'none';
+        }
+    }
+
+    // Filter by status & search query
+    const query = (document.getElementById('khataSearchInput')?.value || '').toLowerCase().trim();
+
+    let displayList = typeEntries.filter(item => {
+        const status = getKhataStatus(item);
+        if (currentKhataFilter !== 'all') {
+            if (currentKhataFilter.toLowerCase() !== status.toLowerCase()) return false;
+        }
+        if (query) {
+            const nameMatch = (item.name || '').toLowerCase().includes(query);
+            const phoneMatch = (item.phone || '').includes(query);
+            const billMatch = (item.billNo || '').toLowerCase().includes(query);
+            const notesMatch = (item.notes || '').toLowerCase().includes(query);
+            return nameMatch || phoneMatch || billMatch || notesMatch;
+        }
+        return true;
+    });
+
+    if (displayList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 35px; color: var(--text-muted); font-size: 13px;">No outstanding Khata dues found. All accounts clear!</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = displayList.map(item => {
+        const status = getKhataStatus(item);
+        const initials = getInitials(item.name);
+        const phoneDisplay = item.phone 
+            ? `<a href="tel:${escapeHtml(item.phone)}" class="cust-phone-link" style="font-family: monospace; font-size: 12px; font-weight: 600; color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="Call ${escapeHtml(item.phone)}">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                <span>${escapeHtml(item.phone)}</span>
+               </a>`
+            : '<span style="color:var(--text-muted)">-</span>';
+
+        let badgeHtml = '';
+        if (status === 'Overdue') {
+            badgeHtml = `<span class="khata-badge-overdue" style="background: #FEE2E2; color: #B91C1C; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 800; border: 1px solid #FECACA; display: inline-flex; align-items: center; gap: 4px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span>Overdue</span></span>`;
+        } else if (status === 'Cleared') {
+            badgeHtml = `<span class="khata-badge-cleared" style="background: #ECFDF5; color: #059669; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 800; border: 1px solid #A7F3D0; display: inline-flex; align-items: center; gap: 4px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Cleared</span></span>`;
+        } else {
+            badgeHtml = `<span class="khata-badge-pending" style="background: #FEF3C7; color: #D97706; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 800; border: 1px solid #FDE68A; display: inline-flex; align-items: center; gap: 4px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span>Pending</span></span>`;
+        }
+
+        const billBadge = item.billNo ? `<div style="font-size: 11px; color: var(--text-muted); font-family: monospace;">${escapeHtml(item.billNo)}</div>` : '';
+        const balanceColor = item.balanceDue > 0 ? '#DC2626' : '#059669';
+
+        return `
+            <tr>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="customer-avatar" style="width: 32px; height: 32px; font-size: 12px;">${initials}</div>
+                        <div>
+                            <div style="font-weight: 700; color: var(--text-dark); font-size: 13px;">${escapeHtml(item.name)}</div>
+                            ${item.notes ? `<div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(item.notes)}</div>` : ''}
+                        </div>
+                    </div>
+                </td>
+                <td>${phoneDisplay}</td>
+                <td>
+                    <div style="font-weight: 600; font-size: 13px;">₹${Number(item.amount || item.balanceDue || 0).toFixed(2)}</div>
+                    ${billBadge}
+                </td>
+                <td>
+                    <strong style="color: ${balanceColor}; font-size: 14px;">₹${Number(item.balanceDue || 0).toFixed(2)}</strong>
+                </td>
+                <td style="font-size: 12px; color: var(--text-dark);">
+                    ${item.dueDate || '-'}
+                </td>
+                <td>${badgeHtml}</td>
+                <td style="text-align: right; white-space: nowrap;">
+                    <div style="display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end;">
+                        ${item.balanceDue > 0 ? `
+                        <button type="button" class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; font-weight: 700; border-radius: 12px; color: #128C7E; border-color: rgba(18,140,126,0.3); background: rgba(18,140,126,0.06); display: inline-flex; align-items: center; gap: 4px;" onclick="sendKhataWhatsAppReminder('${item.id}')" title="Send WhatsApp Due Reminder">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            <span>Remind</span>
+                        </button>
+                        <button type="button" class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; font-weight: 700; border-radius: 12px; color: var(--success); border-color: rgba(40,167,69,0.3); background: rgba(40,167,69,0.06); display: inline-flex; align-items: center; gap: 4px;" onclick="openRecordPaymentModal('${item.id}')" title="Record Payment">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            <span>Settle</span>
+                        </button>` : ''}
+                        <button type="button" class="btn btn-outline" style="padding: 4px 7px; font-size: 11px; border-radius: 10px; color: var(--danger); border-color: rgba(220,53,69,0.25);" onclick="deleteKhataEntry('${item.id}')" title="Delete Entry">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+window.renderKhataUI = renderKhataUI;
+
+function openRecordPaymentModal(entryId) {
+    const entry = khataList.find(k => k.id === entryId || String(k.id) === String(entryId));
+    if (!entry) return showToast("Khata entry not found");
+
+    const modal = document.getElementById('recordKhataPaymentModal');
+    if (!modal) return;
+
+    document.getElementById('khataPaymentEntryId').value = entry.id;
+    document.getElementById('khataPaymentPartyName').innerText = entry.name;
+    document.getElementById('khataPaymentCurrentDue').innerText = `₹${Number(entry.balanceDue).toFixed(2)}`;
+    document.getElementById('khataPaymentDueDate').innerText = entry.dueDate || '-';
+    const amtInput = document.getElementById('khataPaymentAmount');
+    if (amtInput) amtInput.value = entry.balanceDue;
+    const notesInput = document.getElementById('khataPaymentNotes');
+    if (notesInput) notesInput.value = '';
+
+    modal.style.display = 'flex';
+}
+window.openRecordPaymentModal = openRecordPaymentModal;
+
+function closeRecordKhataPaymentModal() {
+    const modal = document.getElementById('recordKhataPaymentModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeRecordKhataPaymentModal = closeRecordKhataPaymentModal;
+
+function recordKhataPayment(entryId, amount, mode = 'Cash', notes = '') {
+    const entry = khataList.find(k => k.id === entryId || String(k.id) === String(entryId));
+    if (!entry) return null;
+    const payVal = Number(amount);
+    if (isNaN(payVal) || payVal <= 0) return null;
+
+    entry.balanceDue = Math.max(0, (Number(entry.balanceDue) || 0) - payVal);
+    entry.status = getKhataStatus(entry);
+
+    entry.paymentsHistory = entry.paymentsHistory || [];
+    const paymentRec = {
+        id: `PAY-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        entryId: entry.id,
+        amount: payVal,
+        mode,
+        cashier: (window.currentUser && window.currentUser.name) || 'Admin',
+        notes,
+        timestamp: new Date().toISOString()
+    };
+    entry.paymentsHistory.push(paymentRec);
+
+    // If entry is linked to customer, sync customer balanceDue
+    if (entry.type === 'customer' && entry.entityId) {
+        const cust = customersList.find(c => c.id === entry.entityId || String(c.id) === String(entry.entityId));
+        if (cust && cust.balanceDue !== undefined) {
+            cust.balanceDue = Math.max(0, (Number(cust.balanceDue) || 0) - payVal);
+        }
+    }
+
+    persistKhata();
+    return paymentRec;
+}
+window.recordKhataPayment = recordKhataPayment;
+
+function saveKhataPayment() {
+    const entryId = document.getElementById('khataPaymentEntryId')?.value;
+    const amount = parseFloat(document.getElementById('khataPaymentAmount')?.value);
+    const mode = document.getElementById('khataPaymentMode')?.value || 'Cash';
+    const notes = document.getElementById('khataPaymentNotes')?.value || '';
+
+    if (!entryId) return showToast("⚠️ No entry selected.");
+    if (isNaN(amount) || amount <= 0) return showToast("⚠️ Please enter a valid payment amount.");
+
+    const rec = recordKhataPayment(entryId, amount, mode, notes);
+    if (rec) {
+        closeRecordKhataPaymentModal();
+        renderKhataUI();
+        showToast(`✅ Payment of ₹${amount} recorded successfully!`);
+    } else {
+        showToast("⚠️ Failed to record payment.");
+    }
+}
+window.saveKhataPayment = saveKhataPayment;
+
+function openAddKhataModal(defaultType = 'customer', entityId = null) {
+    const modal = document.getElementById('addKhataDueModal');
+    if (!modal) return;
+
+    const typeSelect = document.getElementById('addKhataType');
+    if (typeSelect) typeSelect.value = defaultType || 'customer';
+
+    const nameInput = document.getElementById('addKhataPartyName');
+    const phoneInput = document.getElementById('addKhataPhone');
+    const amountInput = document.getElementById('addKhataAmount');
+    const billInput = document.getElementById('addKhataBillNo');
+    const notesInput = document.getElementById('addKhataNotes');
+    const dateInput = document.getElementById('addKhataDueDate');
+
+    if (amountInput) amountInput.value = '';
+    if (billInput) billInput.value = `KH-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (notesInput) notesInput.value = '';
+
+    // Default due date: 7 days in future
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    if (dateInput) dateInput.value = futureDate;
+
+    if (entityId && defaultType === 'customer') {
+        const cust = customersList.find(c => c.id === entityId || String(c.id) === String(entityId));
+        if (cust) {
+            if (nameInput) nameInput.value = cust.name;
+            if (phoneInput) phoneInput.value = cust.phone;
+            modal.dataset.entityId = cust.id;
+        }
+    } else {
+        if (nameInput) nameInput.value = '';
+        if (phoneInput) phoneInput.value = '';
+        delete modal.dataset.entityId;
+    }
+
+    modal.style.display = 'flex';
+}
+window.openAddKhataModal = openAddKhataModal;
+window.openAddKhataDueModal = openAddKhataModal;
+
+function closeAddKhataModal() {
+    const modal = document.getElementById('addKhataDueModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeAddKhataModal = closeAddKhataModal;
+
+function onAddKhataTypeChanged() {
+    // Dynamic callback
+}
+window.onAddKhataTypeChanged = onAddKhataTypeChanged;
+
+function saveNewKhataEntry() {
+    const modal = document.getElementById('addKhataDueModal');
+    const type = document.getElementById('addKhataType')?.value || 'customer';
+    const name = (document.getElementById('addKhataPartyName')?.value || '').trim();
+    const phone = (document.getElementById('addKhataPhone')?.value || '').trim();
+    const amount = parseFloat(document.getElementById('addKhataAmount')?.value);
+    const dueDate = document.getElementById('addKhataDueDate')?.value || '';
+    const billNo = (document.getElementById('addKhataBillNo')?.value || '').trim();
+    const notes = (document.getElementById('addKhataNotes')?.value || '').trim();
+    const entityId = modal?.dataset?.entityId || null;
+
+    if (!name) return showToast("⚠️ Party name is required.");
+    if (isNaN(amount) || amount <= 0) return showToast("⚠️ Please enter a valid due amount.");
+    if (!dueDate) return showToast("⚠️ Due date is required.");
+
+    const newEntry = {
+        id: `KHATA-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        type,
+        entityId: entityId ? Number(entityId) : null,
+        name,
+        phone,
+        billNo: billNo || `KH-${Math.floor(1000 + Math.random() * 9000)}`,
+        amount,
+        balanceDue: amount,
+        dueDate,
+        status: evaluateKhataStatus(dueDate, amount),
+        createdDate: new Date().toISOString(),
+        notes
+    };
+
+    khataList.unshift(newEntry);
+
+    // If linked customer, update customer balance
+    if (type === 'customer' && entityId) {
+        const cust = customersList.find(c => c.id === Number(entityId) || String(c.id) === String(entityId));
+        if (cust) {
+            cust.balanceDue = (Number(cust.balanceDue) || 0) + amount;
+        }
+    }
+
+    persistKhata();
+    closeAddKhataModal();
+    if (currentKhataType !== type) {
+        switchKhataType(type);
+    } else {
+        renderKhataUI();
+    }
+    showToast(`✅ Added ₹${amount} due entry for ${name}`);
+}
+window.saveNewKhataEntry = saveNewKhataEntry;
+
+function deleteKhataEntry(entryId) {
+    if (!confirm("Are you sure you want to delete this Khata record?")) return;
+    khataList = khataList.filter(k => k.id !== entryId && String(k.id) !== String(entryId));
+    persistKhata();
+    renderKhataUI();
+    showToast("🗑️ Khata record removed.");
+}
+window.deleteKhataEntry = deleteKhataEntry;
+
+window.customers = {
+    renderUI: renderCustomersUI,
+    filterUI: filterCustomersUI,
+    filterByTier: filterCustomersByTier,
+    openAddModal: openAddCustomerModal,
+    openEditModal: openEditCustomerModal,
+    closeModal: closeCustomerModal,
+    saveCustomer,
+    deleteCustomer,
+    openHistoryModal: openCustomerHistoryModal,
+    startOrder: startOrderForCustomer,
+    switchTab: switchCustomerHubTab,
+    khata: {
+        init: initKhataEngine,
+        render: renderKhataUI,
+        switchType: switchKhataType,
+        filterByStatus: filterKhataByStatus,
+        formatReminder: formatKhataReminder,
+        sendReminder: sendKhataWhatsAppReminder,
+        recordPayment: recordKhataPayment,
+        savePayment: saveKhataPayment,
+        openRecordPaymentModal,
+        closeRecordPaymentModal,
+        openAddModal: openAddKhataModal,
+        closeAddModal: closeAddKhataModal,
+        saveEntry: saveNewKhataEntry,
+        deleteEntry: deleteKhataEntry
+    }
+};
 
 // Initialize on script load
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         initAiWhatsAppHub();
+        initKhataEngine();
     });
 } else {
-    setTimeout(initAiWhatsAppHub, 200);
+    setTimeout(() => {
+        initAiWhatsAppHub();
+        initKhataEngine();
+    }, 200);
 }

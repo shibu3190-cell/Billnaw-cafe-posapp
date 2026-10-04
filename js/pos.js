@@ -769,16 +769,24 @@ function selectPayment(mode, context) {
         const cashWrap = document.getElementById('checkoutCashTenderContainer');
         const upiWrap = document.getElementById('checkoutUpiQrContainer');
         const cardWrap = document.getElementById('checkoutCardContainer');
+        const khataWrap = document.getElementById('checkoutKhataContainer');
 
         if (cashWrap) cashWrap.style.display = mode === 'Cash' ? 'block' : 'none';
         if (upiWrap) upiWrap.style.display = mode === 'UPI' ? 'flex' : 'none';
         if (cardWrap) cardWrap.style.display = mode === 'Card' ? 'block' : 'none';
+        if (khataWrap) khataWrap.style.display = mode === 'Khata' ? 'block' : 'none';
 
         const cTot = parseFloat(document.getElementById('checkoutTotal')?.innerText) || 0;
         if (mode === 'Cash') {
             setupCheckoutTenderEngine(cTot);
         } else if (mode === 'UPI') {
             renderCheckoutUpiQr(cTot);
+        } else if (mode === 'Khata') {
+            const dueDateInput = document.getElementById('checkoutKhataDueDateInput');
+            if (dueDateInput && !dueDateInput.value) {
+                dueDateInput.value = getDueDefaultDate(7);
+            }
+            updateCheckoutKhataCustomerInfo();
         }
     } else if (context === 'edit') { 
         const editModeInput = document.getElementById('editSelectedPaymentMode');
@@ -789,6 +797,56 @@ function selectPayment(mode, context) {
     }
 }
 window.selectPayment = selectPayment;
+
+function getDueDefaultDate(daysAhead = 7) {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+window.getDueDefaultDate = getDueDefaultDate;
+
+function updateCheckoutKhataCustomerInfo() {
+    const cId = document.getElementById('checkoutCustomerId')?.value;
+    const cName = document.getElementById('checkoutCustomerName')?.value?.trim();
+    const prevBadge = document.getElementById('checkoutKhataPrevDueBadge');
+    const prevAmt = document.getElementById('checkoutKhataPrevDueAmt');
+    const balInfo = document.getElementById('checkoutKhataBalanceInfo');
+    const balDisplay = document.getElementById('checkoutKhataCustomerCreditBalance');
+
+    let matched = null;
+    if (typeof customersList !== 'undefined' && Array.isArray(customersList)) {
+        if (cId) {
+            matched = customersList.find(c => String(c.id) === String(cId));
+        }
+        if (!matched && cName) {
+            const digits = (cName.match(/\d{6,15}/) || [''])[0];
+            matched = customersList.find(c => (digits && c.phone && c.phone.includes(digits)) || (c.name && c.name.toLowerCase() === cName.toLowerCase()));
+        }
+    }
+
+    if (matched) {
+        const balance = Number(matched.balanceDue) || 0;
+        if (prevAmt) prevAmt.innerText = balance.toFixed(2);
+        if (prevBadge) prevBadge.style.display = balance > 0 ? 'inline-block' : 'none';
+        if (balDisplay) balDisplay.innerText = `₹${balance.toFixed(2)}`;
+        if (balInfo) balInfo.style.display = 'flex';
+    } else {
+        if (prevBadge) prevBadge.style.display = 'none';
+        if (balInfo) balInfo.style.display = 'none';
+    }
+}
+window.updateCheckoutKhataCustomerInfo = updateCheckoutKhataCustomerInfo;
+
+function validateKhataCheckout(paymentMode, assignedCustomer) {
+    if (paymentMode === 'Khata' && (!assignedCustomer || (!assignedCustomer.id && !assignedCustomer.name))) {
+        return { valid: false, error: "Please select or add a customer to record this order on Khata / Udhar." };
+    }
+    return { valid: true };
+}
+window.validateKhataCheckout = validateKhataCheckout;
 
 // ⚡ Factor 5: Fast Cash Tender Engine
 function setupCheckoutTenderEngine(orderTotal) {
@@ -943,6 +1001,23 @@ function openCheckoutModal() {
     selectPayment('Cash', 'checkout');
     setupCheckoutTenderEngine(totals.finalTotal);
     
+    // Initialize Khata state & default due date (7 days ahead)
+    const khataDueDateEl = document.getElementById('checkoutKhataDueDateInput');
+    if (khataDueDateEl) khataDueDateEl.value = getDueDefaultDate(7);
+    const khataNotesEl = document.getElementById('checkoutKhataNotesInput');
+    if (khataNotesEl) khataNotesEl.value = '';
+
+    const custSelectEl = document.getElementById('checkoutCustomerSelect');
+    if (custSelectEl && !custSelectEl._khataBound) {
+        custSelectEl._khataBound = true;
+        custSelectEl.addEventListener('change', () => updateCheckoutKhataCustomerInfo());
+    }
+    const custNameEl = document.getElementById('checkoutCustomerName');
+    if (custNameEl && !custNameEl._khataBound) {
+        custNameEl._khataBound = true;
+        custNameEl.addEventListener('input', () => updateCheckoutKhataCustomerInfo());
+    }
+
     if (typeof populateCheckoutCustomerDropdown === 'function') {
         populateCheckoutCustomerDropdown();
     }
@@ -958,6 +1033,7 @@ function openCheckoutModal() {
     } else {
         if (typeof resetCheckoutCustomerFields === 'function') resetCheckoutCustomerFields();
     }
+    updateCheckoutKhataCustomerInfo();
     
     const bNameInput = document.getElementById('checkoutBillerName');
     if (bNameInput) bNameInput.value = currentStaff ? currentStaff.name : 'Admin';
@@ -1005,6 +1081,21 @@ async function confirmCheckout() {
     let tInfo = tablesInfo[activeTable]; 
     if(!tInfo || tInfo.items.length === 0) return showToast(`Table ${activeTable} is empty!`);
     
+    const pMode = document.getElementById('selectedPaymentMode')?.value || 'Cash';
+    const cName = document.getElementById('checkoutCustomerName')?.value.trim() || '';
+    const cId = document.getElementById('checkoutCustomerId')?.value || '';
+
+    // Khata payment mode requires an assigned customer
+    if (pMode === 'Khata') {
+        const hasAssigned = cId || cName || (typeof currentCheckoutCustomer !== 'undefined' && currentCheckoutCustomer);
+        if (!hasAssigned) {
+            showToast("⚠️ Khata payment requires assigning a customer. Please select or add a diner.");
+            const nameInput = document.getElementById('checkoutCustomerName');
+            if (nameInput) nameInput.focus();
+            return;
+        }
+    }
+
     const payBtn = document.querySelector('#checkoutModal .btn-success');
     if (payBtn) {
         payBtn.disabled = true; 
@@ -1021,12 +1112,9 @@ async function confirmCheckout() {
         const itemNames = tInfo.items.map(i => `${i.name} (x${i.qty})`).join(', ');
 
         const oType = document.getElementById('checkoutOrderType')?.value || 'Dine-In'; 
-        const pMode = document.getElementById('selectedPaymentMode')?.value || 'Cash';
         const tenderVal = parseFloat(document.getElementById('checkoutCashTenderedInput')?.value);
         const amountTendered = pMode === 'Cash' ? (!isNaN(tenderVal) ? tenderVal : total) : total;
         const changeReturned = pMode === 'Cash' ? Math.max(0, amountTendered - total) : 0;
-        const cName = document.getElementById('checkoutCustomerName')?.value.trim() || '';
-        const cId = document.getElementById('checkoutCustomerId')?.value || '';
         const bName = document.getElementById('checkoutBillerName')?.value.trim() || (currentStaff?.name || 'Admin');
         const fullDateStr = new Date().toLocaleString(); 
         const safeFilterDate = getLocalISODate(); 
@@ -1071,6 +1159,7 @@ async function confirmCheckout() {
         }
 
         const ptsEarned = Math.max(1, Math.floor(total / 50));
+        let newCust = null;
 
         if (matchedCustomer) {
             matchedCustomer.totalVisits = (matchedCustomer.totalVisits || 0) + 1;
@@ -1093,7 +1182,7 @@ async function confirmCheckout() {
         } else if (cName) {
             const digits = (cName.match(/\d{10}/) || [''])[0];
             const cleanName = cName.replace(/\(\d+\)/g, '').trim();
-            const newCust = {
+            newCust = {
                 id: Date.now(),
                 name: cleanName || cName,
                 phone: digits || '',
@@ -1101,6 +1190,7 @@ async function confirmCheckout() {
                 totalVisits: 1,
                 totalSpend: total,
                 loyaltyPoints: ptsEarned,
+                balanceDue: 0,
                 createdDate: new Date().toISOString().split('T')[0],
                 lastVisitDate: new Date().toLocaleDateString(),
                 history: [{
@@ -1116,6 +1206,68 @@ async function confirmCheckout() {
             persistCustomersFirebase(newCust);
             if (typeof renderCustomersUI === 'function') renderCustomersUI();
             if (typeof populateCheckoutCustomerDropdown === 'function') populateCheckoutCustomerDropdown();
+        }
+
+        // --- KHATA / PAY LATER AUTO-RECORDING & DEBT SYNC ---
+        if (pMode === 'Khata') {
+            const effectiveCust = matchedCustomer || newCust;
+            const effectiveCustId = effectiveCust ? effectiveCust.id : (cId || `CUST-${Date.now()}`);
+            const effectiveCustName = effectiveCust ? effectiveCust.name : (cName || 'Diner');
+            const effectiveCustPhone = effectiveCust ? (effectiveCust.phone || '') : '';
+            const dueDateVal = document.getElementById('checkoutKhataDueDateInput')?.value || getDueDefaultDate(7);
+            const khataNotesVal = document.getElementById('checkoutKhataNotesInput')?.value?.trim() || `Table ${finalTableStr} Bill #${generatedBillNo}`;
+
+            const khataDueEntry = {
+                id: `KHATA-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                type: 'customer',
+                entityId: effectiveCustId,
+                customerId: effectiveCustId,
+                name: effectiveCustName,
+                phone: effectiveCustPhone,
+                billNo: `BILL-${generatedBillNo}`,
+                amount: total,
+                balanceDue: total,
+                dueDate: dueDateVal,
+                status: 'Pending',
+                createdDate: new Date().toISOString(),
+                notes: khataNotesVal
+            };
+
+            if (effectiveCust) {
+                effectiveCust.balanceDue = (Number(effectiveCust.balanceDue) || 0) + total;
+                if (!effectiveCust.dues) effectiveCust.dues = [];
+                effectiveCust.dues.unshift(khataDueEntry);
+                persistCustomersFirebase(effectiveCust);
+            }
+
+            let currentKhata = window.khataList;
+            if (!Array.isArray(currentKhata)) {
+                try {
+                    const rawK = localStorage.getItem('cafe_khata');
+                    currentKhata = rawK ? JSON.parse(rawK) : [];
+                } catch (e) {
+                    currentKhata = [];
+                }
+                window.khataList = currentKhata;
+            }
+            currentKhata.unshift(khataDueEntry);
+            window.khataList = currentKhata;
+
+            try {
+                localStorage.setItem('cafe_khata', JSON.stringify(currentKhata));
+            } catch (e) {}
+            if (typeof idb !== 'undefined' && idb.set) {
+                try {
+                    idb.set('cafe_khata', currentKhata);
+                } catch (e) {}
+            }
+            if (typeof persistKhata === 'function') {
+                persistKhata();
+            }
+            if (typeof renderKhataUI === 'function') {
+                renderKhataUI();
+            }
+            showToast(`📝 ₹${total.toFixed(2)} added to ${effectiveCustName}'s Khata Due ledger!`);
         }
         selectedCustomerForOrder = null;
 
@@ -1351,6 +1503,9 @@ async function sendEscPosToPrinter(order) {
                 printItemsEl.innerHTML += `<div class="print-line"></div>`;
                 printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Cash Tendered</span><span>₹${Number(order.amountTendered).toFixed(2)}</span></div>`;
                 printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#266838;"><span>Change Due</span><span>₹${Number(order.changeReturned).toFixed(2)}</span></div>`;
+            } else if (order.paymentMode === 'Khata') {
+                printItemsEl.innerHTML += `<div class="print-line"></div>`;
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#b45309;"><span>Khata Due (Pay Later)</span><span>₹${Number(order.amount).toFixed(2)}</span></div>`;
             }
         }
         const pTot = document.getElementById('printTotal'); if (pTot) pTot.innerText = `₹${order.amount.toFixed(2)}`;
@@ -1374,6 +1529,7 @@ async function sendEscPosToPrinter(order) {
     receiptText += 'Date: ' + order.date + '\n';
     receiptText += 'Type: ' + (order.orderType || 'Dine-In') + '\n';
     receiptText += 'Payment: ' + (order.paymentMode || 'Cash') + '\n';
+    if (order.paymentMode === 'Khata') receiptText += 'Balance Due: Rs.' + Number(order.amount).toFixed(2) + '\n';
     if(order.customer) receiptText += 'Customer: ' + order.customer + '\n';
     if(order.biller) receiptText += 'Staff: ' + order.biller + '\n';
     receiptText += '--------------------------------\n';

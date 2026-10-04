@@ -18,6 +18,19 @@
     let wastage = { total_loss_inr: 0, history: [] };
     let costingReport = [];
     let activeSubTab = 'rtr_tracker';
+    let activeHubTab = 'raw_stock';
+    let rawStockSearchQuery = '';
+    let rawStockActiveCategory = 'all';
+    let commissaryBatchHistory = [];
+    try {
+        commissaryBatchHistory = JSON.parse(localStorage.getItem('billnaw_culinary_batches') || 'null') || [];
+    } catch (e) {}
+    if (!commissaryBatchHistory || commissaryBatchHistory.length === 0) {
+        commissaryBatchHistory = [
+            { id: 'BATCH-0021', subRecipeId: 'SUB-MAK-01', name: 'Makhani Gravy Base', quantity: 20, unit: 'Litre', unitCost: 132.5, totalCost: 2650, timestamp: '08:30 AM', date: 'Today', status: 'Ready in Walk-in Chiller' },
+            { id: 'BATCH-0020', subRecipeId: 'SUB-GRAVY-BASE', name: 'Cooking Oil / Gravy Base', quantity: 15, unit: 'Litre', unitCost: 95.0, totalCost: 1425, timestamp: '07:15 AM', date: 'Today', status: 'Ready in Walk-in Chiller' }
+        ];
+    }
 
     // 10 Matched Ingredients Strictly Required by the 4 Dishes
     const MATCHED_RAW_MATERIALS_IDS = [
@@ -39,7 +52,17 @@
         { id: 'RM-ONION-SPICES', name: 'Sliced Onions & Spices', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 3.0, cost_per_unit: 50, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
         { id: 'RM-ONION', name: 'Red Onions & Veggies', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 3.0, cost_per_unit: 35, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
         { id: 'RM-COLA', name: 'Classic Cola Cans/Syrup', category: 'Beverages', purchase_unit: 'units', consumption_unit: 'units', conversion_factor: 1, current_stock: 50.0, min_threshold: 10.0, cost_per_unit: 20, supplier: 'Beverage Distributor', unit_type: 'raw' },
-        { id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 2.0, min_threshold: 0.5, cost_per_unit: 300, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' }
+        { id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 2.0, min_threshold: 0.5, cost_per_unit: 300, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-TOMATO', name: 'Vine-Ripe Tomatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 50.0, min_threshold: 15.0, cost_per_unit: 40, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+        { id: 'RM-GINGER-GARLIC', name: 'Ginger-Garlic Paste', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 150, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
+        { id: 'RM-BUTTER', name: 'Dairy Butter (Amul/Dairy)', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 20.0, min_threshold: 5.0, cost_per_unit: 520, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+        { id: 'RM-CREAM', name: 'Fresh Dairy Malai / Cream', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 220, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+        { id: 'RM-PANEER', name: 'Malai Paneer Blocks', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 25.0, min_threshold: 6.0, cost_per_unit: 380, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
+        { id: 'RM-CASHEW', name: 'Premium Cashew Nut Paste', category: 'Dry Fruits & Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 2.5, cost_per_unit: 720, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-KASURI-METHI', name: 'Kasuri Methi (Fenugreek Leaves)', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 4.0, min_threshold: 1.0, cost_per_unit: 320, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-GARAM-MASALA', name: 'Royal Shahi Garam Masala', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 5.0, min_threshold: 1.5, cost_per_unit: 850, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-KASHMIRI-MIRCH', name: 'Kashmiri Degi Mirch Powder', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 6.0, min_threshold: 1.5, cost_per_unit: 480, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
+        { id: 'RM-BASMATI-RICE', name: 'Royal Dum Biryani Basmati Rice', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 60.0, min_threshold: 15.0, cost_per_unit: 115, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' }
     ];
 
     const DEFAULT_LOCAL_RECIPES = [
@@ -92,6 +115,47 @@
             components: [
                 { type: 'raw', id: 'RM-COLA', name: 'Classic Cola Cans/Syrup', exact_quantity: 1.0, unit: 'units' },
                 { type: 'raw', id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', exact_quantity: 0.005, unit: 'kg' }
+            ]
+        },
+        {
+            id: 'REC-BC',
+            menu_item_id: '5',
+            dish_name: 'Butter Chicken',
+            menu_category: 'Main Course',
+            selling_price: 340,
+            gst_percentage: 5,
+            components: [
+                { type: 'sub_recipe', id: 'SUB-MAK-01', name: 'Makhani Gravy Base', exact_quantity: 0.22, unit: 'Litre' },
+                { type: 'raw', id: 'RM-OIL', name: 'Refined Cooking Oil', exact_quantity: 0.02, unit: 'Litre' },
+                { type: 'raw', id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', exact_quantity: 0.20, unit: 'kg' },
+                { type: 'raw', id: 'RM-BUTTER', name: 'Dairy Butter', exact_quantity: 0.025, unit: 'kg' }
+            ]
+        },
+        {
+            id: 'REC-PBM',
+            menu_item_id: '6',
+            dish_name: 'Paneer Butter Masala',
+            menu_category: 'Main Course',
+            selling_price: 280,
+            gst_percentage: 5,
+            components: [
+                { type: 'sub_recipe', id: 'SUB-MAK-01', name: 'Makhani Gravy Base', exact_quantity: 0.20, unit: 'Litre' },
+                { type: 'raw', id: 'RM-OIL', name: 'Refined Cooking Oil', exact_quantity: 0.02, unit: 'Litre' },
+                { type: 'raw', id: 'RM-PANEER', name: 'Malai Paneer Blocks', exact_quantity: 0.15, unit: 'kg' },
+                { type: 'raw', id: 'RM-BUTTER', name: 'Dairy Butter', exact_quantity: 0.02, unit: 'kg' }
+            ]
+        },
+        {
+            id: 'REC-DAL-MAKHANI',
+            menu_item_id: '7',
+            dish_name: 'Dal Makhani',
+            menu_category: 'Main Course',
+            selling_price: 220,
+            gst_percentage: 5,
+            components: [
+                { type: 'sub_recipe', id: 'SUB-DAL-01', name: 'Dal Makhani Slow-Cook Base', exact_quantity: 0.25, unit: 'Litre' },
+                { type: 'raw', id: 'RM-BUTTER', name: 'Dairy Butter', exact_quantity: 0.015, unit: 'kg' },
+                { type: 'raw', id: 'RM-CREAM', name: 'Fresh Dairy Malai / Cream', exact_quantity: 0.01, unit: 'Litre' }
             ]
         }
     ];
@@ -208,12 +272,16 @@
             if (wstRes) wastage = wstRes;
 
             persistLocalSnapshot();
+            switchInventoryHubTab(activeHubTab || 'raw_stock');
             renderActiveSubTab();
+            if (typeof renderInventoryTelemetryUI === 'function') renderInventoryTelemetryUI();
         } catch (e) {
             console.warn('[Culinary Inventory] Backend sync notice, using resilient offline store:', e);
             rawMaterials = JSON.parse(localStorage.getItem('billnaw_culinary_materials') || 'null') || DEFAULT_LOCAL_MATERIALS;
             subRecipes = JSON.parse(localStorage.getItem('billnaw_culinary_subs') || 'null') || DEFAULT_LOCAL_SUB_RECIPES;
+            switchInventoryHubTab(activeHubTab || 'raw_stock');
             renderActiveSubTab();
+            if (typeof renderInventoryTelemetryUI === 'function') renderInventoryTelemetryUI();
         }
     }
 
@@ -223,6 +291,594 @@
             localStorage.setItem('billnaw_culinary_subs', JSON.stringify(subRecipes));
         } catch (e) {}
     }
+
+    function escapeHtml(str) {
+        if (typeof window.escapeHtml === 'function') return window.escapeHtml(str);
+        return String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // Hub Tab Switcher (3-Tab Operational Suite)
+    function switchInventoryHubTab(tabName) {
+        let target = tabName || 'raw_stock';
+        if (target === 'rtr_tracker' || target === 'raw_materials') target = 'raw_stock';
+        if (target === 'morning_prep') target = 'morning_batch';
+        if (target === 'dish_costing' || target === 'recipes_costing' || target === 'central_kitchen' || target === 'purchase_orders' || target === 'forecasting_waste' || target === 'quick_audit') target = 'dish_costing';
+
+        activeHubTab = target;
+
+        const btnRaw = document.getElementById('invTabBtn-rawStock');
+        const btnPrep = document.getElementById('invTabBtn-morningPrep');
+        const btnCost = document.getElementById('invTabBtn-dishCosting');
+
+        if (btnRaw) {
+            if (target === 'raw_stock') { btnRaw.classList.add('active'); btnRaw.setAttribute('aria-selected', 'true'); }
+            else { btnRaw.classList.remove('active'); btnRaw.setAttribute('aria-selected', 'false'); }
+        }
+        if (btnPrep) {
+            if (target === 'morning_batch') { btnPrep.classList.add('active'); btnPrep.setAttribute('aria-selected', 'true'); }
+            else { btnPrep.classList.remove('active'); btnPrep.setAttribute('aria-selected', 'false'); }
+        }
+        if (btnCost) {
+            if (target === 'dish_costing') { btnCost.classList.add('active'); btnCost.setAttribute('aria-selected', 'true'); }
+            else { btnCost.classList.remove('active'); btnCost.setAttribute('aria-selected', 'false'); }
+        }
+
+        const paneRaw = document.getElementById('invTabRawStock');
+        const panePrep = document.getElementById('invTabMorningPrep');
+        const paneCost = document.getElementById('invTabDishCosting');
+
+        if (paneRaw) {
+            if (target === 'raw_stock') { paneRaw.style.display = 'block'; paneRaw.classList.add('active'); }
+            else { paneRaw.style.display = 'none'; paneRaw.classList.remove('active'); }
+        }
+        if (panePrep) {
+            if (target === 'morning_batch') { panePrep.style.display = 'block'; panePrep.classList.add('active'); }
+            else { panePrep.style.display = 'none'; panePrep.classList.remove('active'); }
+        }
+        if (paneCost) {
+            if (target === 'dish_costing') { paneCost.style.display = 'block'; paneCost.classList.add('active'); }
+            else { paneCost.style.display = 'none'; paneCost.classList.remove('active'); }
+        }
+
+        renderActiveHubTab();
+
+        const contentArea = document.getElementById('culinarySubTabContent');
+        if (contentArea) {
+            if (target === 'raw_stock') renderRtrTrackerTab(contentArea);
+            else if (target === 'morning_batch') renderMorningBatchTab(contentArea);
+            else if (target === 'dish_costing') renderDishCostingTab(contentArea);
+        }
+
+        if (typeof renderInventoryTelemetryUI === 'function') {
+            renderInventoryTelemetryUI();
+        }
+    }
+    window.switchInventoryHubTab = switchInventoryHubTab;
+    window.switchInventoryTab = switchInventoryHubTab;
+    window.switchInventory3Tab = switchInventoryHubTab;
+
+    function renderActiveHubTab() {
+        if (activeHubTab === 'raw_stock') {
+            renderRawStockTab();
+        } else if (activeHubTab === 'morning_batch') {
+            renderMorningPrepTab();
+        } else if (activeHubTab === 'dish_costing') {
+            renderDishCostingTab();
+        }
+    }
+
+    function filterRawStock(query) {
+        rawStockSearchQuery = (query || '').toLowerCase().trim();
+        renderRawStockTab();
+    }
+
+    function filterRawStockCategory(cat) {
+        rawStockActiveCategory = cat || 'all';
+        renderRawStockTab();
+    }
+
+    // --- TAB 1: RAW STOCK & RESTOCK TELEMETRY ---
+    function renderRawStockTab(container) {
+        const targetContainer = (container && container.nodeType) ? container : document.getElementById('invTabRawStock');
+        if (!targetContainer) return;
+
+        const query = (rawStockSearchQuery || '').toLowerCase().trim();
+        const activeCat = rawStockActiveCategory || 'all';
+
+        const filteredMaterials = rawMaterials.filter(item => {
+            if (activeCat !== 'all') {
+                const cat = (item.category || '').toLowerCase();
+                if (activeCat === 'dairy' && !cat.includes('dairy')) return false;
+                if (activeCat === 'produce' && !cat.includes('produce')) return false;
+                if (activeCat === 'meat' && !cat.includes('meat') && !cat.includes('poultry')) return false;
+                if (activeCat === 'beverages' && !cat.includes('beverage')) return false;
+                if (activeCat === 'pantry' && !cat.includes('pantry') && !cat.includes('grains') && !cat.includes('dry')) return false;
+                if (activeCat === 'spices' && !cat.includes('spice')) return false;
+                if (activeCat === 'spirits' && item.unit_type !== 'spirit' && item.unit_type !== 'draught_beer') return false;
+            }
+            if (query) {
+                const name = (item.name || '').toLowerCase();
+                const cat = (item.category || '').toLowerCase();
+                const id = (item.id || '').toLowerCase();
+                const supp = (item.supplier || '').toLowerCase();
+                if (!name.includes(query) && !cat.includes(query) && !id.includes(query) && !supp.includes(query)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        const spirits = rawMaterials.filter(m => m.unit_type === 'spirit' || m.unit_type === 'draught_beer');
+        const showSpirits = spirits.length > 0 && (activeCat === 'all' || activeCat === 'spirits');
+
+        const lowStockCount = rawMaterials.filter(m => m.current_stock > 0 && m.current_stock <= m.min_threshold).length;
+        const outCount = rawMaterials.filter(m => m.current_stock <= 0).length;
+
+        targetContainer.innerHTML = `
+            <div style="margin-bottom: 20px;">
+                <!-- Category Chips & Search Bar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                        ${[
+                            { id: 'all', label: 'All Items' },
+                            { id: 'dairy', label: 'Dairy' },
+                            { id: 'produce', label: 'Produce & Veg' },
+                            { id: 'meat', label: 'Poultry & Meat' },
+                            { id: 'beverages', label: 'Beverages' },
+                            { id: 'pantry', label: 'Pantry & Grains' },
+                            { id: 'spices', label: 'Spices' },
+                            { id: 'spirits', label: 'Bar & Spirits' }
+                        ].map(c => `
+                            <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.filterRawStockCategory('${c.id}')" style="font-size: 11px; padding: 5px 12px; border-radius: 20px; font-weight: 700; ${activeCat === c.id ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'background: #FFFFFF; color: #475569; border-color: #CBD5E1;'}">
+                                ${c.label}
+                            </button>
+                        `).join('')}
+                    </div>
+                    <div style="position: relative; min-width: 220px; flex: 1; max-width: 320px;">
+                        <div style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #94A3B8;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                        </div>
+                        <input type="text" id="rawStockSearchInput" value="${escapeHtml(rawStockSearchQuery)}" oninput="window.culinaryInventory.filterRawStock(this.value)" placeholder="Search ingredients (Oil, Milk...)" style="width: 100%; padding: 7px 12px 7px 32px; font-size: 12px; border-radius: 20px; border: 1.5px solid #CBD5E1; background: #FFFFFF; outline: none; box-sizing: border-box;">
+                    </div>
+                </div>
+
+                ${showSpirits ? `
+                <!-- Spirits & Brewery Bar Matrix -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="font-size: 13px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 22h8"/><path d="M12 11v11"/><path d="m19 3-7 8-7-8Z"/></svg>
+                            <span>Bar & Brewery Liquid Telemetry</span>
+                        </div>
+                        <span style="font-size: 11px; color: var(--text-muted);">Exact 30ml/60ml peg deductions & 6% tap line froth buffer</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px;">
+                        ${spirits.map(s => {
+                            const isBeer = s.unit_type === 'draught_beer';
+                            const totalMl = s.conversion_factor || 1000;
+                            const pct = Math.min(100, Math.round((s.current_stock / totalMl) * 100));
+                            const gaugeColor = pct < 25 ? '#EF4444' : (pct < 50 ? '#F59E0B' : '#10B981');
+                            return `
+                                <div class="card" style="padding: 14px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 12px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                        <div>
+                                            <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: ${isBeer ? '#D97706' : '#6B21A8'}; background: ${isBeer ? '#FEF3C7' : '#F3E8FF'}; padding: 2px 7px; border-radius: 8px;">
+                                                ${isBeer ? 'Draught Keg' : 'Spirit 750ml'}
+                                            </span>
+                                            <div style="font-size: 13px; font-weight: 800; color: var(--text-dark); margin-top: 3px;">${escapeHtml(s.name)}</div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 15px; font-weight: 800; color: #143832;">${s.current_stock} <span style="font-size: 10px;">ml</span></div>
+                                            <div style="font-size: 10px; color: var(--text-muted);">${(s.current_stock / 1000).toFixed(2)}L left</div>
+                                        </div>
+                                    </div>
+                                    <div style="background: #F1F5F9; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 0 6px 0;">
+                                        <div style="width: ${pct}%; height: 100%; background: ${gaugeColor}; border-radius: 4px; transition: width 0.3s ease;"></div>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--text-muted);">
+                                        <span>${pct}% Remaining</span>
+                                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openRestockModal('${s.id}')" style="padding: 2px 8px; font-size: 10px; border-radius: 10px;">+ Restock</button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- High-Contrast Raw Stock Telemetry Table -->
+                <div class="inv-telemetry-container">
+                    <div style="padding: 14px 18px; border-bottom: 1.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #FFFFFF;">
+                        <div>
+                            <div style="font-size: 15px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                <span>Ingredient Stock Telemetry Matrix</span>
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                                Showing ${filteredMaterials.length} ingredients • Minimum safety threshold tracking active
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            ${outCount > 0 ? `<span class="inv-badge-out" style="padding: 4px 10px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> ${outCount} Out</span>` : ''}
+                            ${lowStockCount > 0 ? `<span class="inv-badge-low" style="padding: 4px 10px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${lowStockCount} Low</span>` : ''}
+                            <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="font-size: 11px; padding: 6px 14px; border-radius: 14px; display: inline-flex; align-items: center; gap: 6px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>+ Quick Restock</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                        <table class="inv-telemetry-table">
+                            <thead>
+                                <tr>
+                                    <th>Ingredient / Item</th>
+                                    <th>Category &amp; Supplier</th>
+                                    <th>Current Stock</th>
+                                    <th>Safety Min</th>
+                                    <th>Rate (₹/Unit)</th>
+                                    <th>Status</th>
+                                    <th style="text-align: right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filteredMaterials.length === 0 ? `
+                                    <tr>
+                                        <td colspan="7" style="text-align: center; padding: 28px; color: var(--text-muted);">
+                                            No ingredients match current search or category filter.
+                                        </td>
+                                    </tr>
+                                ` : filteredMaterials.map(item => {
+                                    const isOut = item.current_stock <= 0;
+                                    const isLow = !isOut && item.current_stock <= item.min_threshold;
+                                    const badgeHtml = isOut
+                                        ? `<span class="inv-badge-out"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Out</span>`
+                                        : (isLow
+                                            ? `<span class="inv-badge-low"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Low Stock</span>`
+                                            : `<span class="inv-badge-instock"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> In Stock</span>`);
+
+                                    const stockColor = isOut ? '#DC2626' : (isLow ? '#D97706' : '#143832');
+                                    const unitLabel = item.consumption_unit || item.purchase_unit || 'units';
+
+                                    return `
+                                        <tr>
+                                            <td>
+                                                <div style="font-weight: 800; color: var(--text-dark); font-size: 13.5px;">${escapeHtml(item.name)}</div>
+                                                <div style="font-size: 10.5px; color: #64748B; font-family: monospace;">${escapeHtml(item.id)}</div>
+                                            </td>
+                                            <td>
+                                                <div style="font-size: 12px; font-weight: 600; color: #334155;">${escapeHtml(item.category || 'General')}</div>
+                                                <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(item.supplier || 'Mandi Wholesale')}</div>
+                                            </td>
+                                            <td>
+                                                <div style="font-size: 16px; font-weight: 800; color: ${stockColor};">
+                                                    ${item.current_stock} <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div style="font-size: 12px; font-weight: 600; color: #475569;">
+                                                    ${item.min_threshold} <span style="font-size: 10.5px; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div style="font-size: 12.5px; font-weight: 700; color: #0F172A;">
+                                                    ₹${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                ${badgeHtml}
+                                            </td>
+                                            <td style="text-align: right;">
+                                                <div style="display: inline-flex; gap: 6px; align-items: center;">
+                                                    <button type="button" class="btn btn-primary" onclick="window.culinaryInventory.openRestockModal('${item.id}')" style="font-size: 11px; padding: 5px 10px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                        <span>+ Restock</span>
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.promptPriceEdit('${item.id}')" style="font-size: 11px; padding: 5px 9px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                                                        <span>Rate</span>
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openItemAlertModal('${item.id}')" style="font-size: 11px; padding: 5px 9px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                                        <span>Min</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    window.renderRawStockTab = renderRawStockTab;
+
+    // --- TAB 2: MORNING PREP & BATCHING ---
+    function renderMorningPrepTab(container) {
+        const targetContainer = (container && container.nodeType) ? container : document.getElementById('invTabMorningPrep');
+        if (!targetContainer) return;
+
+        targetContainer.innerHTML = `
+            <div style="margin-bottom: 24px;">
+                <!-- Header Banner -->
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 18px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/><path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/></svg>
+                            <span>Morning Commissary Batching &amp; Semi-Finished Bases</span>
+                        </h3>
+                        <p style="margin: 4px 0 0 0; font-size: 12.5px; color: var(--text-muted);">
+                            Cooks execute bulk base production in 1 tap. System validates ingredient availability, deducts exact raw materials, credits sub-recipe stock, and logs batch history.
+                        </p>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.init()" style="font-size: 11px; padding: 6px 12px; border-radius: 14px; display: inline-flex; align-items: center; gap: 4px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            <span>Refresh Stock</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Batching Cards Grid -->
+                <div class="inv-batch-grid">
+                    ${subRecipes.map(sub => {
+                        const isLow = sub.current_stock <= sub.min_threshold;
+                        const ingredientsList = sub.ingredients || [];
+
+                        // Shortage analysis
+                        const shortages = [];
+                        let liveBatchRawCost = 0;
+                        ingredientsList.forEach(ing => {
+                            const rm = rawMaterials.find(m => m.id === ing.material_id);
+                            const avail = rm ? rm.current_stock : 0;
+                            const rate = rm ? rm.cost_per_unit : 0;
+                            liveBatchRawCost += ing.quantity * rate;
+                            if (avail < ing.quantity) {
+                                shortages.push({
+                                    name: rm ? rm.name : ing.material_id,
+                                    needed: ing.quantity,
+                                    available: avail,
+                                    short: Math.round((ing.quantity - avail) * 10) / 10,
+                                    unit: ing.unit
+                                });
+                            }
+                        });
+
+                        const hasShortage = shortages.length > 0;
+                        const liveUnitCost = sub.yield_quantity > 0 ? (liveBatchRawCost / sub.yield_quantity).toFixed(2) : (sub.unit_production_cost || 100);
+
+                        return `
+                            <div class="inv-batch-card">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                    <div>
+                                        <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #143832; background: #E6F4EA; padding: 2px 8px; border-radius: 8px;">
+                                            Semi-Finished Base
+                                        </span>
+                                        <div style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin-top: 4px;">${escapeHtml(sub.name)}</div>
+                                        <div style="font-size: 10.5px; color: var(--text-muted); font-family: monospace;">${escapeHtml(sub.id)}</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-size: 20px; font-weight: 800; color: ${isLow ? 'var(--danger)' : '#143832'};">
+                                            ${sub.current_stock} <span style="font-size: 11px;">${escapeHtml(sub.yield_unit)}</span>
+                                        </div>
+                                        <div style="font-size: 10px; color: var(--text-muted);">Safety Min: ${sub.min_threshold} ${escapeHtml(sub.yield_unit)}</div>
+                                    </div>
+                                </div>
+
+                                <!-- Ingredient Composition Box -->
+                                <div class="inv-ingredient-box">
+                                    <div style="font-size: 11px; font-weight: 800; color: #143832; margin-bottom: 6px; text-transform: uppercase; display: flex; justify-content: space-between;">
+                                        <span>Composition for ${sub.yield_quantity} ${escapeHtml(sub.yield_unit)} Batch:</span>
+                                        <span>Stock Status</span>
+                                    </div>
+                                    <div style="max-height: 120px; overflow-y: auto; font-size: 11px;">
+                                        ${ingredientsList.map(ing => {
+                                            const rm = rawMaterials.find(m => m.id === ing.material_id);
+                                            const avail = rm ? rm.current_stock : 0;
+                                            const isIngShort = avail < ing.quantity;
+                                            return `
+                                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px dashed rgba(0,0,0,0.05);">
+                                                    <span style="color: var(--text-dark);">${escapeHtml(rm ? rm.name : ing.material_id)}: <strong>${ing.quantity} ${escapeHtml(ing.unit)}</strong></span>
+                                                    ${isIngShort
+                                                        ? `<span class="batch-shortage-badge">Short by ${(ing.quantity - avail).toFixed(1)} ${escapeHtml(ing.unit)}</span>`
+                                                        : `<span style="color: #166534; font-weight: 700; font-size: 10.5px;">✓ In Stock (${avail} ${escapeHtml(ing.unit)})</span>`
+                                                    }
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+
+                                ${hasShortage ? `
+                                    <div style="margin-bottom: 12px; padding: 8px 12px; background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 8px; font-size: 11px; color: #991B1B; line-height: 1.4;">
+                                        <strong>⚠️ Shortage Alert:</strong> Insufficient raw ingredients (${shortages.map(s => `${s.name} short by ${s.short} ${s.unit}`).join(', ')}). Restock before batching.
+                                    </div>
+                                ` : ''}
+
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid #F1F5F9; flex-wrap: wrap; gap: 8px;">
+                                    <div style="font-size: 11.5px; color: var(--text-muted);">
+                                        Unit Prep Cost: <strong style="color: #143832; font-size: 13px;">₹${liveUnitCost} / ${escapeHtml(sub.yield_unit)}</strong>
+                                    </div>
+                                    <div style="display: inline-flex; gap: 6px;">
+                                        <button type="button" class="inv-batch-btn" ${hasShortage ? 'disabled' : ''} onclick="window.culinaryInventory.produceMorningBatch('${sub.id}', 1.0)">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/><path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/></svg>
+                                            <span>Produce 1x (${sub.yield_quantity} ${escapeHtml(sub.yield_unit)})</span>
+                                        </button>
+                                        <button type="button" class="btn btn-outline" ${hasShortage ? 'disabled' : ''} onclick="window.culinaryInventory.produceMorningBatch('${sub.id}', 2.0)" style="font-size: 11px; padding: 6px 10px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                                            <span>2x Batch</span>
+                                        </button>
+                                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.promptProduceBatch('${sub.id}', ${sub.yield_quantity})" style="font-size: 11px; padding: 6px 9px; border-radius: 12px;">
+                                            <span>Custom</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+
+                <!-- Commissary Production Batch History Log -->
+                <div style="margin-top: 24px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                    <div style="padding: 14px 18px; border-bottom: 1.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #FAF7F4;">
+                        <div style="font-size: 14px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                            <span>Commissary Production Batch Log</span>
+                        </div>
+                        <span style="font-size: 11px; color: var(--text-muted);">${commissaryBatchHistory.length} Batches Recorded</span>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="inv-costing-table">
+                            <thead>
+                                <tr>
+                                    <th>Batch ID</th>
+                                    <th>Sub-Recipe Base</th>
+                                    <th>Quantity Produced</th>
+                                    <th>Unit Prep Cost</th>
+                                    <th>Total Batch Cost</th>
+                                    <th>Timestamp</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${commissaryBatchHistory.map(b => `
+                                    <tr>
+                                        <td style="font-family: monospace; font-size: 11.5px; font-weight: 700;">${escapeHtml(b.id)}</td>
+                                        <td style="font-weight: 800; color: var(--text-dark);">${escapeHtml(b.name)}</td>
+                                        <td style="font-weight: 700; color: #143832;">${b.quantity} ${escapeHtml(b.unit)}</td>
+                                        <td>₹${Number(b.unitCost || 0).toFixed(2)}</td>
+                                        <td style="font-weight: 800; color: #166534;">₹${Number(b.totalCost || 0).toFixed(2)}</td>
+                                        <td style="color: var(--text-muted); font-size: 11px;">${b.date || 'Today'} • ${b.timestamp}</td>
+                                        <td>
+                                            <span class="inv-margin-badge inv-margin-healthy" style="font-size: 10px;">
+                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                                ${escapeHtml(b.status || 'Ready in Chiller')}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    window.renderMorningPrepTab = renderMorningPrepTab;
+
+    async function produceMorningBatch(subRecipeId, multiplierOrQty) {
+        const sub = subRecipes.find(s => s.id === subRecipeId);
+        if (!sub) {
+            if (typeof showToast === 'function') showToast('⚠️ Sub-recipe not found: ' + subRecipeId);
+            return false;
+        }
+
+        let qty = sub.yield_quantity || 20.0;
+        if (typeof multiplierOrQty === 'number') {
+            if (multiplierOrQty <= 5.0) {
+                qty = (sub.yield_quantity || 20.0) * multiplierOrQty;
+            } else {
+                qty = multiplierOrQty;
+            }
+        }
+        qty = Math.round(qty * 100) / 100;
+        const ratio = qty / (sub.yield_quantity || 1.0);
+
+        // 1. Stock verification
+        const shortages = [];
+        if (Array.isArray(sub.ingredients)) {
+            sub.ingredients.forEach(ing => {
+                const rm = rawMaterials.find(m => m.id === ing.material_id);
+                const needed = Math.round(ing.quantity * ratio * 1000) / 1000;
+                const available = rm ? rm.current_stock : 0;
+                if (available < needed) {
+                    shortages.push({
+                        material_id: ing.material_id,
+                        name: rm ? rm.name : ing.material_id,
+                        needed: needed,
+                        available: available,
+                        shortage: Math.round((needed - available) * 1000) / 1000,
+                        unit: ing.unit || 'kg'
+                    });
+                }
+            });
+        }
+
+        if (shortages.length > 0) {
+            const detail = shortages.map(s => `• ${s.name}: Needs ${s.needed} ${s.unit}, only ${s.available} ${s.unit} in stock (short by ${s.shortage} ${s.unit})`).join('\n');
+            alert(`⚠️ Insufficient Stock to Produce ${qty} ${sub.yield_unit} of ${sub.name}:\n\n${detail}\n\nPlease restock these raw materials before batching.`);
+            if (typeof showToast === 'function') showToast(`❌ Shortage: Cannot produce ${sub.name}. Check ingredient stock.`);
+            return false;
+        }
+
+        // 2. Stock deductions & Cost Rollup
+        let totalRawCost = 0;
+        if (Array.isArray(sub.ingredients)) {
+            sub.ingredients.forEach(ing => {
+                const rm = rawMaterials.find(m => m.id === ing.material_id);
+                const needed = Math.round(ing.quantity * ratio * 1000) / 1000;
+                if (rm) {
+                    rm.current_stock = Math.max(0, Math.round((rm.current_stock - needed) * 1000) / 1000);
+                    totalRawCost += needed * (rm.cost_per_unit || 0);
+                }
+            });
+        }
+
+        // 3. Sub-recipe stock credit
+        sub.current_stock = Math.round((sub.current_stock + qty) * 100) / 100;
+        if (qty > 0 && totalRawCost > 0) {
+            sub.unit_production_cost = Math.round((totalRawCost / qty) * 100) / 100;
+        }
+
+        // Synchronize aliases
+        if (sub.id === 'SUB-GRAVY-BASE') {
+            const br = subRecipes.find(s => s.id === 'SUB-BROWN-01');
+            if (br) br.current_stock = sub.current_stock;
+        }
+
+        // 4. Record to commissary batch history
+        const batchLog = {
+            id: 'BATCH-' + Date.now().toString().slice(-5),
+            subRecipeId: sub.id,
+            name: sub.name,
+            quantity: qty,
+            unit: sub.yield_unit,
+            unitCost: sub.unit_production_cost,
+            totalCost: Math.round(totalRawCost * 100) / 100,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            date: 'Today',
+            status: 'Ready in Walk-in Chiller'
+        };
+        commissaryBatchHistory.unshift(batchLog);
+        if (commissaryBatchHistory.length > 20) commissaryBatchHistory.pop();
+        try {
+            localStorage.setItem('billnaw_culinary_batches', JSON.stringify(commissaryBatchHistory));
+        } catch(e) {}
+
+        persistLocalSnapshot();
+
+        // 5. Backend sync
+        try {
+            await fetch('/api/inventory/batch-produce', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ subRecipeId: sub.id, quantity: qty })
+            });
+        } catch (e) {
+            console.warn('[Culinary] Batch produced offline:', e);
+        }
+
+        if (typeof showToast === 'function') {
+            showToast(`✓ Produced ${qty} ${sub.yield_unit} of ${sub.name}! Raw stock deducted.`);
+        }
+
+        renderActiveHubTab();
+        if (typeof renderInventoryTelemetryUI === 'function') renderInventoryTelemetryUI();
+        return true;
+    }
+    window.produceMorningBatch = produceMorningBatch;
 
     // Tab Switcher
     function switchInventorySubTab(tabName) {
@@ -235,6 +891,13 @@
                 btn.classList.remove('active');
             }
         });
+        if (tabName === 'rtr_tracker' || tabName === 'raw_materials') {
+            switchInventoryHubTab('raw_stock');
+        } else if (tabName === 'morning_batch') {
+            switchInventoryHubTab('morning_batch');
+        } else {
+            switchInventoryHubTab('dish_costing');
+        }
         renderActiveSubTab();
     }
     window.switchInventorySubTab = switchInventorySubTab;
@@ -1280,89 +1943,161 @@
 
     // --- TAB 3: LIVE FOOD COSTING & MARGIN ANALYSIS ---
     function renderDishCostingTab(container) {
-        container.innerHTML = `
-            <div style="margin-bottom: 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
+        const targetContainer = (container && container.nodeType) ? container : document.getElementById('invTabDishCosting');
+        if (!targetContainer) return;
+
+        // Calculate live dish costing for all recipes
+        const costingData = recipes.map(recipe => {
+            let foodCost = 0;
+            const compsBreakdown = (recipe.components || []).map(comp => {
+                let unitCost = 0;
+                let compName = comp.name || comp.id;
+                if (comp.type === 'sub_recipe') {
+                    const sub = subRecipes.find(s => s.id === comp.id);
+                    if (sub) {
+                        compName = sub.name;
+                        unitCost = sub.unit_production_cost || 100;
+                    }
+                } else {
+                    const rm = rawMaterials.find(m => m.id === comp.id);
+                    if (rm) {
+                        compName = rm.name;
+                        unitCost = rm.cost_per_unit || 50;
+                    }
+                }
+                const compCost = Math.round(comp.exact_quantity * unitCost * 100) / 100;
+                foodCost += compCost;
+                return {
+                    ...comp,
+                    name: compName,
+                    unit_cost: unitCost,
+                    component_cost: compCost
+                };
+            });
+
+            foodCost = Math.round(foodCost * 100) / 100;
+            const sellingPrice = recipe.selling_price || 100;
+            const grossProfit = Math.round((sellingPrice - foodCost) * 100) / 100;
+            const grossMarginPct = sellingPrice > 0 ? Math.round(((sellingPrice - foodCost) / sellingPrice) * 1000) / 10 : 0;
+
+            return {
+                recipe_id: recipe.id,
+                dish_name: recipe.dish_name,
+                category: recipe.menu_category || 'Main Course',
+                selling_price: sellingPrice,
+                food_cost: foodCost,
+                gross_profit: grossProfit,
+                gross_margin_pct: grossMarginPct,
+                components: compsBreakdown
+            };
+        });
+
+        targetContainer.innerHTML = `
+            <div style="margin-bottom: 24px;">
+                <!-- Header -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
                     <div>
                         <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                             <span>Live Food Costing &amp; Real-Time Margin Simulator</span>
-                            <span class="badge" style="background: #E0E7FF; color: #4338CA; font-size: 11px;">Dynamic Cost Rollup</span>
                         </h3>
-                        <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
-                            Real-time dish margin calculation. Test supplier ingredient price fluctuations to see instant impact on gross margins.
+                        <p style="margin: 4px 0 0 0; font-size: 12.5px; color: var(--text-muted);">
+                            Portion mapping, dynamic food cost rollups, and real-time gross margin recalculation on wholesale commodity price shifts.
                         </p>
                     </div>
-                    <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.refreshCosting()">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                    <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.refreshCosting()" style="font-size: 11px; padding: 6px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                         <span>Recalculate Margins</span>
                     </button>
                 </div>
 
-                <!-- Price Fluctuation Interactive Simulator -->
-                <div class="card" style="padding: 16px; margin-bottom: 20px; background: linear-gradient(135deg, #143832 0%, #0D2622 100%); color: #FFFFFF; border-radius: 14px;">
-                    <div style="font-size: 13px; font-weight: 800; color: #2DD4BF; text-transform: uppercase; margin-bottom: 6px;">
-                        ⚡ Rapid Market Price Fluctuation Simulator
+                <!-- Rapid Market Price Fluctuation Simulator Card -->
+                <div class="inv-sim-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+                        <div style="font-size: 13px; font-weight: 800; color: #143832; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                            <span>Rapid Market Price Fluctuation Simulator</span>
+                        </div>
+                        <span style="font-size: 11px; color: #64748B;">Test volatile mandi rate shocks to verify live margin resilience</span>
                     </div>
-                    <p style="font-size: 12px; color: #E6DCCD; margin: 0 0 12px 0;">
-                        Change market rates below to observe real-time gross margin recalculation across sub-recipes and finished menu dishes:
+                    <p style="margin: 0 0 12px 0; font-size: 12px; color: #475569;">
+                        Trigger wholesale supplier rate spikes below to observe instant cascaded recomputation across sub-recipes and finished dishes:
                     </p>
-                    <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-                        <button class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px; background: rgba(255,255,255,0.15); color: #FFF; border: 1px solid rgba(255,255,255,0.3);" onclick="window.culinaryInventory.simulateRateChange('RM-TOMATO', 90)">
-                            🍅 Simulate Tomato Price Surge (₹40 ➔ ₹90/kg)
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.simulateRateChange('RM-TOMATO', 90)" style="font-size: 11.5px; padding: 6px 12px; border-radius: 14px; background: #FFFFFF; font-weight: 700; color: #DC2626; border-color: #FCA5A5; display: inline-flex; align-items: center; gap: 6px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                            <span>Simulate Tomato Surge (₹40 -&gt; ₹90/kg)</span>
                         </button>
-                        <button class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px; background: rgba(255,255,255,0.15); color: #FFF; border: 1px solid rgba(255,255,255,0.3);" onclick="window.culinaryInventory.simulateRateChange('RM-PANEER', 450)">
-                            🧀 Simulate Dairy Paneer Hike (₹380 ➔ ₹450/kg)
+                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.simulateRateChange('RM-PANEER', 450)" style="font-size: 11.5px; padding: 6px 12px; border-radius: 14px; background: #FFFFFF; font-weight: 700; color: #D97706; border-color: #FCD34D; display: inline-flex; align-items: center; gap: 6px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                            <span>Simulate Dairy Paneer Hike (₹380 -&gt; ₹450/kg)</span>
                         </button>
-                        <button class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; color: #2DD4BF; border-color: #2DD4BF;" onclick="window.culinaryInventory.resetDefaultRates()">
-                            ↺ Reset to Normal Market Rates
+                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.simulateRateChange('RM-OIL', 200)" style="font-size: 11.5px; padding: 6px 12px; border-radius: 14px; background: #FFFFFF; font-weight: 700; color: #B45309; border-color: #FDE68A; display: inline-flex; align-items: center; gap: 6px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                            <span>Simulate Oil Spike (₹135 -&gt; ₹200/L)</span>
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.resetDefaultRates()" style="font-size: 11.5px; padding: 6px 12px; border-radius: 14px; background: #143832; color: #FFFFFF; font-weight: 700; border-color: #143832; display: inline-flex; align-items: center; gap: 6px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            <span>Reset Baseline Rates</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Costing Table -->
-                <div class="card" style="padding: 0; overflow: hidden; border-radius: 12px; border: 1px solid var(--border);">
+                <!-- Dynamic Live Costing & Profit Margin Table -->
+                <div style="background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                    <div style="padding: 14px 18px; border-bottom: 1.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #FFFFFF;">
+                        <div>
+                            <div style="font-size: 15px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                <span>Live Dish Profit Margins &amp; Cost Rollup</span>
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                                Formula: Gross Profit = Selling Price − Food Cost • Margin % = (Gross Profit / Selling Price) × 100
+                            </div>
+                        </div>
+                    </div>
+
                     <div style="overflow-x: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
-                            <thead style="background: #FAF7F4; border-bottom: 2px solid #E6DCCD;">
+                        <table class="inv-costing-table">
+                            <thead>
                                 <tr>
-                                    <th style="padding: 12px 14px; font-weight: 800; color: #143832;">Dish / Beverage</th>
-                                    <th style="padding: 12px 14px; font-weight: 800; color: #143832;">Category</th>
-                                    <th style="padding: 12px 14px; font-weight: 800; color: #143832;">Selling Price</th>
-                                    <th style="padding: 12px 14px; font-weight: 800; color: #143832;">Food Cost</th>
-                                    <th style="padding: 12px 14px; font-weight: 800; color: #143832;">Gross Profit</th>
-                                    <th style="padding: 12px 14px; font-weight: 800; color: #143832;">Margin %</th>
-                                    <th style="padding: 12px 14px; font-weight: 800; color: #143832;">Health Status</th>
+                                    <th>Dish / Beverage</th>
+                                    <th>Category</th>
+                                    <th>Selling Price</th>
+                                    <th>Food Cost</th>
+                                    <th>Gross Profit</th>
+                                    <th>Margin %</th>
+                                    <th>Health Status</th>
+                                    <th style="text-align: right;">Recipe Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${(costingReport && costingReport.length > 0 ? costingReport : getLocalCostingFallback()).map(c => {
-                                    let badgeColor = '#10B981';
-                                    let badgeBg = '#D1FAE5';
-                                    let statusText = 'Optimal (≥65%)';
-
-                                    if (c.gross_margin_pct < 50) {
-                                        badgeColor = '#DC2626';
-                                        badgeBg = '#FEE2E2';
-                                        statusText = '⚠️ Squeeze Alert (<50%)';
-                                    } else if (c.gross_margin_pct < 65) {
-                                        badgeColor = '#D97706';
-                                        badgeBg = '#FEF3C7';
-                                        statusText = 'Moderate (50-65%)';
-                                    }
+                                ${costingData.map(c => {
+                                    const isOptimal = c.gross_margin_pct >= 65;
+                                    const isModerate = !isOptimal && c.gross_margin_pct >= 50;
+                                    const badgeHtml = isOptimal
+                                        ? `<span class="inv-margin-badge inv-margin-healthy"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Optimal (≥65%)</span>`
+                                        : (isModerate
+                                            ? `<span class="inv-margin-badge inv-margin-moderate"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Moderate (50-65%)</span>`
+                                            : `<span class="inv-margin-badge inv-margin-low"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Squeeze Alert (&lt;50%)</span>`);
 
                                     return `
-                                        <tr style="border-bottom: 1px solid #F3F4F6;">
-                                            <td style="padding: 12px 14px; font-weight: 700; color: var(--text-dark);">${escapeHtml(c.dish_name)}</td>
-                                            <td style="padding: 12px 14px; color: var(--text-muted);">${escapeHtml(c.category)}</td>
-                                            <td style="padding: 12px 14px; font-weight: 700;">₹${c.selling_price}</td>
-                                            <td style="padding: 12px 14px; font-weight: 700; color: #DC2626;">₹${c.food_cost}</td>
-                                            <td style="padding: 12px 14px; font-weight: 700; color: #047857;">₹${c.gross_profit}</td>
-                                            <td style="padding: 12px 14px; font-weight: 800; font-size: 13px;">${c.gross_margin_pct}%</td>
-                                            <td style="padding: 12px 14px;">
-                                                <span style="font-size: 11px; font-weight: 700; color: ${badgeColor}; background: ${badgeBg}; padding: 3px 8px; border-radius: 12px;">
-                                                    ${statusText}
-                                                </span>
+                                        <tr>
+                                            <td>
+                                                <div style="font-weight: 800; color: var(--text-dark); font-size: 13.5px;">${escapeHtml(c.dish_name)}</div>
+                                                <div style="font-size: 10px; color: var(--text-muted); font-family: monospace;">${escapeHtml(c.recipe_id)}</div>
+                                            </td>
+                                            <td style="color: var(--text-muted); font-size: 12px;">${escapeHtml(c.category)}</td>
+                                            <td style="font-weight: 800; font-size: 13px;">₹${c.selling_price}</td>
+                                            <td style="font-weight: 800; color: #DC2626; font-size: 13px;">₹${c.food_cost.toFixed(2)}</td>
+                                            <td style="font-weight: 800; color: #166534; font-size: 13px;">₹${c.gross_profit.toFixed(2)}</td>
+                                            <td style="font-weight: 800; font-size: 13.5px; color: #0F172A;">${c.gross_margin_pct.toFixed(1)}%</td>
+                                            <td>${badgeHtml}</td>
+                                            <td style="text-align: right;">
+                                                <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openDishRecipeModal('${c.recipe_id}')" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                                    <span>Configure</span>
+                                                </button>
                                             </td>
                                         </tr>
                                     `;
@@ -1371,20 +2106,62 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Dish Recipes & Portion Mapping Cards Grid -->
+                <div>
+                    <div style="margin-bottom: 12px;">
+                        <h4 style="margin: 0; font-size: 15px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                            <span>Dish Ingredient Portion Mapping</span>
+                        </h4>
+                        <p style="margin: 2px 0 0 0; font-size: 11.5px; color: var(--text-muted);">
+                            Exact recipe specifications and component cost breakdown for kitchen staff
+                        </p>
+                    </div>
+
+                    <div class="inv-costing-grid">
+                        ${costingData.map(c => `
+                            <div class="inv-recipe-card">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                                    <div>
+                                        <div style="font-size: 15px; font-weight: 800; color: var(--text-dark);">${escapeHtml(c.dish_name)}</div>
+                                        <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(c.category)} • Selling: <strong>₹${c.selling_price}</strong></div>
+                                    </div>
+                                    <span class="inv-margin-badge ${c.gross_margin_pct >= 65 ? 'inv-margin-healthy' : (c.gross_margin_pct >= 50 ? 'inv-margin-moderate' : 'inv-margin-low')}" style="font-size: 10px;">
+                                        ${c.gross_margin_pct.toFixed(1)}%
+                                    </span>
+                                </div>
+
+                                <div style="background: #F8F6F2; border-radius: 10px; padding: 10px; margin-bottom: 10px;">
+                                    <div style="font-size: 10.5px; font-weight: 800; color: #143832; text-transform: uppercase; margin-bottom: 6px;">
+                                        Recipe Portion Components:
+                                    </div>
+                                    <div style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
+                                        ${(c.components || []).map(comp => `
+                                            <div style="display: flex; justify-content: space-between; align-items: center; color: #334155;">
+                                                <span>• ${escapeHtml(comp.name)} (${comp.exact_quantity} ${escapeHtml(comp.unit || 'L')})</span>
+                                                <span style="font-weight: 700; color: #64748B;">₹${comp.component_cost.toFixed(2)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 11.5px;">
+                                    <div>
+                                        Food Cost: <strong style="color: #DC2626;">₹${c.food_cost.toFixed(2)}</strong>
+                                    </div>
+                                    <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openDishRecipeModal('${c.recipe_id}')" style="padding: 3px 9px; font-size: 11px; border-radius: 10px;">
+                                        Configure Portions
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
             </div>
         `;
     }
-
-    function getLocalCostingFallback() {
-        return [
-            { dish_name: 'Paneer Butter Masala', category: 'Main Course', selling_price: 280, food_cost: 95.5, gross_profit: 184.5, gross_margin_pct: 65.9 },
-            { dish_name: 'Butter Chicken', category: 'Main Course', selling_price: 340, food_cost: 112.0, gross_profit: 228.0, gross_margin_pct: 67.1 },
-            { dish_name: 'Dal Makhani', category: 'Main Course', selling_price: 220, food_cost: 45.2, gross_profit: 174.8, gross_margin_pct: 79.5 },
-            { dish_name: 'Chicken Biryani', category: 'Biryani & Rice', selling_price: 280, food_cost: 88.0, gross_profit: 192.0, gross_margin_pct: 68.6 },
-            { dish_name: 'Patiala Peg Whisky (60ml)', category: 'Bar & Spirits', selling_price: 380, food_cost: 208.0, gross_profit: 172.0, gross_margin_pct: 45.3 },
-            { dish_name: 'German Wheat Craft Beer Mug (500ml)', category: 'Brewery & Draught', selling_price: 320, food_cost: 90.1, gross_profit: 229.9, gross_margin_pct: 71.8 }
-        ];
-    }
+    window.renderDishCostingTab = renderDishCostingTab;
 
     // --- TAB 4: CENTRAL KITCHEN & INTER-OUTLET TRANSFERS ---
     function renderCentralKitchenTab(container) {
@@ -1754,6 +2531,26 @@
     }
 
     async function simulateRateChange(materialId, newPrice) {
+        const item = rawMaterials.find(m => m.id === materialId);
+        if (item) item.cost_per_unit = newPrice;
+
+        // Cascade recalculation into all sub-recipes that use this material
+        subRecipes.forEach(sub => {
+            if (Array.isArray(sub.ingredients)) {
+                let totalBatchCost = 0;
+                sub.ingredients.forEach(ing => {
+                    const rm = rawMaterials.find(m => m.id === ing.material_id);
+                    const rate = rm ? rm.cost_per_unit : 0;
+                    totalBatchCost += ing.quantity * rate;
+                });
+                if (sub.yield_quantity > 0) {
+                    sub.unit_production_cost = Math.round((totalBatchCost / sub.yield_quantity) * 100) / 100;
+                }
+            }
+        });
+
+        persistLocalSnapshot();
+
         try {
             const res = await fetch('/api/inventory/raw-materials/price', {
                 method: 'POST',
@@ -1762,22 +2559,28 @@
             }).then(r => r.json());
 
             if (res && res.success) {
-                if (typeof showToast === 'function') showToast(`✓ Updated ${res.name} to ₹${newPrice}. Margins recalculated!`);
+                if (typeof showToast === 'function') showToast(`✓ Updated ${res.name || (item ? item.name : materialId)} to ₹${newPrice}. Margins recalculated!`);
                 loadAllInventoryData();
+                return;
             }
         } catch (e) {
-            const item = rawMaterials.find(m => m.id === materialId);
-            if (item) item.cost_per_unit = newPrice;
-            persistLocalSnapshot();
-            if (typeof showToast === 'function') showToast(`✓ Simulated rate update for ${materialId}.`);
-            renderActiveSubTab();
+            console.warn('[Culinary] Rate updated locally:', e);
         }
+
+        if (typeof showToast === 'function') showToast(`✓ Simulated rate update for ${item ? item.name : materialId} to ₹${newPrice}.`);
+        renderActiveHubTab();
+        renderActiveSubTab();
+        if (typeof renderInventoryTelemetryUI === 'function') renderInventoryTelemetryUI();
     }
 
     async function resetDefaultRates() {
         await simulateRateChange('RM-TOMATO', 40);
         await simulateRateChange('RM-PANEER', 380);
-        if (typeof showToast === 'function') showToast('✓ Reset rates to standard baseline.');
+        await simulateRateChange('RM-OIL', 135);
+        await simulateRateChange('RM-CHICKEN', 240);
+        await simulateRateChange('RM-POULTRY', 240);
+        await simulateRateChange('RM-BUTTER', 520);
+        if (typeof showToast === 'function') showToast('✓ Reset wholesale rates to baseline!');
     }
 
     async function promptDispatchTransfer() {
@@ -2001,6 +2804,15 @@
     window.culinaryInventory = {
         init: loadAllInventoryData,
         switchSubTab: switchInventorySubTab,
+        switchHubTab: switchInventoryHubTab,
+        switchTab: switchInventoryHubTab,
+        renderRawStockTab,
+        renderMorningPrepTab,
+        renderDishCostingTab,
+        produceMorningBatch,
+        filterRawStock,
+        filterRawStockCategory,
+        getBatchHistory: () => commissaryBatchHistory,
         promptProduceBatch,
         promptRestock,
         promptPriceEdit,
@@ -2036,6 +2848,13 @@
         registerNewDishRecipe
     };
 
+    window.switchInventoryHubTab = switchInventoryHubTab;
+    window.switchInventoryTab = switchInventoryHubTab;
+    window.switchInventory3Tab = switchInventoryHubTab;
+    window.produceMorningBatch = produceMorningBatch;
+    window.renderRawStockTab = renderRawStockTab;
+    window.renderMorningPrepTab = renderMorningPrepTab;
+    window.renderDishCostingTab = renderDishCostingTab;
     window.openRestockModal = openRestockModal;
     window.closeRestockModal = closeRestockModal;
     window.submitRestockExpense = submitRestockExpense;
