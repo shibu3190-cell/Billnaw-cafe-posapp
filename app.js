@@ -261,11 +261,10 @@ async function initApp() {
             renderInventoryTelemetryUI();
         }
 
-        // Present Shop Auth Modal if query string contains ?auth=login or on first cold boot if unauthenticated
+        // Present Shop Auth Modal if query string contains ?auth=login
         const hasAuthLoginParam = window.location.search && window.location.search.includes('auth=login');
-        const authMode = localStorage.getItem('billnaw_auth_mode');
 
-        if ((hasAuthLoginParam || !authMode) && typeof openShopAuthModal === 'function') {
+        if (hasAuthLoginParam && typeof openShopAuthModal === 'function') {
             setTimeout(() => {
                 const actOverlay = document.getElementById('activationOverlay');
                 const logOverlay = document.getElementById('loginOverlay');

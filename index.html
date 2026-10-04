@@ -43,6 +43,9 @@
                         <p class="shop-auth-brand-sub">Cloud Store Management & Fast Billing</p>
                     </div>
                 </div>
+                <button type="button" class="shop-auth-close-btn" onclick="closeShopAuthModal(true)" aria-label="Close" style="background: rgba(255,255,255,0.12); border: none; cursor: pointer; color: #FAF7F4; width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="Close & Continue to POS">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
             </div>
 
             <!-- Modal Content Body -->
@@ -242,6 +245,14 @@
                         <span class="coming-soon-pill">Coming Soon</span>
                     </div>
                     <p class="phone-feature-sub">SMS & WhatsApp verification launching soon. Please sign in via registered Email + OTP above.</p>
+                </div>
+
+                <!-- ⚡ DEMO POS QUICK-BYPASS BUTTON -->
+                <div style="margin-top: 14px; text-align: center;">
+                    <button type="button" class="btn btn-outline" style="width: 100%; padding: 10px; font-size: 12px; font-weight: 600; border-radius: 12px; color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="skipShopAuthToDemo()" title="Continue in Demo / Offline POS mode without signing in">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        <span>Skip for Now (Demo POS Mode)</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -3496,8 +3507,9 @@
                             </div>
                         </div>
                     </div>
-                </div>
-        </div> <!-- Closing #custTabMarketing (Tab 3) -->
+                </div> <!-- Closing #aiWhatsAppMarketingHub card -->
+            </div> <!-- Closing #custTabMarketing (Tab 3) -->
+        </div> <!-- Closing #customers view -->
 
         <!-- Modal: Record Khata Payment / Settle Khata -->
         <div id="recordKhataPaymentModal" class="modal-overlay" style="display: none; z-index: 1000030;">
@@ -4838,8 +4850,9 @@
 
             function closeShopAuthModal(force = false) {
                 const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
-                const isExplicitLogin = window.location.search.includes('auth=login');
-                if (!force && (!activeToken || isExplicitLogin)) {
+                const authMode = localStorage.getItem('billnaw_auth_mode');
+                const isExplicitLogin = window.location.search && window.location.search.includes('auth=login');
+                if (!force && !activeToken && authMode !== 'demo' && isExplicitLogin) {
                     if (typeof showToast === 'function') {
                         showToast("Please log in or sign up to access your POS terminal.");
                     }
@@ -4847,6 +4860,9 @@
                 }
                 const modal = document.getElementById('shopAuthModal');
                 if (modal) modal.style.display = 'none';
+                if (isExplicitLogin) {
+                    try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+                }
                 return true;
             }
             window.closeShopAuthModal = closeShopAuthModal;
@@ -5581,7 +5597,7 @@
                 if (typeof updateCloudStoreTopbar === 'function') {
                     updateCloudStoreTopbar(null, false, 'demo');
                 }
-                closeShopAuthModal();
+                closeShopAuthModal(true);
                 if (typeof showToast === 'function') {
                     showToast('⚡ Demo POS Mode Active (Offline Counter Ready)', 'info');
                 }

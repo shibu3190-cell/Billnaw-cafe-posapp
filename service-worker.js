@@ -10,6 +10,8 @@ const STATIC_ASSETS = [
     './js/menu.js',
     './js/customers.js',
     './js/dashboard.js',
+    './js/marketing_inventory.js',
+    './js/culinary_inventory.js',
     './js/settings.js',
     './app.js',
     './manifest.json',

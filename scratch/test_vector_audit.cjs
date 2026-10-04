@@ -97,6 +97,39 @@ test("Inventory Telemetry Hub refresh and loss alert are vectorized", () => {
     assert.ok(html.includes('id="inventoryLossAversionBanner"') && html.includes('loss-alert-icon'));
 });
 
+console.log("\n📍 CHECK 5: VIEW HIERARCHY, INVARIANTS & BLANK-PAGE PREVENTATIVES");
+test("All core views are direct siblings and NOT trapped inside #customers", () => {
+    const custOpen = html.indexOf('<div id="customers" class="view">');
+    const custClose = html.indexOf('</div> <!-- Closing #customers view -->');
+    assert.ok(custOpen !== -1, "Missing #customers view");
+    assert.ok(custClose !== -1, "Missing closing tag for #customers view");
+    assert.ok(custClose > custOpen, "Closing tag for #customers must appear after opening tag");
+
+    const customersChunk = html.substring(custOpen, custClose);
+    assert.ok(!customersChunk.includes('id="pos"'), "#pos must NOT be trapped inside #customers");
+    assert.ok(!customersChunk.includes('id="menu"'), "#menu must NOT be trapped inside #customers");
+    assert.ok(!customersChunk.includes('id="inventory"'), "#inventory must NOT be trapped inside #customers");
+    assert.ok(!customersChunk.includes('id="settings"'), "#settings must NOT be trapped inside #customers");
+    assert.ok(!customersChunk.includes('id="dashboard"'), "#dashboard must NOT be trapped inside #customers");
+});
+
+test("Exact count of 26 SVG modal close buttons matching invariant", () => {
+    const svgMatches = html.match(/<button\b[^>]*class=["'][^"']*modal-close-btn[^"']*["'][^>]*><svg[^>]*>.*?<\/svg><\/button>/g);
+    assert.strictEqual(svgMatches.length, 26, `Strict invariant: expected exactly 26 modal close buttons, found ${svgMatches.length}`);
+});
+
+test("Service worker STATIC_ASSETS includes marketing_inventory.js and culinary_inventory.js", () => {
+    const swPath = path.join(__dirname, '..', 'service-worker.js');
+    const sw = fs.readFileSync(swPath, 'utf8');
+    assert.ok(sw.includes('./js/marketing_inventory.js'), "Missing marketing_inventory.js in service-worker.js STATIC_ASSETS");
+    assert.ok(sw.includes('./js/culinary_inventory.js'), "Missing culinary_inventory.js in service-worker.js STATIC_ASSETS");
+});
+
+test("#shopAuthModal has dedicated close button and demo bypass", () => {
+    assert.ok(html.includes('class="shop-auth-close-btn"'), "Missing dedicated close button in shopAuthModal");
+    assert.ok(html.includes('skipShopAuthToDemo()'), "Missing skipShopAuthToDemo in shopAuthModal");
+});
+
 console.log("\n====================================================");
 console.log(`🎯 VECTOR AUDIT COMPLETE: ${passed} PASSED, ${failed} FAILED`);
 console.log("====================================================\n");
