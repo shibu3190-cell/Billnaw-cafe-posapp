@@ -1587,6 +1587,10 @@ function closeRecordKhataPaymentModal() {
     if (modal) modal.style.display = 'none';
 }
 window.closeRecordKhataPaymentModal = closeRecordKhataPaymentModal;
+window.closeRecordPaymentModal = closeRecordKhataPaymentModal;
+const closeRecordPaymentModal = closeRecordKhataPaymentModal;
+const openRecordKhataPaymentModal = openRecordPaymentModal;
+window.openRecordKhataPaymentModal = openRecordPaymentModal;
 
 function recordKhataPayment(entryId, amount, mode = 'Cash', notes = '') {
     const entry = khataList.find(k => k.id === entryId || String(k.id) === String(entryId));
@@ -1775,7 +1779,9 @@ window.customers = {
         recordPayment: recordKhataPayment,
         savePayment: saveKhataPayment,
         openRecordPaymentModal,
+        openRecordKhataPaymentModal,
         closeRecordPaymentModal,
+        closeRecordKhataPaymentModal,
         openAddModal: openAddKhataModal,
         closeAddModal: closeAddKhataModal,
         saveEntry: saveNewKhataEntry,
