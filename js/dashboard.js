@@ -372,15 +372,20 @@ async function renderDashboardAnalytics() {
             tbody.innerHTML = displayOrders.map(order => {
                 let tableStr = String(order.table || 'Takeaway');
                 let badgeClass = tableStr === 'Takeaway' ? 'table-pill-takeaway' : 'table-pill-dinein';
-                let tableLabel = tableStr === 'Takeaway' ? '🛍️ Takeaway' : (tableStr.startsWith('Table') ? tableStr : `🪑 ${tableStr}`);
+                let isTakeaway = tableStr === 'Takeaway';
+                let tableIconSvg = isTakeaway
+                    ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`
+                    : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3"/><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5Z"/><path d="M5 18v3"/><path d="M19 18v3"/></svg>`;
+                let tableDisplayText = isTakeaway ? 'Takeaway' : (tableStr.startsWith('Table') ? tableStr : `Table ${tableStr}`);
+                let tableLabel = `${tableIconSvg}<span>${tableDisplayText}</span>`;
                 
                 let payBadgeClass = 'pay-badge-cash';
                 if ((order.paymentMode || '').toLowerCase() === 'upi') payBadgeClass = 'pay-badge-upi';
                 if ((order.paymentMode || '').toLowerCase() === 'card') payBadgeClass = 'pay-badge-card';
 
-                let custHtml = '<span style="color: var(--text-muted); font-size: 12px;">Walk-in</span>';
+                let custHtml = `<span style="display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 12px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.7;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Walk-in</span>`;
                 if (order.customer) {
-                    custHtml = `<span style="font-weight: 600; color: var(--text-dark); font-size: 13px;">${escapeHtml(order.customer)}</span>`;
+                    custHtml = `<span style="display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--text-dark); font-size: 13px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${escapeHtml(order.customer)}</span>`;
                 }
 
                 const timeStr = order.date.includes(',') ? order.date.split(',')[1].trim() : order.date;
@@ -390,21 +395,41 @@ async function renderDashboardAnalytics() {
                     : '';
 
                 return `
-                    <tr onclick="openTransactionActionSheet(${order.id})" style="cursor: pointer;" title="Tap to view bill actions">
-                        <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">${timeStr}</td>
+                    <tr class="compact-ledger-row" onclick="openTransactionActionSheet(${order.id})" style="cursor: pointer;" title="Tap to view bill actions">
+                        <td class="ledger-date" style="text-align: center; font-size: 12px; color: var(--text-muted); white-space: nowrap;">${timeStr}</td>
                         <td><strong style="color: var(--primary); font-size: 14px; font-family: monospace;">#${order.billNo || '-'}</strong></td>
-                        <td><span class="custom-pill ${badgeClass}">${tableLabel}</span></td>
+                        <td><span class="custom-pill ${badgeClass}" style="display: inline-flex; align-items: center;">${tableLabel}</span></td>
                         <td>${custHtml}</td>
                         <td style="font-size: 12px; max-width: 200px; color: var(--text-dark); white-space: normal;">${escapeHtml(order.items || '-')}</td>
                         <td><span class="custom-pill ${payBadgeClass}">${order.paymentMode || 'Cash'}</span></td>
-                        <td style="font-weight: 800; color: var(--success); font-size: 14px; text-align: right;">
+                        <td class="ledger-amount" style="font-weight: 800; color: var(--success); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums;">
                             <div>₹${Number(order.amount).toFixed(2)}</div>
                             ${discountBadge}
                         </td>
-                        <td style="text-align: center; white-space: nowrap;" onclick="event.stopPropagation();">
-                            <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="viewOrderInvoiceModal(${order.id})" title="View Full Bill & Invoice Breakdown">🧾 Bill</button>
-                            <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;" onclick="openEditOrderModal(${order.id})">✏️ Edit</button>
-                            <button class="btn btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="reprintReceipt(${order.id})">🖨️ Receipt</button>
+                        <td class="ledger-actions" style="text-align: center; white-space: nowrap; position: relative;" onclick="event.stopPropagation();">
+                            <div class="action-dropdown">
+                                <button type="button" class="action-dropdown-btn" onclick="toggleActionDropdown(event, ${order.id})" title="Actions" aria-label="Order actions">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle><circle cx="5" cy="12" r="1.5"></circle></svg>
+                                </button>
+                                <div class="action-dropdown-menu" id="actionDropdown-${order.id}">
+                                    <button type="button" class="action-dropdown-item" onclick="closeAllActionDropdowns(); viewOrderInvoiceModal(${order.id});">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                                        <span>View Bill</span>
+                                    </button>
+                                    <button type="button" class="action-dropdown-item" onclick="closeAllActionDropdowns(); openEditOrderModal(${order.id});">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                        <span>Edit Order</span>
+                                    </button>
+                                    <button type="button" class="action-dropdown-item" onclick="closeAllActionDropdowns(); reprintReceipt(${order.id});">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                        <span>Print Receipt</span>
+                                    </button>
+                                    <button type="button" class="action-dropdown-item danger" onclick="closeAllActionDropdowns(); voidTransaction(${order.id});">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                        <span>Void Order</span>
+                                    </button>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                 `;
@@ -584,8 +609,196 @@ async function renderDashboardChart(orders, expenses, selectedMonth) {
             }
         }
     });
+
+    // Render interactive Donut chart alongside bar timeline
+    await renderDonutChart(orders, expenses);
 }
 window.renderDashboardChart = renderDashboardChart;
+
+let donutChartInstance = null;
+let currentDonutDataset = 'margin'; // 'margin' | 'category' | 'payment' | 'channel'
+let lastDonutOrders = [];
+let lastDonutExpenses = [];
+
+function getCategoryForDishName(dishName) {
+    if (!dishName) return 'General';
+    if (typeof menu !== 'undefined' && Array.isArray(menu)) {
+        const found = menu.find(m => m.name && m.name.toLowerCase() === dishName.toLowerCase());
+        if (found && found.category) return found.category;
+    }
+    const lower = dishName.toLowerCase();
+    if (lower.includes('chai') || lower.includes('tea') || lower.includes('coffee') || lower.includes('shake') || lower.includes('juice') || lower.includes('drink')) return 'Beverages';
+    if (lower.includes('samosa') || lower.includes('roll') || lower.includes('sandwich') || lower.includes('burger') || lower.includes('fries') || lower.includes('snack')) return 'Snacks';
+    if (lower.includes('biryani') || lower.includes('rice') || lower.includes('thali') || lower.includes('curry') || lower.includes('meal')) return 'Mains';
+    if (lower.includes('cake') || lower.includes('brownie') || lower.includes('pastry') || lower.includes('sweet') || lower.includes('dessert')) return 'Desserts';
+    return 'Specialties';
+}
+
+async function renderDonutChart(orders, expenses) {
+    if (orders) lastDonutOrders = orders;
+    if (expenses) lastDonutExpenses = expenses;
+
+    const canvas = document.getElementById('dashDonutChart') || document.getElementById('revenueDistributionDonut');
+    if (!canvas) return;
+
+    if (!window.Chart && typeof loadLazyScript === 'function') {
+        try {
+            await loadLazyScript('https://cdn.jsdelivr.net/npm/chart.js');
+        } catch (e) {
+            console.warn("Could not lazy-load Chart.js for Donut:", e);
+            return;
+        }
+    }
+    if (!window.Chart) return;
+
+    let labels = [];
+    let datasetData = [];
+    let backgroundColors = [];
+    let isCurrency = true;
+
+    if (currentDonutDataset === 'margin') {
+        const totalSales = (lastDonutOrders || []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+        const totalExp = (lastDonutExpenses || []).reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
+        const netProfit = Math.max(0, totalSales - totalExp);
+
+        if (totalSales === 0 && totalExp === 0) {
+            labels = ['No Financial Data'];
+            datasetData = [1];
+            backgroundColors = ['#E2E8F0'];
+            isCurrency = false;
+        } else {
+            labels = ['Net Margin (Profit)', 'Operating Expenses'];
+            datasetData = [netProfit, totalExp];
+            backgroundColors = ['#143832', '#B53B3B'];
+        }
+    } else if (currentDonutDataset === 'category') {
+        const catMap = {};
+        (lastDonutOrders || []).forEach(o => {
+            if (Array.isArray(o.rawItems)) {
+                o.rawItems.forEach(i => {
+                    const cat = i.category || getCategoryForDishName(i.name) || 'General Menu';
+                    const rev = (Number(i.price) || 0) * (Number(i.qty) || 1);
+                    catMap[cat] = (catMap[cat] || 0) + rev;
+                });
+            } else if (o.items) {
+                const parts = o.items.split(',');
+                parts.forEach(p => {
+                    const match = p.match(/(.+?)\s*\(x(\d+)\)/);
+                    if (match) {
+                        const name = match[1].trim();
+                        const cat = getCategoryForDishName(name) || 'General Menu';
+                        const qty = parseInt(match[2]) || 1;
+                        catMap[cat] = (catMap[cat] || 0) + (qty * 50);
+                    }
+                });
+            }
+        });
+
+        const sortedCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+        if (sortedCats.length === 0) {
+            labels = ['No Category Sales'];
+            datasetData = [1];
+            backgroundColors = ['#E2E8F0'];
+            isCurrency = false;
+        } else {
+            labels = sortedCats.map(c => c[0]);
+            datasetData = sortedCats.map(c => c[1]);
+            const palette = ['#143832', '#2D6A4F', '#52796F', '#E76F51', '#F4A261', '#2A9D8F', '#457B9D', '#1D3557'];
+            backgroundColors = labels.map((_, i) => palette[i % palette.length]);
+        }
+    } else if (currentDonutDataset === 'payment') {
+        const payMap = { 'Cash': 0, 'UPI': 0, 'Card': 0 };
+        (lastDonutOrders || []).forEach(o => {
+            const mode = (o.paymentMode || 'Cash').trim();
+            const normalized = mode.toUpperCase() === 'UPI' ? 'UPI' : (mode.toUpperCase() === 'CARD' ? 'Card' : 'Cash');
+            payMap[normalized] = (payMap[normalized] || 0) + (Number(o.amount) || 0);
+        });
+
+        labels = ['Cash', 'UPI', 'Card'];
+        datasetData = [payMap['Cash'], payMap['UPI'], payMap['Card']];
+        backgroundColors = ['#2D6A4F', '#4361EE', '#F77F00'];
+        if (datasetData.every(v => v === 0)) {
+            labels = ['No Payment Data'];
+            datasetData = [1];
+            backgroundColors = ['#E2E8F0'];
+            isCurrency = false;
+        }
+    } else if (currentDonutDataset === 'channel') {
+        const typeMap = { 'Dine-In': 0, 'Takeaway': 0 };
+        (lastDonutOrders || []).forEach(o => {
+            const isTakeaway = (o.orderType && o.orderType.toLowerCase() === 'takeaway') || (o.table === 'Takeaway');
+            const key = isTakeaway ? 'Takeaway' : 'Dine-In';
+            typeMap[key] = (typeMap[key] || 0) + (Number(o.amount) || 0);
+        });
+
+        labels = ['Dine-In', 'Takeaway'];
+        datasetData = [typeMap['Dine-In'], typeMap['Takeaway']];
+        backgroundColors = ['#143832', '#E76F51'];
+        if (datasetData.every(v => v === 0)) {
+            labels = ['No Channel Data'];
+            datasetData = [1];
+            backgroundColors = ['#E2E8F0'];
+            isCurrency = false;
+        }
+    }
+
+    if (donutChartInstance) {
+        donutChartInstance.destroy();
+        donutChartInstance = null;
+    }
+
+    donutChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: datasetData,
+                backgroundColor: backgroundColors,
+                borderWidth: 2,
+                borderColor: '#FFFFFF',
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 10,
+                        padding: 8,
+                        font: { size: 11, weight: 'bold' }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            if (!isCurrency) return ` ${ctx.label}`;
+                            return ` ${ctx.label}: ₹${Number(ctx.raw).toFixed(2)}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+window.renderDonutChart = renderDonutChart;
+window.renderDashboardDonut = renderDonutChart;
+
+function toggleDonutDataset(datasetType) {
+    currentDonutDataset = datasetType || 'margin';
+    document.querySelectorAll('.donut-pill').forEach(btn => {
+        if (btn.getAttribute('data-donut') === currentDonutDataset) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    renderDonutChart(lastDonutOrders, lastDonutExpenses);
+}
+window.toggleDonutDataset = toggleDonutDataset;
 
 function renderStatements() {
     renderDashboardAnalytics();
@@ -821,7 +1034,7 @@ function openTransactionActionSheet(orderId) {
     const tableBadge = document.getElementById('txnSheetTableBadge');
     if (tableBadge) {
         let tableStr = String(order.table || 'Takeaway');
-        tableBadge.innerText = tableStr === 'Takeaway' ? '🛍️ Takeaway' : (tableStr.startsWith('Table') ? tableStr : `🪑 ${tableStr}`);
+        tableBadge.innerText = tableStr === 'Takeaway' ? 'Takeaway' : (tableStr.startsWith('Table') ? tableStr : `Table ${tableStr}`);
         tableBadge.className = tableStr === 'Takeaway' ? 'custom-pill table-pill-takeaway' : 'custom-pill table-pill-dinein';
     }
 
@@ -901,3 +1114,77 @@ function voidTransaction(orderId) {
     if (typeof updateAllUI === 'function') updateAllUI();
 }
 window.voidTransaction = voidTransaction;
+
+// --- ACTION DROPDOWN & ACCOUNT POPOVER CONTROLLERS (M2) ---
+function toggleActionDropdown(event, orderId) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const currentMenu = document.getElementById(`actionDropdown-${orderId}`);
+    const wasOpen = currentMenu && currentMenu.classList.contains('show');
+    closeAllActionDropdowns();
+    if (currentMenu && !wasOpen) {
+        currentMenu.classList.add('show');
+    }
+}
+window.toggleActionDropdown = toggleActionDropdown;
+
+function closeAllActionDropdowns() {
+    document.querySelectorAll('.action-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+}
+window.closeAllActionDropdowns = closeAllActionDropdowns;
+
+function toggleAccountPopover(event, forceState) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const popover = document.getElementById('accountPopoverCard');
+    if (!popover) return;
+
+    const staffNameEl = document.getElementById('activeStaffName');
+    const popStaffName = document.getElementById('popoverStaffName');
+    if (staffNameEl && popStaffName) {
+        popStaffName.innerText = staffNameEl.innerText || 'Admin Cashier';
+    }
+
+    if (typeof forceState === 'boolean') {
+        popover.style.display = forceState ? 'block' : 'none';
+    } else {
+        const isShown = popover.style.display === 'block';
+        popover.style.display = isShown ? 'none' : 'block';
+    }
+}
+window.toggleAccountPopover = toggleAccountPopover;
+
+function setDashboardPaymentFilter(mode) {
+    const sel = document.getElementById('dashPayModeFilter');
+    if (sel) {
+        sel.value = mode;
+    }
+    document.querySelectorAll('.dashPayFilterPill').forEach(pill => {
+        if (pill.getAttribute('data-mode') === mode) {
+            pill.classList.add('active');
+        } else {
+            pill.classList.remove('active');
+        }
+    });
+    renderDashboardAnalytics();
+}
+window.setDashboardPaymentFilter = setDashboardPaymentFilter;
+
+// Global click-outside listener to dismiss .action-dropdown menus and #accountPopoverCard
+document.addEventListener('click', (event) => {
+    // Action dropdowns dismissal
+    if (!event.target.closest('.action-dropdown')) {
+        closeAllActionDropdowns();
+    }
+    // Account Popover dismissal
+    const popover = document.getElementById('accountPopoverCard');
+    const trigger = document.getElementById('topbarStaffDisplay');
+    if (popover && popover.style.display === 'block') {
+        if (!popover.contains(event.target) && (!trigger || !trigger.contains(event.target))) {
+            popover.style.display = 'none';
+        }
+    }
+});

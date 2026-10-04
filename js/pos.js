@@ -565,16 +565,26 @@ function updateCartUI() {
             discountBtn.style.display = 'none';
         } else {
             discountBtn.style.display = 'inline-block';
+            const btnTextEl = discountBtn.querySelector('.btn-text');
             if (currentDiscount && totals.discountAmount > 0) {
                 discountBtn.classList.add('active');
-                discountBtn.innerText = currentDiscount.type === 'percent' 
-                    ? `🏷️ ${currentDiscount.value}% Off` 
-                    : `🏷️ ₹${currentDiscount.value} Off`;
+                const label = currentDiscount.type === 'percent' 
+                    ? `${currentDiscount.value}% Off` 
+                    : `₹${currentDiscount.value} Off`;
+                if (btnTextEl) {
+                    btnTextEl.textContent = label;
+                } else {
+                    discountBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg><span class="btn-text">${label}</span>`;
+                }
                 discountBtn.style.background = 'var(--success)';
                 discountBtn.style.color = '#fff';
             } else {
                 discountBtn.classList.remove('active');
-                discountBtn.innerText = '🏷️ Discount';
+                if (btnTextEl) {
+                    btnTextEl.textContent = 'Discount';
+                } else {
+                    discountBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg><span class="btn-text">Discount</span>`;
+                }
                 discountBtn.style.background = '';
                 discountBtn.style.color = '';
             }
@@ -591,7 +601,7 @@ function updateCartUI() {
             if (discountDesc) {
                 const typeLabel = currentDiscount.type === 'percent' ? `${currentDiscount.value}%` : 'Flat';
                 const reasonLabel = currentDiscount.reason ? ` (${escapeHtml(currentDiscount.reason)})` : '';
-                discountDesc.innerText = `🏷️ Discount ${typeLabel}${reasonLabel}:`;
+                discountDesc.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg><span>Discount ${typeLabel}${reasonLabel}:</span>`;
             }
             if (discountAmt) discountAmt.innerText = `-₹${totals.discountAmount.toFixed(2)}`;
         } else {
@@ -916,7 +926,7 @@ function openCheckoutModal() {
         if (grossSubEl) grossSubEl.innerText = `₹${totals.grossSubtotal.toFixed(2)}`;
         if (discLabelEl) {
             const dType = tInfo.discount.type === 'percent' ? `${tInfo.discount.value}%` : 'Fixed';
-            discLabelEl.innerText = `🏷️ Discount (${dType}${tInfo.discount.reason ? ' • ' + escapeHtml(tInfo.discount.reason) : ''}):`;
+            discLabelEl.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg><span>Discount (${dType}${tInfo.discount.reason ? ' • ' + escapeHtml(tInfo.discount.reason) : ''}):</span>`;
         }
         if (discAmtEl) discAmtEl.innerText = `-₹${totals.discountAmount.toFixed(2)}`;
         if (gstNoteEl) {
@@ -998,7 +1008,9 @@ async function confirmCheckout() {
     const payBtn = document.querySelector('#checkoutModal .btn-success');
     if (payBtn) {
         payBtn.disabled = true; 
-        payBtn.innerText = printCharacteristic ? "⏳ Printing Receipt..." : "📄 Generating Receipt...";
+        payBtn.innerHTML = printCharacteristic 
+            ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Printing Receipt...</span>' 
+            : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Generating Receipt...</span>';
     }
     const cModal = document.getElementById('checkoutModal');
     if (cModal) cModal.style.display = 'none';
@@ -1136,7 +1148,7 @@ async function confirmCheckout() {
     finally { 
         if (payBtn) {
             payBtn.disabled = false; 
-            payBtn.innerText = "🖨️ Pay & Print"; 
+            payBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span class="btn-text">Pay &amp; Print</span>'; 
         }
     }
 }
@@ -1517,7 +1529,9 @@ async function printKitchenTicket() {
     const btn = document.querySelector('#kotModal .btn-warning'); 
     if (btn) {
         btn.disabled = true; 
-        btn.innerText = printCharacteristic ? "⏳ Printing KOT..." : "📄 Generating KOT...";
+        btn.innerHTML = printCharacteristic 
+            ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Printing KOT...</span>' 
+            : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Generating KOT...</span>';
     }
     let tInfo = tablesInfo[activeTable];
     const currentTableName = getTableName(activeTable);
@@ -1525,14 +1539,14 @@ async function printKitchenTicket() {
         await sendKotToPrinter(currentTableName, tInfo.items); 
         const kotModal = document.getElementById('kotModal');
         if (kotModal) kotModal.style.display = 'none'; 
-        showToast(`👨‍🍳 Table ${currentTableName} KOT Processed.`); 
+        showToast(`Table ${currentTableName} KOT Processed.`); 
     } catch(e) { 
         console.error(e); 
-        showToast("❌ KOT Error."); 
+        showToast("Error processing KOT."); 
     } finally { 
         if (btn) {
             btn.disabled = false; 
-            btn.innerText = "🖨️ Print KOT"; 
+            btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span class="btn-text">Print KOT</span>'; 
         }
     }
 }

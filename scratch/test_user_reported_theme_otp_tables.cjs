@@ -88,7 +88,7 @@ test("registerUser rejects signup without phone or phone with < 10 digits", () =
 });
 
 test("registerUser accepts valid 10-digit phone and stores it on user and shop profile", () => {
-    const email = 'valid_phone_signup@billnawcafe.com';
+    const email = `valid_phone_signup_${Date.now()}@billnawcafe.com`;
     const otpRes = authService.sendOtp(email, 'signup');
     const validOtp = otpRes.data.devOtp;
 

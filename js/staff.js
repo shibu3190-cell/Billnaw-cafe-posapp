@@ -36,8 +36,8 @@ function renderStaffManagementUI() {
                     </span>
                 </td>
                 <td>
-                    <button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;" onclick="openEditStaffModal(${staff.id})">✏️ Edit</button>
-                    ${staff.role !== 'Admin' ? `<button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="deleteStaffMember(${staff.id})">🗑️</button>` : ''}
+                    <button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; display: inline-flex; align-items: center; gap: 4px;" onclick="openEditStaffModal(${staff.id})"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg><span>Edit</span></button>
+                    ${staff.role !== 'Admin' ? `<button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; color: var(--danger); border-color: var(--danger); display: inline-flex; align-items: center; justify-content: center;" onclick="deleteStaffMember(${staff.id})" title="Delete Staff Member"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>` : ''}
                 </td>
             </tr>
         `;

@@ -32,7 +32,7 @@ function renderCategoryListUI() {
         container.innerHTML = menuCategories.map(c => `
             <span class="category-manage-chip">
                 <span>${escapeHtml(c)}</span>
-                ${c !== 'All' ? `<button type="button" class="del-btn" onclick="deleteCategory('${escapeHtml(c)}')" title="Delete Category ${escapeHtml(c)}">✕</button>` : ''}
+                ${c !== 'All' ? `<button type="button" class="del-btn" onclick="deleteCategory('${escapeHtml(c)}')" title="Delete Category ${escapeHtml(c)}" style="display:inline-flex;align-items:center;justify-content:center;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
             </span>
         `).join('');
     }
@@ -685,7 +685,7 @@ function openAddMenuItemModal() {
     editingMenuItemId = null; 
     renderCategoryDropdown();
     document.getElementById('menuFormTitle').innerText = "Add New Menu Item"; 
-    document.getElementById('addMenuBtn').innerText = "💾 Save Item";
+    document.getElementById('addMenuBtn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg><span>Save Item</span>';
     document.getElementById('newItemName').value = ''; 
     document.getElementById('newItemPrice').value = ''; 
     document.getElementById('newItemGst').value = '0';
@@ -728,13 +728,13 @@ function editMenuItem(id) {
         
         const genBtn = document.getElementById('btnGenerateAI');
         if (genBtn) {
-            genBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>🎲 Next Photo</span>`;
+            genBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>Next Photo</span>`;
             genBtn.disabled = false;
         }
         
         editingMenuItemId = id; 
         document.getElementById('menuFormTitle').innerText = "Edit Menu Item"; 
-        document.getElementById('addMenuBtn').innerText = "💾 Update Item"; 
+        document.getElementById('addMenuBtn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg><span>Update Item</span>'; 
         document.getElementById('menuItemModal').style.display = 'flex';
     }
 }

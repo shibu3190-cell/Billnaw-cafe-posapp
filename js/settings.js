@@ -330,14 +330,60 @@ function closeStaffManagementModal() {
 }
 window.closeStaffManagementModal = closeStaffManagementModal;
 
+let currentBillingCycle = 'monthly';
+
+function setBillingCycle(cycle) {
+    currentBillingCycle = cycle === 'annual' ? 'annual' : 'monthly';
+    const isAnnual = currentBillingCycle === 'annual';
+
+    const btnMonthly = document.getElementById('btnMonthlyBilling');
+    const btnAnnual = document.getElementById('btnAnnualBilling');
+    if (btnMonthly) {
+        if (!isAnnual) btnMonthly.classList.add('active');
+        else btnMonthly.classList.remove('active');
+    }
+    if (btnAnnual) {
+        if (isAnnual) btnAnnual.classList.add('active');
+        else btnAnnual.classList.remove('active');
+    }
+
+    const pricePro = document.getElementById('pricePro');
+    const periodPro = document.getElementById('periodPro');
+    const proBilledInfo = document.getElementById('proBilledInfo');
+    const priceEnterprise = document.getElementById('priceEnterprise');
+    const periodEnterprise = document.getElementById('periodEnterprise');
+    const enterpriseBilledInfo = document.getElementById('enterpriseBilledInfo');
+
+    if (pricePro) pricePro.innerText = isAnnual ? '₹399' : '₹499';
+    if (periodPro) periodPro.innerText = isAnnual ? '/mo (billed annually)' : '/mo';
+    if (proBilledInfo) proBilledInfo.innerText = isAnnual ? '₹4,788 billed annually (Save ₹1,200)' : 'Billed monthly, cancel anytime';
+
+    if (priceEnterprise) priceEnterprise.innerText = isAnnual ? '₹1,199' : '₹1,499';
+    if (periodEnterprise) periodEnterprise.innerText = isAnnual ? '/mo (billed annually)' : '/mo';
+    if (enterpriseBilledInfo) enterpriseBilledInfo.innerText = isAnnual ? '₹14,388 billed annually (Save ₹3,600)' : 'Billed monthly, cancel anytime';
+}
+window.setBillingCycle = setBillingCycle;
+window.toggleBillingCycle = setBillingCycle;
+
+function selectPricingTier(tierName, price) {
+    if (typeof showToast === 'function') {
+        if (tierName === 'Starter') {
+            showToast('Starter plan is already active (Free Forever).', 'info');
+        } else {
+            showToast(`Selected ${tierName} plan (${currentBillingCycle === 'annual' ? 'Annual' : 'Monthly'}). Redirecting to secure checkout...`, 'success');
+        }
+    }
+}
+window.selectPricingTier = selectPricingTier;
+
 function openSubscriptionModal() {
-    const el = document.getElementById('subscriptionDetailModal');
+    const el = document.getElementById('subscriptionDetailModal') || document.getElementById('subscriptionModal');
     if (el) el.style.display = 'flex';
 }
 window.openSubscriptionModal = openSubscriptionModal;
 
 function closeSubscriptionModal() {
-    const el = document.getElementById('subscriptionDetailModal');
+    const el = document.getElementById('subscriptionDetailModal') || document.getElementById('subscriptionModal');
     if (el) el.style.display = 'none';
 }
 window.closeSubscriptionModal = closeSubscriptionModal;
@@ -771,11 +817,32 @@ function handleRestoreShopBackup(event) {
 }
 window.handleRestoreShopBackup = handleRestoreShopBackup;
 
+function openMoreHub() {
+    const modal = document.getElementById('moreHubModal');
+    if (modal) modal.style.display = 'flex';
+}
+window.openMoreHub = openMoreHub;
+
+function closeMoreHub() {
+    const modal = document.getElementById('moreHubModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeMoreHub = closeMoreHub;
+
 function switchTab(tabId) { 
+    if (tabId === 'more') {
+        openMoreHub();
+        return;
+    }
+
     document.querySelectorAll('.nav-btn, .tab-btn').forEach(btn => btn.classList.remove('active')); 
     document.querySelectorAll('.view, .tab-content').forEach(c => c.classList.remove('active')); 
     
     const targetNavBtn = document.getElementById(`nav-${tabId}`) || document.getElementById(`tab-${tabId}`);
+    if (['customers', 'settings', 'whatsapp'].includes(tabId)) {
+        const moreNavBtn = document.getElementById('nav-more');
+        if (moreNavBtn) moreNavBtn.classList.add('active');
+    }
     if (targetNavBtn) targetNavBtn.classList.add('active');
     
     const targetContent = document.getElementById(tabId);

@@ -54,6 +54,18 @@ function escapeHtml(str) {
 }
 window.escapeHtml = escapeHtml;
 
+function openMoreHub() {
+    const modal = document.getElementById('moreHubModal');
+    if (modal) modal.style.display = 'flex';
+}
+window.openMoreHub = openMoreHub;
+
+function closeMoreHub() {
+    const modal = document.getElementById('moreHubModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeMoreHub = closeMoreHub;
+
 // Global Terminal State
 const defaultPinHash = hashString("1234");
 let shopProfile = { 

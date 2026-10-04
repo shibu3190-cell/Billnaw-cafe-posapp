@@ -375,8 +375,9 @@
                             </p>
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <button type="button" class="btn" style="background: #2DD4BF; color: #143832; font-weight: 800; font-size: 12px; border-radius: 20px; padding: 7px 16px; border: none;" onclick="window.culinaryInventory.syncMenuItems()">
-                                🔄 Refresh Menu & Stock
+                            <button type="button" class="btn" style="background: #2DD4BF; color: #143832; font-weight: 800; font-size: 12px; border-radius: 20px; padding: 7px 16px; border: none; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.syncMenuItems()">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                                <span>Refresh Menu &amp; Stock</span>
                             </button>
                         </div>
                     </div>
@@ -384,17 +385,17 @@
                     <!-- 3 Quick KPI Metrics -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.15);">
                         <div style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px 14px;">
-                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🛢️ Cooking Oil Leftover</div>
+                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase; display: flex; align-items: center; gap: 4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2.69 5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><span>Cooking Oil Leftover</span></div>
                             <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
                                 ${oilItem.current_stock} <span style="font-size: 12px; font-weight: 600;">Litres</span>
                             </div>
                             <div style="font-size: 11px; color: ${oilItem.current_stock <= (oilItem.min_threshold || 5) ? '#FCA5A5' : '#86EFAC'};">
-                                ${oilItem.current_stock <= (oilItem.min_threshold || 5) ? '⚠️ Alert: Reorder Required' : '🟢 Sufficient Kitchen Supply'}
+                                ${oilItem.current_stock <= (oilItem.min_threshold || 5) ? '<span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Alert: Reorder Required</span>' : '<span style="display:inline-flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Sufficient Kitchen Supply</span>'}
                             </div>
                         </div>
 
                         <div style="background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px 14px;">
-                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase;">🍗 Poultry & 🥔 Potatoes</div>
+                            <div style="font-size: 11px; font-weight: 700; color: #A7F3D0; text-transform: uppercase; display: flex; align-items: center; gap: 4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><span>Poultry &amp; Potatoes</span></div>
                             <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin-top: 2px;">
                                 ${poultryItem.current_stock} kg <span style="font-size: 12px; font-weight: 400; opacity: 0.8;">/</span> ${potatoItem.current_stock} kg
                             </div>
@@ -451,35 +452,12 @@
                                 let totalCost = 0;
 
                                 rec.components.forEach(comp => {
-                                    if (comp.type === 'sub_recipe' || comp.id === 'SUB-GRAVY-BASE' || comp.id === 'SUB-BROWN-01') {
-                                        pills.push(`<span class="rtr-recipe-pill">🍲 ${escapeHtml(comp.name || 'Gravy')}: ${comp.exact_quantity}L</span>`);
-                                    } else if (comp.id === 'RM-OIL') {
-                                        pills.push(`<span class="rtr-recipe-pill">🛢️ Oil: ${comp.exact_quantity}L</span>`);
-                                    } else if (comp.id === 'RM-MAIDA') {
-                                        pills.push(`<span class="rtr-recipe-pill">🌾 Maida: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-POTATO') {
-                                        pills.push(`<span class="rtr-recipe-pill">🥔 Potatoes: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-MILK') {
-                                        pills.push(`<span class="rtr-recipe-pill">🥛 Milk: ${comp.exact_quantity}L</span>`);
-                                    } else if (comp.id === 'RM-TEA-LEAVES') {
-                                        pills.push(`<span class="rtr-recipe-pill">🍃 Tea Leaves: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-SUGAR') {
-                                        pills.push(`<span class="rtr-recipe-pill">🍬 Sugar: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-POULTRY' || comp.id === 'RM-CHICKEN') {
-                                        pills.push(`<span class="rtr-recipe-pill">🍗 Poultry: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-ONION-SPICES' || comp.id === 'RM-ONION') {
-                                        pills.push(`<span class="rtr-recipe-pill">🧅 Onions & Spices: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-COLA') {
-                                        pills.push(`<span class="rtr-recipe-pill">🥤 Cola: ${comp.exact_quantity} units</span>`);
-                                    } else if (comp.id === 'RM-CHAAT-MASALA') {
-                                        pills.push(`<span class="rtr-recipe-pill">🧂 Chaat Masala: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-PANEER') {
-                                        pills.push(`<span class="rtr-recipe-pill">🧀 Paneer: ${comp.exact_quantity}kg</span>`);
-                                    } else if (comp.id === 'RM-BUTTER') {
-                                        pills.push(`<span class="rtr-recipe-pill">🧈 Butter: ${comp.exact_quantity}kg</span>`);
-                                    } else {
-                                        pills.push(`<span class="rtr-recipe-pill">📦 ${escapeHtml(comp.name || comp.id)}: ${comp.exact_quantity}${comp.unit || ''}</span>`);
-                                    }
+                                    const pillSvg = comp.id === 'RM-OIL'
+                                        ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:3px;vertical-align:middle;"><path d="m12 2.69 5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>'
+                                        : (comp.type === 'sub_recipe' || comp.id === 'SUB-GRAVY-BASE' || comp.id === 'SUB-BROWN-01'
+                                        ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:3px;vertical-align:middle;"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>'
+                                        : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:3px;vertical-align:middle;"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>');
+                                    pills.push(`<span class="rtr-recipe-pill" style="display:inline-flex;align-items:center;">${pillSvg}<span>${escapeHtml(comp.name || comp.id)}: ${comp.exact_quantity}${comp.unit || (comp.type === 'sub_recipe' ? 'L' : '')}</span></span>`);
                                 });
                                 pillsHtml = pills.join(' ');
 
@@ -500,7 +478,7 @@
                                 const marginPct = sPrice > 0 ? Math.round(((sPrice - totalCost) / sPrice) * 100) : 0;
                                 costHtml = `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Food Cost: <strong>₹${totalCost.toFixed(2)}</strong> • Margin: <strong style="color: #16A34A;">${marginPct}%</strong></div>`;
                             } else {
-                                pillsHtml = `<span style="font-size: 12px; color: #D97706;">⚠️ Needs Recipe Mapping — Tap to configure portion quantities or ⚡ Approx Auto-Fill</span>`;
+                                pillsHtml = `<span style="font-size: 12px; color: #D97706; display:inline-flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Needs Recipe Mapping — Tap to configure portion quantities</span></span>`;
                             }
 
                             return `
@@ -519,12 +497,13 @@
 
                                     <div style="display: flex; align-items: center; gap: 10px;">
                                         ${isConfigured ? `
-                                            <span class="badge" style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 800;">Configured ✅</span>
+                                            <span class="badge" style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 800; display:inline-flex; align-items:center; gap:4px;"><span>Configured</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                                         ` : `
-                                            <span class="badge" style="background: #FEF3C7; color: #92400E; font-size: 11px; font-weight: 800;">Needs Recipe ⚠️</span>
+                                            <span class="badge" style="background: #FEF3C7; color: #92400E; font-size: 11px; font-weight: 800; display:inline-flex; align-items:center; gap:4px;"><span>Needs Recipe</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
                                         `}
-                                        <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 11px; padding: 6px 14px; font-weight: 700; pointer-events: none;">
-                                            ⚙️ Configure
+                                        <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 11px; padding: 6px 14px; font-weight: 700; pointer-events: none; display:inline-flex; align-items:center; gap:4px;">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                            <span>Configure</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1174,12 +1153,16 @@
             <div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
                     <div>
-                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #143832;">🥦 Kitchen Raw Materials & Bulk Ingredients</h3>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 6px;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                            <span>Kitchen Raw Materials &amp; Bulk Ingredients</span>
+                        </h3>
                         <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-muted);">Direct purchase-to-consumption conversions with safety stock alerts</p>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-success" style="font-size: 12px; padding: 6px 14px; border-radius: 16px;" onclick="window.switchInventorySubTab('purchase_orders')">
-                            🛒 Generate Vendor PO
+                        <button class="btn btn-success" style="font-size: 12px; padding: 6px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.switchInventorySubTab('purchase_orders')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                            <span>Generate Vendor PO</span>
                         </button>
                     </div>
                 </div>
@@ -1283,7 +1266,8 @@
                                         Unit Prep Cost: <strong style="color: #143832;">₹${sub.unit_production_cost || '130.00'} / ${sub.yield_unit}</strong>
                                     </div>
                                     <button class="btn btn-primary" style="padding: 7px 16px; font-size: 12px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.promptProduceBatch('${sub.id}', ${sub.yield_quantity})">
-                                        👨‍🍳 Produce Batch
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
+                                        <span>Produce Batch</span>
                                     </button>
                                 </div>
                             </div>
@@ -1301,15 +1285,17 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
                     <div>
                         <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
-                            <span>📊 Live Food Costing & Real-Time Margin Simulator</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                            <span>Live Food Costing &amp; Real-Time Margin Simulator</span>
                             <span class="badge" style="background: #E0E7FF; color: #4338CA; font-size: 11px;">Dynamic Cost Rollup</span>
                         </h3>
                         <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
                             Real-time dish margin calculation. Test supplier ingredient price fluctuations to see instant impact on gross margins.
                         </p>
                     </div>
-                    <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 6px 14px;" onclick="window.culinaryInventory.refreshCosting()">
-                        🔄 Recalculate Margins
+                    <button class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.refreshCosting()">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                        <span>Recalculate Margins</span>
                     </button>
                 </div>
 
@@ -1451,8 +1437,9 @@
                                         ${t.status}
                                     </span>
                                     ${t.status !== 'Received' ? `
-                                        <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 12px;" onclick="window.culinaryInventory.receiveTransfer('${t.id}')">
-                                            ✓ Mark Received
+                                        <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="window.culinaryInventory.receiveTransfer('${t.id}')">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                            <span>Mark Received</span>
                                         </button>
                                     ` : ''}
                                 </div>
@@ -1471,7 +1458,8 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
                     <div>
                         <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
-                            <span>📦 Purchase Order (PO) & Multi-Vendor Procurement</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                            <span>Purchase Order (PO) &amp; Multi-Vendor Procurement</span>
                             <span class="badge" style="background: #FEE2E2; color: #B91C1C; font-size: 11px;">Single Dashboard</span>
                         </h3>
                         <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
@@ -1595,15 +1583,17 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
                     <div>
                         <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
-                            <span>⏱️ 15-Minute Rapid Stock-Take Audit</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <span>15-Minute Rapid Stock-Take Audit</span>
                             <span class="badge" style="background: #FEF3C7; color: #D97706; font-size: 11px;">High-Speed Reconciliation</span>
                         </h3>
                         <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
                             Rapid count verification. Enables total stock-keeping procedures to be completed in under 15 minutes.
                         </p>
                     </div>
-                    <button class="btn btn-success" style="font-size: 12px; padding: 6px 16px; border-radius: 16px;" onclick="window.culinaryInventory.submitAudit()">
-                        ✓ Reconcile & Update All Stock
+                    <button class="btn btn-success" style="font-size: 12px; padding: 6px 16px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.submitAudit()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        <span>Reconcile &amp; Update All Stock</span>
                     </button>
                 </div>
 
