@@ -54,8 +54,27 @@
 }
 
 * { box-sizing: border-box; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+html {
+    height: 100vh;
+    height: 100dvh;
+    width: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
 body, button, input, select, textarea { font-family: 'Poppins', sans-serif; }
-body { margin: 0; background: var(--bg-body); color: var(--text-dark); display: flex; height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body {
+    margin: 0;
+    background: var(--bg-body);
+    color: var(--text-dark);
+    display: flex;
+    height: 100vh;
+    height: 100dvh;
+    width: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
 h1, h2, h3, h4, h5, h6 { margin: 0; color: var(--text-dark); font-weight: 700; letter-spacing: -0.02em; }
 input:focus, select:focus, textarea:focus { outline: none; }
 
@@ -96,14 +115,17 @@ input:focus, select:focus, textarea:focus { outline: none; }
     color: var(--text-muted); 
     cursor: pointer; 
     padding: 0; 
-    width: 32px; 
-    height: 32px; 
+    width: 44px; 
+    height: 44px; 
+    min-width: 44px; 
+    min-height: 44px; 
     border-radius: 8px; 
-    display: inline-flex; 
+    display: flex; 
     align-items: center; 
     justify-content: center; 
     transition: all 0.15s ease;
     flex-shrink: 0;
+    box-sizing: border-box;
 }
 .more-close-btn:hover { background: var(--bg-body); color: var(--text-dark); }
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
@@ -284,7 +306,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 }
 
 /* ✨ MAIN APPLICATION WRAPPER & TOPBAR ✨ */
-.main-wrapper { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--bg-body); }
+.main-wrapper, .app-layout { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--bg-body); }
 .topbar { 
     background: rgba(248, 245, 241, 0.85); 
     backdrop-filter: blur(12px); 
@@ -429,9 +451,11 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FFFFFF;
     border: 1.5px solid var(--border);
     border-radius: 50%;
-    width: 34px;
-    height: 34px;
-    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
@@ -439,6 +463,8 @@ svg.nav-icon.active, svg.btn-icon.active {
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     flex-shrink: 0;
     box-shadow: var(--shadow-xs);
+    box-sizing: border-box;
+    padding: 0;
 }
 .topbar-bell-btn:hover {
     border-color: var(--primary);
@@ -470,10 +496,41 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 var(--spacing-outer-desktop) var(--spacing-outer-desktop) var(--spacing-outer-desktop); }
 
-.view { display: none; flex: 1; overflow-y: auto; animation: fadeUp 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
-.view.active { display: flex; flex-direction: column; }
+.view { 
+    display: none; 
+    flex: 1; 
+    overflow-y: auto; 
+    -webkit-overflow-scrolling: touch; 
+    overscroll-behavior: contain; 
+    animation: fadeUp 0.22s cubic-bezier(0.16, 1, 0.3, 1); 
+    min-height: 0;
+}
+.view.active { 
+    display: flex; 
+    flex-direction: column; 
+}
 .view.active > * { flex-shrink: 0; }
-#pos.view.active { overflow-y: hidden; } 
+
+/* Active View Independent Scroll Isolation */
+#pos.view.active { 
+    overflow: hidden;
+    overflow-y: hidden; 
+    overflow-x: hidden;
+}
+#pos .pos-left {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+#menu.view.active,
+#customers.view.active,
+#inventory.view.active,
+#dashboard.view.active,
+#settings.view.active {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+} 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ✨ BUTTON DESIGN SYSTEM ✨ */
@@ -814,12 +871,6 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 /* MENU CARDS */
 .menu-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-content: start; padding-bottom: 24px; }
-@media screen and (min-width: 901px) {
-    .menu-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 12px; }
-}
-@media screen and (max-width: 900px) {
-    .menu-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
-}
 .menu-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; display: flex; flex-direction: column; position: relative; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-xs); text-align: left; min-height: 175px; overflow: hidden; }
 .menu-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-2px); }
 .menu-card:active { transform: scale(0.98); }
@@ -999,6 +1050,8 @@ svg.nav-icon.active, svg.btn-icon.active {
 .cart-items-container { 
     flex: 1; 
     overflow-y: auto; 
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 12px 16px; 
     display: flex; 
     flex-direction: column; 
@@ -2013,9 +2066,10 @@ svg.nav-icon.active, svg.btn-icon.active {
         display: none;
     }
 
-    /* Split-screen Menu Grid: strictly 2 columns on tablet (<= 900px), strictly 4 columns on PC (>= 901px) */
+    /* Split-screen Menu Grid: strictly 4 columns on tablet & desktop (>= 641px) */
     .menu-grid {
-        gap: 10px;
+        grid-template-columns: repeat(4, 1fr) !important;
+        gap: 12px;
     }
     .menu-card {
         min-height: 140px;
@@ -2049,15 +2103,8 @@ svg.nav-icon.active, svg.btn-icon.active {
     }
 }
 
-/* Responsive 4-Item Menu Grid Rules: strictly 2 columns on mobile/tablet (<= 900px), strictly 4 columns on PC (>= 901px) */
-@media screen and (max-width: 900px) {
-    .menu-grid {
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 10px;
-    }
-}
-
-@media screen and (min-width: 901px) {
+/* Responsive Menu Grid Rules: strictly 4 columns on tablet & PC (>= 641px) */
+@media screen and (min-width: 641px) {
     .menu-grid {
         grid-template-columns: repeat(4, 1fr) !important;
         gap: 12px;
@@ -2067,6 +2114,11 @@ svg.nav-icon.active, svg.btn-icon.active {
 /* Breakpoint 2: Compact Handheld Phone (< 640px) */
 @media screen and (max-width: 640px) {
     body { flex-direction: column; }
+
+    .menu-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px;
+    }
     
     /* CLASSY 5-ITEM BOTTOM NAVIGATION BAR */
     .sidebar { 
@@ -2076,6 +2128,7 @@ svg.nav-icon.active, svg.btn-icon.active {
         justify-content: space-around; 
         padding: 6px 6px 0 6px; 
         padding-bottom: max(12px, env(safe-area-inset-bottom, 24px)); 
+        padding-bottom: max(16px, env(safe-area-inset-bottom, 24px)); 
         position: fixed; 
         bottom: 0; 
         left: 0; 
@@ -2174,28 +2227,59 @@ svg.nav-icon.active, svg.btn-icon.active {
         to { transform: translateY(0); opacity: 1; }
     }
     
-    .main-wrapper { padding-bottom: 72px; } 
-    .main-content { padding: 0 12px 14px 12px; }
+    .main-wrapper { 
+        padding-bottom: 72px; 
+        overflow: hidden; 
+    } 
+    .main-content { 
+        padding: 0 12px 14px 12px; 
+        overflow: hidden; 
+        flex: 1; 
+        display: flex; 
+        flex-direction: column; 
+        min-height: 0; 
+    }
     .topbar { padding: 10px 12px; gap: 8px; }
     .topbar-title { font-size: 16px; }
     .topbar-date { display: none; }
     .topbar-actions { gap: 6px; flex-shrink: 0; }
     .topbar-table-pill { padding: 4px 8px; font-size: 11px; flex-shrink: 0 !important; }
     
-    .pos-layout { flex-direction: column; overflow-y: visible; overflow-x: hidden; display: block; }
-    .pos-left { min-height: 50vh; overflow: visible; padding-right: 0; padding-bottom: 120px; }
+    #pos.view.active {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        height: 100%;
+        min-height: 0;
+    }
+    .pos-layout {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .pos-left {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        padding-right: 0;
+        padding-bottom: 130px;
+    }
     
     .drawer-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(28, 18, 13, 0.65); backdrop-filter: blur(4px); z-index: 4999; opacity: 0; pointer-events: none; transition: opacity 0.28s ease; }
     .drawer-overlay.show { opacity: 1; pointer-events: auto; }
     
     .pos-right { position: fixed; bottom: -120%; left: 0; width: 100%; height: 82vh; z-index: 5000; border-radius: 28px 28px 0 0; max-width: 100%; transition: bottom 0.32s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-sheet); }
     .pos-right.open { bottom: 0; }
-    .drawer-handle { display: block; width: 40px; height: 4px; background: rgba(0,0,0,0.18); border-radius: 10px; margin: 10px auto 0; }
+    .drawer-handle { display: block; width: 40px; height: 4px; background: rgba(0,0,0,0.18); border-radius: 10px; margin: 10px auto 0; cursor: grab; touch-action: pan-y; }
+    .pos-right .cart-footer { padding-bottom: max(16px, env(safe-area-inset-bottom, 24px)); }
     .close-drawer-btn { display: flex; }
-    #pos.view.active { overflow-y: auto; }
     .desktop-only { display: none !important; }
 
-    .menu-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } 
+    .menu-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; } 
     .menu-card { min-height: 130px; border-radius: 14px; }
     .card-img-wrapper { height: 72px; } 
     .card-content { padding: 8px 10px; }
@@ -2576,11 +2660,13 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 /* Merged menu trigger button and cafe logo icon into one cohesive minimal element */
 .topbar-menu-icon-btn {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
     background: var(--primary);
     color: #FFFFFF;
@@ -2590,6 +2676,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     box-shadow: var(--shadow-xs);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
+    box-sizing: border-box;
 }
 .topbar-menu-icon-btn:hover {
     background: var(--secondary);
@@ -2694,8 +2781,10 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FAF7F4;
 }
 .slide-menu-close-btn {
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     border-radius: 8px;
     border: 1px solid var(--border);
     background: #FFFFFF;
@@ -2705,10 +2794,14 @@ svg.nav-icon.active, svg.btn-icon.active {
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
+    padding: 0;
 }
 .slide-menu-nav {
     flex: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: 14px 12px;
     display: flex;
     flex-direction: column;
@@ -2719,6 +2812,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     gap: 12px;
     padding: 12px 14px;
+    min-height: 44px;
     border-radius: 12px;
     border: 1px solid transparent;
     background: transparent;
@@ -2729,6 +2823,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     text-align: left;
     transition: all 0.15s ease;
     width: 100%;
+    box-sizing: border-box;
 }
 .slide-nav-item:hover {
     background: var(--bg-body);
@@ -2740,10 +2835,15 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-color: rgba(125, 79, 66, 0.2);
     font-weight: 700;
 }
+.slide-menu-drawer .slide-menu-footer,
 .slide-menu-footer {
-    padding: 14px 18px;
+    padding: 16px 20px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 24px));
     border-top: 1px solid var(--border);
     background: #FAF7F4;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 /* Bulk Customer Selector Items */
@@ -3993,7 +4093,7 @@ body.printing { background: #fff !important; }
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-/* 2. Dashed Bulk Upload Card (Screenshot 1) */
+/* 2. Dashed Bulk Upload Card & Unified AI Ingestion Hero Card (Screenshot 1) */
 .bulk-upload-dashed-card {
     border: 2px dashed #CBD5E1;
     background: #F8FAFC;
@@ -4001,16 +4101,41 @@ body.printing { background: #fff !important; }
     padding: 16px 20px;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 16px;
     cursor: pointer;
     margin-bottom: 14px;
+    position: relative;
     transition: all 0.2s ease;
 }
 .bulk-upload-dashed-card:hover {
     border-color: #143832;
     background: #F0FDF4;
-    transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(20,56,50,0.06);
+}
+.unified-ai-ingest-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+@media screen and (max-width: 640px) {
+    .bulk-upload-dashed-card {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 14px;
+    }
+    .unified-ai-ingest-actions {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+    }
+    .unified-ai-ingest-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
 }
 .bulk-upload-icon-circle {
     width: 44px;
@@ -4347,6 +4472,57 @@ body.printing { background: #fff !important; }
     }
 }
 
+/* ==========================================================================
+   Customer & Khata Form Touch Ergonomics (Requirement R3)
+   ========================================================================== */
+#customerModal input:not([type="hidden"]),
+#customerModal select,
+#customerModal textarea,
+#addKhataDueModal input:not([type="hidden"]),
+#addKhataDueModal select,
+#addKhataDueModal textarea,
+#recordKhataPaymentModal input:not([type="hidden"]),
+#recordKhataPaymentModal select,
+#recordKhataPaymentModal textarea,
+#custNameInput,
+#custPhoneInput,
+#custNotesInput,
+#custPointsInput,
+#custDiscountInput,
+#addKhataType,
+#addKhataPartyName,
+#addKhataPhone,
+#addKhataAmount,
+#addKhataDueDate,
+#addKhataBillNo,
+#addKhataNotes,
+#khataPaymentAmount,
+#khataPaymentMode,
+#khataPaymentNotes,
+#khataDueAmount,
+#khataDueDate,
+#khataDueNotes {
+    min-height: 48px !important;
+    padding: 12px 14px !important;
+    box-sizing: border-box !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    border-radius: 10px !important;
+}
+
+#customerModal input[type="date"],
+#addKhataDueModal input[type="date"],
+#recordKhataPaymentModal input[type="date"],
+#customerModal select,
+#addKhataDueModal select,
+#recordKhataPaymentModal select {
+    min-height: 48px !important;
+    padding: 12px 14px !important;
+    box-sizing: border-box !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+}
+
 /* 10. Modern Mobile-First UX for Reports Transactions & Customer Directory */
 @media screen and (max-width: 640px) {
     .dash-charts-grid {
@@ -4357,26 +4533,21 @@ body.printing { background: #fff !important; }
         display: none !important;
     }
 
-    #dashboard .table-responsive,
-    #customerDirectoryDetailedSubView .table-responsive {
+    #dashboard .table-responsive {
         overflow-x: visible !important;
     }
 
-    #dashboard .data-table thead,
-    #customerDirectoryDetailedSubView .data-table thead {
+    #dashboard .data-table thead {
         display: none !important;
     }
 
     #dashboard .data-table,
-    #customerDirectoryDetailedSubView .data-table,
-    #dashboard .data-table tbody,
-    #customerDirectoryDetailedSubView .data-table tbody {
+    #dashboard .data-table tbody {
         display: block !important;
         width: 100% !important;
     }
 
-    #historyTableBody tr,
-    #customersTableBody tr {
+    #historyTableBody tr {
         display: flex !important;
         flex-direction: column !important;
         gap: 8px !important;
@@ -4391,14 +4562,12 @@ body.printing { background: #fff !important; }
         box-sizing: border-box !important;
     }
 
-    #historyTableBody tr:active,
-    #customersTableBody tr:active {
+    #historyTableBody tr:active {
         transform: scale(0.985) !important;
         background: #FAF7F4 !important;
     }
 
-    #historyTableBody tr td,
-    #customersTableBody tr td {
+    #historyTableBody tr td {
         display: flex !important;
         justify-content: space-between !important;
         align-items: center !important;
@@ -4409,12 +4578,206 @@ body.printing { background: #fff !important; }
         box-sizing: border-box !important;
     }
 
-    #historyTableBody tr td:last-child,
-    #customersTableBody tr td:last-child {
+    #historyTableBody tr td:last-child {
         margin-top: 6px !important;
         padding-top: 8px !important;
         border-top: 1px dashed var(--border) !important;
         justify-content: flex-end !important;
+    }
+
+    /* Customer Directory Mobile High-Legibility Cards (Requirement R3) */
+    #custTabDirectory .table-responsive,
+    #customerDirectoryDetailedSubView .table-responsive {
+        overflow-x: visible !important;
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+
+    #custTabDirectory thead,
+    #customerDirectoryDetailedSubView thead,
+    #customerDirectoryDetailedSubView .data-table thead {
+        display: none !important;
+    }
+
+    #custTabDirectory .data-table,
+    #customerDirectoryDetailedSubView .data-table,
+    #custTabDirectory .data-table tbody,
+    #customerDirectoryDetailedSubView .data-table tbody {
+        display: block !important;
+        width: 100% !important;
+        border: none !important;
+        background: transparent !important;
+    }
+
+    #customersTableBody {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+        width: 100% !important;
+    }
+
+    #customersTableBody tr {
+        display: grid !important;
+        grid-template-columns: 1fr auto !important;
+        grid-template-areas:
+            "avatar-name tier-badge"
+            "phone-link spend"
+            "visits-meta last-visit"
+            "action-bar action-bar" !important;
+        row-gap: 8px !important;
+        column-gap: 12px !important;
+        align-items: center !important;
+        background: #FFFFFF !important;
+        border: 1.5px solid var(--border) !important;
+        border-radius: 14px !important;
+        padding: 14px !important;
+        margin-bottom: 12px !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+        transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+        cursor: pointer !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        width: 100% !important;
+    }
+
+    #customersTableBody tr:active {
+        transform: scale(0.985) !important;
+        background: #FAF7F4 !important;
+    }
+
+    /* Top Row: Avatar Initials circle + Customer Name & Notes */
+    #customersTableBody tr td:nth-child(1) {
+        grid-area: avatar-name !important;
+        display: flex !important;
+        align-items: center !important;
+        padding: 0 !important;
+        border: none !important;
+        font-size: 13px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Top Row Right: Loyalty Tier badge (.cust-badge) */
+    #customersTableBody tr td:nth-child(3) {
+        grid-area: tier-badge !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-end !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        border: none !important;
+        font-size: 12px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Sub-Row Left: Phone Link (.cust-phone-link) */
+    #customersTableBody tr td:nth-child(2) {
+        grid-area: phone-link !important;
+        display: flex !important;
+        align-items: center !important;
+        padding: 0 !important;
+        border: none !important;
+        font-size: 13px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Sub-Row Right: Lifetime Spend in bold emerald (#10B981) */
+    #customersTableBody tr td:nth-child(5) {
+        grid-area: spend !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        padding: 0 !important;
+        border: none !important;
+        font-size: 15px !important;
+        font-weight: 800 !important;
+        color: #10B981 !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Meta Row Left: Visits */
+    #customersTableBody tr td:nth-child(4) {
+        grid-area: visits-meta !important;
+        display: flex !important;
+        align-items: center !important;
+        padding: 0 !important;
+        border: none !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        color: var(--text-muted) !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Meta Row Right: Last Visit */
+    #customersTableBody tr td:nth-child(6) {
+        grid-area: last-visit !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        padding: 0 !important;
+        border: none !important;
+        font-size: 11px !important;
+        color: var(--text-muted) !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Action Row: Clean, non-overflowing action bar */
+    #customersTableBody tr td:nth-child(7),
+    #customersTableBody tr td:last-child {
+        grid-area: action-bar !important;
+        width: 100% !important;
+        margin-top: 4px !important;
+        padding-top: 10px !important;
+        border-top: 1px dashed var(--border) !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        gap: 8px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Hide bulky redundant Manage & Message text button on mobile viewports (< 640px) */
+    #customersTableBody .cust-btn-manage-text {
+        display: none !important;
+    }
+
+    /* Ensure 3-dot action dropdown button is thumb-friendly (>= 44x44px) */
+    #customersTableBody .action-dropdown-btn {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 8px !important;
+    }
+
+    /* Modal Action Buttons Touch Ergonomics on Mobile (48px targets) */
+    #customerModal .modal-actions,
+    #addKhataDueModal .modal-actions,
+    #recordKhataPaymentModal .modal-actions {
+        display: flex !important;
+        flex-direction: column-reverse !important;
+        gap: 10px !important;
+        width: 100% !important;
+        margin-top: 16px !important;
+        box-sizing: border-box !important;
+    }
+
+    #customerModal .modal-actions button,
+    #addKhataDueModal .modal-actions button,
+    #recordKhataPaymentModal .modal-actions button {
+        width: 100% !important;
+        min-height: 48px !important;
+        padding: 12px 14px !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        box-sizing: border-box !important;
+        border-radius: 10px !important;
+        flex: 1 1 auto !important;
     }
 
     /* Action Sheet Modal Bottom-Sheet Behavior */
