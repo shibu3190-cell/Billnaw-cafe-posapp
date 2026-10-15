@@ -4738,6 +4738,19 @@
             window.firebaseSignOut = signOut;
             window.firebaseOnAuthStateChanged = onAuthStateChanged;
 
+            function isGoogleFirebaseCustomToken(token) {
+                if (!token || typeof token !== 'string') return false;
+                const parts = token.split('.');
+                if (parts.length !== 3) return false;
+                try {
+                    const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+                    return header && header.alg === 'RS256';
+                } catch (e) {
+                    return false;
+                }
+            }
+            window.isGoogleFirebaseCustomToken = isGoogleFirebaseCustomToken;
+
             if (auth && typeof onAuthStateChanged === 'function') {
                 try {
                     onAuthStateChanged(auth, (user) => {
@@ -5132,10 +5145,14 @@
 
                             // Firebase Auth Custom Token Sign-in
                             if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
-                                try {
-                                    await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
-                                    console.log("Firebase Auth custom token sign in established");
-                                } catch (fbErr) {
+                                if (typeof window.isGoogleFirebaseCustomToken === 'function' && window.isGoogleFirebaseCustomToken(data.customToken)) {
+                                    try {
+                                        await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
+                                        console.log("Firebase Auth custom token sign in established");
+                                    } catch (fbErr) {
+                                        console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
+                                    }
+                                } else {
                                     console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
                                 }
                             }
@@ -5199,9 +5216,13 @@
                             } catch (e) {}
 
                             if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
-                                try {
-                                    await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
-                                } catch (fbErr) {
+                                if (typeof window.isGoogleFirebaseCustomToken === 'function' && window.isGoogleFirebaseCustomToken(data.customToken)) {
+                                    try {
+                                        await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
+                                    } catch (fbErr) {
+                                        console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
+                                    }
+                                } else {
                                     console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
                                 }
                             }
@@ -5469,11 +5490,15 @@
                             } catch (e) {}
 
                             if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
-                                try {
-                                    await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
-                                    console.log("Firebase Auth sign in established");
-                                } catch (fbErr) {
-                                    console.warn("Firebase Auth sign in fallback:", fbErr);
+                                if (typeof window.isGoogleFirebaseCustomToken === 'function' && window.isGoogleFirebaseCustomToken(data.customToken)) {
+                                    try {
+                                        await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
+                                        console.log("Firebase Auth sign in established");
+                                    } catch (fbErr) {
+                                        console.warn("Firebase Auth sign in fallback:", fbErr);
+                                    }
+                                } else {
+                                    console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
                                 }
                             }
 
@@ -5571,9 +5596,13 @@
                             } catch (e) {}
 
                             if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
-                                try {
-                                    await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
-                                } catch (fbErr) {}
+                                if (typeof window.isGoogleFirebaseCustomToken === 'function' && window.isGoogleFirebaseCustomToken(data.customToken)) {
+                                    try {
+                                        await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
+                                    } catch (fbErr) {}
+                                } else {
+                                    console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
+                                }
                             }
 
                             if (typeof attachFirestoreListener === 'function') {

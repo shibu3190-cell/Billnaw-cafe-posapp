@@ -196,12 +196,20 @@ node scratch/check_duplicate_ids.cjs
 ```
 *Expected Result*: `Total unique IDs: 621, Duplicate IDs count: 0`.
 
+### 6. Headless Browser Visual Tab Verification
+```powershell
+node scratch/test_all_tabs_visual.cjs
+```
+*Expected Result*: Verifies all 6 tabs (`#pos`, `#menu`, `#dashboard`, `#inventory`, `#customers`, `#settings`) render with `display: flex`, `opacity: 1`, non-zero dimensions, and 0 console exceptions.
+
 ---
 
 ## 7. 💡 Operational Guidelines for Developers & Subagents
 
-1. **PowerShell Statement Separators**: Never run chained commands like `cmd1 && cmd2` or `cmd1; cmd2; cmd3` in PowerShell subagent environments. Always run commands individually or create dedicated script files.
-2. **Preserve the Modal Invariant**: Never add a `.modal-close-btn` SVG button to any new modal without accounting for the exact 26 test invariant. Use a feature-specific class (e.g. `feature-close-btn`).
-3. **No Raw Unicode Emojis**: Always use inline SVGs with standard 24x24 viewBox.
-4. **CSS Breakpoint Integrity**: Maintain clean boundaries between mobile (< 640px), tablet (641px - 1080px), and desktop (> 1080px). Always check that `.menu-grid` remains strictly 2 columns on mobile and 4 columns on desktop.
-5. **No Cheating or Dummy Facades**: All implementations must be genuine, working, and validated through real headless/browser or unit assertions.
+1. **Server Lifecycle & Port 5000**: The Express backend (`server.js`) must be running on port 5000 (`npm start` or daemonized `node server.js`). If the server process is down, the Service Worker will serve offline cached files but backend APIs (`/api/config/client`, `/api/inventory/*`, `/api/version`) will throw `ERR_CONNECTION_REFUSED`.
+2. **Google Firebase Custom Token Validation**: Client-side Firebase SDK's `signInWithCustomToken(auth, token)` strictly requires RS256 JWT tokens minted with a Google Service Account private key. Internal HMAC-SHA256 session tokens must be validated with `isGoogleFirebaseCustomToken(token)` before being passed to Firebase Auth to prevent `400 (Bad Request)` network errors.
+3. **PowerShell Statement Separators**: Never run chained commands like `cmd1 && cmd2` or `cmd1; cmd2; cmd3` in PowerShell subagent environments. Always run commands individually or create dedicated script files.
+4. **Preserve the Modal Invariant**: Never add a `.modal-close-btn` SVG button to any new modal without accounting for the exact 26 test invariant. Use a feature-specific class (e.g. `feature-close-btn`).
+5. **No Raw Unicode Emojis**: Always use inline SVGs with standard 24x24 viewBox.
+6. **CSS Breakpoint Integrity**: Maintain clean boundaries between mobile (< 640px), tablet (641px - 1080px), and desktop (> 1080px). Always check that `.menu-grid` remains strictly 2 columns on mobile and 4 columns on desktop.
+7. **No Cheating or Dummy Facades**: All implementations must be genuine, working, and validated through real headless/browser or unit assertions.

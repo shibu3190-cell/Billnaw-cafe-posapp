@@ -156,9 +156,26 @@ function restoreShopSession() {
                 if (session.shop && session.shop.name && typeof shopProfile !== 'undefined') {
                     shopProfile.name = session.shop.name;
                 }
-                // Silently re-authenticate Firebase Custom Token if window.auth is ready
+                // Re-authenticate Firebase Custom Token if window.auth is ready and token is signed by Google Service Account (RS256)
                 if (session.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
-                    window.firebaseSignInWithCustomToken(window.auth, session.customToken).catch(() => {});
+                    const isGoogleToken = typeof window.isGoogleFirebaseCustomToken === 'function' 
+                        ? window.isGoogleFirebaseCustomToken(session.customToken)
+                        : (function(t) {
+                            try {
+                                const parts = String(t).split('.');
+                                if (parts.length !== 3) return false;
+                                const h = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+                                return h && h.alg === 'RS256';
+                            } catch(e) { return false; }
+                        })(session.customToken);
+
+                    if (isGoogleToken) {
+                        window.firebaseSignInWithCustomToken(window.auth, session.customToken).catch(() => {
+                            console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
+                        });
+                    } else {
+                        console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
+                    }
                 }
                 updateCloudStoreTopbar(session.user?.email || session.shop?.name || session.storeCode, true);
             }
