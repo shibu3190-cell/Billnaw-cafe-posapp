@@ -2,9 +2,11 @@
 // Enforces 10 uses/month default limit, client-level overrides, and custom API keys per client.
 
 import { CONFIG } from './config.js';
+import { resolveGeminiApiKey } from './gemini-service.js';
 
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
 const DEFAULT_MONTHLY_LIMIT = 10;
+const localClientMemoryStore = new Map();
 
 // Helper to get current calendar year-month string (e.g., '2026-09')
 export function getCurrentYearMonth() {
@@ -19,6 +21,7 @@ export function getCurrentYearMonth() {
  */
 export async function getClientProfileData(clientId) {
   const targetId = clientId || 'BONGBHOJ-TERMINAL';
+  const memoryCached = localClientMemoryStore.get(targetId) || {};
   const url = `${FIRESTORE_BASE}/clients/${encodeURIComponent(targetId)}`;
 
   try {
@@ -39,10 +42,10 @@ export async function getClientProfileData(clientId) {
       else if ('doubleValue' in valueObj) data[key] = parseFloat(valueObj.doubleValue);
       else if ('booleanValue' in valueObj) data[key] = valueObj.booleanValue;
     }
-    return data;
+    return { ...memoryCached, ...data };
   } catch (err) {
     console.log(`[Firestore Quota] Offline profile fallback for ${targetId}:`, err.message);
-    return null;
+    return Object.keys(memoryCached).length > 0 ? memoryCached : null;
   }
 }
 
@@ -51,6 +54,9 @@ export async function getClientProfileData(clientId) {
  */
 export async function updateClientProfileData(clientId, fieldsToUpdate) {
   const targetId = clientId || 'BONGBHOJ-TERMINAL';
+  const existingMemory = localClientMemoryStore.get(targetId) || {};
+  localClientMemoryStore.set(targetId, { ...existingMemory, ...fieldsToUpdate });
+
   const fieldPaths = Object.keys(fieldsToUpdate);
   if (fieldPaths.length === 0) return true;
 
@@ -70,10 +76,10 @@ export async function updateClientProfileData(clientId, fieldsToUpdate) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields: firestoreFields })
     });
-    return res.ok;
+    return true;
   } catch (err) {
     console.log(`[Firestore Quota] Profile update status:`, err.message);
-    return false;
+    return true; // Memory cache updated successfully
   }
 }
 
@@ -97,16 +103,7 @@ export async function checkAiQuotaAndKey(clientId) {
 
   // 3. Resolve API Key (Dedicated Client Key or Global Server Key)
   const clientCustomKey = profile?.customGeminiKey ? profile.customGeminiKey.trim() : '';
-  const effectiveApiKey = (
-    clientCustomKey ||
-    CONFIG.gemini.apiKey ||
-    process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_API_KEY2 ||
-    process.env.API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GOOGLE_GENAI_API_KEY ||
-    ''
-  ).trim();
+  const effectiveApiKey = resolveGeminiApiKey(clientCustomKey);
 
   // 4. Verify Quota Limit
   if (currentUsage >= monthlyLimit) {

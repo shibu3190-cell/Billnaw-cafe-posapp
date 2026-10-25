@@ -1077,7 +1077,7 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
         }
 
         pendingAiItems = [];
-        pendingAiFallbackNotice = serverData.isFallback ? (serverData.warning || "Gemini Vision API key is unauthenticated. Items parsed via smart fallback below.") : null;
+        pendingAiFallbackNotice = serverData.isFallback ? (serverData.warning || "Menu digitized using Smart Layout Parser.") : null;
 
         if (serverData.categories && Array.isArray(serverData.categories)) {
             serverData.categories.forEach(cat => {
@@ -1202,8 +1202,16 @@ function renderAiPreviewModal() {
 
     let html = '';
     if (pendingAiFallbackNotice) {
-        html += `<div style="background: rgba(230,81,0,0.08); border-left: 4px solid var(--warning); padding: 8px 12px; border-radius: 8px; font-size: 11px; margin-bottom: 8px; color: #b75500; line-height: 1.4;">
-            <strong>Notice:</strong> ${escapeHtml(pendingAiFallbackNotice)}
+        const isError = pendingAiFallbackNotice.includes('could not be') || pendingAiFallbackNotice.includes('failed') || pendingAiFallbackNotice.includes('invalid');
+        const bg = isError ? 'rgba(230,81,0,0.08)' : 'rgba(20,56,50,0.06)';
+        const border = isError ? 'var(--warning)' : 'var(--primary)';
+        const textCol = isError ? '#b75500' : 'var(--primary)';
+        html += `<div style="background: ${bg}; border-left: 4px solid ${border}; padding: 8px 12px; border-radius: 8px; font-size: 11px; margin-bottom: 8px; color: ${textCol}; line-height: 1.4; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span>${escapeHtml(pendingAiFallbackNotice)}</span>
+            </div>
+            <button type="button" onclick="closeAiPreviewModal(); openClientQuotaModal();" style="background: none; border: 1px solid ${border}; color: ${textCol}; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: opacity 0.15s;" title="Configure Gemini AI Key">AI Key</button>
         </div>`;
     }
 

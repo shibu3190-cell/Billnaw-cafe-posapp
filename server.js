@@ -7,7 +7,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { CONFIG } from './server/config.js';
-import { extractMenuFromDocument, generateMenuItemImage, getCuratedFoodPhotoServer, generateMarketingCampaign, isGeminiKeyOperational, clearGeminiCaches } from './server/gemini-service.js';
+import { extractMenuFromDocument, generateMenuItemImage, getCuratedFoodPhotoServer, generateMarketingCampaign, isGeminiKeyOperational, clearGeminiCaches, resolveGeminiApiKey } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
@@ -169,16 +169,7 @@ app.get('/api/gemini/status', async (req, res) => {
       }
     }
 
-    const resolvedApiKey = (
-      keyCheck?.apiKey ||
-      CONFIG.gemini.apiKey ||
-      process.env.GEMINI_API_KEY ||
-      process.env.GEMINI_API_KEY2 ||
-      process.env.API_KEY ||
-      process.env.GOOGLE_API_KEY ||
-      process.env.GOOGLE_GENAI_API_KEY ||
-      ''
-    ).trim();
+    const resolvedApiKey = resolveGeminiApiKey(keyCheck?.apiKey);
 
     const hasKey = Boolean(resolvedApiKey && resolvedApiKey.length > 5);
     const operational = hasKey ? await isGeminiKeyOperational(resolvedApiKey) : false;
@@ -216,16 +207,7 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
       }
     }
 
-    const resolvedApiKey = (
-      keyCheck?.apiKey ||
-      CONFIG.gemini.apiKey ||
-      process.env.GEMINI_API_KEY ||
-      process.env.GEMINI_API_KEY2 ||
-      process.env.API_KEY ||
-      process.env.GOOGLE_API_KEY ||
-      process.env.GOOGLE_GENAI_API_KEY ||
-      ''
-    ).trim();
+    const resolvedApiKey = resolveGeminiApiKey(keyCheck?.apiKey);
 
     let isOperationalKey = false;
     if (base64Data && resolvedApiKey) {
@@ -257,11 +239,9 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
     // 2. Fallback parser (Extracts text lines or populates editable category starter)
     const fallbackData = parseMenuFromText(extractedText || '');
 
-    let warningMessage = 'Menu imported via smart layout parser.';
-    if (!resolvedApiKey) {
-      warningMessage = 'Menu imported via smart layout parser. To enable Google Gemini AI Vision OCR, enter a verified Gemini API Key in Settings > AI Quota & Key.';
-    } else if (!isOperationalKey) {
-      warningMessage = 'Menu imported via smart layout parser. Note: The configured Gemini API Key could not be authenticated with Google AI. Please check the key in Settings > AI Quota & Key or Settings > Secrets.';
+    let warningMessage = 'Menu digitized using Smart Layout Parser.';
+    if (resolvedApiKey && !isOperationalKey) {
+      warningMessage = 'Menu digitized using Smart Layout Parser. (Configured Gemini Key could not be verified; check your key in Settings > AI Quota & Key).';
     }
 
     return res.json({
