@@ -498,8 +498,9 @@ export function verifyOtp(email, otp, shopName) {
     };
   }
 
-  // Compare OTP
-  if (record.otp !== cleanOtp) {
+  // Compare OTP using constant-time comparison to prevent timing attacks
+  const isMatch = cleanOtp.length === record.otp.length && crypto.timingSafeEqual(Buffer.from(cleanOtp), Buffer.from(record.otp));
+  if (!isMatch) {
     const attemptsRemaining = Math.max(0, OTP_MAX_ATTEMPTS - record.attempts);
     if (attemptsRemaining === 0) {
       otpStore.delete(normalizedEmail);
@@ -741,7 +742,9 @@ export function loginWithPassword({ email, password }) {
   }
 
   const computedHash = hashPassword(password, user.salt);
-  if (computedHash !== user.passwordHash) {
+  const hashBuf = Buffer.from(computedHash, 'hex');
+  const userHashBuf = Buffer.from(user.passwordHash, 'hex');
+  if (hashBuf.length !== userHashBuf.length || !crypto.timingSafeEqual(hashBuf, userHashBuf)) {
     return { status: 401, data: { success: false, error: 'Invalid credentials' } };
   }
 

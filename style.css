@@ -3416,6 +3416,8 @@ body.printing { background: #fff !important; }
 
 /* Semantic Close Button (strictly distinct from .modal-close-btn) */
 .shop-auth-close-btn {
+    display: none !important;
+    pointer-events: none !important;
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.15);
     color: #E2E8F0;
@@ -3424,7 +3426,6 @@ body.printing { background: #fff !important; }
     width: 32px;
     height: 32px;
     border-radius: 10px;
-    display: inline-flex;
     align-items: center;
     justify-content: center;
     transition: all 0.15s ease;

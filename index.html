@@ -43,7 +43,7 @@
                         <p class="shop-auth-brand-sub">Cloud Store Management & Fast Billing</p>
                     </div>
                 </div>
-                <button type="button" class="shop-auth-close-btn" onclick="closeShopAuthModal(true)" aria-label="Close" style="background: rgba(255,255,255,0.12); border: none; cursor: pointer; color: #FAF7F4; width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="Close & Continue to POS">
+                <button type="button" id="shopAuthCloseBtn" class="shop-auth-close-btn" onclick="closeShopAuthModal(false)" aria-label="Close" style="display: none !important; pointer-events: none; background: rgba(255,255,255,0.12); border: none; cursor: pointer; color: #FAF7F4; width: 30px; height: 30px; border-radius: 8px; align-items: center; justify-content: center;" title="Close">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
             </div>
@@ -5140,10 +5140,21 @@
             let otpCountdownInterval = null;
             let otpRemainingSeconds = 60;
 
-            function openShopAuthModal() {
+            function openShopAuthModal(isReLogin = false) {
                 const modal = document.getElementById('shopAuthModal');
+                const isExplicitLogin = isReLogin || (window.location.search && window.location.search.includes('auth=login'));
                 if (modal) {
+                    if (isExplicitLogin) {
+                        modal.dataset.relogin = 'true';
+                    }
                     modal.style.display = 'flex';
+                    const closeBtn = document.getElementById('shopAuthCloseBtn') || modal.querySelector('.shop-auth-close-btn');
+                    if (closeBtn) {
+                        // Strict security: Top right cross button is completely removed for re-login and unauthenticated access
+                        closeBtn.style.display = 'none';
+                        closeBtn.style.setProperty('display', 'none', 'important');
+                        closeBtn.disabled = true;
+                    }
                     const emailInput = document.getElementById('shopAuthEmail');
                     if (emailInput && !emailInput.value) {
                         setTimeout(() => emailInput.focus(), 60);
@@ -5155,15 +5166,24 @@
             function closeShopAuthModal(force = false) {
                 const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
                 const authMode = localStorage.getItem('billnaw_auth_mode');
-                const isExplicitLogin = window.location.search && window.location.search.includes('auth=login');
-                if (!force && !activeToken && authMode !== 'demo' && isExplicitLogin) {
+                const modal = document.getElementById('shopAuthModal');
+                const isExplicitLogin = (window.location.search && window.location.search.includes('auth=login')) || (modal && modal.dataset.relogin === 'true');
+                if (!activeToken && isExplicitLogin) {
                     if (typeof showToast === 'function') {
                         showToast("Please log in or sign up to access your POS terminal.");
                     }
                     return false;
                 }
-                const modal = document.getElementById('shopAuthModal');
-                if (modal) modal.style.display = 'none';
+                if (!force && !activeToken && authMode !== 'demo') {
+                    if (typeof showToast === 'function') {
+                        showToast("Please log in or sign up to access your POS terminal.");
+                    }
+                    return false;
+                }
+                if (modal) {
+                    modal.style.display = 'none';
+                    delete modal.dataset.relogin;
+                }
                 if (isExplicitLogin) {
                     try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
                 }
@@ -6354,7 +6374,7 @@
                     updateShopAuthUI();
                     if (window.location.search && window.location.search.includes('auth=login')) {
                         setTimeout(() => {
-                            if (typeof openShopAuthModal === 'function') openShopAuthModal();
+                            if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
                             try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
                         }, 120);
                     }
@@ -6364,7 +6384,7 @@
                 updateShopAuthUI();
                 if (window.location.search && window.location.search.includes('auth=login')) {
                     setTimeout(() => {
-                        if (typeof openShopAuthModal === 'function') openShopAuthModal();
+                        if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
                         try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
                     }, 120);
                 }

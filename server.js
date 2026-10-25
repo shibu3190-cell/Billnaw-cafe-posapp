@@ -44,6 +44,35 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Security Headers Middleware
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// Firewall / Information Disclosure Protection Middleware
+// Strictly forbid direct static access to server code, database files, test scratch, and secrets
+app.use((req, res, next) => {
+  const p = req.path.toLowerCase();
+  if (
+    p.startsWith('/server') ||
+    p.startsWith('/data') ||
+    p.startsWith('/scratch') ||
+    p.startsWith('/node_modules') ||
+    p.startsWith('/.') ||
+    p.includes('auth_store') ||
+    p.includes('.env') ||
+    p.includes('.git') ||
+    p.includes('package.json')
+  ) {
+    return res.status(403).json({ error: 'Access forbidden: Protected system resource' });
+  }
+  next();
+});
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 

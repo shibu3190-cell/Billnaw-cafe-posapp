@@ -288,7 +288,7 @@ async function initApp() {
                 const isActivationShowing = actOverlay && actOverlay.style.display !== 'none';
                 const isLoginShowing = logOverlay && logOverlay.style.display !== 'none';
                 if (!isActivationShowing && !isLoginShowing) {
-                    openShopAuthModal();
+                    openShopAuthModal(true);
                     if (hasAuthLoginParam) {
                         try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
                     }
