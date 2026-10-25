@@ -213,3 +213,31 @@ node scratch/test_all_tabs_visual.cjs
 5. **No Raw Unicode Emojis**: Always use inline SVGs with standard 24x24 viewBox.
 6. **CSS Breakpoint Integrity**: Maintain clean boundaries between mobile (< 640px), tablet (641px - 1080px), and desktop (> 1080px). Always check that `.menu-grid` remains strictly 2 columns on mobile and 4 columns on desktop.
 7. **No Cheating or Dummy Facades**: All implementations must be genuine, working, and validated through real headless/browser or unit assertions.
+
+---
+
+## 8. 🍽️ Menu Catalog: 3-Dot Action Dropdown & Mobile Readability
+
+### Problem Solved
+On mobile screens ($\le 640\text{px}$), `.clean-item-card` previously rendered 3 inline buttons (`Adjust Stock`, Edit pencil, Delete trash) inside `.clean-item-right`, taking $\approx 175\text{px}$ of horizontal space. This compressed the dish title row (`.clean-item-name`) to $< 60\text{px}$, forcing dish names to truncate awkwardly into 4-letter prefixes with ellipses (e.g., "Samo...", "Tea", "Chick...", "Masa...").
+
+### Architecture Implementation
+1. **3-Dot Action Trigger (`.clean-item-more-btn`)**:
+   - Replaced the 3 inline buttons on `.clean-item-card` with an accessible 3-dot trigger button (`.action-dropdown-btn.clean-item-more-btn`) with vector SVG ellipsis.
+   - Sized for mobile ergonomics ($36\times 36\text{px}$, $\ge 44\times 44\text{px}$ touch envelope).
+2. **Elevated Floating Dropdown (`.action-dropdown-menu`)**:
+   - Positioned absolutely (`top: calc(100% + 4px); right: 0; z-index: 1050; min-width: 155px;`).
+   - `.clean-item-card.dropdown-open` receives elevated `z-index: 60` to ensure no overlap by subsequent cards.
+   - Contains strictly 3 functional options with inline Lucide vector SVGs:
+     - 📦 **Adjust Stock** (`openQuickAdjustStockModal(item.id)`)
+     - ✏️ **Edit Item** (`editMenuItem(item.id)`)
+     - 🗑️ **Delete Item** (`deleteMenuItem(item.id)` with `.danger` styling)
+3. **Event Management**:
+   - `toggleMenuItemDropdown(event, itemId)` cleanly toggles individual item dropdowns while closing any other open menus.
+   - `closeAllMenuActionDropdowns()` closes all open menu dropdowns and strips `.dropdown-open` from parent cards.
+   - Global document click listener dismisses dropdowns when tapping outside.
+4. **Empirical Verification (`scratch/test_menu_3dot_dropdown.cjs`)**:
+   - Verified in headless Chrome at 375×667 viewport: all dish names render with full width ("Chicken Curry" at $104.9\text{px}$, "Masala Coke" at $93.8\text{px}$, "Samosa" at $59.5\text{px}$) with zero truncation.
+   - Verified 3-dot click opens dropdown, click outside dismisses, and clicking "Adjust Stock" launches `#quickAdjustStockModal`.
+   - Verified 100% test pass rate across all suites and exact 26 SVG modal close buttons invariant.
+
