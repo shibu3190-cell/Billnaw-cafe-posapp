@@ -15,7 +15,7 @@ export function clearGeminiCaches() {
 
 export function resolveGeminiApiKey(customKey = null) {
   const custom = (customKey || '').trim();
-  if (custom && custom.length > 15 && !custom.startsWith('AQ.')) {
+  if (custom && custom.length > 15) {
     return custom;
   }
   const defaultKey = (
@@ -27,7 +27,7 @@ export function resolveGeminiApiKey(customKey = null) {
     process.env.GOOGLE_GENAI_API_KEY ||
     ''
   ).trim();
-  return (defaultKey && !defaultKey.startsWith('AQ.') && defaultKey.length > 15) ? defaultKey : '';
+  return (defaultKey && defaultKey.length > 15) ? defaultKey : '';
 }
 
 export function getGeminiClient(customKey = null) {
@@ -56,7 +56,7 @@ export function getGeminiClient(customKey = null) {
  */
 export async function isGeminiKeyOperational(apiKey = null) {
   const key = resolveGeminiApiKey(apiKey);
-  if (!key || key.length < 15 || key.startsWith('AQ.')) return false;
+  if (!key || key.length < 15) return false;
 
   const cached = keyVerificationCache.get(key);
   if (cached) {
@@ -70,9 +70,9 @@ export async function isGeminiKeyOperational(apiKey = null) {
 
   const testModels = [
     CONFIG.gemini.model,
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash'
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-flash-latest'
   ].filter(Boolean);
   for (const model of testModels) {
     try {
@@ -159,9 +159,9 @@ Output the final result ONLY as a valid JSON object adhering strictly to this sc
 
   const candidateModels = [...new Set([
     CONFIG.gemini.model,
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash'
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest'
   ].filter(Boolean))];
   
   let response = null;
@@ -663,30 +663,119 @@ export function getDishVariationCountServer(name, category = '') {
       return bestEntry.urls.length;
     }
   }
-  return 4;
+  return 10;
+}
+
+const dishOnlineImageCache = new Map();
+
+/**
+ * Searches online authentic food photographs via Wikimedia Commons / public culinary imagery
+ * Returns real food photos matching the dish name and category for accurate visual rendering.
+ */
+export async function searchDishFoodImages(dishName, category = '', variationIndex = 0) {
+  const cleanName = String(dishName || '').trim();
+  if (!cleanName) return null;
+  const vIdx = Math.max(0, parseInt(variationIndex, 10) || 0);
+
+  const cacheKey = cleanName.toLowerCase();
+  if (!dishOnlineImageCache.has(cacheKey)) {
+    try {
+      const q = encodeURIComponent(`${cleanName} food`);
+      const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${q}&gsrnamespace=6&prop=imageinfo&iiprop=url&format=json&origin=*`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'BillnawPOS/1.0 (contact@billnawcafe.com)' } });
+      if (res.ok) {
+        const data = await res.json();
+        const pages = Object.values(data.query?.pages || {});
+        const images = pages
+          .map(p => p.imageinfo?.[0]?.url)
+          .filter(u => {
+            if (!u) return false;
+            const cleanUrl = u.split('?')[0].toLowerCase();
+            const isImage = cleanUrl.endsWith('.jpg') || cleanUrl.endsWith('.jpeg') || cleanUrl.endsWith('.png') || cleanUrl.endsWith('.webp');
+            const isJunk = cleanUrl.includes('.svg') || cleanUrl.includes('logo') || cleanUrl.includes('flag') || cleanUrl.includes('icon') || cleanUrl.includes('map') || cleanUrl.includes('diagram') || cleanUrl.includes('seal') || cleanUrl.includes('symbol');
+            return isImage && !isJunk;
+          });
+
+        if (images.length > 0) {
+          dishOnlineImageCache.set(cacheKey, images);
+        }
+      }
+
+      // If no images found, try alternative search without "food"
+      if (!dishOnlineImageCache.has(cacheKey) || dishOnlineImageCache.get(cacheKey).length === 0) {
+        const q2 = encodeURIComponent(cleanName);
+        const url2 = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${q2}&gsrnamespace=6&prop=imageinfo&iiprop=url&format=json&origin=*`;
+        const res2 = await fetch(url2, { headers: { 'User-Agent': 'BillnawPOS/1.0 (contact@billnawcafe.com)' } });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          const pages2 = Object.values(data2.query?.pages || {});
+          const images2 = pages2
+            .map(p => p.imageinfo?.[0]?.url)
+            .filter(u => {
+              if (!u) return false;
+              const cleanUrl = u.split('?')[0].toLowerCase();
+              const isImage = cleanUrl.endsWith('.jpg') || cleanUrl.endsWith('.jpeg') || cleanUrl.endsWith('.png') || cleanUrl.endsWith('.webp');
+              const isJunk = cleanUrl.includes('.svg') || cleanUrl.includes('logo') || cleanUrl.includes('flag') || cleanUrl.includes('icon') || cleanUrl.includes('map');
+              return isImage && !isJunk;
+            });
+          if (images2.length > 0) {
+            dishOnlineImageCache.set(cacheKey, images2);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Dish Search] Online image search warning:', e.message);
+    }
+  }
+
+  const cachedList = dishOnlineImageCache.get(cacheKey);
+  if (cachedList && cachedList.length > 0) {
+    return cachedList[vIdx % cachedList.length];
+  }
+
+  return null;
 }
 
 /**
- * Generates gourmet photo for menu item with Curated Culinary Library as authoritative engine
- * and Gemini AI as a smart culinary visual classifier for unknown/custom dishes.
+ * Generates gourmet photo for menu item with Curated Culinary Library as authoritative engine,
+ * Real Online Food Photography Search for custom dishes and rich variations,
+ * and Gemini AI as a smart culinary visual classifier.
  */
 export async function generateMenuItemImage({ prompt, itemName, category = '', variation = 0, apiKey }) {
   const vIdx = Math.max(0, parseInt(variation, 10) || 0);
   const cleanItemName = (itemName || prompt || '').trim();
   const cleanCat = (category || '').trim();
 
-  // 1. Primary Engine: Direct Curated Culinary Library Match with Variation Cycling
-  const directCuratedUrl = getCuratedFoodPhotoServer(cleanItemName, cleanCat, vIdx, false);
-  if (directCuratedUrl) {
-    return {
-      imageUrl: directCuratedUrl,
-      source: 'curated-culinary',
-      variation: vIdx,
-      success: true
-    };
+  // 1. Primary Engine: Direct Curated Culinary Library Match (for first 4 variations of known core dishes)
+  if (vIdx < 4) {
+    const directCuratedUrl = getCuratedFoodPhotoServer(cleanItemName, cleanCat, vIdx, false);
+    if (directCuratedUrl) {
+      return {
+        imageUrl: directCuratedUrl,
+        source: 'curated-culinary',
+        variation: vIdx,
+        success: true
+      };
+    }
   }
 
-  // 2. Secondary Engine: Gemini AI Smart Culinary Visual Classifier for unknown/custom dishes
+  // 2. Real Dish Online Image Search Engine (Google / Wikimedia authentic food photography)
+  // Ensures authentic, real food photos for any dish rather than assuming or guessing
+  try {
+    const onlineImageUrl = await searchDishFoodImages(cleanItemName, cleanCat, vIdx);
+    if (onlineImageUrl) {
+      return {
+        imageUrl: onlineImageUrl,
+        source: 'online-food-search',
+        variation: vIdx,
+        success: true
+      };
+    }
+  } catch (searchErr) {
+    console.warn('[Image Generator] Online search fallback:', searchErr.message);
+  }
+
+  // 3. Secondary Engine: Gemini AI Smart Culinary Visual Classifier for unknown/custom dishes
   const effectiveKey = resolveGeminiApiKey(apiKey);
   if (effectiveKey && await isGeminiKeyOperational(effectiveKey)) {
     try {
@@ -699,9 +788,9 @@ Output strictly a JSON object: {"matched_type": "one_item_from_list"}`;
 
       const candidateModels = [
         CONFIG.gemini.model,
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-flash'
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
+        'gemini-flash-latest'
       ].filter(Boolean);
 
       for (const modelName of candidateModels) {
@@ -743,7 +832,7 @@ Output strictly a JSON object: {"matched_type": "one_item_from_list"}`;
     }
   }
 
-  // 3. Fallback to category pool or default appetizing cafe visual
+  // 4. Fallback to category pool or default appetizing cafe visual
   const fallbackUrl = getCuratedFoodPhotoServer(cleanItemName, cleanCat || 'Snacks', vIdx, true);
   if (fallbackUrl) {
     return {
@@ -790,8 +879,9 @@ Guidelines:
       const ai = getGeminiClient(effectiveKey);
       const candidateModels = [
         CONFIG.gemini.model,
-        'gemini-2.5-flash',
-        'gemini-1.5-flash'
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
+        'gemini-flash-latest'
       ].filter(Boolean);
 
       for (const modelName of candidateModels) {

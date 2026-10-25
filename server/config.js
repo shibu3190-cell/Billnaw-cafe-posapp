@@ -25,10 +25,10 @@ export const CONFIG = {
         process.env.GOOGLE_GENAI_API_KEY ||
         ''
       ).trim();
-      return (k && !k.startsWith('AQ.') && k.length > 15) ? k : '';
+      return (k && k.length > 15) ? k : '';
     },
-    model: 'gemini-2.5-flash',
-    imageModel: 'gemini-2.5-flash'
+    model: 'gemini-3.5-flash',
+    imageModel: 'gemini-3.5-flash'
   },
   sheets: {
     // Default fallback webhook url kept strictly server-side

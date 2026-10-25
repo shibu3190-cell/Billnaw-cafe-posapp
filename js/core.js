@@ -874,49 +874,7 @@ function getGourmetFoodImage(name, category = '', variationIndex = 0) {
 window.getGourmetFoodImage = getGourmetFoodImage;
 
 function getDishVariationCount(name, category = '') {
-    if (!name && !category) return 4;
-    const cleanName = String(name || '').toLowerCase().trim();
-    const cleanCat = String(category || '').toLowerCase().trim();
-
-    if (cleanName) {
-        for (const entry of CULINARY_PHOTO_MAP) {
-            for (const k of entry.keys) {
-                if (cleanName === k) {
-                    return (entry.urls && entry.urls.length > 0) ? entry.urls.length : 4;
-                }
-            }
-        }
-        let bestEntry = null;
-        let highestScore = 0;
-        for (const entry of CULINARY_PHOTO_MAP) {
-            let entryScore = 0;
-            for (const k of entry.keys) {
-                const escapedK = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const wordBoundaryRegex = new RegExp('(?:^|\\s|_|-|\\/)' + escapedK + '(?:$|\\s|_|-|\\/)', 'i');
-                if (wordBoundaryRegex.test(cleanName)) {
-                    const matchScore = k.length * 10;
-                    if (matchScore > entryScore) entryScore = matchScore;
-                }
-            }
-            if (entryScore > 0) {
-                if (cleanCat && (
-                    (entry.theme && cleanCat.includes(entry.theme)) ||
-                    (entry.badge && cleanCat.includes(entry.badge.toLowerCase())) ||
-                    entry.keys.some(k => cleanCat.includes(k) || k.includes(cleanCat))
-                )) {
-                    entryScore += 50;
-                }
-                if (entryScore > highestScore) {
-                    highestScore = entryScore;
-                    bestEntry = entry;
-                }
-            }
-        }
-        if (bestEntry && bestEntry.urls && bestEntry.urls.length > 0) {
-            return bestEntry.urls.length;
-        }
-    }
-    return 4;
+    return 10;
 }
 window.getDishVariationCount = getDishVariationCount;
 

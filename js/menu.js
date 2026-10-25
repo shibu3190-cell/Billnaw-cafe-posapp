@@ -626,8 +626,8 @@ async function fetchImageAsBase64(promptText, itemName = '', variationIndex = 0,
     const vIdx = Math.max(0, parseInt(variationIndex, 10) || 0);
     const cat = String(category || '').trim();
 
-    // 1. Direct Curated Gourmet Culinary Photo Library matching locally
-    if (typeof getCuratedFoodPhoto === 'function') {
+    // 1. Direct Curated Gourmet Culinary Photo Library matching locally (for first 4 variations)
+    if (vIdx < 4 && typeof getCuratedFoodPhoto === 'function') {
         const directCurated = getCuratedFoodPhoto(dishName, cat, vIdx, false);
         if (directCurated) return directCurated;
     }
