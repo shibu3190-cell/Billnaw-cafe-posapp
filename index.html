@@ -469,7 +469,7 @@
                                 <span>Platform</span>
                             </button>
                         </div>
-                        <input type="file" id="newItemImageInput" accept="image/*" style="display: none;" onchange="handleItemImageUpload(event)">
+                        <input type="file" id="newItemImageInput" accept="image/*" style="display: none;" onclick="this.value=null;" onchange="handleItemImageUpload(event)">
                     </div>
                 </div>
             </div>
@@ -649,7 +649,7 @@
                     </button>
                 </div>
             </div>
-            <input type="file" id="aiItemImageUploader" accept="image/*" style="display: none;" onchange="handleAiItemImageSelected(event)">
+            <input type="file" id="aiItemImageUploader" accept="image/*" style="display: none;" onclick="this.value=null;" onchange="handleAiItemImageSelected(event)">
             <datalist id="knownCategoriesList"></datalist>
         </div>
     </div>
@@ -1973,11 +1973,11 @@
             </div>
 
             <!-- Hidden file inputs required for audits and upload logic -->
-            <input type="file" id="aiMenuFileInput" accept="image/*" style="display: none;" onchange="processAIMenu(event)">
-            <input type="file" id="aiMenuCameraInput" accept="image/*" capture="environment" style="display: none;" onchange="processAIMenu(event)">
-            <input type="file" id="aiMenuPdfInput" accept="application/pdf" style="display: none;" onchange="processAIMenu(event)">
-            <input type="file" id="aiMenuUploader" accept="image/*, application/pdf" style="display: none;" onchange="processAIMenu(event)">
-            <input type="file" id="aiMenuExcelInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelMenuUpload(event)">
+            <input type="file" id="aiMenuFileInput" accept="image/*" style="display: none;" onclick="this.value=null;" onchange="processAIMenu(event)">
+            <input type="file" id="aiMenuCameraInput" accept="image/*" capture="environment" style="display: none;" onclick="this.value=null;" onchange="processAIMenu(event)">
+            <input type="file" id="aiMenuPdfInput" accept="application/pdf" style="display: none;" onclick="this.value=null;" onchange="processAIMenu(event)">
+            <input type="file" id="aiMenuUploader" accept="image/*, application/pdf" style="display: none;" onclick="this.value=null;" onchange="processAIMenu(event)">
+            <input type="file" id="aiMenuExcelInput" accept=".xlsx, .xls, .csv" style="display: none;" onclick="this.value=null;" onchange="handleExcelMenuUpload(event)">
 
             <div style="padding: 16px 0; display: flex; flex-direction: column; gap: 10px;">
                 <!-- Option 1: Live Camera Snap -->

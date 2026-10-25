@@ -43,6 +43,33 @@ function hashString(str) {
 }
 window.hashString = hashString;
 
+// ⚡ Lazy Script Loader for On-Demand CDNs (Chart.js, PDF.js, etc.)
+const _loadedLazyScripts = new Map();
+function loadLazyScript(src) {
+    if (!src) return Promise.reject(new Error('Script source is required'));
+    if (_loadedLazyScripts.has(src)) return _loadedLazyScripts.get(src);
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+        const p = Promise.resolve();
+        _loadedLazyScripts.set(src, p);
+        return p;
+    }
+    const promise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = (err) => {
+            _loadedLazyScripts.delete(src);
+            reject(err);
+        };
+        document.head.appendChild(script);
+    });
+    _loadedLazyScripts.set(src, promise);
+    return promise;
+}
+window.loadLazyScript = loadLazyScript;
+
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
     return String(str)
@@ -280,7 +307,7 @@ const CULINARY_PHOTO_MAP = [
     },
     // 8. Hot Coffee, Cappuccino & Espresso
     {
-        keys: ['coffee', 'cappuccino', 'espresso', 'latte', 'hot coffee', 'americano', 'filter coffee', 'mocha', 'flat white', 'macchiato'],
+        keys: ['coffee', 'cappuccino', 'espresso', 'latte', 'hot coffee', 'americano', 'filter coffee', 'mocha', 'flat white', 'macchiato', 'hot chocolate', 'hot cocoa'],
         url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
         urls: [
             'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
@@ -325,7 +352,7 @@ const CULINARY_PHOTO_MAP = [
     },
     // 11. French Fries & Finger Snacks
     {
-        keys: ['fries', 'french fries', 'peri peri fries', 'potato wedges', 'nuggets', 'cheese balls', 'finger chips', 'crispy corn', 'potatoes'],
+        keys: ['fries', 'french fries', 'peri peri fries', 'potato wedges', 'nuggets', 'cheese balls', 'finger chips', 'crispy corn', 'potatoes', 'nachos', 'loaded nachos'],
         url: 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=600&auto=format&fit=crop&q=80',
         urls: [
             'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=600&auto=format&fit=crop&q=80',

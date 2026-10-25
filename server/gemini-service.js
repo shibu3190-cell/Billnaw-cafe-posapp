@@ -15,12 +15,11 @@ export function clearGeminiCaches() {
 
 export function resolveGeminiApiKey(customKey = null) {
   const custom = (customKey || '').trim();
-  if (custom && custom.length > 5) {
+  if (custom && custom.length > 15 && !custom.startsWith('AQ.')) {
     return custom;
   }
   const defaultKey = (
     CONFIG.gemini.apiKey ||
-    'AQ.Ab8RN6KT_02Vdemz8fVUS8n-m5fsz3APL5LBNvca0vgr6quTlA' ||
     process.env.GEMINI_API_KEY ||
     process.env.GEMINI_API_KEY2 ||
     process.env.API_KEY ||
@@ -28,12 +27,12 @@ export function resolveGeminiApiKey(customKey = null) {
     process.env.GOOGLE_GENAI_API_KEY ||
     ''
   ).trim();
-  return defaultKey;
+  return (defaultKey && !defaultKey.startsWith('AQ.') && defaultKey.length > 15) ? defaultKey : '';
 }
 
 export function getGeminiClient(customKey = null) {
   const key = resolveGeminiApiKey(customKey);
-  if (!key || key.length < 5) {
+  if (!key || key.length < 15) {
     throw new Error('NO_API_KEY: A valid Gemini API key was not found. Please provide a key in backend Secrets (GEMINI_API_KEY) or in Settings.');
   }
 
@@ -57,13 +56,13 @@ export function getGeminiClient(customKey = null) {
  */
 export async function isGeminiKeyOperational(apiKey = null) {
   const key = resolveGeminiApiKey(apiKey);
-  if (!key || key.length < 5) return false;
+  if (!key || key.length < 15 || key.startsWith('AQ.')) return false;
 
   const cached = keyVerificationCache.get(key);
   if (cached) {
     const age = Date.now() - cached.timestamp;
-    // Cache successful verification for 5 mins; failed checks only for 5 seconds to catch updated secrets immediately
-    const maxAge = cached.operational ? 300000 : 5000;
+    // Cache successful verification for 5 mins; failed checks for 30s
+    const maxAge = cached.operational ? 300000 : 30000;
     if (age < maxAge) {
       return cached.operational;
     }
@@ -71,10 +70,9 @@ export async function isGeminiKeyOperational(apiKey = null) {
 
   const testModels = [
     CONFIG.gemini.model,
-    'gemini-3.7-flash',
-    'gemini-flash-latest',
-    'gemini-3.1-flash-lite',
-    'gemini-3.6-flash'
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash'
   ].filter(Boolean);
   for (const model of testModels) {
     try {
@@ -161,10 +159,9 @@ Output the final result ONLY as a valid JSON object adhering strictly to this sc
 
   const candidateModels = [...new Set([
     CONFIG.gemini.model,
-    'gemini-3.7-flash',
-    'gemini-flash-latest',
-    'gemini-3.1-flash-lite',
-    'gemini-3.6-flash'
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash'
   ].filter(Boolean))];
   
   let response = null;
@@ -301,7 +298,7 @@ const SERVER_CULINARY_PHOTO_MAP = [
   },
   // 8. Hot Coffee, Cappuccino & Espresso
   {
-    keys: ['coffee', 'cappuccino', 'espresso', 'latte', 'hot coffee', 'americano', 'filter coffee', 'mocha', 'flat white', 'macchiato'],
+    keys: ['coffee', 'cappuccino', 'espresso', 'latte', 'hot coffee', 'americano', 'filter coffee', 'mocha', 'flat white', 'macchiato', 'hot chocolate', 'hot cocoa'],
     url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
     urls: [
       'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
@@ -334,7 +331,7 @@ const SERVER_CULINARY_PHOTO_MAP = [
   },
   // 11. French Fries & Finger Snacks
   {
-    keys: ['fries', 'french fries', 'peri peri fries', 'potato wedges', 'nuggets', 'cheese balls', 'finger chips', 'crispy corn', 'potatoes'],
+    keys: ['fries', 'french fries', 'peri peri fries', 'potato wedges', 'nuggets', 'cheese balls', 'finger chips', 'crispy corn', 'potatoes', 'nachos', 'loaded nachos'],
     url: 'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=600&auto=format&fit=crop&q=80',
     urls: [
       'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=600&auto=format&fit=crop&q=80',
@@ -703,9 +700,8 @@ Output strictly a JSON object: {"matched_type": "one_item_from_list"}`;
       const candidateModels = [
         CONFIG.gemini.model,
         'gemini-2.5-flash',
-        'gemini-1.5-flash',
-        'gemini-3.7-flash',
-        'gemini-flash-latest'
+        'gemini-2.0-flash',
+        'gemini-1.5-flash'
       ].filter(Boolean);
 
       for (const modelName of candidateModels) {

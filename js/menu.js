@@ -458,7 +458,7 @@ async function handleExcelMenuUpload(event) {
                         stockQty: 50,
                         trackStock: true,
                         gstRate: 5,
-                        image: generateFallbackImage(name)
+                        image: (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name, category) : generateFallbackImage(name, category))
                     };
                     menuItems.push(newItem);
                     if (!menuCategories.includes(category)) {
@@ -474,7 +474,11 @@ async function handleExcelMenuUpload(event) {
             persistCategories();
             renderCategoryDropdown();
             renderCategoryFilters();
+            renderMenuCatalogUI();
             renderMenuUI();
+            if (window.culinaryInventory && typeof window.culinaryInventory.syncMenuItems === 'function') {
+                window.culinaryInventory.syncMenuItems();
+            }
             showToast(`Successfully imported ${importedCount} items from spreadsheet!`, 'success');
         } else {
             showToast('No valid dish rows found in spreadsheet. Ensure Column 1 = Name, Column 2 = Price.', 'warning');
@@ -704,11 +708,13 @@ async function generateAIImage() {
         preview.style.opacity = "0.85";
     }
     currentItemImageBase64 = instantPreview;
+    window.currentItemImageBase64 = currentItemImageBase64;
     
     try {
         const promptStr = `Gourmet culinary photography of ${name}, variation ${varNum}, elegant plating, cafe presentation, natural studio lighting, 4k quality`;
         const generatedImg = await fetchImageAsBase64(promptStr, name, currentVarIndex, cat);
         currentItemImageBase64 = generatedImg || instantPreview;
+        window.currentItemImageBase64 = currentItemImageBase64;
         if (preview && currentItemImageBase64) {
             preview.src = currentItemImageBase64; 
             preview.style.opacity = "1";
@@ -721,6 +727,7 @@ async function generateAIImage() {
     } catch (error) { 
         console.warn("AI Image note:", error.message); 
         currentItemImageBase64 = instantPreview;
+        window.currentItemImageBase64 = currentItemImageBase64;
         if (preview && instantPreview) {
             preview.src = instantPreview;
             preview.style.opacity = "1";
@@ -803,20 +810,25 @@ function addMenuItem() {
 
     if(name && !isNaN(price)) { 
         let savedDishId = null;
+        const previewEl = document.getElementById('newItemImagePreview');
+        const previewSrc = (previewEl && previewEl.src && !previewEl.src.includes('placeholder') && !previewEl.src.startsWith('data:image/svg+xml')) ? previewEl.src : '';
+        const dishPhoto = currentItemImageBase64 || previewSrc || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name, category) : generateFallbackImage(name, category));
+
         if (editingMenuItemId) {
             const index = menuItems.findIndex(i => i.id === editingMenuItemId);
             if(index > -1) { 
-                menuItems[index] = { id: editingMenuItemId, name, category, price, gstRate, trackStock, stockQty, image: currentItemImageBase64 }; 
+                menuItems[index] = { id: editingMenuItemId, name, category, price, gstRate, trackStock, stockQty, image: dishPhoto }; 
                 savedDishId = editingMenuItemId;
             }
             showToast("✅ Item updated!");
         } else { 
             savedDishId = Date.now();
-            menuItems.push({ id: savedDishId, name, category, price, gstRate, trackStock, stockQty, image: currentItemImageBase64 }); 
+            menuItems.push({ id: savedDishId, name, category, price, gstRate, trackStock, stockQty, image: dishPhoto }); 
             showToast("✅ Item added!"); 
         }
         persistMenu(); 
         renderMenuUI(); 
+        if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
         if (window.culinaryInventory) {
             if (typeof window.culinaryInventory.registerNewDishRecipe === 'function') {
                 window.culinaryInventory.registerNewDishRecipe({ id: savedDishId, name, category, price });
@@ -1014,6 +1026,7 @@ async function processAIMenu(event) {
         showToast("⚠️ " + error.message); 
     } finally { 
         if (btn) { btn.disabled = false; btn.innerText = "Upload Menu Photo"; }
+        if (scanOverlay) scanOverlay.style.display = 'none';
         const uploader = document.getElementById('aiMenuFileInput') || document.getElementById('aiMenuUploader');
         if (uploader) uploader.value = ''; 
     }
@@ -1425,7 +1438,11 @@ async function confirmAiImport() {
         renderCategoryDropdown();
         renderCategoryFilters();
         renderCategoryListUI();
+        renderMenuCatalogUI();
         renderMenuUI();
+        if (window.culinaryInventory && typeof window.culinaryInventory.syncMenuItems === 'function') {
+            window.culinaryInventory.syncMenuItems();
+        }
 
         closeAiPreviewModal();
         showToast(`✅ Successfully imported ${itemsAdded} items to menu!`);

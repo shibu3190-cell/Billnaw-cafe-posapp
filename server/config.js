@@ -17,8 +17,7 @@ export const CONFIG = {
   gemini: {
     // Check all standard Gemini API key environment variables dynamically
     get apiKey() {
-      return (
-        'AQ.Ab8RN6KT_02Vdemz8fVUS8n-m5fsz3APL5LBNvca0vgr6quTlA' ||
+      const k = (
         process.env.GEMINI_API_KEY ||
         process.env.GEMINI_API_KEY2 ||
         process.env.API_KEY ||
@@ -26,9 +25,10 @@ export const CONFIG = {
         process.env.GOOGLE_GENAI_API_KEY ||
         ''
       ).trim();
+      return (k && !k.startsWith('AQ.') && k.length > 15) ? k : '';
     },
-    model: 'gemini-3.7-flash',
-    imageModel: 'gemini-3.1-flash-lite-image'
+    model: 'gemini-2.5-flash',
+    imageModel: 'gemini-2.5-flash'
   },
   sheets: {
     // Default fallback webhook url kept strictly server-side
