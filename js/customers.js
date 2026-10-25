@@ -652,11 +652,12 @@ let activeAiSegmentKey = 'all';
 let waPreviewCustomerIndex = 0;
 let waCampaignVariables = {
     discount: 15,
+    discountCode: 'BILLNAW15',
     minOrder: 199,
     validTill: 'This Sunday'
 };
 
-let waCampaignTemplateText = "Hello {customer_name}! ☕✨ Greetings from billnaw. As a valued patron, enjoy an exclusive {discount_pct}% OFF on all orders above ₹{min_order}. Show this message at the counter to redeem. Valid till {valid_till}! See you soon!";
+let waCampaignTemplateText = "Hello {customer_name}! ☕✨ Greetings from billnaw. As a valued patron, enjoy an exclusive {discount_pct}% OFF using promo code {discount_code} on all orders above ₹{min_order}. Show this message at the counter to redeem. Valid till {valid_till}! See you soon!";
 
 // Ensure initial sample customer base exists if database is brand new
 function seedInitialCustomersIfEmpty() {
@@ -736,7 +737,7 @@ let waTierCollapsedState = {
 const WA_TIER_CONFIG = [
     {
         key: 'vip',
-        title: 'VIP Diners',
+        title: 'VIP & Gold Diners',
         icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>',
         filter: c => (c.totalVisits || 0) >= 10
     },
@@ -748,7 +749,7 @@ const WA_TIER_CONFIG = [
     },
     {
         key: 'occasional',
-        title: 'New & Occasional Diners',
+        title: 'Occasional Diners',
         icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>',
         filter: c => (c.totalVisits || 0) < 3
     }
@@ -805,6 +806,126 @@ function toggleWaPreviewExpand(expand) {
 }
 window.toggleWaPreviewExpand = toggleWaPreviewExpand;
 
+// ============================================================
+// 🧭 PROGRESSIVE 3-STEP WHATSAPP MARKETING WIZARD ENGINE (M3)
+// ============================================================
+let currentMarketingWizardStep = 1;
+
+function setMarketingWizardStep(stepNumber) {
+    const step = parseInt(stepNumber, 10) || 1;
+    if (step < 1 || step > 3) return;
+    currentMarketingWizardStep = step;
+
+    // Warning if advancing past step 1 with zero selected diners
+    if (step > 1 && waBulkSelectedCustomerIds.size === 0) {
+        if (typeof showToast === 'function') {
+            showToast("⚠️ Please select at least one customer first.");
+        }
+    }
+
+    // Toggle wizard step panels & indicators
+    for (let i = 1; i <= 3; i++) {
+        const stepPanel = document.getElementById(`waWizardStep-${i}`);
+        const indicator = document.getElementById(`waStepIndicator-${i}`);
+        if (stepPanel) {
+            if (i === step) {
+                stepPanel.style.display = 'block';
+                stepPanel.classList.add('active');
+            } else {
+                stepPanel.style.display = 'none';
+                stepPanel.classList.remove('active');
+            }
+        }
+        if (indicator) {
+            indicator.classList.remove('active', 'completed', 'upcoming');
+            if (i === step) {
+                indicator.classList.add('active');
+                indicator.setAttribute('aria-selected', 'true');
+            } else if (i < step) {
+                indicator.classList.add('completed');
+                indicator.setAttribute('aria-selected', 'false');
+            } else {
+                indicator.classList.add('upcoming');
+                indicator.setAttribute('aria-selected', 'false');
+            }
+        }
+    }
+
+    // Update dynamic review elements when entering step 3
+    if (step === 3) {
+        updateWaAudienceSummary();
+        renderBroadcastQueueUI();
+        updateWaSimulatedBubble();
+    } else if (step === 2) {
+        const txtArea = document.getElementById('waCampaignEditableText');
+        if (txtArea && !txtArea.value) {
+            txtArea.value = waCampaignTemplateText;
+        }
+        updateWaSimulatedBubble();
+    }
+
+    updateWaStepperCounters();
+}
+window.setMarketingWizardStep = setMarketingWizardStep;
+window.setCampaignWizardStep = setMarketingWizardStep;
+window.goToMarketingStep = setMarketingWizardStep;
+
+// Variable Chips Inserter (M3)
+function insertCampaignVariable(tag) {
+    const txtArea = document.getElementById('waCampaignEditableText');
+    if (!txtArea) return;
+    const start = txtArea.selectionStart ?? txtArea.value.length;
+    const end = txtArea.selectionEnd ?? txtArea.value.length;
+    const current = txtArea.value;
+    txtArea.value = current.substring(0, start) + tag + current.substring(end);
+    txtArea.selectionStart = txtArea.selectionEnd = start + tag.length;
+    txtArea.focus();
+    onCustomCampaignTextEdited();
+}
+window.insertCampaignVariable = insertCampaignVariable;
+window.insertVariableChip = insertCampaignVariable;
+
+// Audience Summary Breakdown Calculator (M3)
+function updateWaAudienceSummary() {
+    const totalRecipients = waBulkSelectedCustomerIds.size;
+    const totalEl = document.getElementById('waSummaryTotalRecipients');
+    if (totalEl) totalEl.innerText = totalRecipients;
+
+    const vipConf = WA_TIER_CONFIG.find(t => t.key === 'vip');
+    const regConf = WA_TIER_CONFIG.find(t => t.key === 'regular');
+    const occConf = WA_TIER_CONFIG.find(t => t.key === 'occasional');
+
+    const vipCount = vipConf ? customersList.filter(vipConf.filter).filter(c => waBulkSelectedCustomerIds.has(c.id)).length : 0;
+    const regCount = regConf ? customersList.filter(regConf.filter).filter(c => waBulkSelectedCustomerIds.has(c.id)).length : 0;
+    const occCount = occConf ? customersList.filter(occConf.filter).filter(c => waBulkSelectedCustomerIds.has(c.id)).length : 0;
+
+    const elVip = document.getElementById('waSummaryVipCount');
+    if (elVip) elVip.innerText = vipCount;
+    const elReg = document.getElementById('waSummaryRegularCount');
+    if (elReg) elReg.innerText = regCount;
+    const elOcc = document.getElementById('waSummaryOccasionalCount');
+    if (elOcc) elOcc.innerText = occCount;
+}
+window.updateWaAudienceSummary = updateWaAudienceSummary;
+
+function updateWaStepperCounters() {
+    const count = waBulkSelectedCustomerIds.size;
+    const total = customersList.length;
+
+    const step1Badge = document.getElementById('waStep1SelectedCount');
+    if (step1Badge) step1Badge.innerText = count;
+
+    const bulkBadge = document.getElementById('bulkSelectedCount');
+    if (bulkBadge) bulkBadge.innerText = count;
+
+    const dockCount = document.getElementById('waDockSelectedCount');
+    if (dockCount) dockCount.innerText = count;
+
+    const waBadge = document.getElementById('waSelectedCountBadge');
+    if (waBadge) waBadge.innerText = `${count} of ${total} selected`;
+}
+window.updateWaStepperCounters = updateWaStepperCounters;
+
 function initAiWhatsAppHub() {
     seedInitialCustomersIfEmpty();
     // Pre-select all customers by default
@@ -836,6 +957,7 @@ function initAiWhatsAppHub() {
         }, { passive: true });
     }
 
+    setMarketingWizardStep(currentMarketingWizardStep || 1);
     renderAiWhatsAppHubUI();
 }
 window.initAiWhatsAppHub = initAiWhatsAppHub;
@@ -849,14 +971,8 @@ function renderAiWhatsAppHubUI() {
     const selectedCount = waBulkSelectedCustomerIds.size;
 
     // Update count labels across header, dock, and badges
-    const bulkBadge = document.getElementById('bulkSelectedCount');
-    if (bulkBadge) bulkBadge.innerText = selectedCount;
-
-    const dockCount = document.getElementById('waDockSelectedCount');
-    if (dockCount) dockCount.innerText = selectedCount;
-
-    const waBadge = document.getElementById('waSelectedCountBadge');
-    if (waBadge) waBadge.innerText = `${selectedCount} of ${totalCount} selected`;
+    updateWaStepperCounters();
+    updateWaAudienceSummary();
 
     // Master select-all checkbox (sync both possible IDs)
     const masterCb = document.getElementById('selectAllCustomersCheckbox');
@@ -1095,6 +1211,7 @@ function updateWaSimulatedBubble() {
     const bubbleEl = document.getElementById('waSimulatedChatBubble') || document.getElementById('waSimulatedPersonalizedMessage');
     const previewNameEl = document.getElementById('waPreviewCustomerName') || document.getElementById('waSimulatedTargetName');
     const pillBadge = document.getElementById('waPillTargetBadge');
+    const step2PreviewEl = document.getElementById('waStep2LivePreview');
 
     const selectedList = getSelectedCustomerList();
     let currentDinerName = "Valued Customer";
@@ -1109,11 +1226,13 @@ function updateWaSimulatedBubble() {
 
     let text = waCampaignTemplateText || document.getElementById('waCampaignEditableText')?.value || '';
     text = text.replace(/\{customer_name\}/g, currentDinerName)
+               .replace(/\{discount_code\}/g, waCampaignVariables.discountCode || 'BILLNAW15')
                .replace(/\{discount_pct\}/g, waCampaignVariables.discount)
                .replace(/\{min_order\}/g, waCampaignVariables.minOrder)
                .replace(/\{valid_till\}/g, waCampaignVariables.validTill);
 
     if (bubbleEl) bubbleEl.innerText = text;
+    if (step2PreviewEl) step2PreviewEl.innerText = text;
 }
 window.updateWaSimulatedBubble = updateWaSimulatedBubble;
 
@@ -1130,8 +1249,11 @@ function renderBroadcastQueueUI() {
     if (!queueContainer) return;
 
     const selectedList = getSelectedCustomerList();
+    const countEl = document.getElementById('queueCount');
+    if (countEl) countEl.innerText = selectedList.length;
+
     if (selectedList.length === 0) {
-        queueContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">No diners selected yet. Select customers on the left to review the dispatch queue.</div>`;
+        queueContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">No diners selected yet. Select customers in Step 1 to review the dispatch queue.</div>`;
         return;
     }
 
@@ -1140,6 +1262,7 @@ function renderBroadcastQueueUI() {
         const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
         const personalizedMsg = (waCampaignTemplateText || '')
             .replace(/\{customer_name\}/g, cust.name)
+            .replace(/\{discount_code\}/g, waCampaignVariables.discountCode || 'BILLNAW15')
             .replace(/\{discount_pct\}/g, waCampaignVariables.discount)
             .replace(/\{min_order\}/g, waCampaignVariables.minOrder)
             .replace(/\{valid_till\}/g, waCampaignVariables.validTill);
@@ -1153,8 +1276,9 @@ function renderBroadcastQueueUI() {
                     <div style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${cust.phone || 'No phone'}</div>
                 </div>
                 <div style="display: flex; gap: 6px; align-items: center;">
-                    <a href="${waLink}" target="_blank" class="btn btn-success" style="padding: 5px 12px; font-size: 11px; font-weight: 700; border-radius: 12px; text-decoration: none;" title="Open WhatsApp Chat">
-                        💬 Send WhatsApp
+                    <a href="${waLink}" target="_blank" class="btn btn-success" style="padding: 5px 12px; font-size: 11px; font-weight: 700; border-radius: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;" title="Open WhatsApp Chat">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                        <span>Send WhatsApp</span>
                     </a>
                 </div>
             </div>
@@ -1173,6 +1297,7 @@ function triggerBulkWhatsAppBroadcast() {
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const personalizedMsg = (waCampaignTemplateText || '')
         .replace(/\{customer_name\}/g, firstCust.name)
+        .replace(/\{discount_code\}/g, waCampaignVariables.discountCode || 'BILLNAW15')
         .replace(/\{discount_pct\}/g, waCampaignVariables.discount)
         .replace(/\{min_order\}/g, waCampaignVariables.minOrder)
         .replace(/\{valid_till\}/g, waCampaignVariables.validTill);
@@ -1929,12 +2054,20 @@ window.customers = {
     openHistoryModal: openCustomerHistoryModal,
     startOrder: startOrderForCustomer,
     switchTab: switchCustomerHubTab,
+    setMarketingWizardStep,
+    setCampaignWizardStep: setMarketingWizardStep,
+    insertCampaignVariable,
+    insertVariableChip: insertCampaignVariable,
     marketing: {
         init: initAiWhatsAppHub,
         render: renderAiWhatsAppHubUI,
         toggleTier: toggleWaTierAccordion,
         selectTier: toggleSelectTierCustomers,
-        toggleExpand: toggleWaPreviewExpand
+        toggleExpand: toggleWaPreviewExpand,
+        setMarketingWizardStep,
+        setCampaignWizardStep: setMarketingWizardStep,
+        insertCampaignVariable,
+        insertVariableChip: insertCampaignVariable
     },
     khata: {
         init: initKhataEngine,
@@ -1955,6 +2088,7 @@ window.customers = {
         deleteEntry: deleteKhataEntry
     }
 };
+window.customersHub = window.customers;
 
 // Initialize on script load
 if (document.readyState === 'loading') {

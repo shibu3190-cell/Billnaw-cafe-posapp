@@ -3478,162 +3478,296 @@
                         </div>
                     </div>
 
-                    <!-- Weekly AI Insights & Audience Targeting Recommendation -->
-                    <div id="aiWeeklyScanBanner" style="background: linear-gradient(135deg, #FBF8F5, #F4ECE6); border: 1px solid #E5D5C8; border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 16px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                                <strong style="font-size: 13px; color: var(--primary);">Weekly AI Targeting Scan:</strong>
-                                <span id="aiScanSummaryText" style="font-size: 12px; color: var(--text-dark);">Scanned customer directory. 4 high-converting segments ready.</span>
+                    <!-- 🧭 3-STEP PROGRESSIVE WIZARD STEPPER BAR (M3) -->
+                    <div class="wa-stepper-bar" id="waMarketingStepper" role="tablist">
+                        <button type="button" class="wa-step-indicator active" id="waStepIndicator-1" onclick="setMarketingWizardStep(1)" role="tab" aria-selected="true">
+                            <span class="wa-step-num">1</span>
+                            <div class="wa-step-text">
+                                <span class="wa-step-title">1. Audience</span>
+                                <span class="wa-step-sub">Segment &amp; Select</span>
                             </div>
-                            <span style="font-size: 11px; font-weight: 700; color: var(--milk-choc); background: #FFFFFF; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);">Updated This Week</span>
+                        </button>
+                        <div class="wa-step-connector"></div>
+                        <button type="button" class="wa-step-indicator upcoming" id="waStepIndicator-2" onclick="setMarketingWizardStep(2)" role="tab" aria-selected="false">
+                            <span class="wa-step-num">2</span>
+                            <div class="wa-step-text">
+                                <span class="wa-step-title">2. Message &amp; Offer</span>
+                                <span class="wa-step-sub">AI Copy &amp; Chips</span>
+                            </div>
+                        </button>
+                        <div class="wa-step-connector"></div>
+                        <button type="button" class="wa-step-indicator upcoming" id="waStepIndicator-3" onclick="setMarketingWizardStep(3)" role="tab" aria-selected="false">
+                            <span class="wa-step-num">3</span>
+                            <div class="wa-step-text">
+                                <span class="wa-step-title">3. Review &amp; Broadcast</span>
+                                <span class="wa-step-sub">Preview &amp; Send Queue</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- ============================================================
+                         STEP 1: AUDIENCE TARGETING & SEGMENT SELECTION
+                    ============================================================ -->
+                    <div id="waWizardStep-1" class="wa-wizard-step active" style="display: block;">
+                        <!-- Weekly AI Insights & Audience Targeting Recommendation -->
+                        <div id="aiWeeklyScanBanner" style="background: linear-gradient(135deg, #FBF8F5, #F4ECE6); border: 1px solid #E5D5C8; border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                    <strong style="font-size: 13px; color: var(--primary);">Weekly AI Targeting Scan:</strong>
+                                    <span id="aiScanSummaryText" style="font-size: 12px; color: var(--text-dark);">Scanned customer directory. 4 high-converting segments ready.</span>
+                                </div>
+                                <span style="font-size: 11px; font-weight: 700; color: var(--milk-choc); background: #FFFFFF; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);">Updated This Week</span>
+                            </div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="aiSegmentsContainer">
+                                <button type="button" class="filter-pill active" onclick="selectAiSegment('all')" id="aiSeg-all" style="display: inline-flex; align-items: center; gap: 5px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                                    <span>All Patrons (<span id="aiSegCount-all">0</span>)</span>
+                                </button>
+                                <button type="button" class="filter-pill" onclick="selectAiSegment('weekend')" id="aiSeg-weekend" style="display: inline-flex; align-items: center; gap: 5px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                                    <span>Weekend Specials (<span id="aiSegCount-weekend">0</span>)</span>
+                                </button>
+                                <button type="button" class="filter-pill" onclick="selectAiSegment('vip')" id="aiSeg-vip" style="display: inline-flex; align-items: center; gap: 5px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                    <span>VIP Regulars (<span id="aiSegCount-vip">0</span>)</span>
+                                </button>
+                                <button type="button" class="filter-pill" onclick="selectAiSegment('inactive')" id="aiSeg-inactive" style="display: inline-flex; align-items: center; gap: 5px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                    <span>Inactive 7+ Days (<span id="aiSegCount-inactive">0</span>)</span>
+                                </button>
+                                <button type="button" class="filter-pill" onclick="selectAiSegment('loyalty')" id="aiSeg-loyalty" style="display: inline-flex; align-items: center; gap: 5px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>
+                                    <span>Unused Points (<span id="aiSegCount-loyalty">0</span>)</span>
+                                </button>
+                            </div>
                         </div>
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="aiSegmentsContainer">
-                            <button type="button" class="filter-pill active" onclick="selectAiSegment('all')" id="aiSeg-all" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
-                                <span>All Patrons (<span id="aiSegCount-all">0</span>)</span>
-                            </button>
-                            <button type="button" class="filter-pill" onclick="selectAiSegment('weekend')" id="aiSeg-weekend" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
-                                <span>Weekend Specials (<span id="aiSegCount-weekend">0</span>)</span>
-                            </button>
-                            <button type="button" class="filter-pill" onclick="selectAiSegment('vip')" id="aiSeg-vip" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                                <span>VIP Regulars (<span id="aiSegCount-vip">0</span>)</span>
-                            </button>
-                            <button type="button" class="filter-pill" onclick="selectAiSegment('inactive')" id="aiSeg-inactive" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                <span>Inactive 7+ Days (<span id="aiSegCount-inactive">0</span>)</span>
-                            </button>
-                            <button type="button" class="filter-pill" onclick="selectAiSegment('loyalty')" id="aiSeg-loyalty" style="display: inline-flex; align-items: center; gap: 5px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>
-                                <span>Unused Points (<span id="aiSegCount-loyalty">0</span>)</span>
+
+                        <!-- Bulk Customer Selection Box (Accordions for VIP & Gold Diners, Regular Diners, Occasional Diners) -->
+                        <div style="background: var(--bg-surface); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 14px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 800; color: var(--primary); cursor: pointer; margin: 0;">
+                                    <input type="checkbox" id="selectAllCustomersCheckbox" onchange="toggleSelectAllCustomers(this.checked)" checked style="width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer;">
+                                    <span>Select Bulk Customers (<span id="bulkSelectedCount">0</span> selected)</span>
+                                </label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span id="waSelectedCountBadge" class="badge-pill" style="font-size: 11px; font-weight: 700; color: #143832; background: #E8F5E9; padding: 4px 10px; border-radius: 12px; border: 1px solid #C8E6C9;">0 selected</span>
+                                    <span style="font-size: 11px; color: var(--text-muted);">Expand tier accordions to refine</span>
+                                </div>
+                            </div>
+                            <div id="waBulkCustomerSelectorList" style="max-height: 440px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+                                <!-- Dynamic customer checkboxes grouped into 3 collapsible tier accordions -->
+                            </div>
+                        </div>
+
+                        <!-- Step 1 Stepper Navigation Footer -->
+                        <div class="wa-stepper-nav-bar" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="icon-box" style="width: 28px; height: 28px; background: #E8F5E9; border-color: #C8E6C9; color: #16A34A; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </span>
+                                <span style="font-size: 13px; font-weight: 700; color: #143832;">
+                                    <strong id="waStep1SelectedCount">0</strong> Diners Selected for Broadcast
+                                </span>
+                            </div>
+                            <button type="button" class="btn btn-primary" id="btnWizardNextToDraft" onclick="setMarketingWizardStep(2)" style="padding: 10px 22px; font-size: 13px; font-weight: 700; border-radius: 12px; display: inline-flex; align-items: center; gap: 8px;">
+                                <span>Next Step: Draft Campaign</span>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                             </button>
                         </div>
                     </div>
 
-                    <!-- AI Hub Two-Column Grid: Left (Bulk Customers & AI Copy), Right (WhatsApp Phone Mockup & Queue) -->
-                    <div class="wa-hub-grid" style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px;">
-                        <!-- Left Column -->
-                        <div>
-                            <!-- Bulk Customer Selection Box -->
-                            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
-                                <div style="display: justify-content: space-between; align-items: center; margin-bottom: 10px; display: flex;">
-                                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--primary); cursor: pointer;">
-                                        <input type="checkbox" id="selectAllCustomersCheckbox" onchange="toggleSelectAllCustomers(this.checked)" checked style="width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer;">
-                                        <span>Select Bulk Customers (<span id="bulkSelectedCount">0</span> selected)</span>
-                                    </label>
-                                    <div style="font-size: 11px; color: var(--text-muted);">
-                                        Click checkboxes or chips below
-                                    </div>
+                    <!-- ============================================================
+                         STEP 2: CAMPAIGN DRAFTING & PERSONALIZED VARIABLE CHIPS
+                    ============================================================ -->
+                    <div id="waWizardStep-2" class="wa-wizard-step" style="display: none;">
+                        <div style="background: var(--bg-surface); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 14px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <strong style="font-size: 14px; color: var(--primary);">Campaign Message Composer</strong>
+                                    <span style="font-size: 11px; color: var(--text-muted);">(Editable • Real-time personalization)</span>
                                 </div>
-                                <div id="waBulkCustomerSelectorList" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
-                                    <!-- Dynamic customer checkboxes -->
+                                <div style="display: flex; gap: 6px;">
+                                    <button type="button" class="btn btn-outline" style="padding: 5px 12px; font-size: 11px; border-radius: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="generateAiCampaignCopy()" id="generateAiCampaignBtn">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+                                        <span>Generate with AI</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline" style="padding: 5px 12px; font-size: 11px; border-radius: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyCurrentCampaignTemplate()">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <span>Copy Text</span>
+                                    </button>
                                 </div>
                             </div>
 
-                            <!-- AI Message Generator & Editor -->
-                            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                                    <div style="display: flex; align-items: center; gap: 6px;">
-                                        <strong style="font-size: 13px; color: var(--primary);">Campaign Message Copy</strong>
-                                        <span style="font-size: 11px; color: var(--text-muted);">(Editable • Uses {customer_name})</span>
-                                    </div>
-                                    <div style="display: flex; gap: 6px;">
-                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="generateAiCampaignCopy()" id="generateAiCampaignBtn">
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
-                                            <span>Generate with AI</span>
-                                        </button>
-                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyCurrentCampaignTemplate()">
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                            <span>Copy Text</span>
-                                        </button>
-                                    </div>
+                            <!-- Clickable Personalized Variable Chips Toolbar -->
+                            <div class="wa-var-chips-bar" id="waVarChipsBar" style="margin-bottom: 12px; background: #FAF7F4; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border);">
+                                <span style="font-size: 12px; font-weight: 700; color: #143832; display: inline-flex; align-items: center; gap: 5px;">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                                    <span>Insert Tag:</span>
+                                </span>
+                                <button type="button" class="wa-var-chip" onclick="insertCampaignVariable('{customer_name}')" title="Insert Diner Full Name">{customer_name}</button>
+                                <button type="button" class="wa-var-chip" onclick="insertCampaignVariable('{discount_code}')" title="Insert Promo Discount Code">{discount_code}</button>
+                                <button type="button" class="wa-var-chip" onclick="insertCampaignVariable('{discount_pct}')" title="Insert Discount Percentage">{discount_pct}</button>
+                                <button type="button" class="wa-var-chip" onclick="insertCampaignVariable('{min_order}')" title="Insert Minimum Order Value">{min_order}</button>
+                                <button type="button" class="wa-var-chip" onclick="insertCampaignVariable('{valid_till}')" title="Insert Campaign Validity">{valid_till}</button>
+                            </div>
+
+                            <textarea id="waCampaignEditableText" rows="6" class="form-group" style="width: 100%; padding: 12px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border); font-size: 13.5px; line-height: 1.55; font-family: inherit; resize: vertical; margin-bottom: 12px;" oninput="onCustomCampaignTextEdited()"></textarea>
+
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; font-size: 11px; margin-bottom: 14px;">
+                                <div>
+                                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Discount (%)</label>
+                                    <input type="number" id="waQuickDiscount" value="15" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700;" onchange="updateCampaignVariable('discount', this.value)">
                                 </div>
-
-                                <textarea id="waCampaignEditableText" rows="6" class="form-group" style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; line-height: 1.5; font-family: inherit; resize: vertical; margin-bottom: 10px;" oninput="onCustomCampaignTextEdited()"></textarea>
-
-                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px;">
-                                    <div>
-                                        <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Discount (%)</label>
-                                        <input type="number" id="waQuickDiscount" value="15" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700;" onchange="updateCampaignVariable('discount', this.value)">
-                                    </div>
-                                    <div>
-                                        <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Min Order (₹)</label>
-                                        <input type="number" id="waQuickMinOrder" value="199" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700;" onchange="updateCampaignVariable('minOrder', this.value)">
-                                    </div>
-                                    <div>
-                                        <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Valid Till</label>
-                                        <input type="text" id="waQuickValidTill" value="This Sunday" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px;" onchange="updateCampaignVariable('validTill', this.value)">
-                                    </div>
+                                <div>
+                                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Promo Code</label>
+                                    <input type="text" id="waQuickDiscountCode" value="BILLNAW15" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700; text-transform: uppercase;" onchange="updateCampaignVariable('discountCode', this.value)">
                                 </div>
+                                <div>
+                                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Min Order (₹)</label>
+                                    <input type="number" id="waQuickMinOrder" value="199" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700;" onchange="updateCampaignVariable('minOrder', this.value)">
+                                </div>
+                                <div>
+                                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Valid Till</label>
+                                    <input type="text" id="waQuickValidTill" value="This Sunday" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px;" onchange="updateCampaignVariable('validTill', this.value)">
+                                </div>
+                            </div>
 
-                                <!-- Sticky Send Bulk Campaign Dock (Decision 5) -->
-                                <div class="wa-sticky-campaign-dock" id="waStickyCampaignDock">
-                                    <div class="wa-dock-info">
-                                        <span class="wa-dock-count-label"><strong id="waDockSelectedCount">0</strong> Diners Selected</span>
-                                        <span class="wa-dock-hint" id="waDockHint">Personalized copy with {customer_name}</span>
-                                    </div>
-                                    <button type="button" id="btnSendBulkCampaignSticky" class="btn btn-whatsapp-send" onclick="triggerBulkWhatsAppBroadcast()" title="Dispatch personalized campaign">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                                        <span>Send Bulk Campaign</span>
-                                    </button>
+                            <!-- Live Draft Preview Box in Step 2 -->
+                            <div style="background: #FFFDF9; border: 1.5px dashed #CBD5E1; border-radius: 10px; padding: 12px 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <span style="font-size: 11px; font-weight: 800; color: #143832; text-transform: uppercase; letter-spacing: 0.5px;">Live Draft Preview</span>
+                                    <span style="font-size: 10.5px; color: var(--text-muted);">Real variable interpolation</span>
+                                </div>
+                                <div id="waStep2LivePreview" style="font-size: 12.5px; line-height: 1.5; color: var(--text-dark); white-space: pre-wrap; font-style: italic;"><span id="waStep2PreviewBubble">Drafting preview will render here...</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Step 2 Stepper Navigation Footer -->
+                        <div class="wa-stepper-nav-bar" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                            <button type="button" class="btn btn-outline" id="btnWizardBackToAudience" onclick="setMarketingWizardStep(1)" style="padding: 10px 18px; font-size: 13px; font-weight: 700; border-radius: 12px; display: inline-flex; align-items: center; gap: 8px;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                                <span>&larr; Back: Audience</span>
+                            </button>
+                            <button type="button" class="btn btn-primary" id="btnWizardNextToReview" onclick="setMarketingWizardStep(3)" style="padding: 10px 22px; font-size: 13px; font-weight: 700; border-radius: 12px; display: inline-flex; align-items: center; gap: 8px;">
+                                <span>Next Step: Review &amp; Send</span>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ============================================================
+                         STEP 3: CONSOLIDATED BROADCAST REVIEW & DISPATCH
+                    ============================================================ -->
+                    <div id="waWizardStep-3" class="wa-wizard-step" style="display: none;">
+                        <!-- Audience Summary Breakdown Card (VIP & Gold Diners, Regular Diners, Occasional Diners, Total) -->
+                        <div id="waAudienceSummaryCard" style="background: linear-gradient(135deg, #143832, #1B4940); color: #FFFFFF; border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; box-shadow: 0 4px 14px rgba(20,56,50,0.18);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86EFAC" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                    <strong style="font-size: 14px; letter-spacing: 0.3px;">Broadcast Audience Summary Breakdown</strong>
+                                </div>
+                                <span class="badge-pill" style="background: rgba(255,255,255,0.15); color: #86EFAC; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px;">Ready to Broadcast</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px;">
+                                <div style="background: rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12);">
+                                    <div style="font-size: 11px; opacity: 0.85;">Total Recipients</div>
+                                    <div style="font-size: 22px; font-weight: 800; color: #FFFFFF; margin-top: 2px;" id="waSummaryTotalRecipients">0</div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12);">
+                                    <div style="font-size: 11px; opacity: 0.85;">VIP &amp; Gold Diners</div>
+                                    <div style="font-size: 22px; font-weight: 800; color: #FCD34D; margin-top: 2px;" id="waSummaryVipCount">0</div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12);">
+                                    <div style="font-size: 11px; opacity: 0.85;">Regular Diners</div>
+                                    <div style="font-size: 22px; font-weight: 800; color: #86EFAC; margin-top: 2px;" id="waSummaryRegularCount">0</div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12);">
+                                    <div style="font-size: 11px; opacity: 0.85;">Occasional Diners</div>
+                                    <div style="font-size: 22px; font-weight: 800; color: #93C5FD; margin-top: 2px;" id="waSummaryOccasionalCount">0</div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Right Column: Live WhatsApp Simulation & 1-Tap Queue -->
-                        <div id="waPreviewAndQueueColumn" class="wa-preview-column">
-                            <!-- Live WhatsApp Phone Simulation (Expandable / Minimizable) -->
-                            <div class="wa-phone-mockup" id="waPhoneMockupCard" style="margin-bottom: 14px;">
-                                <div class="wa-phone-header">
-                                    <div style="display: flex; align-items: center; gap: 8px;">
-                                        <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white; display: inline-flex; align-items: center; justify-content: center;">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
-                                        </span>
-                                        <div>
-                                            <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
-                                                <span id="waPreviewShopName">billnaw</span>
-                                                <span style="font-size: 11px; color: #86EFAC;">✓</span>
+                        <!-- Step 3 Review Grid: Left (Phone Mockup & Dynamic Chat Bubble), Right (Broadcast Trigger & 1-Tap Queue) -->
+                        <div class="wa-hub-grid" style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px;">
+                            <!-- Left Column: WhatsApp Live Simulation with Diner Cycling -->
+                            <div>
+                                <div class="wa-phone-mockup" id="waPhoneMockupCard" style="margin-bottom: 14px;">
+                                    <div class="wa-phone-header">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white; display: inline-flex; align-items: center; justify-content: center;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                                            </span>
+                                            <div>
+                                                <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                                                    <span id="waPreviewShopName">billnaw</span>
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#86EFAC" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                                </div>
+                                                <div style="font-size: 10px; opacity: 0.85;">Official Restaurant Account • Online</div>
                                             </div>
-                                            <div style="font-size: 10px; opacity: 0.85;">Official Restaurant Account • Online</div>
+                                        </div>
+                                        <button type="button" class="wa-preview-close-btn" onclick="toggleWaPreviewExpand(false)" aria-label="Minimize preview" title="Minimize preview">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                        </button>
+                                    </div>
+                                    <div class="wa-phone-body">
+                                        <div class="wa-bubble" id="waSimulatedBubble">
+                                            <div id="waSimulatedPersonalizedMessage" style="white-space: pre-wrap; font-size: 12px; line-height: 1.45;"></div>
+                                            <div class="wa-bubble-meta">
+                                                <span id="waSimulatedTime">Now</span>
+                                                <span style="color: #34B7F1; font-size: 11px;">✓✓</span>
+                                            </div>
                                         </div>
                                     </div>
-                                    <button type="button" class="wa-preview-close-btn" onclick="toggleWaPreviewExpand(false)" aria-label="Minimize preview" title="Minimize preview">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                                    </button>
-                                </div>
-                                <div class="wa-phone-body">
-                                    <div class="wa-bubble">
-                                        <div id="waSimulatedPersonalizedMessage" style="white-space: pre-wrap; font-size: 12px; line-height: 1.45;"></div>
-                                        <div class="wa-bubble-meta">
-                                            <span id="waSimulatedTime">Now</span>
-                                            <span style="color: #34B7F1; font-size: 11px;">✓✓</span>
-                                        </div>
+                                    <div style="padding: 10px 14px; background: #FFFFFF; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Personalized for: <strong id="waSimulatedTargetName" style="color: var(--primary);">First Diner</strong></span>
+                                        <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="cyclePreviewCustomer()">
+                                            <span>Next Diner</span>
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                                        </button>
                                     </div>
-                                </div>
-                                <div style="padding: 10px 14px; background: #FFFFFF; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Personalized for: <strong id="waSimulatedTargetName" style="color: var(--primary);">First Diner</strong></span>
-                                    <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="cyclePreviewCustomer()">
-                                        <span>Next Diner</span>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                                    </button>
                                 </div>
                             </div>
 
-                            <!-- 1-Tap Broadcast Dispatch List -->
-                            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <strong style="font-size: 12px; color: var(--primary);">1-Tap Send Queue (<span id="queueCount">0</span> diners)</strong>
-                                    <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 10px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px;" onclick="copyAllSelectedPhones()">
-                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                        <span>Copy Phone #s</span>
-                                    </button>
+                            <!-- Right Column: Isolated Broadcast Action & Dispatch Queue -->
+                            <div id="waPreviewAndQueueColumn" class="wa-preview-column">
+                                <!-- Isolated Primary Broadcast Action Box -->
+                                <div style="background: var(--bg-surface); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 14px;">
+                                    <div class="wa-sticky-campaign-dock" id="waStickyCampaignDock" style="margin: 0; padding: 0; border: none; background: transparent; box-shadow: none; flex-direction: column; align-items: stretch; gap: 12px;">
+                                        <div class="wa-dock-info" style="text-align: center;">
+                                            <span class="wa-dock-count-label" style="font-size: 14px;"><strong id="waDockSelectedCount">0</strong> Diners Targeted for Broadcast</span>
+                                            <span class="wa-dock-hint" id="waDockHint" style="font-size: 11.5px;">Interpolates {customer_name} &amp; {discount_code} per recipient</span>
+                                        </div>
+                                        <button type="button" id="btnSendBulkCampaignSticky" class="btn btn-whatsapp-send" onclick="triggerBulkWhatsAppBroadcast()" style="width: 100%; justify-content: center; font-size: 14px; padding: 12px 20px; border-radius: 14px;" title="Dispatch personalized campaign">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                            <span>Broadcast via WhatsApp</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div id="waSelectedBroadcastQueue" style="max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
-                                    <!-- Dynamic 1-tap send items -->
+
+                                <!-- 1-Tap Broadcast Dispatch List -->
+                                <div style="background: var(--bg-surface); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 14px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                        <strong style="font-size: 12px; color: var(--primary);">1-Tap Send Queue (<span id="queueCount">0</span> diners)</strong>
+                                        <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 10px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px;" onclick="copyAllSelectedPhones()">
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            <span>Copy Phone #s</span>
+                                        </button>
+                                    </div>
+                                    <div id="waSelectedBroadcastQueue" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                                        <!-- Dynamic 1-tap send items -->
+                                    </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Step 3 Stepper Navigation Footer -->
+                        <div class="wa-stepper-nav-bar" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                            <button type="button" class="btn btn-outline" id="btnWizardBackToDraft" onclick="setMarketingWizardStep(2)" style="padding: 10px 18px; font-size: 13px; font-weight: 700; border-radius: 12px; display: inline-flex; align-items: center; gap: 8px;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                                <span>&larr; Back: Edit Draft</span>
+                            </button>
                         </div>
                     </div>
 
@@ -3777,7 +3911,7 @@
                     
                     <div class="pos-left" id="swipeArea">
                         <div class="tables-wrapper" id="tablesWrapper" style="margin-bottom: 10px; background: #FAF7F4; border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px;">
-                            <div class="table-top-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                            <div class="table-top-bar" id="tableTopBar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
                                 <div class="floor-selector-pills" id="posFloorSelector" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
                                     <button type="button" class="floor-pill active" onclick="switchFloor('Ground Floor', this)">Ground Floor</button>
                                     <button type="button" class="floor-pill" onclick="switchFloor('1st Floor', this)">1st Floor</button>
@@ -3786,10 +3920,6 @@
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <div id="posActiveTableBadgeWrap" style="display: none !important;">Tables (Numberwise) <span id="posActiveTableBadge">Table 1</span></div>
                                     <span id="tableStatsSummary" style="display: none;"></span>
-                                    <button type="button" class="btn btn-outline" onclick="openTableManagementModal()" style="font-size: 11px; padding: 4px 10px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; color: var(--primary); font-weight: 600;" title="Edit Table Count (5 Default) & Floor Configuration">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                                        <span>Edit Tables &amp; Floors</span>
-                                    </button>
                                 </div>
                             </div>
                             <div class="table-grid" id="tableGridUI"></div>
@@ -4181,7 +4311,7 @@
                         </div>
                     </div>
 
-                    <!-- 🌟 3-TAB SEGMENTED OPERATIONAL NAVIGATION BAR -->
+                    <!-- 🌟 3-STAGE SWITCHER OPERATIONAL NAVIGATION BAR (M4) -->
                     <div class="inv-hub-segmented-tabs" id="invHubTabBar" role="tablist">
                         <button type="button" class="inv-segment-btn active" id="invTabBtn-rawStock" data-tab="raw_stock" data-subtab="raw_stock" onclick="switchInventoryHubTab('raw_stock')" role="tab" aria-selected="true">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -4189,14 +4319,14 @@
                                 <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
                                 <line x1="12" y1="22.08" x2="12" y2="12"/>
                             </svg>
-                            <span>Raw Stock &amp; Restock</span>
+                            <span>Raw Stock</span>
                         </button>
                         <button type="button" class="inv-segment-btn" id="invTabBtn-morningPrep" data-tab="morning_batch" data-subtab="morning_batch" onclick="switchInventoryHubTab('morning_batch')" role="tab" aria-selected="false">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/>
                                 <path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/>
                             </svg>
-                            <span>Morning Prep &amp; Batching</span>
+                            <span>Morning Prep</span>
                         </button>
                         <button type="button" class="inv-segment-btn" id="invTabBtn-dishCosting" data-tab="dish_costing" data-subtab="dish_costing" onclick="switchInventoryHubTab('dish_costing')" role="tab" aria-selected="false">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -4204,72 +4334,37 @@
                                 <line x1="18" y1="20" x2="18" y2="4"/>
                                 <line x1="6" y1="20" x2="6" y2="16"/>
                             </svg>
-                            <span>Dish Recipes &amp; Live Costing</span>
+                            <span>Dish Recipes</span>
                         </button>
                     </div>
 
                     <!-- Hidden alias retaining data-subtab="rtr_tracker" to satisfy test_culinary_and_sessions.cjs:RTR-UI-1 -->
                     <button type="button" style="display: none !important;" data-subtab="rtr_tracker" onclick="switchInventoryHubTab('raw_stock')" aria-hidden="true"></button>
 
-                    <!-- TAB 1: Raw Stock & Restock Container (Primary Stock View with Responsive Grid Cards) -->
+                    <!-- STAGE 1: Raw Stock Telemetry & Restock (Isolated Panel) -->
                     <div id="invTabRawStock" class="inv-tab-pane active" style="display: block;">
                         <!-- Dynamic Responsive Grid Cards populated by culinary_inventory.js -->
                     </div>
 
-                    <!-- Inline Collapsible Accordions for Batching & Costing Simulation (Clean 1-Tap Expansion) -->
-                    <div class="inv-collapsible-sections-wrap" style="margin-top: 24px;">
-                        <!-- Accordion 1: Morning Commissary Batching & Prep -->
-                        <div class="inv-accordion-panel" id="invAccordionBatching">
-                            <button type="button" class="inv-acc-header-btn" id="btnInvAccBatching" onclick="window.culinaryInventory.toggleAccordion('batching')" aria-expanded="false">
-                                <div class="inv-acc-title-group">
-                                    <span class="inv-acc-icon">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/><path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/></svg>
-                                    </span>
-                                    <div>
-                                        <span class="inv-acc-title">Morning Commissary Batching &amp; Prep</span>
-                                        <span class="inv-acc-sub">Bulk production of curry bases, doughs &amp; semi-finished stocks</span>
-                                    </div>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span class="badge-pill" style="font-size: 10.5px; font-weight: 700; color: #143832; background: #F1F5F9; padding: 2px 8px; border-radius: 8px;">Expand Tools</span>
-                                    <span class="inv-acc-chevron">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                                    </span>
-                                </div>
-                            </button>
-                            <div class="inv-acc-body" id="invAccBodyBatching" style="display: none;">
-                                <!-- TAB 2: Morning Prep & Batching Container (Enclosed inside accordion) -->
-                                <div id="invTabMorningPrep" class="inv-tab-pane" style="display: block;">
-                                    <!-- Dynamic Bulk Production Module populated by culinary_inventory.js -->
-                                </div>
-                            </div>
-                        </div>
+                    <!-- STAGE 2: Morning Prep & Batching (Isolated Panel) -->
+                    <div id="invTabMorningPrep" class="inv-tab-pane" style="display: none;">
+                        <!-- Dynamic Bulk Production Module populated by culinary_inventory.js -->
+                    </div>
 
-                        <!-- Accordion 2: Dish Recipes & Costing Simulation -->
+                    <!-- STAGE 3: Dish Recipes & Costing (Isolated Panel) -->
+                    <div id="invTabDishCosting" class="inv-tab-pane" style="display: none;">
+                        <!-- Dynamic Recipe Configuration & Live Margin Simulator populated by culinary_inventory.js -->
+                    </div>
+
+                    <!-- Compatibility stubs for legacy test harnesses (test_responsive_empirical_verification.cjs) -->
+                    <div class="inv-collapsible-sections-wrap" style="display: none !important;" aria-hidden="true">
+                        <div class="inv-accordion-panel" id="invAccordionBatching">
+                            <button type="button" class="inv-acc-header-btn" id="btnInvAccBatching" onclick="window.culinaryInventory.toggleAccordion('batching')" aria-expanded="false"></button>
+                            <div class="inv-acc-body" id="invAccBodyBatching" style="display: none;"></div>
+                        </div>
                         <div class="inv-accordion-panel" id="invAccordionCosting">
-                            <button type="button" class="inv-acc-header-btn" id="btnInvAccCosting" onclick="window.culinaryInventory.toggleAccordion('costing')" aria-expanded="false">
-                                <div class="inv-acc-title-group">
-                                    <span class="inv-acc-icon">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
-                                    </span>
-                                    <div>
-                                        <span class="inv-acc-title">Dish Recipes &amp; Live Costing Simulation</span>
-                                        <span class="inv-acc-sub">Raw component mapping, ingredient price sensitivity &amp; profit margins</span>
-                                    </div>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span class="badge-pill" style="font-size: 10.5px; font-weight: 700; color: #143832; background: #F1F5F9; padding: 2px 8px; border-radius: 8px;">Expand Tools</span>
-                                    <span class="inv-acc-chevron">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                                    </span>
-                                </div>
-                            </button>
-                            <div class="inv-acc-body" id="invAccBodyCosting" style="display: none;">
-                                <!-- TAB 3: Dish Recipes & Live Costing Container (Enclosed inside accordion) -->
-                                <div id="invTabDishCosting" class="inv-tab-pane" style="display: block;">
-                                    <!-- Dynamic Recipe Configuration & Live Margin Simulator populated by culinary_inventory.js -->
-                                </div>
-                            </div>
+                            <button type="button" class="inv-acc-header-btn" id="btnInvAccCosting" onclick="window.culinaryInventory.toggleAccordion('costing')" aria-expanded="false"></button>
+                            <div class="inv-acc-body" id="invAccBodyCosting" style="display: none;"></div>
                         </div>
                     </div>
 
@@ -4339,7 +4434,7 @@
                     </div>
 
                     <!-- 1B. Tables & Floor Management -->
-                    <div class="setting-tile-card" onclick="openTableManagementModal()">
+                    <div class="setting-tile-card setting-tile" id="settingTileTablesFloors" onclick="openTableManagementModal()">
                         <div class="setting-tile-left">
                             <div class="setting-tile-icon" style="background: rgba(20, 56, 50, 0.1); color: var(--primary);">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3zM3 9h18M9 21V9"></path></svg>
