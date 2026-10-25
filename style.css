@@ -5479,5 +5479,904 @@ body.printing { background: #fff !important; }
     padding: 8px 12px;
 }
 
+/* ==========================================================================
+   ✨ PRODUCTION UI/UX UPGRADE: RESPONSIVE ADAPTIVE HEADER & MODERN HUBS (D1 - D5)
+   ========================================================================== */
+
+/* --- Decision 1: Master Responsive Adaptive Header --- */
+.topbar-desktop-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.topbar-adaptive-actions-wrap {
+    display: none !important;
+    position: relative;
+}
+
+.topbar-actions-menu-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 12px;
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    color: #143832;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    box-shadow: var(--shadow-xs);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    padding: 0;
+}
+
+.topbar-actions-menu-btn:hover {
+    border-color: #143832;
+    color: #143832;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+    background: #FAF7F4;
+}
+
+.topbar-actions-menu-btn:active {
+    transform: scale(0.96);
+}
+
+.header-notice-dot {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    width: 8px;
+    height: 8px;
+    background: #EF4444;
+    border-radius: 50%;
+    border: 1.5px solid #FFFFFF;
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3);
+}
+
+.header-actions-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 260px;
+    background: #FFFFFF;
+    border-radius: 16px;
+    border: 1.5px solid #E2E8F0;
+    box-shadow: 0 12px 36px rgba(20, 56, 50, 0.16), 0 4px 12px rgba(0, 0, 0, 0.06);
+    padding: 10px;
+    z-index: 99999;
+    animation: fadeUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header-actions-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 6px 8px 6px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #64748B;
+    border-bottom: 1px solid #F1F5F9;
+    margin-bottom: 6px;
+}
+
+.hdr-close-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #94A3B8;
+    padding: 4px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 28px;
+    transition: color 0.15s ease;
+}
+
+.hdr-close-btn:hover {
+    color: #0F172A;
+    background: #F1F5F9;
+}
+
+.header-actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.header-action-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #1E293B;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+    box-sizing: border-box;
+}
+
+.header-action-item:hover {
+    background: #FAF7F4;
+    color: #143832;
+}
+
+.header-action-item:active {
+    transform: scale(0.98);
+}
+
+.hdr-act-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+}
+
+.hdr-act-icon.expense-icon { background: #FEF2F2; border-color: #FEE2E2; }
+.hdr-act-icon.bell-icon { background: #FFFBEB; border-color: #FEF3C7; }
+.hdr-act-icon.staff-icon { background: #EFF6FF; border-color: #DBEAFE; }
+.hdr-act-icon.settings-icon { background: #F0FDF4; border-color: #DCFCE7; }
+.hdr-act-icon.session-icon { background: #F5F3FF; border-color: #EDE9FE; }
+.hdr-act-icon.lock-icon { background: #FEF2F2; border-color: #FEE2E2; }
+
+.hdr-act-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.hdr-act-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #1E293B;
+    line-height: 1.25;
+}
+
+.hdr-act-sub {
+    font-size: 10.5px;
+    color: #64748B;
+    line-height: 1.2;
+    margin-top: 2px;
+}
+
+.hdr-act-divider {
+    height: 1px;
+    background: #F1F5F9;
+    margin: 4px 0;
+}
+
+.header-action-item.danger-item:hover {
+    background: #FEF2F2;
+    color: var(--danger);
+}
+
+/* Adaptive Breakpoint for Header (< 1080px collapses secondary items into dropdown) */
+@media screen and (max-width: 1079px) {
+    .topbar-desktop-actions {
+        display: none !important;
+    }
+    .topbar-adaptive-actions-wrap {
+        display: inline-flex !important;
+    }
+}
+
+/* --- Decision 2: Reports Dashboard Vertical Stack & Donut Center Total --- */
+.donut-center-total {
+    position: absolute;
+    top: 48%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    z-index: 2;
+    width: 120px;
+}
+
+.donut-center-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748B;
+}
+
+.donut-center-value {
+    display: block;
+    font-size: 22px;
+    font-weight: 800;
+    color: #143832;
+    line-height: 1.15;
+    margin: 2px 0;
+}
+
+.donut-center-sub {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    color: #10B981;
+    background: #ECFDF5;
+    padding: 1px 7px;
+    border-radius: 8px;
+    border: 1px solid #A7F3D0;
+}
+
+.dash-vertical-meters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+    margin-top: 10px;
+}
+
+.vertical-meters-cluster {
+    background: #FAF7F4;
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+.cluster-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding-bottom: 8px;
+}
+
+.cluster-title {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: #143832;
+}
+
+.cluster-sub {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748B;
+}
+
+.vertical-meters-row {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    gap: 10px;
+    min-height: 190px;
+    padding: 10px 4px 4px 4px;
+}
+
+.vertical-meter-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.meter-val-text {
+    font-size: 11px;
+    font-weight: 800;
+    color: #143832;
+    white-space: nowrap;
+}
+
+.meter-track-vertical {
+    width: 24px;
+    height: 120px;
+    background: #E2E8F0;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.meter-fill-vertical {
+    width: 100%;
+    border-radius: 12px;
+    transition: height 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.meter-label-bottom {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70px;
+}
+
+.meter-pct-badge {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    color: #0F172A;
+}
+
+/* Dashboard responsive card spacing */
+@media screen and (max-width: 768px) {
+    .dash-charts-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 18px !important;
+    }
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+    }
+}
+
+@media screen and (max-width: 540px) {
+    .kpi-grid {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+    }
+}
+
+/* --- Decision 3: Inventory Stock Grid Cards & Inline Accordions --- */
+.inv-stock-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+    margin-bottom: 24px;
+}
+
+.inv-stock-card {
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.inv-stock-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(20, 56, 50, 0.08);
+    border-color: #CBD5E1;
+}
+
+.inv-stock-card.card-low {
+    border-color: #FCD34D;
+    background: #FFFDF7;
+}
+
+.inv-stock-card.card-out {
+    border-color: #FCA5A5;
+    background: #FFF8F8;
+}
+
+.inv-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.inv-card-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0F172A;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.inv-card-code {
+    font-size: 10.5px;
+    font-family: monospace;
+    color: #64748B;
+    margin-top: 2px;
+}
+
+.inv-card-meta {
+    font-size: 11.5px;
+    color: #64748B;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.inv-card-sep {
+    color: #CBD5E1;
+}
+
+.inv-card-levels-stacked {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: #F8FAF8;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+}
+
+.inv-level-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12px;
+}
+
+.inv-level-label {
+    color: #64748B;
+    font-weight: 600;
+}
+
+.inv-level-value {
+    font-weight: 700;
+    color: #1E293B;
+}
+
+.inv-level-value.stock-highlight {
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.inv-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.inv-card-actions .btn {
+    flex: 1;
+    padding: 7px 10px;
+    font-size: 11px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-weight: 700;
+}
+
+/* Inline Collapsible Accordions for Batching & Dish Recipes */
+.inv-collapsible-sections-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.inv-accordion-panel {
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.inv-accordion-panel:hover {
+    border-color: #CBD5E1;
+}
+
+.inv-accordion-panel.open {
+    border-color: #143832;
+    box-shadow: 0 4px 16px rgba(20, 56, 50, 0.08);
+}
+
+.inv-acc-header-btn {
+    width: 100%;
+    min-height: 52px;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #FFFFFF;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+    box-sizing: border-box;
+}
+
+.inv-acc-header-btn:hover {
+    background: #FAF7F4;
+}
+
+.inv-acc-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.inv-acc-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(20, 56, 50, 0.08);
+    color: #143832;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.inv-acc-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: #143832;
+    display: block;
+    line-height: 1.3;
+}
+
+.inv-acc-sub {
+    font-size: 11.5px;
+    color: #64748B;
+    display: block;
+    margin-top: 1px;
+}
+
+.inv-acc-chevron {
+    width: 22px;
+    height: 22px;
+    color: #64748B;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.inv-accordion-panel.open .inv-acc-chevron {
+    transform: rotate(180deg);
+    color: #143832;
+}
+
+.inv-acc-body {
+    padding: 16px 18px 20px 18px;
+    border-top: 1px solid var(--border-subtle);
+    background: #FCFBF9;
+}
+
+/* --- Decision 4 & 5: CRM & WhatsApp Marketing Accordions & Floating Preview --- */
+.wa-tier-accordion {
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+}
+
+.wa-tier-accordion:hover {
+    border-color: #CBD5E1;
+}
+
+.wa-tier-header {
+    padding: 10px 14px;
+    background: #FAF7F4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+    min-height: 44px;
+}
+
+.wa-tier-header:hover {
+    background: #F5EFEB;
+}
+
+.wa-tier-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.wa-tier-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+}
+
+.wa-tier-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #143832;
+}
+
+.wa-tier-count-badge {
+    font-size: 10.5px;
+    font-weight: 700;
+    background: #E2E8F0;
+    color: #334155;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.wa-tier-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.wa-tier-cb-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    margin: 0;
+}
+
+.acc-toggle-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #64748B;
+    padding: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
+    transition: transform 0.2s ease;
+}
+
+.wa-tier-accordion.collapsed .wa-tier-body {
+    display: none;
+}
+
+.wa-tier-accordion.collapsed .acc-toggle-btn svg {
+    transform: rotate(-90deg);
+}
+
+.wa-tier-body {
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #FFFFFF;
+}
+
+/* Sticky Send Bulk Campaign Dock */
+.wa-sticky-campaign-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid #E2E8F0;
+    border-radius: 16px;
+    padding: 12px 18px;
+    margin-top: 14px;
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.06);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+}
+
+.wa-dock-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.wa-dock-count-label {
+    font-size: 13px;
+    font-weight: 800;
+    color: #143832;
+}
+
+.wa-dock-hint {
+    font-size: 11px;
+    color: #64748B;
+}
+
+.btn-whatsapp-send {
+    background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+    color: #FFFFFF;
+    font-weight: 800;
+    font-size: 13px;
+    padding: 10px 22px;
+    border-radius: 24px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(37, 211, 102, 0.35);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    min-height: 44px;
+}
+
+.btn-whatsapp-send:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(37, 211, 102, 0.45);
+}
+
+.btn-whatsapp-send:active {
+    transform: scale(0.97);
+}
+
+/* Floating WhatsApp Preview Pill */
+.wa-floating-preview-pill {
+    position: fixed;
+    bottom: 84px;
+    right: 24px;
+    z-index: 500;
+    background: #128C7E;
+    color: #FFFFFF;
+    border-radius: 28px;
+    padding: 10px 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(18, 140, 126, 0.38);
+    transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+    min-height: 44px;
+}
+
+.wa-floating-preview-pill:hover {
+    transform: translateY(-2px);
+    background: #075E54;
+    box-shadow: 0 10px 28px rgba(18, 140, 126, 0.48);
+}
+
+.wa-floating-preview-pill:active {
+    transform: scale(0.96);
+}
+
+.wa-floating-preview-pill.minimized {
+    padding: 10px 12px;
+    opacity: 0.85;
+    transform: scale(0.90);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.wa-floating-preview-pill.minimized .wa-pill-text,
+.wa-floating-preview-pill.minimized .wa-pill-badge {
+    display: none;
+}
+
+.wa-pill-dot-live {
+    width: 8px;
+    height: 8px;
+    background: #25D366;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+
+.wa-pill-text {
+    font-size: 12.5px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+}
+
+.wa-pill-badge {
+    background: rgba(255, 255, 255, 0.22);
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 8px;
+}
+
+.wa-preview-close-btn {
+    border: none;
+    background: rgba(255, 255, 255, 0.2);
+    color: #FFFFFF;
+    border-radius: 8px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.wa-preview-close-btn:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+/* On mobile/tablet (< 1080px), collapse the rigid phone simulation into floating modal */
+@media screen and (max-width: 1079px) {
+    .wa-hub-grid {
+        grid-template-columns: 1fr !important;
+        gap: 14px !important;
+    }
+    .wa-preview-column {
+        display: block !important;
+    }
+    .wa-phone-mockup {
+        display: none;
+    }
+    .wa-phone-mockup.expanded {
+        display: block !important;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: calc(100% - 32px);
+        max-width: 400px;
+        max-height: 88vh;
+        overflow-y: auto;
+        z-index: 100002;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+        animation: popIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .wa-preview-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.65);
+        backdrop-filter: blur(4px);
+        z-index: 100001;
+    }
+    .wa-preview-backdrop.active {
+        display: block !important;
+    }
+    /* Reports Dashboard vertical stack with ample whitespace */
+    .dash-charts-grid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 20px !important;
+    }
+}
+
+/* Hide floating preview pill on wide desktop screens (where live mockup is visible inline) */
+@media screen and (min-width: 1080px) {
+    .wa-floating-preview-pill {
+        display: none !important;
+    }
+    .wa-preview-backdrop {
+        display: none !important;
+    }
+}
+
+
 
 

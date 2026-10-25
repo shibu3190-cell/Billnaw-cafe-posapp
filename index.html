@@ -2821,20 +2821,22 @@
                     <strong id="topbarTableDisplay">Table 1</strong>
                 </div>
 
-                <!-- Sleek Bell Notification Icon Button & Unread Counter -->
-                <button type="button" id="topbarNotificationBellBtn" class="topbar-bell-btn" onclick="toggleNotificationDrawer(true)" aria-label="Notifications" title="System & Stock Alerts">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                    </svg>
-                    <span id="topbarNotificationBadge" class="notification-badge">0</span>
-                </button>
+                <!-- Desktop Quick Actions Group (Visible on desktop >= 1080px, collapsed into #headerActionsDropdown on mobile & tablet < 1080px) -->
+                <div class="topbar-desktop-actions">
+                    <!-- Sleek Bell Notification Icon Button & Unread Counter -->
+                    <button type="button" id="topbarNotificationBellBtn" class="topbar-bell-btn" onclick="toggleNotificationDrawer(true)" aria-label="Notifications" title="System & Stock Alerts">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                        <span id="topbarNotificationBadge" class="notification-badge">0</span>
+                    </button>
 
-                <!-- Quick Expense Record Button -->
-                <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 20px; font-weight: 700; color: var(--danger); border-color: rgba(167,50,50,0.25); display: inline-flex; align-items: center; gap: 6px;" onclick="openQuickExpenseModal()" title="Record Daily Expense">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    <span>Expense</span>
-                </button>
+                    <!-- Quick Expense Record Button -->
+                    <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; border-radius: 20px; font-weight: 700; color: var(--danger); border-color: rgba(167,50,50,0.25); display: inline-flex; align-items: center; gap: 6px;" onclick="openQuickExpenseModal()" title="Record Daily Expense">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span>Expense</span>
+                    </button>
 
                 <!-- Staff Switcher with Cashier Account Popover Trigger -->
                 <div class="topbar-account-wrap" style="position: relative; display: inline-flex;">
@@ -2872,6 +2874,83 @@
                             <button type="button" class="account-popover-item" onclick="toggleAccountPopover(event, false); switchTab('settings');">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                                 <span>Quick Settings</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                </div> <!-- Closing .topbar-desktop-actions -->
+
+                <!-- Unified Header Actions Dropdown Trigger (Mobile & Tablet < 1080px) -->
+                <div class="topbar-adaptive-actions-wrap">
+                    <button type="button" id="headerActionsBtn" class="topbar-actions-menu-btn" onclick="toggleHeaderActionsDropdown(event)" aria-label="Administrative Menu & Actions" aria-expanded="false" title="Administrative Actions Menu">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="5" r="1.5"></circle><circle cx="12" cy="19" r="1.5"></circle></svg>
+                        <span id="headerActionsNoticeDot" class="header-notice-dot" style="display: none;"></span>
+                    </button>
+
+                    <!-- Unified Header Actions Dropdown Menu (#headerActionsDropdown) -->
+                    <div id="headerActionsDropdown" class="header-actions-dropdown" style="display: none;" role="menu">
+                        <div class="header-actions-title">
+                            <span>Admin Actions</span>
+                            <button type="button" class="hdr-close-btn" onclick="closeHeaderActionsDropdown()" aria-label="Close menu">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+                        <div class="header-actions-list">
+                            <!-- Action 1: Expense -->
+                            <button type="button" class="header-action-item" onclick="closeHeaderActionsDropdown(); openQuickExpenseModal();" role="menuitem">
+                                <span class="hdr-act-icon expense-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></span>
+                                <div class="hdr-act-text">
+                                    <span class="hdr-act-label">Record Daily Expense</span>
+                                    <span class="hdr-act-sub">Supplies, kitchen &amp; market costs</span>
+                                </div>
+                            </button>
+
+                            <!-- Action 2: Notifications -->
+                            <button type="button" class="header-action-item" onclick="closeHeaderActionsDropdown(); toggleNotificationDrawer(true);" role="menuitem">
+                                <span class="hdr-act-icon bell-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></span>
+                                <div class="hdr-act-text">
+                                    <span class="hdr-act-label">System &amp; Stock Alerts</span>
+                                    <span class="hdr-act-sub">Low stock &amp; debt reminders</span>
+                                </div>
+                                <span id="headerDropdownNotificationBadge" class="notification-badge" style="display: none; position: static;">0</span>
+                            </button>
+
+                            <!-- Action 3: Cashier Profile -->
+                            <button type="button" class="header-action-item" onclick="closeHeaderActionsDropdown(); openStaffSwitchModal();" role="menuitem">
+                                <span class="hdr-act-icon staff-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span>
+                                <div class="hdr-act-text">
+                                    <span class="hdr-act-label">Cashier: <strong id="hdrActionStaffName">Admin</strong></span>
+                                    <span class="hdr-act-sub">Switch active staff PIN</span>
+                                </div>
+                            </button>
+
+                            <!-- Action 4: Settings -->
+                            <button type="button" class="header-action-item" onclick="closeHeaderActionsDropdown(); switchTab('settings');" role="menuitem">
+                                <span class="hdr-act-icon settings-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#143832" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></span>
+                                <div class="hdr-act-text">
+                                    <span class="hdr-act-label">Settings &amp; Store Profile</span>
+                                    <span class="hdr-act-sub">Tax, printer, tables &amp; cloud</span>
+                                </div>
+                            </button>
+
+                            <!-- Action 5: Active Sessions -->
+                            <button type="button" class="header-action-item" onclick="closeHeaderActionsDropdown(); openActiveSessionsModal();" role="menuitem">
+                                <span class="hdr-act-icon session-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
+                                <div class="hdr-act-text">
+                                    <span class="hdr-act-label">Active Cloud Sessions</span>
+                                    <span class="hdr-act-sub">Connected device sessions</span>
+                                </div>
+                            </button>
+
+                            <div class="hdr-act-divider"></div>
+
+                            <!-- Action 6: Lock System -->
+                            <button type="button" class="header-action-item danger-item" onclick="closeHeaderActionsDropdown(); lockSystem();" role="menuitem">
+                                <span class="hdr-act-icon lock-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
+                                <div class="hdr-act-text">
+                                    <span class="hdr-act-label">Lock Terminal</span>
+                                    <span class="hdr-act-sub">Requires cashier PIN</span>
+                                </div>
                             </button>
                         </div>
                     </div>
@@ -2997,17 +3076,44 @@
                     </div>
                 </div>
 
-                <!-- Visual Charts Section -->
+                <!-- Visual Charts Section: Responsive Vertical Stack & Donut Analytics -->
                 <div class="dash-charts-grid" style="gap: 16px; margin-bottom: 20px;">
-                    <div class="card" style="padding: 18px; margin-bottom: 0;">
-                        <div class="card-header" style="margin-bottom: 12px;">
-                            <h3 class="card-title" style="font-size: 15px;">Revenue vs Costs Timeline</h3>
+                    <!-- Clean Vertical Progress Meters Card (Replacing Horizontal Timeline) -->
+                    <div class="card" id="dashProgressMetersCard" style="padding: 18px; margin-bottom: 0;">
+                        <div class="card-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                            <div>
+                                <h3 class="card-title" style="font-size: 15px; margin: 0; font-weight: 800; color: #143832;">Revenue &amp; Payment Meters</h3>
+                                <p style="margin: 2px 0 0 0; font-size: 11px; color: var(--text-muted);">Clean vertical progress meters for menu categories &amp; settlement channels</p>
+                            </div>
+                            <span style="font-size: 10.5px; font-weight: 700; color: #143832; background: #F1F5F9; padding: 3px 8px; border-radius: 10px;">Live Realtime</span>
                         </div>
-                        <div style="position: relative; height: 220px; width: 100%;">
-                            <canvas id="monthlySalesChart"></canvas>
+                        <div class="dash-vertical-meters-grid">
+                            <!-- Category Vertical Meters -->
+                            <div class="vertical-meters-cluster">
+                                <div class="cluster-header">
+                                    <span class="cluster-title">Top Revenue Categories</span>
+                                    <span class="cluster-sub" id="catMetersTotal">Total: ₹0</span>
+                                </div>
+                                <div class="vertical-meters-row" id="categoryVerticalMeters">
+                                    <!-- Populated dynamically: Snacks, Beverages, Main Course, Other -->
+                                </div>
+                            </div>
+                            <!-- Payment Channel Vertical Meters -->
+                            <div class="vertical-meters-cluster">
+                                <div class="cluster-header">
+                                    <span class="cluster-title">Payment Settlement Channels</span>
+                                    <span class="cluster-sub" id="paymentMetersTotal">Total: ₹0</span>
+                                </div>
+                                <div class="vertical-meters-row" id="paymentVerticalMeters">
+                                    <!-- Populated dynamically: Cash, UPI, Card -->
+                                </div>
+                            </div>
                         </div>
+                        <!-- Preserved canvas for background chart processing -->
+                        <canvas id="monthlySalesChart" style="display: none;"></canvas>
                     </div>
-                    <!-- Interactive Analytics Donut Card -->
+
+                    <!-- Interactive Analytics Donut Card with Central Total -->
                     <div class="card" id="reportsDonutCard" style="padding: 18px; margin-bottom: 0;">
                         <div class="card-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                             <h3 class="card-title" style="font-size: 15px; margin: 0;">Revenue &amp; Margin Distribution</h3>
@@ -3018,8 +3124,14 @@
                                 <button type="button" class="filter-pill donut-pill" data-donut="channel" onclick="toggleDonutDataset('channel')">Channels</button>
                             </div>
                         </div>
-                        <div id="reportsDonutContainer" style="position: relative; height: 220px; width: 100%; display: flex; justify-content: center; align-items: center;">
+                        <div id="reportsDonutContainer" style="position: relative; height: 230px; width: 100%; display: flex; justify-content: center; align-items: center;">
                             <canvas id="dashDonutChart"></canvas>
+                            <!-- Donut Hole Central Metric Overlay -->
+                            <div id="donutCenterTotal" class="donut-center-total">
+                                <span id="donutCenterLabel" class="donut-center-label">Net Margin</span>
+                                <span id="donutCenterValue" class="donut-center-value">₹0</span>
+                                <span id="donutCenterSub" class="donut-center-sub">100% Volume</span>
+                            </div>
                         </div>
                     </div>
                     <div class="card dash-top-selling-card" style="padding: 18px; margin-bottom: 0;">
@@ -3415,7 +3527,7 @@
                                         Click checkboxes or chips below
                                     </div>
                                 </div>
-                                <div id="waBulkCustomerSelectorList" style="max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
+                                <div id="waBulkCustomerSelectorList" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px;">
                                     <!-- Dynamic customer checkboxes -->
                                 </div>
                             </div>
@@ -3455,24 +3567,41 @@
                                         <input type="text" id="waQuickValidTill" value="This Sunday" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px;" onchange="updateCampaignVariable('validTill', this.value)">
                                     </div>
                                 </div>
+
+                                <!-- Sticky Send Bulk Campaign Dock (Decision 5) -->
+                                <div class="wa-sticky-campaign-dock" id="waStickyCampaignDock">
+                                    <div class="wa-dock-info">
+                                        <span class="wa-dock-count-label"><strong id="waDockSelectedCount">0</strong> Diners Selected</span>
+                                        <span class="wa-dock-hint" id="waDockHint">Personalized copy with {customer_name}</span>
+                                    </div>
+                                    <button type="button" id="btnSendBulkCampaignSticky" class="btn btn-whatsapp-send" onclick="triggerBulkWhatsAppBroadcast()" title="Dispatch personalized campaign">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                        <span>Send Bulk Campaign</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Right Column: Live WhatsApp Simulation & 1-Tap Queue -->
-                        <div>
-                            <!-- Live WhatsApp Phone Simulation -->
-                            <div class="wa-phone-mockup" style="margin-bottom: 14px;">
+                        <div id="waPreviewAndQueueColumn" class="wa-preview-column">
+                            <!-- Live WhatsApp Phone Simulation (Expandable / Minimizable) -->
+                            <div class="wa-phone-mockup" id="waPhoneMockupCard" style="margin-bottom: 14px;">
                                 <div class="wa-phone-header">
-                                    <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white; display: inline-flex; align-items: center; justify-content: center;">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
-                                    </span>
-                                    <div>
-                                        <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
-                                            <span id="waPreviewShopName">billnaw</span>
-                                            <span style="font-size: 11px; color: #86EFAC;">✓</span>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="icon-box" style="width: 32px; height: 32px; font-size: 14px; background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); color: white; display: inline-flex; align-items: center; justify-content: center;">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                                        </span>
+                                        <div>
+                                            <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                                                <span id="waPreviewShopName">billnaw</span>
+                                                <span style="font-size: 11px; color: #86EFAC;">✓</span>
+                                            </div>
+                                            <div style="font-size: 10px; opacity: 0.85;">Official Restaurant Account • Online</div>
                                         </div>
-                                        <div style="font-size: 10px; opacity: 0.85;">Official Restaurant Account • Online</div>
                                     </div>
+                                    <button type="button" class="wa-preview-close-btn" onclick="toggleWaPreviewExpand(false)" aria-label="Minimize preview" title="Minimize preview">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </button>
                                 </div>
                                 <div class="wa-phone-body">
                                     <div class="wa-bubble">
@@ -3506,6 +3635,18 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Backdrop for floating WhatsApp live simulation expansion on mobile (< 1080px) -->
+                    <div id="waPreviewBackdrop" class="wa-preview-backdrop" onclick="toggleWaPreviewExpand(false)"></div>
+
+                    <!-- Floating WhatsApp Preview Pill (Decision 5: Auto-minimizes when typing or scrolling) -->
+                    <div id="waFloatingPreviewPill" class="wa-floating-preview-pill" onclick="toggleWaPreviewExpand()" title="Tap to expand live WhatsApp chat simulation">
+                        <div class="wa-pill-dot-live"></div>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                        <span class="wa-pill-text">WhatsApp Preview</span>
+                        <span class="wa-pill-badge" id="waPillTargetBadge">First Diner</span>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
                     </div>
                 </div> <!-- Closing #aiWhatsAppMarketingHub card -->
             </div> <!-- Closing #custTabMarketing (Tab 3) -->
@@ -4070,19 +4211,66 @@
                     <!-- Hidden alias retaining data-subtab="rtr_tracker" to satisfy test_culinary_and_sessions.cjs:RTR-UI-1 -->
                     <button type="button" style="display: none !important;" data-subtab="rtr_tracker" onclick="switchInventoryHubTab('raw_stock')" aria-hidden="true"></button>
 
-                    <!-- TAB 1: Raw Stock & Restock Container -->
+                    <!-- TAB 1: Raw Stock & Restock Container (Primary Stock View with Responsive Grid Cards) -->
                     <div id="invTabRawStock" class="inv-tab-pane active" style="display: block;">
-                        <!-- Dynamic High-Contrast Telemetry Table populated by culinary_inventory.js -->
+                        <!-- Dynamic Responsive Grid Cards populated by culinary_inventory.js -->
                     </div>
 
-                    <!-- TAB 2: Morning Prep & Batching Container -->
-                    <div id="invTabMorningPrep" class="inv-tab-pane" style="display: none;">
-                        <!-- Dynamic Bulk Production Module populated by culinary_inventory.js -->
-                    </div>
+                    <!-- Inline Collapsible Accordions for Batching & Costing Simulation (Clean 1-Tap Expansion) -->
+                    <div class="inv-collapsible-sections-wrap" style="margin-top: 24px;">
+                        <!-- Accordion 1: Morning Commissary Batching & Prep -->
+                        <div class="inv-accordion-panel" id="invAccordionBatching">
+                            <button type="button" class="inv-acc-header-btn" id="btnInvAccBatching" onclick="window.culinaryInventory.toggleAccordion('batching')" aria-expanded="false">
+                                <div class="inv-acc-title-group">
+                                    <span class="inv-acc-icon">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/><path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/></svg>
+                                    </span>
+                                    <div>
+                                        <span class="inv-acc-title">Morning Commissary Batching &amp; Prep</span>
+                                        <span class="inv-acc-sub">Bulk production of curry bases, doughs &amp; semi-finished stocks</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="badge-pill" style="font-size: 10.5px; font-weight: 700; color: #143832; background: #F1F5F9; padding: 2px 8px; border-radius: 8px;">Expand Tools</span>
+                                    <span class="inv-acc-chevron">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                    </span>
+                                </div>
+                            </button>
+                            <div class="inv-acc-body" id="invAccBodyBatching" style="display: none;">
+                                <!-- TAB 2: Morning Prep & Batching Container (Enclosed inside accordion) -->
+                                <div id="invTabMorningPrep" class="inv-tab-pane" style="display: block;">
+                                    <!-- Dynamic Bulk Production Module populated by culinary_inventory.js -->
+                                </div>
+                            </div>
+                        </div>
 
-                    <!-- TAB 3: Dish Recipes & Live Costing Container -->
-                    <div id="invTabDishCosting" class="inv-tab-pane" style="display: none;">
-                        <!-- Dynamic Recipe Configuration & Live Margin Simulator populated by culinary_inventory.js -->
+                        <!-- Accordion 2: Dish Recipes & Costing Simulation -->
+                        <div class="inv-accordion-panel" id="invAccordionCosting">
+                            <button type="button" class="inv-acc-header-btn" id="btnInvAccCosting" onclick="window.culinaryInventory.toggleAccordion('costing')" aria-expanded="false">
+                                <div class="inv-acc-title-group">
+                                    <span class="inv-acc-icon">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                                    </span>
+                                    <div>
+                                        <span class="inv-acc-title">Dish Recipes &amp; Live Costing Simulation</span>
+                                        <span class="inv-acc-sub">Raw component mapping, ingredient price sensitivity &amp; profit margins</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="badge-pill" style="font-size: 10.5px; font-weight: 700; color: #143832; background: #F1F5F9; padding: 2px 8px; border-radius: 8px;">Expand Tools</span>
+                                    <span class="inv-acc-chevron">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                    </span>
+                                </div>
+                            </button>
+                            <div class="inv-acc-body" id="invAccBodyCosting" style="display: none;">
+                                <!-- TAB 3: Dish Recipes & Live Costing Container (Enclosed inside accordion) -->
+                                <div id="invTabDishCosting" class="inv-tab-pane" style="display: block;">
+                                    <!-- Dynamic Recipe Configuration & Live Margin Simulator populated by culinary_inventory.js -->
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Legacy and test compatibility anchors -->

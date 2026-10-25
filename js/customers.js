@@ -727,6 +727,84 @@ function seedInitialCustomersIfEmpty() {
     }
 }
 
+let waTierCollapsedState = {
+    vip: false,
+    regular: false,
+    occasional: false
+};
+
+const WA_TIER_CONFIG = [
+    {
+        key: 'vip',
+        title: 'VIP Diners',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>',
+        filter: c => (c.totalVisits || 0) >= 10
+    },
+    {
+        key: 'regular',
+        title: 'Regular Diners',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>',
+        filter: c => (c.totalVisits || 0) >= 3 && (c.totalVisits || 0) < 10
+    },
+    {
+        key: 'occasional',
+        title: 'New & Occasional Diners',
+        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>',
+        filter: c => (c.totalVisits || 0) < 3
+    }
+];
+
+function toggleWaTierAccordion(tierKey) {
+    waTierCollapsedState[tierKey] = !waTierCollapsedState[tierKey];
+    const acc = document.getElementById(`waTierAcc-${tierKey}`);
+    if (acc) {
+        if (waTierCollapsedState[tierKey]) {
+            acc.classList.add('collapsed');
+        } else {
+            acc.classList.remove('collapsed');
+        }
+    }
+}
+window.toggleWaTierAccordion = toggleWaTierAccordion;
+
+function toggleSelectTierCustomers(tierKey, checked) {
+    const tierConf = WA_TIER_CONFIG.find(t => t.key === tierKey);
+    if (!tierConf) return;
+    const tierMembers = customersList.filter(tierConf.filter);
+    tierMembers.forEach(c => {
+        if (checked) {
+            waBulkSelectedCustomerIds.add(c.id);
+        } else {
+            waBulkSelectedCustomerIds.delete(c.id);
+        }
+    });
+    renderAiWhatsAppHubUI();
+}
+window.toggleSelectTierCustomers = toggleSelectTierCustomers;
+
+function toggleWaPreviewExpand(expand) {
+    const pill = document.getElementById('waFloatingPreviewPill');
+    const mockup = document.getElementById('waPhoneMockupCard');
+    const backdrop = document.getElementById('waPreviewBackdrop');
+
+    const isCurrentlyExpanded = mockup && mockup.classList.contains('expanded');
+    const shouldExpand = (typeof expand === 'boolean') ? expand : !isCurrentlyExpanded;
+
+    if (shouldExpand) {
+        if (pill) pill.classList.remove('minimized');
+        if (mockup) {
+            mockup.classList.add('expanded');
+            mockup.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        if (backdrop) backdrop.classList.add('active');
+    } else {
+        if (pill) pill.classList.add('minimized');
+        if (mockup) mockup.classList.remove('expanded');
+        if (backdrop) backdrop.classList.remove('active');
+    }
+}
+window.toggleWaPreviewExpand = toggleWaPreviewExpand;
+
 function initAiWhatsAppHub() {
     seedInitialCustomersIfEmpty();
     // Pre-select all customers by default
@@ -737,6 +815,27 @@ function initAiWhatsAppHub() {
     if (txtArea && !txtArea.value) {
         txtArea.value = waCampaignTemplateText;
     }
+
+    const pill = document.getElementById('waFloatingPreviewPill');
+    const scrollList = document.getElementById('waBulkCustomerSelectorList');
+
+    if (txtArea && !txtArea._waPillBound) {
+        txtArea._waPillBound = true;
+        txtArea.addEventListener('focus', () => {
+            toggleWaPreviewExpand(false);
+        });
+        txtArea.addEventListener('input', () => {
+            toggleWaPreviewExpand(false);
+        });
+    }
+
+    if (scrollList && !scrollList._waPillBound) {
+        scrollList._waPillBound = true;
+        scrollList.addEventListener('scroll', () => {
+            if (pill) pill.classList.add('minimized');
+        }, { passive: true });
+    }
+
     renderAiWhatsAppHubUI();
 }
 window.initAiWhatsAppHub = initAiWhatsAppHub;
@@ -749,11 +848,23 @@ function renderAiWhatsAppHubUI() {
     const totalCount = customersList.length;
     const selectedCount = waBulkSelectedCustomerIds.size;
 
-    // Update count badge
-    const badge = document.getElementById('waSelectedCountBadge');
-    if (badge) badge.innerText = `${selectedCount} of ${totalCount} selected`;
+    // Update count labels across header, dock, and badges
+    const bulkBadge = document.getElementById('bulkSelectedCount');
+    if (bulkBadge) bulkBadge.innerText = selectedCount;
 
-    // Master select-all checkbox
+    const dockCount = document.getElementById('waDockSelectedCount');
+    if (dockCount) dockCount.innerText = selectedCount;
+
+    const waBadge = document.getElementById('waSelectedCountBadge');
+    if (waBadge) waBadge.innerText = `${selectedCount} of ${totalCount} selected`;
+
+    // Master select-all checkbox (sync both possible IDs)
+    const masterCb = document.getElementById('selectAllCustomersCheckbox');
+    if (masterCb) {
+        masterCb.checked = totalCount > 0 && selectedCount === totalCount;
+        masterCb.indeterminate = selectedCount > 0 && selectedCount < totalCount;
+    }
+
     const selectAllCb = document.getElementById('waSelectAllCheckbox');
     if (selectAllCb) {
         selectAllCb.checked = totalCount > 0 && selectedCount === totalCount;
@@ -765,28 +876,71 @@ function renderAiWhatsAppHubUI() {
         return;
     }
 
-    container.innerHTML = customersList.map(cust => {
-        const isChecked = waBulkSelectedCustomerIds.has(cust.id);
-        const tier = getCustomerTier(cust.totalVisits || 0);
-        const initials = getInitials(cust.name);
+    // Render grouped 3-Tier Collapsible Accordions (Decision 4 & 5)
+    container.innerHTML = WA_TIER_CONFIG.map(t => {
+        const tierCusts = customersList.filter(t.filter);
+        const tierSelectedCount = tierCusts.filter(c => waBulkSelectedCustomerIds.has(c.id)).length;
+        const allChecked = tierCusts.length > 0 && tierSelectedCount === tierCusts.length;
+        const isCollapsed = !!waTierCollapsedState[t.key];
 
         return `
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; border: 1px solid ${isChecked ? 'var(--primary)' : 'var(--border)'}; background: ${isChecked ? '#FFFBF7' : '#FFFFFF'}; transition: all 0.15s ease;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; margin: 0;">
-                    <input type="checkbox" style="width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer;" ${isChecked ? 'checked' : ''} onchange="toggleSelectCustomerForBroadcast(${cust.id})">
-                    <div class="customer-avatar" style="width: 32px; height: 32px; font-size: 12px;">${initials}</div>
-                    <div>
-                        <div style="font-weight: 700; font-size: 13px; color: var(--text-dark);">${escapeHtml(cust.name)}</div>
-                        <div style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${cust.phone || 'No phone'}</div>
+            <div class="wa-tier-accordion ${isCollapsed ? 'collapsed' : ''}" id="waTierAcc-${t.key}">
+                <div class="wa-tier-header" onclick="toggleWaTierAccordion('${t.key}')">
+                    <div class="wa-tier-title-group">
+                        <span class="wa-tier-icon">${t.icon}</span>
+                        <span class="wa-tier-title">${t.title}</span>
+                        <span class="wa-tier-count-badge">${tierCusts.length} Diners</span>
                     </div>
-                </label>
-                <div style="text-align: right;">
-                    <span class="cust-badge ${tier.class}" style="font-size: 10px; padding: 2px 6px;">${tier.icon} ${tier.name}</span>
-                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${cust.totalVisits || 0} visits</div>
+                    <div class="wa-tier-controls" onclick="event.stopPropagation();">
+                        <label class="wa-tier-cb-label">
+                            <input type="checkbox" id="waTierCb-${t.key}" ${allChecked ? 'checked' : ''} onchange="toggleSelectTierCustomers('${t.key}', this.checked)" style="width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer;">
+                            <span>Select Tier</span>
+                        </label>
+                        <button type="button" class="acc-toggle-btn" onclick="toggleWaTierAccordion('${t.key}')" aria-label="Toggle ${t.title}">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="wa-tier-body" id="waTierBody-${t.key}">
+                    ${tierCusts.length === 0 ? `
+                        <div style="font-size: 11px; color: var(--text-muted); padding: 8px 10px; text-align: center;">No diners in this tier.</div>
+                    ` : tierCusts.map(cust => {
+                        const isChecked = waBulkSelectedCustomerIds.has(cust.id);
+                        const tier = getCustomerTier(cust.totalVisits || 0);
+                        const initials = getInitials(cust.name);
+
+                        return `
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; border: 1px solid ${isChecked ? 'var(--primary)' : 'var(--border)'}; background: ${isChecked ? '#FFFBF7' : '#FFFFFF'}; transition: all 0.15s ease;">
+                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; margin: 0;">
+                                    <input type="checkbox" style="width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer;" ${isChecked ? 'checked' : ''} onchange="toggleSelectCustomerForBroadcast(${cust.id})">
+                                    <div class="customer-avatar" style="width: 32px; height: 32px; font-size: 12px;">${initials}</div>
+                                    <div>
+                                        <div style="font-weight: 700; font-size: 13px; color: var(--text-dark);">${escapeHtml(cust.name)}</div>
+                                        <div style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${escapeHtml(cust.phone || 'No phone')}</div>
+                                    </div>
+                                </label>
+                                <div style="text-align: right;">
+                                    <span class="cust-badge ${tier.class}" style="font-size: 10px; padding: 2px 6px;">${tier.icon} ${tier.name}</span>
+                                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${cust.totalVisits || 0} visits</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
             </div>
         `;
     }).join('');
+
+    // Update indeterminate states for tier checkboxes
+    WA_TIER_CONFIG.forEach(t => {
+        const tierCusts = customersList.filter(t.filter);
+        const tierSelected = tierCusts.filter(c => waBulkSelectedCustomerIds.has(c.id)).length;
+        const cb = document.getElementById(`waTierCb-${t.key}`);
+        if (cb) {
+            cb.checked = tierCusts.length > 0 && tierSelected === tierCusts.length;
+            cb.indeterminate = tierSelected > 0 && tierSelected < tierCusts.length;
+        }
+    });
 
     renderBroadcastQueueUI();
     updateWaSimulatedBubble();
@@ -938,9 +1092,9 @@ function getSelectedCustomerList() {
 }
 
 function updateWaSimulatedBubble() {
-    const bubbleEl = document.getElementById('waSimulatedChatBubble');
-    const previewNameEl = document.getElementById('waPreviewCustomerName');
-    if (!bubbleEl) return;
+    const bubbleEl = document.getElementById('waSimulatedChatBubble') || document.getElementById('waSimulatedPersonalizedMessage');
+    const previewNameEl = document.getElementById('waPreviewCustomerName') || document.getElementById('waSimulatedTargetName');
+    const pillBadge = document.getElementById('waPillTargetBadge');
 
     const selectedList = getSelectedCustomerList();
     let currentDinerName = "Valued Customer";
@@ -951,6 +1105,7 @@ function updateWaSimulatedBubble() {
     }
 
     if (previewNameEl) previewNameEl.innerText = currentDinerName;
+    if (pillBadge) pillBadge.innerText = currentDinerName;
 
     let text = waCampaignTemplateText || document.getElementById('waCampaignEditableText')?.value || '';
     text = text.replace(/\{customer_name\}/g, currentDinerName)
@@ -958,7 +1113,7 @@ function updateWaSimulatedBubble() {
                .replace(/\{min_order\}/g, waCampaignVariables.minOrder)
                .replace(/\{valid_till\}/g, waCampaignVariables.validTill);
 
-    bubbleEl.innerText = text;
+    if (bubbleEl) bubbleEl.innerText = text;
 }
 window.updateWaSimulatedBubble = updateWaSimulatedBubble;
 
@@ -1136,6 +1291,11 @@ function switchCustomerHubTab(tabName) {
     const legacyWaHub = document.getElementById('aiWhatsAppMarketingHub');
     if (legacyWaHub) {
         legacyWaHub.style.display = (activeTab === 'marketing') ? 'block' : 'none';
+    }
+
+    const pill = document.getElementById('waFloatingPreviewPill');
+    if (pill) {
+        pill.style.display = (activeTab === 'marketing') ? 'inline-flex' : 'none';
     }
 
     if (activeTab === 'directory') {
@@ -1769,6 +1929,13 @@ window.customers = {
     openHistoryModal: openCustomerHistoryModal,
     startOrder: startOrderForCustomer,
     switchTab: switchCustomerHubTab,
+    marketing: {
+        init: initAiWhatsAppHub,
+        render: renderAiWhatsAppHubUI,
+        toggleTier: toggleWaTierAccordion,
+        selectTier: toggleSelectTierCustomers,
+        toggleExpand: toggleWaPreviewExpand
+    },
     khata: {
         init: initKhataEngine,
         render: renderKhataUI,

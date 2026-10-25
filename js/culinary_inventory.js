@@ -340,6 +340,25 @@
             else { paneCost.style.display = 'none'; paneCost.classList.remove('active'); }
         }
 
+        // Expand inline accordion when respective operational tool tab is selected
+        if (target === 'morning_batch') {
+            const panelBatch = document.getElementById('invAccordionBatching');
+            const btnBatch = document.getElementById('btnInvAccBatching');
+            const bodyBatch = document.getElementById('invAccBodyBatching');
+            if (panelBatch) panelBatch.classList.add('open');
+            if (btnBatch) btnBatch.setAttribute('aria-expanded', 'true');
+            if (bodyBatch) bodyBatch.style.display = 'block';
+            if (panePrep) { panePrep.style.display = 'block'; panePrep.classList.add('active'); }
+        } else if (target === 'dish_costing') {
+            const panelCost = document.getElementById('invAccordionCosting');
+            const btnCostAcc = document.getElementById('btnInvAccCosting');
+            const bodyCost = document.getElementById('invAccBodyCosting');
+            if (panelCost) panelCost.classList.add('open');
+            if (btnCostAcc) btnCostAcc.setAttribute('aria-expanded', 'true');
+            if (bodyCost) bodyCost.style.display = 'block';
+            if (paneCost) { paneCost.style.display = 'block'; paneCost.classList.add('active'); }
+        }
+
         renderActiveHubTab();
 
         const contentArea = document.getElementById('culinarySubTabContent');
@@ -356,6 +375,46 @@
     window.switchInventoryHubTab = switchInventoryHubTab;
     window.switchInventoryTab = switchInventoryHubTab;
     window.switchInventory3Tab = switchInventoryHubTab;
+
+    // Inline Accordion Toggler for Batching & Dish Costing
+    function toggleAccordion(accId) {
+        if (accId === 'batching' || accId === 'invAccordionBatching') {
+            const panel = document.getElementById('invAccordionBatching');
+            const btn = document.getElementById('btnInvAccBatching');
+            const body = document.getElementById('invAccBodyBatching');
+            const isOpen = panel && panel.classList.contains('open');
+            if (isOpen) {
+                if (panel) panel.classList.remove('open');
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+                if (body) body.style.display = 'none';
+            } else {
+                if (panel) panel.classList.add('open');
+                if (btn) btn.setAttribute('aria-expanded', 'true');
+                if (body) body.style.display = 'block';
+                const panePrep = document.getElementById('invTabMorningPrep');
+                if (panePrep) panePrep.style.display = 'block';
+                renderMorningPrepTab();
+            }
+        } else if (accId === 'costing' || accId === 'invAccordionCosting') {
+            const panel = document.getElementById('invAccordionCosting');
+            const btn = document.getElementById('btnInvAccCosting');
+            const body = document.getElementById('invAccBodyCosting');
+            const isOpen = panel && panel.classList.contains('open');
+            if (isOpen) {
+                if (panel) panel.classList.remove('open');
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+                if (body) body.style.display = 'none';
+            } else {
+                if (panel) panel.classList.add('open');
+                if (btn) btn.setAttribute('aria-expanded', 'true');
+                if (body) body.style.display = 'block';
+                const paneCost = document.getElementById('invTabDishCosting');
+                if (paneCost) paneCost.style.display = 'block';
+                renderDishCostingTab();
+            }
+        }
+    }
+    window.toggleCulinaryAccordion = toggleAccordion;
 
     function renderActiveHubTab() {
         if (activeHubTab === 'raw_stock') {
@@ -508,7 +567,80 @@
                         </div>
                     </div>
 
-                    <div style="overflow-x: auto;">
+                    <!-- Responsive Grid Cards (Decision 3) -->
+                    <div class="inv-stock-cards-grid" style="padding: 16px; margin: 0;">
+                        ${filteredMaterials.length === 0 ? `
+                            <div style="grid-column: 1 / -1; text-align: center; padding: 36px 20px; color: var(--text-muted);">
+                                No ingredients match current search or category filter.
+                            </div>
+                        ` : filteredMaterials.map(item => {
+                            const isOut = item.current_stock <= 0;
+                            const isLow = !isOut && item.current_stock <= item.min_threshold;
+                            const cardClass = isOut ? 'card-out' : (isLow ? 'card-low' : '');
+                            const badgeHtml = isOut
+                                ? `<span class="inv-badge-out"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Out</span>`
+                                : (isLow
+                                    ? `<span class="inv-badge-low"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Low Stock</span>`
+                                    : `<span class="inv-badge-instock"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> In Stock</span>`);
+
+                            const stockColor = isOut ? '#DC2626' : (isLow ? '#D97706' : '#143832');
+                            const unitLabel = item.consumption_unit || item.purchase_unit || 'units';
+
+                            return `
+                                <div class="inv-stock-card ${cardClass}">
+                                    <div class="inv-card-header">
+                                        <div>
+                                            <h4 class="inv-card-name">${escapeHtml(item.name)}</h4>
+                                            <div class="inv-card-code">${escapeHtml(item.id)}</div>
+                                        </div>
+                                        <div>${badgeHtml}</div>
+                                    </div>
+                                    <div class="inv-card-meta">
+                                        <span>${escapeHtml(item.category || 'General')}</span>
+                                        <span class="inv-card-sep">•</span>
+                                        <span>${escapeHtml(item.supplier || 'Mandi Wholesale')}</span>
+                                    </div>
+                                    <div class="inv-card-levels-stacked">
+                                        <div class="inv-level-row">
+                                            <span class="inv-level-label">Current Stock:</span>
+                                            <span class="inv-level-value stock-highlight" style="color: ${stockColor};">
+                                                ${item.current_stock} <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
+                                            </span>
+                                        </div>
+                                        <div class="inv-level-row">
+                                            <span class="inv-level-label">Safety Threshold:</span>
+                                            <span class="inv-level-value">
+                                                ${item.min_threshold} <span style="font-size: 10.5px; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
+                                            </span>
+                                        </div>
+                                        <div class="inv-level-row">
+                                            <span class="inv-level-label">Purchase Rate:</span>
+                                            <span class="inv-level-value">
+                                                ₹${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="inv-card-actions">
+                                        <button type="button" class="btn btn-primary" onclick="window.culinaryInventory.openRestockModal('${item.id}')">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                            <span>+ Restock</span>
+                                        </button>
+                                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.promptPriceEdit('${item.id}')">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+                                            <span>Rate</span>
+                                        </button>
+                                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openItemAlertModal('${item.id}')">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                            <span>Min</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <!-- Preserve table for backward compatibility in hidden state -->
+                    <div style="overflow-x: auto; display: none;">
                         <table class="inv-telemetry-table">
                             <thead>
                                 <tr>
@@ -2806,6 +2938,7 @@
         switchSubTab: switchInventorySubTab,
         switchHubTab: switchInventoryHubTab,
         switchTab: switchInventoryHubTab,
+        toggleAccordion,
         renderRawStockTab,
         renderMorningPrepTab,
         renderDishCostingTab,

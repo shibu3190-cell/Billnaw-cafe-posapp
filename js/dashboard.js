@@ -485,7 +485,8 @@ async function renderDashboardAnalytics() {
         }
     }
 
-    // 7. Render Interactive Sales Chart
+    // 7. Render Interactive Sales Chart & Vertical Progress Meters
+    renderVerticalProgressMeters(filteredOrders);
     await renderDashboardChart(filteredOrders, filteredExpenses, selectedMonth);
 }
 window.renderDashboardAnalytics = renderDashboardAnalytics;
@@ -783,6 +784,43 @@ async function renderDonutChart(orders, expenses) {
             }
         }
     });
+
+    // Update Central Donut Total and Percentage in hole (Decision 2)
+    const centerValEl = document.getElementById('donutCenterValue');
+    const centerLabelEl = document.getElementById('donutCenterLabel');
+    const centerSubEl = document.getElementById('donutCenterSub');
+
+    if (centerValEl && centerLabelEl) {
+        if (currentDonutDataset === 'margin') {
+            const totalRev = (lastDonutOrders || []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+            const totalExp = (lastDonutExpenses || []).reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
+            const netProfit = Math.max(0, totalRev - totalExp);
+            const marginPct = totalRev > 0 ? Math.round((netProfit / totalRev) * 100) : 0;
+            centerLabelEl.innerText = "Net Margin";
+            centerValEl.innerText = `₹${Math.round(netProfit).toLocaleString('en-IN')}`;
+            if (centerSubEl) centerSubEl.innerText = `${marginPct}% Margin`;
+        } else if (currentDonutDataset === 'category') {
+            const catSum = isCurrency ? datasetData.reduce((sum, v) => sum + (Number(v) || 0), 0) : 0;
+            centerLabelEl.innerText = "Category Total";
+            centerValEl.innerText = `₹${Math.round(catSum).toLocaleString('en-IN')}`;
+            const topPct = (isCurrency && catSum > 0) ? Math.round(((datasetData[0] || 0) / catSum) * 100) : 0;
+            if (centerSubEl) centerSubEl.innerText = `${topPct}% Top Share`;
+        } else if (currentDonutDataset === 'payment') {
+            const paySum = isCurrency ? datasetData.reduce((sum, v) => sum + (Number(v) || 0), 0) : 0;
+            centerLabelEl.innerText = "Settled Total";
+            centerValEl.innerText = `₹${Math.round(paySum).toLocaleString('en-IN')}`;
+            const cashVal = isCurrency ? (Number(datasetData[0]) || 0) : 0;
+            const cashPct = (isCurrency && paySum > 0) ? Math.round((cashVal / paySum) * 100) : 0;
+            if (centerSubEl) centerSubEl.innerText = `${cashPct}% Cash`;
+        } else if (currentDonutDataset === 'channel') {
+            const chanSum = isCurrency ? datasetData.reduce((sum, v) => sum + (Number(v) || 0), 0) : 0;
+            centerLabelEl.innerText = "Orders Volume";
+            centerValEl.innerText = `₹${Math.round(chanSum).toLocaleString('en-IN')}`;
+            const dineInVal = isCurrency ? (Number(datasetData[0]) || 0) : 0;
+            const dineInPct = (isCurrency && chanSum > 0) ? Math.round((dineInVal / chanSum) * 100) : 0;
+            if (centerSubEl) centerSubEl.innerText = `${dineInPct}% Dine-In`;
+        }
+    }
 }
 window.renderDonutChart = renderDonutChart;
 window.renderDashboardDonut = renderDonutChart;
@@ -1173,7 +1211,165 @@ function setDashboardPaymentFilter(mode) {
 }
 window.setDashboardPaymentFilter = setDashboardPaymentFilter;
 
-// Global click-outside listener to dismiss .action-dropdown menus and #accountPopoverCard
+// --- Decision 2: Clean Vertical Progress Meters for Categories & Payment Channels ---
+function renderVerticalProgressMeters(orders) {
+    const catContainer = document.getElementById('categoryVerticalMeters');
+    const payContainer = document.getElementById('paymentVerticalMeters');
+    const catTotalEl = document.getElementById('catMetersTotal');
+    const payTotalEl = document.getElementById('paymentMetersTotal');
+
+    if (!catContainer && !payContainer) return;
+
+    const list = Array.isArray(orders) ? orders : [];
+
+    // 1. Calculate Categories: Snacks, Beverages, Main Course, Others
+    const catTotals = {
+        'Snacks': 0,
+        'Beverages': 0,
+        'Main Course': 0,
+        'Others': 0
+    };
+
+    list.forEach(o => {
+        if (Array.isArray(o.rawItems)) {
+            o.rawItems.forEach(i => {
+                const dishCat = (i.category || getCategoryForDishName(i.name) || '').toLowerCase();
+                const rev = (Number(i.price) || 0) * (Number(i.qty) || 1);
+                if (dishCat.includes('snack') || dishCat.includes('roll') || dishCat.includes('burger') || dishCat.includes('sandwich')) {
+                    catTotals['Snacks'] += rev;
+                } else if (dishCat.includes('beverage') || dishCat.includes('tea') || dishCat.includes('coffee') || dishCat.includes('drink')) {
+                    catTotals['Beverages'] += rev;
+                } else if (dishCat.includes('main') || dishCat.includes('curry') || dishCat.includes('biryani') || dishCat.includes('rice') || dishCat.includes('thali')) {
+                    catTotals['Main Course'] += rev;
+                } else {
+                    catTotals['Others'] += rev;
+                }
+            });
+        } else if (o.items) {
+            const rev = Number(o.amount) || 0;
+            const lower = (o.items || '').toLowerCase();
+            if (lower.includes('tea') || lower.includes('coffee') || lower.includes('shake') || lower.includes('chai')) {
+                catTotals['Beverages'] += rev;
+            } else if (lower.includes('samosa') || lower.includes('sandwich') || lower.includes('burger') || lower.includes('snack')) {
+                catTotals['Snacks'] += rev;
+            } else if (lower.includes('biryani') || lower.includes('paneer') || lower.includes('curry') || lower.includes('thali') || lower.includes('roti')) {
+                catTotals['Main Course'] += rev;
+            } else {
+                catTotals['Others'] += rev;
+            }
+        }
+    });
+
+    const totalCatRev = Object.values(catTotals).reduce((a, b) => a + b, 0);
+    if (catTotalEl) catTotalEl.innerText = `Total: ₹${Math.round(totalCatRev).toLocaleString('en-IN')}`;
+
+    if (catContainer) {
+        const catConfig = [
+            { key: 'Snacks', label: 'Snacks', color: '#143832' },
+            { key: 'Beverages', label: 'Beverages', color: '#0284C7' },
+            { key: 'Main Course', label: 'Mains', color: '#D97706' },
+            { key: 'Others', label: 'Others', color: '#8B5CF6' }
+        ];
+
+        catContainer.innerHTML = catConfig.map(c => {
+            const val = catTotals[c.key] || 0;
+            const pct = totalCatRev > 0 ? Math.round((val / totalCatRev) * 100) : 0;
+            const barHeight = val > 0 ? Math.max(6, Math.min(100, pct)) : 0;
+            return `
+                <div class="vertical-meter-col">
+                    <span class="meter-val-text">₹${Math.round(val)}</span>
+                    <div class="meter-track-vertical">
+                        <div class="meter-fill-vertical" style="height: ${barHeight}%; background: ${c.color};"></div>
+                    </div>
+                    <span class="meter-pct-badge">${pct}%</span>
+                    <span class="meter-label-bottom" title="${c.label}">${c.label}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // 2. Calculate Payment Channels: Cash, UPI, Card
+    const payTotals = { 'Cash': 0, 'UPI': 0, 'Card': 0 };
+    list.forEach(o => {
+        const mode = (o.paymentMode || 'Cash').trim().toUpperCase();
+        if (mode === 'UPI') payTotals['UPI'] += (Number(o.amount) || 0);
+        else if (mode === 'CARD') payTotals['Card'] += (Number(o.amount) || 0);
+        else payTotals['Cash'] += (Number(o.amount) || 0);
+    });
+
+    const totalPayRev = Object.values(payTotals).reduce((a, b) => a + b, 0);
+    if (payTotalEl) payTotalEl.innerText = `Total: ₹${Math.round(totalPayRev).toLocaleString('en-IN')}`;
+
+    if (payContainer) {
+        const payConfig = [
+            { key: 'Cash', label: 'Cash', color: '#10B981' },
+            { key: 'UPI', label: 'UPI / QR', color: '#4361EE' },
+            { key: 'Card', label: 'Card / POS', color: '#F77F00' }
+        ];
+
+        payContainer.innerHTML = payConfig.map(p => {
+            const val = payTotals[p.key] || 0;
+            const pct = totalPayRev > 0 ? Math.round((val / totalPayRev) * 100) : 0;
+            const barHeight = val > 0 ? Math.max(6, Math.min(100, pct)) : 0;
+            return `
+                <div class="vertical-meter-col">
+                    <span class="meter-val-text">₹${Math.round(val)}</span>
+                    <div class="meter-track-vertical">
+                        <div class="meter-fill-vertical" style="height: ${barHeight}%; background: ${p.color};"></div>
+                    </div>
+                    <span class="meter-pct-badge">${pct}%</span>
+                    <span class="meter-label-bottom" title="${p.label}">${p.label}</span>
+                </div>
+            `;
+        }).join('');
+    }
+}
+window.renderVerticalProgressMeters = renderVerticalProgressMeters;
+
+// --- Decision 1: Master Header Unified Actions Dropdown Handlers ---
+function toggleHeaderActionsDropdown(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const dropdown = document.getElementById('headerActionsDropdown');
+    const trigger = document.getElementById('headerActionsBtn');
+    if (!dropdown) return;
+
+    const isVisible = dropdown.style.display === 'block';
+    dropdown.style.display = isVisible ? 'none' : 'block';
+    if (trigger) trigger.setAttribute('aria-expanded', isVisible ? 'false' : 'true');
+
+    if (!isVisible) {
+        // Sync active cashier name
+        const activeName = document.getElementById('activeStaffName')?.innerText || 'Admin';
+        const hdrStaff = document.getElementById('hdrActionStaffName');
+        if (hdrStaff) hdrStaff.innerText = activeName;
+
+        // Sync unread notification count
+        const notifBadge = document.getElementById('topbarNotificationBadge');
+        const count = notifBadge ? parseInt(notifBadge.innerText) || 0 : 0;
+        const hdrBadge = document.getElementById('headerDropdownNotificationBadge');
+        if (hdrBadge) {
+            hdrBadge.innerText = count;
+            hdrBadge.style.display = count > 0 ? 'inline-block' : 'none';
+        }
+        const noticeDot = document.getElementById('headerActionsNoticeDot');
+        if (noticeDot) {
+            noticeDot.style.display = count > 0 ? 'block' : 'none';
+        }
+    }
+}
+window.toggleHeaderActionsDropdown = toggleHeaderActionsDropdown;
+
+function closeHeaderActionsDropdown() {
+    const dropdown = document.getElementById('headerActionsDropdown');
+    const trigger = document.getElementById('headerActionsBtn');
+    if (dropdown) dropdown.style.display = 'none';
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+window.closeHeaderActionsDropdown = closeHeaderActionsDropdown;
+
+// Global click-outside listener to dismiss .action-dropdown menus, #accountPopoverCard, and #headerActionsDropdown
 document.addEventListener('click', (event) => {
     // Action dropdowns dismissal
     if (!event.target.closest('.action-dropdown')) {
@@ -1185,6 +1381,34 @@ document.addEventListener('click', (event) => {
     if (popover && popover.style.display === 'block') {
         if (!popover.contains(event.target) && (!trigger || !trigger.contains(event.target))) {
             popover.style.display = 'none';
+        }
+    }
+    // Header Actions Dropdown dismissal
+    const hdrDropdown = document.getElementById('headerActionsDropdown');
+    const hdrTrigger = document.getElementById('headerActionsBtn');
+    if (hdrDropdown && hdrDropdown.style.display === 'block') {
+        if (!hdrDropdown.contains(event.target) && (!hdrTrigger || !hdrTrigger.contains(event.target))) {
+            closeHeaderActionsDropdown();
+        }
+    }
+});
+
+// Window resize listener to dismiss mobile dropdown on wide screens
+window.addEventListener('resize', () => {
+    if (window.innerWidth >= 1080) {
+        closeHeaderActionsDropdown();
+    }
+});
+
+// Escape key listener for accessible dismissal of open dropdowns
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        closeHeaderActionsDropdown();
+        closeAllActionDropdowns();
+        const popover = document.getElementById('accountPopoverCard');
+        if (popover) popover.style.display = 'none';
+        if (typeof toggleWaPreviewExpand === 'function') {
+            toggleWaPreviewExpand(false);
         }
     }
 });
