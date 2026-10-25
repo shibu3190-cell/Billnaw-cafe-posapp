@@ -1170,6 +1170,9 @@ window.toggleActionDropdown = toggleActionDropdown;
 
 function closeAllActionDropdowns() {
     document.querySelectorAll('.action-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+    if (typeof closeAllMenuActionDropdowns === 'function') {
+        closeAllMenuActionDropdowns();
+    }
 }
 window.closeAllActionDropdowns = closeAllActionDropdowns;
 

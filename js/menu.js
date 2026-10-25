@@ -289,15 +289,29 @@ function renderMenuCatalogUI() {
                         </div>
                     </div>
                     <div class="clean-item-right">
-                        <button type="button" class="adjust-stock-btn" onclick="openQuickAdjustStockModal(${item.id})">
-                            Adjust Stock
-                        </button>
-                        <button type="button" class="clean-item-action-btn" onclick="editMenuItem(${item.id})" title="Edit Item">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                        </button>
-                        <button type="button" class="clean-item-action-btn delete-btn" onclick="deleteMenuItem(${item.id})" title="Delete Item">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                        </button>
+                        <div class="action-dropdown" style="position: relative; display: inline-block;">
+                            <button type="button" class="action-dropdown-btn clean-item-more-btn" onclick="event.stopPropagation(); toggleMenuItemDropdown(event, ${item.id})" title="Item Options" aria-label="Item options" aria-haspopup="true">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="1.5"></circle>
+                                    <circle cx="12" cy="5" r="1.5"></circle>
+                                    <circle cx="12" cy="19" r="1.5"></circle>
+                                </svg>
+                            </button>
+                            <div class="action-dropdown-menu" id="menuItemDropdown-${item.id}" style="display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 1050; min-width: 155px;">
+                                <button type="button" class="action-dropdown-item" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); openQuickAdjustStockModal(${item.id});">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                                    <span>Adjust Stock</span>
+                                </button>
+                                <button type="button" class="action-dropdown-item" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); editMenuItem(${item.id});">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                    <span>Edit Item</span>
+                                </button>
+                                <button type="button" class="action-dropdown-item danger" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); deleteMenuItem(${item.id});">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    <span>Delete Item</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>`;
             }).join('');
@@ -362,6 +376,45 @@ function renderMenuCatalogUI() {
     }
 }
 window.renderMenuCatalogUI = renderMenuCatalogUI;
+
+// ⚡ Menu Item Action Dropdown Toggle Handlers (3-Dot Menu)
+function toggleMenuItemDropdown(event, itemId) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const targetMenu = document.getElementById(`menuItemDropdown-${itemId}`);
+    const parentCard = targetMenu ? targetMenu.closest('.clean-item-card') : null;
+    const isVisible = targetMenu && (targetMenu.style.display === 'block' || targetMenu.classList.contains('show'));
+    
+    closeAllMenuActionDropdowns();
+    
+    if (targetMenu && !isVisible) {
+        targetMenu.style.display = 'block';
+        targetMenu.classList.add('show');
+        if (parentCard) {
+            parentCard.classList.add('dropdown-open');
+        }
+    }
+}
+window.toggleMenuItemDropdown = toggleMenuItemDropdown;
+
+function closeAllMenuActionDropdowns() {
+    document.querySelectorAll('[id^="menuItemDropdown-"]').forEach(el => {
+        el.style.display = 'none';
+        el.classList.remove('show');
+    });
+    document.querySelectorAll('.clean-item-card.dropdown-open').forEach(card => {
+        card.classList.remove('dropdown-open');
+    });
+}
+window.closeAllMenuActionDropdowns = closeAllMenuActionDropdowns;
+
+// Global document click listener to close menu item action dropdowns
+document.addEventListener('click', (event) => {
+    if (!event.target.closest('.clean-item-right .action-dropdown')) {
+        closeAllMenuActionDropdowns();
+    }
+});
 
 // 📸 Upload Menu Choice Dialog Handlers
 function openUploadMenuChoiceModal() {
