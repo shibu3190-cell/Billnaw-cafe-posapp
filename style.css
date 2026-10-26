@@ -6914,6 +6914,105 @@ body.printing { background: #fff !important; }
     }
 }
 
+/* 🚀 PWA Modern Floating Update Notification Banner */
+.app-update-popup {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 999999;
+    max-width: 440px;
+    width: calc(100vw - 32px);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22), 0 4px 12px rgba(20, 56, 50, 0.15);
+    border-radius: 16px;
+    background: #FFFFFF;
+    border: 1.5px solid rgba(20, 56, 50, 0.18);
+    animation: slideUpUpdateToast 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUpUpdateToast {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.update-popup-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+}
+
+.update-icon-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: #E8F5E9;
+    color: #143832;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.update-text-area {
+    flex: 1;
+    min-width: 0;
+}
+
+.update-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0F172A;
+    line-height: 1.3;
+}
+
+.update-desc {
+    font-size: 11px;
+    color: #64748B;
+    line-height: 1.3;
+    margin-top: 2px;
+}
+
+.update-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.update-action-btn {
+    padding: 7px 12px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    border-radius: 10px !important;
+    gap: 5px !important;
+    background: #143832 !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+
+.update-popup-close-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #F1F5F9;
+    border: none;
+    color: #64748B;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.update-popup-close-btn:hover {
+    background: #E2E8F0;
+    color: #0F172A;
+}
+
+
 
 
 

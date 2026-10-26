@@ -549,21 +549,19 @@ let draftTableCount = 5;
 let draftCustomNames = {};
 
 function openTableConfigModal() {
-    const modal = document.getElementById('tableConfigModal');
-    if (!modal) return;
-    
-    draftTableCount = parseInt(shopProfile.tableCount, 10) || 5;
-    draftCustomNames = JSON.parse(JSON.stringify(shopProfile.customTableNames || {}));
-    
-    const countInput = document.getElementById('settingTableCountInput');
-    if (countInput) countInput.value = draftTableCount;
-    
-    renderTableConfigList();
-    modal.style.display = 'flex';
+    if (typeof openTableManagementModal === 'function') {
+        openTableManagementModal();
+    } else {
+        const modal = document.getElementById('tableManagementModal') || document.getElementById('tableConfigModal');
+        if (modal) modal.style.display = 'flex';
+    }
 }
 window.openTableConfigModal = openTableConfigModal;
 
 function closeTableConfigModal() {
+    if (typeof closeTableManagementModal === 'function') {
+        closeTableManagementModal();
+    }
     const modal = document.getElementById('tableConfigModal');
     if (modal) modal.style.display = 'none';
 }
@@ -699,42 +697,8 @@ function applyTableNamingPreset(prefix) {
 }
 window.applyTableNamingPreset = applyTableNamingPreset;
 
-function saveTableSettings() {
-    // Read from inputs
-    for (let i = 1; i <= draftTableCount; i++) {
-        const inp = document.getElementById(`tblCustomNameInput_${i}`);
-        if (inp) {
-            draftCustomNames[i] = inp.value.trim() || `T${i}`;
-        }
-    }
-    
-    shopProfile.tableCount = draftTableCount;
-    shopProfile.customTableNames = JSON.parse(JSON.stringify(draftCustomNames));
-    shopProfile.tableNamingPrefix = "T";
-    
-    // Ensure all tables initialized
-    for (let i = 1; i <= draftTableCount; i++) {
-        if (!tablesInfo[i]) {
-            tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
-        }
-    }
-    
-    // Clamp activeTable if out of range
-    if (activeTable > draftTableCount) {
-        activeTable = 1;
-    }
+// saveTableSettings eliminated in Milestone 1: Authoritative handler is defined in index.html for #tableManagementModal
 
-    persistProfile();
-    persistTables();
-    
-    closeTableConfigModal();
-    renderTables();
-    syncTableUI();
-    updateCartUI();
-    
-    showToast("✅ Table tabs & seating saved successfully!");
-}
-window.saveTableSettings = saveTableSettings;
 
 function openCloudSyncDetailModal() {
     const el = document.getElementById('cloudSyncDetailModal');

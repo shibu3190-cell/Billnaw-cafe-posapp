@@ -140,7 +140,6 @@ function toggleVoiceBilling() {
         initVoiceEngine();
     }
     if (!speechRecognizer) {
-        // In iframe environment where SpeechRecognition is unavailable
         showToast("Voice mode active. Tap any simulated spoken command or speech chip.");
         showQuickVoicePills(true);
         updateVoiceIndicatorUI(true, "Select or tap spoken diner phrase to add to Table ledger");
@@ -155,7 +154,6 @@ function toggleVoiceBilling() {
         try {
             speechRecognizer.start();
         } catch (e) {
-            // If starting fails (e.g. already started or blocked in iframe)
             showQuickVoicePills(true);
             updateVoiceIndicatorUI(true, "Microphone stream ready. Tap quick voice chips or speak.");
         }
@@ -211,24 +209,20 @@ function parseAndPushVoiceOrder(phrase) {
 
     // Check against menu items
     if (Array.isArray(menuItems) && menuItems.length > 0) {
-        // Split by commas, 'and', 'plus', or line breaks
         const parts = cleanPhrase.split(/,|\band\b|\bplus\b|\btatha\b/i);
 
         parts.forEach(part => {
             const trimmed = part.trim();
             if (!trimmed) return;
 
-            // Extract numeric or word count
             let qty = 1;
             let dishNameCandidate = trimmed;
 
-            // Check leading digit
             const digitMatch = trimmed.match(/^(\d+)\s*(.*)$/);
             if (digitMatch) {
                 qty = parseInt(digitMatch[1], 10) || 1;
                 dishNameCandidate = digitMatch[2].trim();
             } else {
-                // Check leading word number
                 const firstWordMatch = trimmed.match(/^([a-z]+)\s+(.*)$/i);
                 if (firstWordMatch && spokenNumberMap[firstWordMatch[1].toLowerCase()]) {
                     qty = spokenNumberMap[firstWordMatch[1].toLowerCase()];
@@ -236,7 +230,6 @@ function parseAndPushVoiceOrder(phrase) {
                 }
             }
 
-            // Aliases mapping for common voice orders
             let lookupName = dishNameCandidate.toLowerCase();
             if (/^(hot\s+)?(chai|tea)$/i.test(lookupName) || /\b(hot\s+)?(chai|tea)\b/i.test(lookupName)) {
                 lookupName = 'tea';
@@ -248,7 +241,6 @@ function parseAndPushVoiceOrder(phrase) {
                 lookupName = 'masala coke';
             }
 
-            // Find matching menu item
             let matched = menuItems.find(m => m.name.toLowerCase() === lookupName);
             if (!matched) {
                 matched = menuItems.find(m => m.name.toLowerCase() === dishNameCandidate.toLowerCase());
@@ -257,12 +249,10 @@ function parseAndPushVoiceOrder(phrase) {
                 matched = menuItems.find(m => dishNameCandidate.length >= 3 && m.name.toLowerCase().includes(dishNameCandidate.toLowerCase()));
             }
             if (!matched) {
-                // Reverse search: does menu item name exist in candidate
                 matched = menuItems.find(m => trimmed.toLowerCase().includes(m.name.toLowerCase()));
             }
 
             if (matched) {
-                // Add to active table ledger
                 if (!tablesInfo[activeTable]) {
                     tablesInfo[activeTable] = { items: [], status: 'occupied', savedTime: Date.now(), lastReminder: null };
                 }
@@ -306,290 +296,8 @@ function parseAndPushVoiceOrder(phrase) {
 }
 window.parseAndPushVoiceOrder = parseAndPushVoiceOrder;
 
-
-// --- 2. WHATSAPP MARKETING HUB ENGINE ---
-const defaultWhatsAppTemplates = [
-    {
-        id: 'weekend_feast',
-        title: '🍕 Weekend Special Feast',
-        category: 'Discount Promo',
-        headline: 'Weekend Foodie Celebration!',
-        discountPercent: 15,
-        minOrder: 499,
-        validTill: 'This Sunday Midnight',
-        customNote: 'Dine-in or Takeaway available at our cafe.',
-        format: (storeName, data, customerName) => 
-            `Namaste ${customerName || 'Food Lover'}! 🌟\n\n*${storeName}* invites you to our *Weekend Special Feast*! 🎉\n\nEnjoy a flat *${data.discountPercent}% OFF* on all orders above *₹${data.minOrder}*.\n\n📅 *Valid:* ${data.validTill}\n✨ *Note:* ${data.customNote}\n\nShow this message at billing to avail your discount. See you soon! ☕🍛`
-    },
-    {
-        id: 'vip_loyalty',
-        title: '⭐ VIP Customer Appreciation',
-        category: 'Loyalty Reward',
-        headline: 'A Special Treat for Our Loyal Regulars',
-        discountPercent: 20,
-        minOrder: 299,
-        validTill: 'Next 7 Days',
-        customNote: 'Exclusive reward reserved for our top patrons.',
-        format: (storeName, data, customerName) => 
-            `Hello ${customerName || 'Valued Guest'}! 💎\n\nThank you for being one of *${storeName}*'s most cherished patrons. We truly appreciate your visits!\n\nHere is an exclusive *${data.discountPercent}% OFF* voucher on your next order.\n\n🎁 *Valid:* ${data.validTill}\n🏷️ *Offer:* ${data.discountPercent}% Off on orders above ₹${data.minOrder}\n📍 *Store:* ${storeName}\n\nWe look forward to serving you again! ✨`
-    },
-    {
-        id: 'evening_chai_snack',
-        title: '☕ Evening Chai & Snack Combo',
-        category: 'Combo Offer',
-        headline: 'Warm Up with Our Evening Special',
-        discountPercent: 10,
-        minOrder: 199,
-        validTill: 'Daily 4 PM - 7 PM',
-        customNote: 'Pair your favourite hot tea/coffee with freshly fried savouries.',
-        format: (storeName, data, customerName) => 
-            `Evening cravings calling? ☕🥟\n\nDrop by *${storeName}* between *${data.validTill}* for our signature Chai, Coffee & Hot Snack combos!\n\nGet *${data.discountPercent}% OFF* on bill above ₹${data.minOrder}.\n\nBring along friends and enjoy the warm café vibes! 🌟`
-    },
-    {
-        id: 'chef_launch',
-        title: '📢 Chef\'s New Menu Launch',
-        category: 'New Dishes',
-        headline: 'Taste Our New Culinary Delights',
-        discountPercent: 12,
-        minOrder: 350,
-        validTill: 'This Whole Week',
-        customNote: 'Crafted with premium authentic regional recipes.',
-        format: (storeName, data, customerName) => 
-            `Exciting News from *${storeName}*! 👨‍🍳🔥\n\nWe have just refreshed our menu with exciting new signature items, authentic regional flavours, and freshly brewed specialties.\n\nBe the first to taste them with an introductory *${data.discountPercent}% OFF* (min order ₹${data.minOrder})!\n\nValid till: ${data.validTill}. Come dine with us today! 🍽️`
-    }
-];
-
-let selectedWaTemplateId = 'weekend_feast';
-let waCustomValues = JSON.parse(localStorage.getItem('bongbhoj_wa_custom_values') || 'null') || {
-    discountPercent: 15,
-    minOrder: 499,
-    validTill: 'This Sunday',
-    customNote: 'Show this message at the counter to claim discount.'
-};
-
-function selectWhatsAppTemplate(tplId) {
-    selectedWaTemplateId = tplId;
-    const tpl = defaultWhatsAppTemplates.find(t => t.id === tplId);
-    if (tpl) {
-        waCustomValues.discountPercent = tpl.discountPercent;
-        waCustomValues.minOrder = tpl.minOrder;
-        waCustomValues.validTill = tpl.validTill;
-        waCustomValues.customNote = tpl.customNote;
-    }
-    renderWhatsAppHubUI();
-}
-window.selectWhatsAppTemplate = selectWhatsAppTemplate;
-
-function updateWhatsAppCustomValue(key, val) {
-    waCustomValues[key] = val;
-    localStorage.setItem('bongbhoj_wa_custom_values', JSON.stringify(waCustomValues));
-    renderWhatsAppPreviewBubble();
-}
-window.updateWhatsAppCustomValue = updateWhatsAppCustomValue;
-
-function getGeneratedWhatsAppText(customerName) {
-    const tpl = defaultWhatsAppTemplates.find(t => t.id === selectedWaTemplateId) || defaultWhatsAppTemplates[0];
-    const storeName = shopProfile.name || "billnaw";
-    return tpl.format(storeName, waCustomValues, customerName);
-}
-window.getGeneratedWhatsAppText = getGeneratedWhatsAppText;
-
-function renderWhatsAppPreviewBubble() {
-    const bubbleTextEl = document.getElementById('waBubbleMessageContent');
-    const timeEl = document.getElementById('waBubbleTimeDisplay');
-    if (bubbleTextEl) {
-        const rawText = getGeneratedWhatsAppText('Aditi Roy');
-        // Simple whatsapp markdown formatter (*bold* and newlines)
-        const formatted = escapeHtml(rawText)
-            .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, '<br>');
-        bubbleTextEl.innerHTML = formatted;
-    }
-    if (timeEl) {
-        timeEl.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-}
-window.renderWhatsAppPreviewBubble = renderWhatsAppPreviewBubble;
-
-function renderWhatsAppHubUI() {
-    const templatesListEl = document.getElementById('waTemplatesListContainer');
-    const storeNamePreview = document.getElementById('waPreviewStoreName');
-    if (storeNamePreview) storeNamePreview.innerText = shopProfile.name || "billnaw";
-
-    if (templatesListEl) {
-        templatesListEl.innerHTML = defaultWhatsAppTemplates.map(tpl => {
-            const isSelected = tpl.id === selectedWaTemplateId;
-            return `
-                <div class="wa-template-card ${isSelected ? 'selected' : ''}" onclick="selectWhatsAppTemplate('${tpl.id}')">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <span class="wa-tpl-badge">${escapeHtml(tpl.category)}</span>
-                        ${isSelected ? '<span style="color: var(--success); font-weight: 800; font-size: 14px;">✓ Selected</span>' : ''}
-                    </div>
-                    <div class="wa-tpl-title">${escapeHtml(tpl.title)}</div>
-                    <div class="wa-tpl-desc">${escapeHtml(tpl.headline)} • ${tpl.discountPercent}% Off</div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    // Populate input values
-    const discountInput = document.getElementById('waInputDiscount');
-    const minOrderInput = document.getElementById('waInputMinOrder');
-    const validTillInput = document.getElementById('waInputValidTill');
-    const noteInput = document.getElementById('waInputNote');
-
-    if (discountInput) discountInput.value = waCustomValues.discountPercent;
-    if (minOrderInput) minOrderInput.value = waCustomValues.minOrder;
-    if (validTillInput) validTillInput.value = waCustomValues.validTill;
-    if (noteInput) noteInput.value = waCustomValues.customNote;
-
-    renderWhatsAppPreviewBubble();
-    renderWhatsAppCustomerBroadcastList();
-}
-window.renderWhatsAppHubUI = renderWhatsAppHubUI;
-
-function renderWhatsAppCustomerBroadcastList() {
-    const listEl = document.getElementById('waCustomerBroadcastList');
-    if (!listEl) return;
-
-    if (!customersList || customersList.length === 0) {
-        listEl.innerHTML = `
-            <div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">
-                No customer contacts in directory yet. Add customers in the Customers tab to dispatch instant campaigns.
-            </div>`;
-        return;
-    }
-
-    listEl.innerHTML = customersList.slice(0, 15).map(cust => {
-        const phone = (cust.phone || '').replace(/\D/g, '');
-        const hasPhone = phone.length >= 10;
-        const msgText = encodeURIComponent(getGeneratedWhatsAppText(cust.name));
-        const waLink = hasPhone ? `https://wa.me/91${phone.slice(-10)}?text=${msgText}` : '#';
-
-        return `
-            <div class="wa-cust-row">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div class="customer-avatar" style="width: 32px; height: 32px; font-size: 11px;">
-                        ${(cust.name || 'C').charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                        <div style="font-weight: 700; font-size: 13px; color: var(--text-dark);">${escapeHtml(cust.name)}</div>
-                        <div style="font-size: 11px; color: var(--text-muted);">${cust.phone || 'No Phone'} • <span style="color: var(--primary); font-weight: 600;">${cust.tier || 'Bronze'}</span></div>
-                    </div>
-                </div>
-                <div>
-                    ${hasPhone ? `
-                        <a href="${waLink}" target="_blank" class="btn btn-success" style="padding: 6px 12px; font-size: 11px; border-radius: 16px; text-decoration: none; gap: 4px;">
-                            💬 Send WhatsApp
-                        </a>
-                    ` : `
-                        <button disabled class="btn btn-outline" style="padding: 6px 10px; font-size: 11px; opacity: 0.5;">No Phone</button>
-                    `}
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-window.renderWhatsAppCustomerBroadcastList = renderWhatsAppCustomerBroadcastList;
-
-function copyWhatsAppCampaignText() {
-    const text = getGeneratedWhatsAppText('Customer');
-    navigator.clipboard.writeText(text).then(() => {
-        showToast("Campaign message copied to clipboard! Paste directly into WhatsApp groups or broadcast.");
-    }).catch(() => {
-        showToast("Copied campaign text.");
-    });
-}
-window.copyWhatsAppCampaignText = copyWhatsAppCampaignText;
-
-// --- WHATSAPP LANDING HUB SUB-VIEW NAVIGATION ---
-function openWhatsAppHubSubView(viewType, templateKey) {
-    const hub = document.getElementById('whatsappLandingHub');
-    if (hub) hub.style.display = 'none';
-
-    const studioSub = document.getElementById('waCampaignStudioSubView');
-    const broadcastSub = document.getElementById('waBroadcastSubView');
-    const qrSub = document.getElementById('waQrSubView');
-
-    if (studioSub) studioSub.style.display = 'none';
-    if (broadcastSub) broadcastSub.style.display = 'none';
-    if (qrSub) qrSub.style.display = 'none';
-
-    if (templateKey) {
-        if (templateKey === 'festival') selectWhatsAppTemplate('weekend_feast');
-        else if (templateKey === 'combos') selectWhatsAppTemplate('evening_chai_snack');
-        else if (templateKey === 'loyalty') selectWhatsAppTemplate('vip_loyalty');
-        else selectWhatsAppTemplate(templateKey);
-    }
-
-    if (viewType === 'broadcast') {
-        if (broadcastSub) broadcastSub.style.display = 'block';
-    } else if (viewType === 'qr') {
-        if (qrSub) qrSub.style.display = 'block';
-    } else {
-        if (studioSub) studioSub.style.display = 'block';
-    }
-
-    if (typeof renderWhatsAppHubUI === 'function') {
-        renderWhatsAppHubUI();
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-window.openWhatsAppHubSubView = openWhatsAppHubSubView;
-
-function closeWhatsAppHubSubView() {
-    const hub = document.getElementById('whatsappLandingHub');
-    if (hub) hub.style.display = 'block';
-
-    const studioSub = document.getElementById('waCampaignStudioSubView');
-    const broadcastSub = document.getElementById('waBroadcastSubView');
-    const qrSub = document.getElementById('waQrSubView');
-
-    if (studioSub) studioSub.style.display = 'none';
-    if (broadcastSub) broadcastSub.style.display = 'none';
-    if (qrSub) qrSub.style.display = 'none';
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-window.closeWhatsAppHubSubView = closeWhatsAppHubSubView;
-
-// --- INVENTORY LANDING HUB SUB-VIEW NAVIGATION ---
-function openInventoryHubSubView(subtab) {
-    if (typeof window.switchInventoryHubTab === 'function') {
-        const targetTab = (subtab === 'morning_batch') ? 'morning_batch'
-            : (subtab === 'dish_costing' || subtab === 'central_kitchen' || subtab === 'purchase_orders' || subtab === 'forecasting_waste') ? 'dish_costing'
-            : 'raw_stock';
-        window.switchInventoryHubTab(targetTab);
-    } else if (typeof window.switchInventorySubTab === 'function') {
-        const targetTab = (subtab === 'bar_matrix') ? 'raw_materials' : subtab;
-        window.switchInventorySubTab(targetTab);
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-window.openInventoryHubSubView = openInventoryHubSubView;
-
-function closeInventoryHubSubView() {
-    if (typeof window.switchInventoryHubTab === 'function') {
-        window.switchInventoryHubTab('raw_stock');
-    }
-    if (typeof renderInventoryTelemetryUI === 'function') {
-        renderInventoryTelemetryUI();
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-window.closeInventoryHubSubView = closeInventoryHubSubView;
-
-function openRestockExpenseModal(itemId) {
-    if (window.culinaryInventory && typeof window.culinaryInventory.openRestockModal === 'function') {
-        window.culinaryInventory.openRestockModal(itemId || 'RM-OIL');
-    }
-}
-window.openRestockExpenseModal = openRestockExpenseModal;
-
-
-
-// --- 3. INVENTORY TELEMETRY & RAW INGREDIENTS ENGINE ---
-// Clean Zero-Stock Baseline: Real purchases and recipe consumption populate live inventory
+// --- 2. TELEMETRY INVENTORY DATA & DISH RECIPES ---
+// Clean Zero-Stock Baseline: Real purchases and recipe consumption populate live inventory via culinary pipeline
 const defaultInventoryData = [
     { id: 4, name: "Refined Sunflower Oil", category: "Pantry", stock: 0.0, minThreshold: 5.0, unit: "Litre", costPerUnit: 135, dailyUsage: "0 L/day", impactedDishes: ["Samosa", "Chicken Curry"], status: "low" },
     { id: 9, name: "Refined Wheat & All-Purpose Flour (Maida)", category: "Grains & Bakery", stock: 0.0, minThreshold: 5.0, unit: "kg", costPerUnit: 45, dailyUsage: "0 kg/day", impactedDishes: ["Samosa"], status: "low" },
@@ -604,7 +312,7 @@ const defaultInventoryData = [
     { id: 14, name: "Chaat Masala Blend", category: "Spices", stock: 0.0, minThreshold: 0.5, unit: "kg", costPerUnit: 300, dailyUsage: "0 kg/day", impactedDishes: ["Masala Coke"], status: "low" }
 ];
 
-let inventoryTelemetryData = JSON.parse(localStorage.getItem('bongbhoj_inventory_telemetry') || 'null') || defaultInventoryData;
+let inventoryTelemetryData = defaultInventoryData;
 
 // Pre-configured default dish recipes for existing menu items (ingredientId: amountPerPortion)
 const defaultDishRecipes = {
@@ -627,153 +335,8 @@ const defaultDishRecipes = {
     "chicken rolls": { 6: 0.15, 9: 0.08, 4: 0.02 },
     "paneer roll": { 7: 0.12, 9: 0.08, 4: 0.02 },
     "paneer tikka": { 7: 0.18, 4: 0.02 },
-    "paneer sandwich": { 7: 0.10, 9: 0.06, 4: 0.01 },
-    "paneer": { 7: 0.12, 9: 0.06, 4: 0.02 },
-    "veg burger": { 9: 0.10, 4: 0.02 },
-    "burger": { 9: 0.10, 4: 0.02 },
-    "fried rice": { 3: 0.20, 4: 0.03 },
-    "special fried rice": { 3: 0.20, 4: 0.03 },
-    "rice": { 3: 0.20, 4: 0.02 },
-    "french fries": { 4: 0.04 },
-    "cutlets": { 9: 0.06, 4: 0.03 }
+    "paneer sandwich": { 7: 0.10, 9: 0.06, 4: 0.01 }
 };
-
-function persistInventoryTelemetry() {
-    localStorage.setItem('bongbhoj_inventory_telemetry', JSON.stringify(inventoryTelemetryData));
-}
-
-function calculateLossAversionMetrics() {
-    // Count critical and low items
-    const criticalItems = inventoryTelemetryData.filter(i => i.stock <= i.minThreshold);
-    // Dynamic calculated revenue impact based on costPerUnit and estimated rush servings
-    const estImpact = criticalItems.reduce((acc, item) => acc + Math.round((item.costPerUnit || 100) * 8), 0); 
-    return {
-        criticalCount: criticalItems.length,
-        potentialLoss: estImpact || (criticalItems.length * 1200),
-        itemsSummary: criticalItems.map(i => i.name).slice(0, 3).join(', ')
-    };
-}
-window.calculateLossAversionMetrics = calculateLossAversionMetrics;
-
-function renderInventoryTelemetryUI() {
-    const container = document.getElementById('inventoryIngredientsList');
-    const alertBanner = document.getElementById('inventoryLossAversionBanner');
-    const alertText = document.getElementById('inventoryLossAlertText');
-
-    const metrics = calculateLossAversionMetrics();
-
-    if (alertBanner && alertText) {
-        if (metrics.criticalCount > 0) {
-            alertBanner.style.display = 'none'; // Alert handled in topbar notification bell drawer
-            alertText.innerHTML = `<strong>⚠️ ${metrics.criticalCount} Low Ingredients may impact tonight's top best-sellers (${metrics.itemsSummary})</strong>. Estimated <span style="color: var(--danger); font-weight: 800;">₹${metrics.potentialLoss.toLocaleString('en-IN')} potential sales at risk</span> if unstocked before dinner rush.`;
-        } else {
-            alertBanner.style.display = 'none';
-        }
-    }
-
-    // Update dynamic top cards if elements exist in DOM
-    const totalCount = inventoryTelemetryData.length;
-    const criticalItems = inventoryTelemetryData.filter(i => i.stock <= i.minThreshold);
-    const lowCount = criticalItems.length;
-    const itemsSummary = criticalItems.map(i => i.name.split(' ')[0]).slice(0, 3).join(', ');
-    const stockedCount = inventoryTelemetryData.filter(i => i.stock > i.minThreshold).length;
-    const readyPercent = totalCount > 0 ? Math.round((stockedCount / totalCount) * 100) : 100;
-
-    const totalEl = document.getElementById('invStatTotalCount');
-    if (totalEl) totalEl.innerText = `${totalCount} Items`;
-    const riskEl = document.getElementById('invStatRiskCount');
-    if (riskEl) riskEl.innerText = `${lowCount} Near Low`;
-    const riskSumEl = document.getElementById('invStatRiskSummary');
-    if (riskSumEl) riskSumEl.innerText = itemsSummary || 'All items optimal';
-    const readyEl = document.getElementById('invStatReadyPercent');
-    if (readyEl) readyEl.innerText = `${readyPercent}% Ready`;
-    const readySumEl = document.getElementById('invStatReadySummary');
-    if (readySumEl) readySumEl.innerText = `${stockedCount}/${totalCount} dishes stocked`;
-
-    if (!container) return;
-
-    if (inventoryTelemetryData.length === 0) {
-        container.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align: center; padding: 32px 16px; background: #FAF7F4; border: 1.5px dashed var(--border); border-radius: 14px;">
-                <div style="font-size: 26px; margin-bottom: 6px;">🥦</div>
-                <div style="font-weight: 800; font-size: 14px; color: var(--text-dark);">No Ingredients Tracked Yet</div>
-                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Record a market purchase or configure recipes to monitor live stock.</div>
-            </div>
-        `;
-        return;
-    }
-
-    container.innerHTML = inventoryTelemetryData.map(item => {
-        const percent = Math.min(100, Math.round((item.stock / (item.minThreshold * 2.5)) * 100));
-        let barColor = 'var(--success)';
-        let badgeCls = 'stock-good';
-        let statusLabel = 'Optimal';
-
-        if (item.stock === 0) {
-            barColor = 'var(--danger)';
-            badgeCls = 'stock-critical';
-            statusLabel = 'EMPTY / RESTOCK';
-        } else if (item.stock <= item.minThreshold * 0.7) {
-            barColor = 'var(--danger)';
-            badgeCls = 'stock-critical';
-            statusLabel = 'CRITICAL LOW';
-        } else if (item.stock <= item.minThreshold) {
-            barColor = 'var(--warning)';
-            badgeCls = 'stock-low';
-            statusLabel = 'Below Safety Level';
-        }
-
-        return `
-            <div class="inventory-item-card">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-                    <div>
-                        <div style="font-size: 15px; font-weight: 700; color: var(--text-dark);">${escapeHtml(item.name)}</div>
-                        <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(item.category)} • Usage: ${item.dailyUsage}</div>
-                    </div>
-                    <span class="stock-status-badge ${badgeCls}">${statusLabel}</span>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
-                    <div style="font-size: 20px; font-weight: 800; color: ${item.stock <= item.minThreshold ? 'var(--danger)' : 'var(--primary)'};">
-                        ${item.stock} <span style="font-size: 13px; font-weight: 600; color: var(--text-muted);">${item.unit}</span>
-                    </div>
-                    <div style="font-size: 11px; color: var(--text-muted);">
-                        Min Threshold: <strong>${item.minThreshold} ${item.unit}</strong>
-                    </div>
-                </div>
-
-                <!-- Visual stock progress bar -->
-                <div class="stock-bar-container">
-                    <div class="stock-bar-fill" style="width: ${percent}%; background: ${barColor};"></div>
-                    <div class="stock-bar-marker" style="left: ${Math.round((item.minThreshold / (item.minThreshold * 2.5)) * 100)}%;" title="Safety Threshold"></div>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px;">
-                    <div style="color: var(--text-muted);">
-                        Used in: <strong style="color: var(--primary);">${item.impactedDishes.join(', ')}</strong>
-                    </div>
-                    <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 14px;" onclick="promptRestockIngredient(${item.id})">
-                        ➕ Restock
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-window.renderInventoryTelemetryUI = renderInventoryTelemetryUI;
-
-function promptRestockIngredient(id) {
-    const item = inventoryTelemetryData.find(i => i.id === id);
-    if (!item) return;
-    const addAmt = prompt(`Add restock quantity for ${item.name} (${item.unit}):`, "5");
-    if (addAmt && !isNaN(parseFloat(addAmt)) && parseFloat(addAmt) > 0) {
-        item.stock = Math.round((item.stock + parseFloat(addAmt)) * 10) / 10;
-        persistInventoryTelemetry();
-        renderInventoryTelemetryUI();
-        showToast(`Updated ${item.name} stock to ${item.stock} ${item.unit}`);
-    }
-}
-window.promptRestockIngredient = promptRestockIngredient;
 
 // Deduct inventory ingredients when an order is completed using dish recipes
 function deductInventoryForOrder(order) {
@@ -781,73 +344,10 @@ function deductInventoryForOrder(order) {
     if (window.culinaryInventory && typeof window.culinaryInventory.deductOrder === 'function') {
         window.culinaryInventory.deductOrder(order);
     }
-    const orderItems = Array.isArray(order.rawItems) ? order.rawItems : (Array.isArray(order.items) ? order.items : []);
-    if (!orderItems.length) return;
-    
-    orderItems.forEach(cartItem => {
-        const dishName = (cartItem.name || '').toLowerCase().trim();
-        const qty = cartItem.qty || cartItem.quantity || 1;
-
-        // 1. Try exact or partial match from defaultDishRecipes
-        let recipe = defaultDishRecipes[dishName];
-        if (!recipe) {
-            const recipeKey = Object.keys(defaultDishRecipes).find(k => dishName.includes(k));
-            if (recipeKey) recipe = defaultDishRecipes[recipeKey];
-        }
-
-        if (recipe) {
-            Object.entries(recipe).forEach(([ingIdStr, amount]) => {
-                const ingId = parseInt(ingIdStr, 10);
-                const item = inventoryTelemetryData.find(i => i.id === ingId);
-                if (item) {
-                    item.stock = Math.max(0, Math.round((item.stock - (amount * qty)) * 100) / 100);
-                }
-            });
-        } else {
-            // Heuristic deductions for unmapped dish components
-            if (dishName.includes('samosa')) {
-                const f = inventoryTelemetryData.find(i => i.id === 9); if (f) f.stock = Math.max(0, Math.round((f.stock - 0.04 * qty) * 100) / 100);
-                const p = inventoryTelemetryData.find(i => i.id === 10); if (p) p.stock = Math.max(0, Math.round((p.stock - 0.05 * qty) * 100) / 100);
-                const o = inventoryTelemetryData.find(i => i.id === 4); if (o) o.stock = Math.max(0, Math.round((o.stock - 0.015 * qty) * 100) / 100);
-            }
-            if (dishName.includes('tea') || dishName.includes('chai')) {
-                const m = inventoryTelemetryData.find(i => i.id === 2); if (m) m.stock = Math.max(0, Math.round((m.stock - 0.08 * qty) * 100) / 100);
-                const t = inventoryTelemetryData.find(i => i.id === 5); if (t) t.stock = Math.max(0, Math.round((t.stock - 0.005 * qty) * 100) / 100);
-                const s = inventoryTelemetryData.find(i => i.id === 8); if (s) s.stock = Math.max(0, Math.round((s.stock - 0.008 * qty) * 100) / 100);
-            }
-            if (dishName.includes('chicken')) {
-                const ch = inventoryTelemetryData.find(i => i.id === 6); if (ch) ch.stock = Math.max(0, Math.round((ch.stock - 0.18 * qty) * 100) / 100);
-                const on = inventoryTelemetryData.find(i => i.id === 12); if (on) on.stock = Math.max(0, Math.round((on.stock - 0.05 * qty) * 100) / 100);
-                const gr = inventoryTelemetryData.find(i => i.id === 15); if (gr) gr.stock = Math.max(0, Math.round((gr.stock - 0.15 * qty) * 100) / 100);
-            }
-            if (dishName.includes('coke') || dishName.includes('cola')) {
-                const cl = inventoryTelemetryData.find(i => i.id === 13); if (cl) cl.stock = Math.max(0, Math.round((cl.stock - 1.0 * qty) * 100) / 100);
-                const cm = inventoryTelemetryData.find(i => i.id === 14); if (cm) cm.stock = Math.max(0, Math.round((cm.stock - 0.005 * qty) * 100) / 100);
-            }
-            if (dishName.includes('coffee')) {
-                const c = inventoryTelemetryData.find(i => i.id === 1); if (c) c.stock = Math.max(0, Math.round((c.stock - 0.02 * qty) * 100) / 100);
-                const m = inventoryTelemetryData.find(i => i.id === 2); if (m) m.stock = Math.max(0, Math.round((m.stock - 0.15 * qty) * 100) / 100);
-            }
-            if (dishName.includes('biryani')) {
-                const r = inventoryTelemetryData.find(i => i.id === 3); if (r) r.stock = Math.max(0, Math.round((r.stock - 0.25 * qty) * 100) / 100);
-                const ch = inventoryTelemetryData.find(i => i.id === 6); if (ch) ch.stock = Math.max(0, Math.round((ch.stock - 0.20 * qty) * 100) / 100);
-            }
-            if (dishName.includes('paneer')) {
-                const p = inventoryTelemetryData.find(i => i.id === 7); if (p) p.stock = Math.max(0, Math.round((p.stock - 0.12 * qty) * 100) / 100);
-                const f = inventoryTelemetryData.find(i => i.id === 9); if (f) f.stock = Math.max(0, Math.round((f.stock - 0.08 * qty) * 100) / 100);
-            }
-            if (dishName.includes('rice')) {
-                const r = inventoryTelemetryData.find(i => i.id === 3); if (r) r.stock = Math.max(0, Math.round((r.stock - 0.20 * qty) * 100) / 100);
-            }
-        }
-    });
-
-    persistInventoryTelemetry();
-    renderInventoryTelemetryUI();
 }
 window.deductInventoryForOrder = deductInventoryForOrder;
 
-// --- 4. CATALOG EDITING CHIPS & PLATFORM TOGGLE HELPERS ---
+// --- 3. CATALOG EDITING CHIPS & PLATFORM TOGGLE HELPERS ---
 function applyPortionChip(size) {
     const input = document.getElementById('newItemName');
     if (!input) return;
@@ -880,5 +380,4 @@ window.importFromPlatformModal = importFromPlatformModal;
 document.addEventListener('DOMContentLoaded', () => {
     initVoiceEngine();
     renderVoiceHistoryChips();
-    renderInventoryTelemetryUI();
 });

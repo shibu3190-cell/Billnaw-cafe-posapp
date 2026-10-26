@@ -2,21 +2,8 @@
 // 🚀 APP.JS - Main Application Entry Point & Orchestration
 // ============================================================
 
-// Global Dynamic script loader for lazy-loading heavy vendor libraries (Chart.js, PDF.js, etc.)
-window.loadedScripts = window.loadedScripts || {};
-function loadLazyScript(src) {
-    if (window.loadedScripts[src]) return window.loadedScripts[src];
-    window.loadedScripts[src] = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.async = true;
-        script.onload = () => resolve();
-        script.onerror = (err) => reject(new Error(`Failed to load script: ${src}`));
-        document.head.appendChild(script);
-    });
-    return window.loadedScripts[src];
-}
-window.loadLazyScript = loadLazyScript;
+// Global script loader provided authoritatively by js/core.js
+
 
 // Global Keyboard Shortcut Handlers
 document.addEventListener('keydown', function(event) {
@@ -218,20 +205,24 @@ function logoutShop() {
     }
     window.currentAuthUser = null;
     try {
-        localStorage.removeItem('billnaw_shop_session');
-        localStorage.removeItem('billnaw_auth_token');
-        localStorage.removeItem('billnaw_auth_email');
-        localStorage.removeItem('billnaw_active_user');
-        localStorage.setItem('billnaw_auth_mode', 'demo');
-        if (typeof sessionStorage !== 'undefined') {
-            sessionStorage.clear();
+        if (typeof clearAllTenantLocalData === 'function') {
+            clearAllTenantLocalData();
+        } else {
+            localStorage.removeItem('billnaw_shop_session');
+            localStorage.removeItem('billnaw_auth_token');
+            localStorage.removeItem('billnaw_auth_email');
+            localStorage.removeItem('billnaw_active_user');
+            localStorage.removeItem('billnaw_auth_mode');
+            if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.clear();
+            }
         }
     } catch (e) {}
 
     if (typeof resetLoginOtpView === 'function') resetLoginOtpView();
     if (typeof resetSignupOtpView === 'function') resetSignupOtpView();
 
-    updateCloudStoreTopbar(null, false, 'demo');
+    updateCloudStoreTopbar(null, false, 'unauthenticated');
     if (typeof updateShopAuthUI === 'function') {
         updateShopAuthUI();
     }
@@ -239,7 +230,7 @@ function logoutShop() {
         showToast('Logged out of cloud shop. Session destroyed.', 'info');
     }
     if (typeof openShopAuthModal === 'function') {
-        openShopAuthModal();
+        openShopAuthModal(true);
     }
     if (typeof window !== 'undefined' && window.location) {
         setTimeout(() => {
@@ -278,10 +269,12 @@ async function initApp() {
             renderInventoryTelemetryUI();
         }
 
-        // Present Shop Auth Modal if query string contains ?auth=login
+        // Mandatory First-Device Registration & Auth Gate:
         const hasAuthLoginParam = window.location.search && window.location.search.includes('auth=login');
+        const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
+        const isAuth = activeToken && localStorage.getItem('billnaw_auth_mode') === 'authenticated';
 
-        if (hasAuthLoginParam && typeof openShopAuthModal === 'function') {
+        if ((hasAuthLoginParam || !isAuth) && typeof openShopAuthModal === 'function') {
             setTimeout(() => {
                 const actOverlay = document.getElementById('activationOverlay');
                 const logOverlay = document.getElementById('loginOverlay');
@@ -289,6 +282,9 @@ async function initApp() {
                 const isLoginShowing = logOverlay && logOverlay.style.display !== 'none';
                 if (!isActivationShowing && !isLoginShowing) {
                     openShopAuthModal(true);
+                    if (!isAuth && !hasAuthLoginParam && typeof switchShopAuthTab === 'function') {
+                        switchShopAuthTab('signup');
+                    }
                     if (hasAuthLoginParam) {
                         try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
                     }

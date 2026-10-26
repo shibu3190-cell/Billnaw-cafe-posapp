@@ -86,21 +86,29 @@ function renderMenuUI() {
     const posGrid = document.getElementById('menuGridUI');
     if (!posGrid) return;
 
-    // Auto-heal empty menuItems
+    // Zero phantom data: render welcoming empty slate if no menu items exist
     if (!Array.isArray(menuItems) || menuItems.length === 0) {
-        if (typeof defaultMenu !== 'undefined' && Array.isArray(defaultMenu) && defaultMenu.length > 0) {
-            menuItems = [...defaultMenu];
-        } else if (window.defaultMenu && Array.isArray(window.defaultMenu) && window.defaultMenu.length > 0) {
-            menuItems = [...window.defaultMenu];
-        } else {
-            menuItems = [
-                { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
-                { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
-                { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
-                { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
-            ];
-        }
-        window.menuItems = menuItems;
+        posGrid.innerHTML = `
+            <div id="posMenuEmptyState" style="grid-column: 1 / -1; text-align: center; padding: 40px 16px; background: #FFFFFF; border: 1.5px dashed #CBD5E1; border-radius: 16px; margin: 10px 0;">
+                <div style="width: 52px; height: 52px; border-radius: 50%; background: #F0FDF4; color: #143832; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; border: 1px solid #BBF7D0;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <h3 style="font-size: 16px; font-weight: 700; color: #0F172A; margin: 0 0 6px 0;">No Dishes Added Yet</h3>
+                <p style="font-size: 13px; color: #64748B; margin: 0 0 16px 0; max-width: 320px; margin-inline: auto;">Start your menu fresh by scanning with AI or creating your first dish manually.</p>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-primary" onclick="openUploadMenuChoiceModal()" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 13px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                        <span>Import Menu with AI</span>
+                    </button>
+                    <button type="button" class="btn btn-outline" onclick="openAddDishModal()" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 13px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>Add First Dish</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        renderMenuCatalogUI();
+        return;
     }
 
     // Auto-reset category if activeCategory has no matching items
@@ -119,7 +127,9 @@ function renderMenuUI() {
     if (filteredMenu.length === 0) {
         posGrid.innerHTML = `
             <div style="grid-column: 1 / -1; padding: 36px 16px; text-align: center; color: var(--text-muted); background: var(--bg-surface); border-radius: var(--radius-lg); border: 1.5px dashed var(--border); margin: 8px 0;">
-                <div style="font-size: 32px; margin-bottom: 6px;">🍽️</div>
+                <div style="width: 44px; height: 44px; border-radius: 50%; background: #F1F5F9; color: #64748B; display: inline-flex; align-items: center; justify-content: center; margin: 0 auto 8px auto;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </div>
                 <div style="font-size: 14px; font-weight: 700; color: var(--text-dark);">No menu items found</div>
                 <div style="font-size: 12px; margin-top: 4px;">Click below to display all available dishes.</div>
                 <button type="button" class="btn btn-emerald" style="margin-top: 10px; border-radius: 20px; font-size: 11.5px; padding: 6px 16px;" onclick="if(document.getElementById('menuSearchInput')) document.getElementById('menuSearchInput').value=''; filterMenu('All');">
@@ -206,7 +216,6 @@ function switchMenuSubTab(subTab) {
 window.switchMenuSubTab = switchMenuSubTab;
 
 function renderMenuCatalogUI() {
-    const menuTable = document.getElementById('menuTableBody');
     const cleanCardsContainer = document.getElementById('cleanItemCardsList');
     const { mode: gstCurrentMode, defaultRate: gstStoreRate } = getStoreGstConfig();
 
@@ -249,7 +258,27 @@ function renderMenuCatalogUI() {
 
     // 4. Render Clean Item Cards matching Screenshot 1
     if (cleanCardsContainer) {
-        if (itemsToRender.length === 0) {
+        if (!Array.isArray(menuItems) || menuItems.length === 0) {
+            cleanCardsContainer.innerHTML = `
+                <div id="catalogMenuEmptyState" style="text-align: center; padding: 48px 20px; background: #FFFFFF; border: 1.5px dashed #CBD5E1; border-radius: 16px; margin: 12px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 50%; background: #F0FDF4; color: #143832; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; border: 1px solid #BBF7D0;">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                    </div>
+                    <h3 style="font-size: 17px; font-weight: 800; color: #0F172A; margin: 0 0 6px 0;">Your Menu is Fresh &amp; Ready</h3>
+                    <p style="font-size: 13px; color: #64748B; margin: 0 0 20px 0; max-width: 360px; margin-inline: auto;">No dishes exist yet. Import your physical menu using AI OCR or add your dishes manually.</p>
+                    <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-primary" onclick="openUploadMenuChoiceModal()" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 13px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                            <span>Import Menu with AI</span>
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="openAddDishModal()" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 13px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            <span>Add First Dish</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else if (itemsToRender.length === 0) {
             cleanCardsContainer.innerHTML = `
                 <div style="text-align: center; padding: 36px 16px; background: #FFFFFF; border: 1.5px dashed #E5E7EB; border-radius: 14px; color: var(--text-muted); font-size: 13px;">
                     No menu items found matching current search.
@@ -316,63 +345,6 @@ function renderMenuCatalogUI() {
                 </div>`;
             }).join('');
         }
-    }
-
-    // 5. Fallback Table Rendering for backward compatibility
-    if (menuTable) {
-        if (itemsToRender.length === 0) {
-            menuTable.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 24px 16px; color: var(--text-muted); font-size: 13px;">No menu items found.</td></tr>`;
-            return;
-        }
-
-        menuTable.innerHTML = itemsToRender.map(item => {
-            let gstDisplay = '';
-            if (gstCurrentMode === 'none') {
-                gstDisplay = '<span class="stock-pill stock-pill-unlimited">0% Exempt</span>';
-            } else if (gstCurrentMode === 'exclusive') {
-                const r = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : gstStoreRate;
-                gstDisplay = `<span class="stock-pill stock-pill-low">+${r}% Excl</span>`;
-            } else {
-                const r = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : gstStoreRate;
-                gstDisplay = `<span class="stock-pill stock-pill-in">${r}% Incl</span>`;
-            }
-
-            let stockDisplay = '';
-            if (!item.trackStock) {
-                stockDisplay = '<span class="stock-pill stock-pill-unlimited">∞ Unlimited</span>';
-            } else if (item.stockQty > 5) {
-                stockDisplay = `<span class="stock-pill stock-pill-in">${item.stockQty} in stock</span>`;
-            } else if (item.stockQty > 0) {
-                stockDisplay = `<span class="stock-pill stock-pill-low">${item.stockQty} low</span>`;
-            } else {
-                stockDisplay = '<span class="stock-pill stock-pill-out">Out of stock</span>';
-            }
-
-            const thumbSrc = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
-            return `<tr>
-                <td style="width: 48px;">
-                    <img src="${thumbSrc}" style="width:36px; height:36px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display: block;" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">
-                </td>
-                <td>
-                    <div style="font-weight: 700; color: var(--text-dark);">${escapeHtml(item.name)}</div>
-                    ${item.badge ? `<span style="font-size: 9px; font-weight: 800; color: var(--accent); text-transform: uppercase;">${escapeHtml(item.badge)}</span>` : ''}
-                </td>
-                <td><span class="cat-label" style="display:inline-block; font-size:11px; padding: 2px 6px; background: #FAF7F4; border-radius: 6px; border: 1px solid var(--border);">${escapeHtml(item.category)}</span></td>
-                <td style="font-weight:700; color:var(--primary); font-size:14px; font-variant-numeric: tabular-nums;">₹${Number(item.price).toFixed(2)}</td>
-                <td>${gstDisplay}</td>
-                <td>${stockDisplay}</td>
-                <td>
-                    <div style="display: flex; gap: 6px; align-items: center;">
-                        <button type="button" class="catalog-action-btn" onclick="editMenuItem(${item.id})" title="Edit Item ${escapeHtml(item.name)}">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-                        </button>
-                        <button type="button" class="catalog-action-btn delete-btn" onclick="deleteMenuItem(${item.id})" title="Delete Item">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                        </button>
-                    </div>
-                </td>
-            </tr>`;
-        }).join('');
     }
 }
 window.renderMenuCatalogUI = renderMenuCatalogUI;

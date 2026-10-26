@@ -659,73 +659,10 @@ let waCampaignVariables = {
 
 let waCampaignTemplateText = "Hello {customer_name}! ☕✨ Greetings from billnaw. As a valued patron, enjoy an exclusive {discount_pct}% OFF using promo code {discount_code} on all orders above ₹{min_order}. Show this message at the counter to redeem. Valid till {valid_till}! See you soon!";
 
-// Ensure initial sample customer base exists if database is brand new
+// Ensure customer base remains pristine with zero phantom data
 function seedInitialCustomersIfEmpty() {
-    if (customersList && customersList.length > 0) return;
-
-    const sampleDiners = [
-        {
-            id: 101,
-            name: "Suman Roy",
-            phone: "9830112233",
-            notes: "Corner table regular, cold brew coffee lover",
-            loyaltyPoints: 120,
-            totalSpend: 5420,
-            totalVisits: 24,
-            createdDate: "2026-01-10",
-            lastVisitDate: "2026-09-18"
-        },
-        {
-            id: 102,
-            name: "Ananya Sen",
-            phone: "9830223344",
-            notes: "Darjeeling first flush tea regular, prefers sugar-free",
-            loyaltyPoints: 85,
-            totalSpend: 3150,
-            totalVisits: 14,
-            createdDate: "2026-02-14",
-            lastVisitDate: "2026-09-19"
-        },
-        {
-            id: 103,
-            name: "Rahul Mukherjee",
-            phone: "9830334455",
-            notes: "Weekend brunch with family, likes club sandwiches",
-            loyaltyPoints: 45,
-            totalSpend: 1890,
-            totalVisits: 8,
-            createdDate: "2026-03-05",
-            lastVisitDate: "2026-09-12"
-        },
-        {
-            id: 104,
-            name: "Priya Das",
-            phone: "9830445566",
-            notes: "Hazelnut cappuccino and blueberry muffin",
-            loyaltyPoints: 20,
-            totalSpend: 820,
-            totalVisits: 4,
-            createdDate: "2026-05-20",
-            lastVisitDate: "2026-09-20"
-        },
-        {
-            id: 105,
-            name: "Vikram Verma",
-            phone: "9830556677",
-            notes: "Evening espresso and spicy grilled wraps",
-            loyaltyPoints: 95,
-            totalSpend: 4300,
-            totalVisits: 18,
-            createdDate: "2026-01-28",
-            lastVisitDate: "2026-09-08"
-        }
-    ];
-
-    customersList = sampleDiners;
-    window.customersList = customersList;
-    if (typeof idb !== 'undefined' && idb.set) {
-        idb.set('cafe_customers', customersList);
-    }
+    // Zero phantom data: fresh shops start with clean zero-customer directory
+    return;
 }
 
 let waTierCollapsedState = {
@@ -1527,10 +1464,6 @@ function openCustomerWhatsAppDirect(custId) {
 }
 window.openCustomerWhatsAppDirect = openCustomerWhatsAppDirect;
 
-function quickAddNewCustomerFromCheckout() {
-    openAddCustomerModal();
-}
-window.quickAddNewCustomerFromCheckout = quickAddNewCustomerFromCheckout;
 
 function renderWhatsAppHubUI() {
     if (typeof switchTab === 'function') switchTab('customers');

@@ -6,36 +6,32 @@ let currentDashboardRange = 'today';
 let currentDashboardMetric = 'all';
 
 function addExpense() {
-    const name = document.getElementById('expenseName').value; 
-    const cost = parseFloat(document.getElementById('expenseCost').value); 
-    if(name && cost) { 
+    const nameEl = document.getElementById('quickExpenseNameInput') || document.getElementById('expenseName'); 
+    const costEl = document.getElementById('quickExpenseCostInput') || document.getElementById('expenseCost'); 
+    if (!nameEl || !costEl) {
+        if (typeof openQuickExpenseModal === 'function') openQuickExpenseModal();
+        return;
+    }
+    const name = nameEl.value ? nameEl.value.trim() : ''; 
+    const cost = parseFloat(costEl.value); 
+    if (name && !isNaN(cost) && cost > 0) { 
         const newExpense = { 
             id: Date.now(), 
             date: new Date().toLocaleDateString(), 
-            filterDate: getLocalISODate(), 
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+            filterDate: (typeof getLocalISODate === 'function') ? getLocalISODate() : '', 
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
             name: name, 
             cost: cost 
         };
-        if (editingExpenseId) { 
-            const index = dailyExpenses.findIndex(e => e.id === editingExpenseId); 
-            if(index > -1) { 
-                dailyExpenses[index].name = name; 
-                dailyExpenses[index].cost = cost; 
-            } 
-            editingExpenseId = null; 
-            document.getElementById('addExpenseBtn').innerText = "- Record"; 
-            showToast("Expense updated."); 
-            persistExpensesFirebase(); 
-        } else { 
-            dailyExpenses.unshift(newExpense); 
-            pushToGoogleSheetsQueue('addExpense', newExpense); 
-            persistExpensesFirebase(newExpense); 
-            showToast("Expense recorded."); 
-        }
-        document.getElementById('expenseName').value = ''; 
-        document.getElementById('expenseCost').value = ''; 
+        dailyExpenses.unshift(newExpense); 
+        if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addExpense', newExpense); 
+        if (typeof persistExpensesFirebase === 'function') persistExpensesFirebase(newExpense); 
+        if (typeof saveToLocal === 'function') saveToLocal(); 
+        nameEl.value = ''; 
+        costEl.value = ''; 
         renderExpensesUI(); 
+        if (typeof renderDashboardAnalytics === 'function') renderDashboardAnalytics();
+        showToast("Expense recorded."); 
     } else { 
         showToast("Please enter Item Name and Cost."); 
     }
@@ -44,13 +40,26 @@ window.addExpense = addExpense;
 
 function editExpense(id) { 
     const exp = dailyExpenses.find(e => e.id === id); 
-    if(exp) { 
-        document.getElementById('expenseName').value = exp.name; 
-        document.getElementById('expenseCost').value = exp.cost; 
-        editingExpenseId = id; 
-        document.getElementById('addExpenseBtn').innerText = "💾 Update"; 
-        window.scrollTo(0,0); 
-    } 
+    if (!exp) return;
+    const modal = document.getElementById('quickExpenseModal');
+    if (modal) {
+        const editId = document.getElementById('quickExpenseEditId');
+        const nameInput = document.getElementById('quickExpenseNameInput') || document.getElementById('quickExpenseName');
+        const costInput = document.getElementById('quickExpenseCostInput') || document.getElementById('quickExpenseCost');
+        const title = document.getElementById('quickExpenseModalTitle');
+        if (editId) editId.value = exp.id;
+        if (nameInput) nameInput.value = exp.name || '';
+        if (costInput) costInput.value = exp.cost || '';
+        if (title) title.innerText = 'Edit Expense';
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        setTimeout(() => nameInput?.focus(), 50);
+        return;
+    }
+    const nameEl = document.getElementById('expenseName');
+    const costEl = document.getElementById('expenseCost');
+    if (nameEl) nameEl.value = exp.name;
+    if (costEl) costEl.value = exp.cost;
 }
 window.editExpense = editExpense;
 
@@ -77,11 +86,16 @@ window.renderExpensesUI = renderExpensesUI;
 function openQuickExpenseModal() {
     const modal = document.getElementById('quickExpenseModal');
     if (modal) {
-        const n = document.getElementById('quickExpenseName');
-        const c = document.getElementById('quickExpenseCost');
+        const editId = document.getElementById('quickExpenseEditId');
+        if (editId) editId.value = '';
+        const title = document.getElementById('quickExpenseModalTitle');
+        if (title) title.innerText = 'Record Expense';
+        const n = document.getElementById('quickExpenseNameInput') || document.getElementById('quickExpenseName');
+        const c = document.getElementById('quickExpenseCostInput') || document.getElementById('quickExpenseCost');
         if (n) n.value = '';
         if (c) c.value = '';
         modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
         setTimeout(() => n?.focus(), 50);
     }
 }
@@ -89,27 +103,47 @@ window.openQuickExpenseModal = openQuickExpenseModal;
 
 function closeQuickExpenseModal() {
     const modal = document.getElementById('quickExpenseModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    const editId = document.getElementById('quickExpenseEditId');
+    if (editId) editId.value = '';
+    const title = document.getElementById('quickExpenseModalTitle');
+    if (title) title.innerText = 'Record Expense';
 }
 window.closeQuickExpenseModal = closeQuickExpenseModal;
 
 function saveQuickExpense() {
-    const name = document.getElementById('quickExpenseName')?.value.trim();
-    const cost = parseFloat(document.getElementById('quickExpenseCost')?.value);
+    const editIdEl = document.getElementById('quickExpenseEditId');
+    const editId = editIdEl && editIdEl.value ? parseInt(editIdEl.value, 10) : null;
+    const name = (document.getElementById('quickExpenseNameInput') || document.getElementById('quickExpenseName'))?.value.trim();
+    const cost = parseFloat((document.getElementById('quickExpenseCostInput') || document.getElementById('quickExpenseCost'))?.value);
     if (!name || isNaN(cost) || cost <= 0) {
         return showToast("Please enter a valid item name and amount.");
     }
-    const newExpense = {
-        id: Date.now(),
-        date: new Date().toLocaleDateString(),
-        filterDate: (typeof getLocalISODate === 'function') ? getLocalISODate() : '',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        name: name,
-        cost: cost
-    };
-    dailyExpenses.unshift(newExpense);
-    if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addExpense', newExpense);
-    if (typeof persistExpensesFirebase === 'function') persistExpensesFirebase(newExpense);
+    if (editId) {
+        const exp = dailyExpenses.find(e => e.id === editId);
+        if (exp) {
+            exp.name = name;
+            exp.cost = cost;
+        }
+        if (editIdEl) editIdEl.value = '';
+        showToast("Expense updated.");
+    } else {
+        const newExpense = {
+            id: Date.now(),
+            date: new Date().toLocaleDateString(),
+            filterDate: (typeof getLocalISODate === 'function') ? getLocalISODate() : '',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            name: name,
+            cost: cost
+        };
+        dailyExpenses.unshift(newExpense);
+        if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addExpense', newExpense);
+        if (typeof persistExpensesFirebase === 'function') persistExpensesFirebase(newExpense);
+        showToast(`Recorded expense: ${name} (₹${cost.toFixed(2)})`);
+    }
     if (typeof saveToLocal === 'function') saveToLocal();
     renderExpensesUI();
     renderDashboardAnalytics();
@@ -121,7 +155,6 @@ function saveQuickExpense() {
         const sum = todayExp.reduce((s, e) => s + (Number(e.cost) || 0), 0);
         totEl.innerText = `Today's Total: ₹${sum.toFixed(2)}`;
     }
-    showToast(`Recorded expense: ${name} (₹${cost.toFixed(2)})`);
 }
 window.saveQuickExpense = saveQuickExpense;
 

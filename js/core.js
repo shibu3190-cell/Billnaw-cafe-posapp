@@ -16,14 +16,39 @@ if (topbarDateEl) {
 const ALERT_THRESHOLD_MS = 15 * 60 * 1000; 
 let monthlyChartInstance = null;
 
+// Authoritative Currency & Formatting Helpers
+function formatCurrency(amount) {
+    return '₹' + Number(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+window.formatCurrency = formatCurrency;
+
 // Date & String Helpers
 function getLocalISODate(dateObj = new Date()) {
-    const yyyy = dateObj.getFullYear();
-    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const dd = String(dateObj.getDate()).padStart(2, '0');
+    const d = (dateObj instanceof Date && !isNaN(dateObj)) ? dateObj : new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
 }
 window.getLocalISODate = getLocalISODate;
+
+// Authoritative Modal Helpers
+function openModal(modalId) {
+    const el = document.getElementById(modalId);
+    if (el) {
+        el.style.display = 'flex';
+        el.setAttribute('aria-hidden', 'false');
+    }
+}
+function closeModal(modalId) {
+    const el = document.getElementById(modalId);
+    if (el) {
+        el.style.display = 'none';
+        el.setAttribute('aria-hidden', 'true');
+    }
+}
+window.openModal = openModal;
+window.closeModal = closeModal;
 
 function getLocalISOMonth(dateObj = new Date()) {
     const yyyy = dateObj.getFullYear();
@@ -177,8 +202,8 @@ window.staffList = staffList;
 window.currentStaff = currentStaff;
 window.myClientID = myClientID;
 
-// Toast Notifications
-function showToast(message) {
+// Toast Notifications (Polymorphic: info, success, warning, error)
+function showToast(message, type = 'info') {
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -186,7 +211,8 @@ function showToast(message) {
         document.body.appendChild(container);
     }
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    const safeType = type || 'info';
+    toast.className = `toast toast-${safeType}`;
     toast.innerText = message;
     container.appendChild(toast);
     setTimeout(() => {

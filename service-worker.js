@@ -1,5 +1,5 @@
-// billnaw POS - Service Worker v2.6.0
-const CACHE_VERSION = 'billnaw-pos-v2.6.0-' + Date.now();
+// billnaw POS - Service Worker v2.7.0
+const CACHE_VERSION = 'billnaw-pos-v2.7.0';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -20,7 +20,7 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', event => {
-    self.skipWaiting();
+    // Cache static assets without prematurely activating
     event.waitUntil(
         caches.open(CACHE_VERSION).then(cache => {
             return cache.addAll(STATIC_ASSETS);
@@ -80,10 +80,10 @@ self.addEventListener('fetch', event => {
 });
 
 self.addEventListener('message', event => {
-    if (event.data && event.data.action === 'skipWaiting') {
+    if (event.data && (event.data.action === 'skipWaiting' || event.data.type === 'SKIP_WAITING')) {
         self.skipWaiting();
     }
-    if (event.data && event.data.action === 'clearCache') {
+    if (event.data && (event.data.action === 'clearCache' || event.data.type === 'CLEAR_CACHE')) {
         caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
     }
 });

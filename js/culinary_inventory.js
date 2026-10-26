@@ -291,11 +291,8 @@
             localStorage.setItem('billnaw_culinary_subs', JSON.stringify(subRecipes));
         } catch (e) {}
     }
+    // Global escapeHtml utilized from js/core.js
 
-    function escapeHtml(str) {
-        if (typeof window.escapeHtml === 'function') return window.escapeHtml(str);
-        return String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
 
     // Hub Tab Switcher (3-Tab Operational Suite)
     function switchInventoryHubTab(tabName) {
