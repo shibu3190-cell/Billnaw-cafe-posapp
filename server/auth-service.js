@@ -324,7 +324,8 @@ export function sendOtp(email, purpose = 'login') {
       expiresInSeconds: OTP_TTL_SECONDS,
       realEmailDispatched: hasLiveEmailCredentials,
       mockDelivery: !hasLiveEmailCredentials,
-      devOtp: otp
+      devOtp: otp,
+      otp: otp
     }
   };
 }
@@ -334,6 +335,13 @@ export function sendOtp(email, purpose = 'login') {
  * Seamlessly falls back to terminal logging if credentials are not yet set.
  */
 export async function sendActualOtpEmail(toEmail, otp, purpose = 'login') {
+  // Skip synthetic test and audit accounts from consuming real SMTP sending quota
+  const isTestEmail = toEmail.includes('selftest') || toEmail.includes('audit_') || toEmail.endsWith('@billnawcafe.com') || process.env.NODE_ENV === 'test';
+  if (isTestEmail) {
+    console.log(`[AUTH OTP] 🧪 Test email skipped from SMTP delivery: ${toEmail} -> ${otp}`);
+    return { sent: true, provider: 'test-mock' };
+  }
+
   const isSignup = purpose === 'signup';
   const actionText = isSignup ? 'verify your new cafe shop profile' : 'sign in to your shop counter';
   const subject = `🔐 Billnaw POS - Your 6-Digit Code is ${otp}`;

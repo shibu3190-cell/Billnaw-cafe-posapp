@@ -93,6 +93,16 @@
                                 <span class="otp-step-label">Enter 6-digit code sent to <strong id="otpRecipientEmailDisplay"></strong></span>
                             </div>
                             
+                            <div id="otpAutoFillBanner" style="display: none; margin-bottom: 12px; padding: 10px 14px; background: #ECFDF5; border: 1.5px solid #A7F3D0; border-radius: 12px; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 11px; font-weight: 700; color: #065F46;">Verification Code:</span>
+                                    <strong id="otpAutoFillCodeText" style="font-size: 15px; letter-spacing: 2px; color: #047857; font-family: monospace;"></strong>
+                                </div>
+                                <button type="button" class="btn btn-sm" onclick="triggerAutoFillOtp('login')" style="background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 8px; border: none; cursor: pointer;">
+                                    Auto-Fill
+                                </button>
+                            </div>
+
                             <div class="otp-inputs-grid" id="otpBoxesContainer">
                                 <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="0" autocomplete="one-time-code" aria-label="Digit 1">
                                 <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="1" aria-label="Digit 2">
@@ -112,6 +122,7 @@
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                                 <span>Verify & Sign In</span>
                             </button>
+                            <div id="otpValidationFeedback" class="validation-feedback" style="margin-top: 6px; text-align: center;"></div>
                         </div>
 
                         <!-- Toggle link to password mode -->
@@ -208,6 +219,16 @@
                             <span class="otp-step-label">Enter 6-digit code sent to <strong id="signupOtpRecipientEmail"></strong> to verify new shop (<a href="javascript:void(0)" onclick="resetSignupOtpView()" style="color: #143832; font-weight: 700; text-decoration: underline; font-size: 11px; margin-left: 4px;">Change</a>):</span>
                         </div>
                         
+                        <div id="signupOtpAutoFillBanner" style="display: none; margin-bottom: 12px; padding: 10px 14px; background: #ECFDF5; border: 1.5px solid #A7F3D0; border-radius: 12px; align-items: center; justify-content: space-between;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 11px; font-weight: 700; color: #065F46;">Verification Code:</span>
+                                <strong id="signupOtpAutoFillCodeText" style="font-size: 15px; letter-spacing: 2px; color: #047857; font-family: monospace;"></strong>
+                            </div>
+                            <button type="button" class="btn btn-sm" onclick="triggerAutoFillOtp('signup')" style="background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 8px; border: none; cursor: pointer;">
+                                Auto-Fill
+                            </button>
+                        </div>
+
                         <div class="otp-inputs-grid" id="signupOtpBoxesContainer">
                             <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="0" autocomplete="one-time-code" aria-label="Signup Digit 1">
                             <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="1" aria-label="Signup Digit 2">
@@ -227,6 +248,7 @@
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                             <span>Verify OTP &amp; Complete Shop Registration</span>
                         </button>
+                        <div id="signupOtpValidationFeedback" class="validation-feedback" style="margin-top: 6px; text-align: center;"></div>
                     </div>
 
                     <div style="display: flex; gap: 8px; margin-top: 12px;" id="signupActionRow">
@@ -5355,17 +5377,22 @@
                             if (typeof showToast === 'function') {
                                 showToast('Verification code dispatched to ' + email, 'success');
                             }
-                            if (data.devOtp) {
-                                window._lastDevLoginOtp = data.devOtp;
+                            const receivedOtp = data.devOtp || data.otp;
+                            if (receivedOtp) {
+                                window._lastDevLoginOtp = receivedOtp;
                                 const banner = document.getElementById('otpAutoFillBanner');
                                 const codeText = document.getElementById('otpAutoFillCodeText');
                                 if (banner && codeText) {
-                                    codeText.innerText = data.devOtp;
+                                    codeText.innerText = receivedOtp;
                                     banner.style.display = 'flex';
                                 }
+                                const inputs = Array.from(document.querySelectorAll('#otpBoxesContainer .otp-digit-input'));
+                                receivedOtp.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
                             }
+                            showValidationMsg('otpValidationFeedback', '', '');
                         } else if (data && data.error) {
                             showValidationMsg('loginEmailValidationFeedback', data.error, 'error');
+                            showValidationMsg('otpValidationFeedback', data.error, 'error');
                         }
                     }).catch(() => {});
                 }
@@ -5405,7 +5432,9 @@
                 const email = emailInput ? emailInput.value.trim() : '';
 
                 if (otpCode.length < 6) {
-                    showValidationMsg('loginEmailValidationFeedback', 'Please enter complete 6-digit verification code', 'error');
+                    const msg = 'Please enter complete 6-digit verification code';
+                    showValidationMsg('loginEmailValidationFeedback', msg, 'error');
+                    showValidationMsg('otpValidationFeedback', msg, 'error');
                     return;
                 }
 
@@ -5414,8 +5443,9 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email, otp: otpCode })
-                    }).then(res => res.json()).then(async data => {
-                        if (data && data.success) {
+                    }).then(async res => {
+                        const data = await res.json().catch(() => ({}));
+                        if (res.ok && data && data.success) {
                             // Wipe OTP inputs upon successful login
                             digitInputs.forEach(input => { input.value = ''; });
 
@@ -5465,13 +5495,21 @@
                             if (typeof showToast === 'function') showToast('Verified! Welcome to Billnaw POS', 'success');
                             closeShopAuthModal();
                         } else {
-                            showValidationMsg('loginEmailValidationFeedback', (data && data.error) ? data.error : 'Invalid verification code', 'error');
+                            const errMsg = (data && data.error) ? data.error : (res.status === 401 ? 'Incorrect or expired verification code. Use the auto-filled code or click Resend.' : 'Invalid verification code');
+                            showValidationMsg('loginEmailValidationFeedback', errMsg, 'error');
+                            showValidationMsg('otpValidationFeedback', errMsg, 'error');
+                            if (typeof showToast === 'function') showToast(errMsg, 'error');
                         }
                     }).catch(err => {
-                        showValidationMsg('loginEmailValidationFeedback', 'Verification error: ' + (err.message || 'Network issue. Please try again.'), 'error');
+                        const errMsg = 'Verification error: ' + (err.message || 'Network issue. Please try again.');
+                        showValidationMsg('loginEmailValidationFeedback', errMsg, 'error');
+                        showValidationMsg('otpValidationFeedback', errMsg, 'error');
+                        if (typeof showToast === 'function') showToast(errMsg, 'error');
                     });
                 } else {
-                    showValidationMsg('loginEmailValidationFeedback', 'Network connection unavailable', 'error');
+                    const msg = 'Network connection unavailable';
+                    showValidationMsg('loginEmailValidationFeedback', msg, 'error');
+                    showValidationMsg('otpValidationFeedback', msg, 'error');
                 }
             }
             window.handleVerifyOtpCode = handleVerifyOtpCode;
@@ -5684,15 +5722,19 @@
                             if (typeof showToast === 'function') {
                                 showToast('Verification code sent to ' + email, 'success');
                             }
-                            if (data.devOtp) {
-                                window._lastDevSignupOtp = data.devOtp;
+                            const receivedOtp = data.devOtp || data.otp;
+                            if (receivedOtp) {
+                                window._lastDevSignupOtp = receivedOtp;
                                 const banner = document.getElementById('signupOtpAutoFillBanner');
                                 const codeText = document.getElementById('signupOtpAutoFillCodeText');
                                 if (banner && codeText) {
-                                    codeText.innerText = data.devOtp;
+                                    codeText.innerText = receivedOtp;
                                     banner.style.display = 'flex';
                                 }
+                                const inputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
+                                receivedOtp.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
                             }
+                            showValidationMsg('signupOtpValidationFeedback', '', '');
                         } else if (data && data.error) {
                             alert(data.error);
                         }
@@ -5714,8 +5756,23 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email, purpose: 'signup' })
                     }).then(res => res.json()).then(data => {
-                        if (data && data.success && typeof showToast === 'function') {
-                            showToast('New verification code sent to ' + email, 'success');
+                        if (data && data.success) {
+                            if (typeof showToast === 'function') {
+                                showToast('New verification code sent to ' + email, 'success');
+                            }
+                            const receivedOtp = data.devOtp || data.otp;
+                            if (receivedOtp) {
+                                window._lastDevSignupOtp = receivedOtp;
+                                const banner = document.getElementById('signupOtpAutoFillBanner');
+                                const codeText = document.getElementById('signupOtpAutoFillCodeText');
+                                if (banner && codeText) {
+                                    codeText.innerText = receivedOtp;
+                                    banner.style.display = 'flex';
+                                }
+                                const inputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
+                                receivedOtp.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
+                            }
+                            showValidationMsg('signupOtpValidationFeedback', '', '');
                         }
                     }).catch(() => {});
                 }
@@ -5741,7 +5798,9 @@
                 }
 
                 if (otp.length < 6) {
-                    alert('Please enter complete 6-digit verification code sent to your email');
+                    const msg = 'Please enter complete 6-digit verification code sent to your email';
+                    showValidationMsg('signupOtpValidationFeedback', msg, 'error');
+                    alert(msg);
                     return;
                 }
 
@@ -5809,7 +5868,11 @@
                             if (typeof showToast === 'function') showToast('Shop Account Created & Verified! Welcome, ' + fn, 'success');
                             closeShopAuthModal();
                         } else {
-                            alert((data && data.error) ? data.error : 'Failed to verify OTP & create account');
+                            const errMsg = (data && data.error) ? data.error : 'Failed to verify OTP & create account';
+                            showValidationMsg('signupOtpValidationFeedback', errMsg, 'error');
+                            if (typeof showToast === 'function') showToast(errMsg, 'error');
+                            else alert(errMsg);
+                        }
                         }
                     }).catch((err) => {
                         alert('Signup verification error: ' + (err.message || 'Please check your connection and retry.'));
