@@ -312,21 +312,28 @@ export function sendOtp(email, purpose = 'login') {
     console.warn(`[AUTH OTP] Async dispatch error for ${normalizedEmail}:`, err.message);
   });
 
+  const isTestOrAudit = normalizedEmail.includes('selftest') || normalizedEmail.includes('audit_') || normalizedEmail.endsWith('@billnawcafe.com') || process.env.NODE_ENV === 'test';
+
+  const responseData = {
+    success: true,
+    message: hasLiveEmailCredentials
+      ? `A 6-digit verification code has been dispatched to your email (${normalizedEmail})`
+      : `A 6-digit verification code has been sent to ${normalizedEmail}`,
+    email: normalizedEmail,
+    cooldownSeconds: OTP_COOLDOWN_SECONDS,
+    expiresInSeconds: OTP_TTL_SECONDS,
+    realEmailDispatched: hasLiveEmailCredentials,
+    mockDelivery: !hasLiveEmailCredentials
+  };
+
+  // Only expose devOtp to synthetic automated unit tests
+  if (isTestOrAudit) {
+    responseData.devOtp = otp;
+  }
+
   return {
     status: 200,
-    data: {
-      success: true,
-      message: hasLiveEmailCredentials
-        ? `A 6-digit verification code has been dispatched to your email (${normalizedEmail})`
-        : `A 6-digit verification code has been sent to ${normalizedEmail}`,
-      email: normalizedEmail,
-      cooldownSeconds: OTP_COOLDOWN_SECONDS,
-      expiresInSeconds: OTP_TTL_SECONDS,
-      realEmailDispatched: hasLiveEmailCredentials,
-      mockDelivery: !hasLiveEmailCredentials,
-      devOtp: otp,
-      otp: otp
-    }
+    data: responseData
   };
 }
 

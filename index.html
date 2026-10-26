@@ -92,17 +92,6 @@
                             <div class="otp-header-info">
                                 <span class="otp-step-label">Enter 6-digit code sent to <strong id="otpRecipientEmailDisplay"></strong></span>
                             </div>
-                            
-                            <div id="otpAutoFillBanner" style="display: none; margin-bottom: 12px; padding: 10px 14px; background: #ECFDF5; border: 1.5px solid #A7F3D0; border-radius: 12px; align-items: center; justify-content: space-between;">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="font-size: 11px; font-weight: 700; color: #065F46;">Verification Code:</span>
-                                    <strong id="otpAutoFillCodeText" style="font-size: 15px; letter-spacing: 2px; color: #047857; font-family: monospace;"></strong>
-                                </div>
-                                <button type="button" class="btn btn-sm" onclick="triggerAutoFillOtp('login')" style="background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 8px; border: none; cursor: pointer;">
-                                    Auto-Fill
-                                </button>
-                            </div>
-
                             <div class="otp-inputs-grid" id="otpBoxesContainer">
                                 <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="0" autocomplete="one-time-code" aria-label="Digit 1">
                                 <input type="text" class="otp-digit-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="1" aria-label="Digit 2">
@@ -218,17 +207,6 @@
                         <div class="otp-header-info">
                             <span class="otp-step-label">Enter 6-digit code sent to <strong id="signupOtpRecipientEmail"></strong> to verify new shop (<a href="javascript:void(0)" onclick="resetSignupOtpView()" style="color: #143832; font-weight: 700; text-decoration: underline; font-size: 11px; margin-left: 4px;">Change</a>):</span>
                         </div>
-                        
-                        <div id="signupOtpAutoFillBanner" style="display: none; margin-bottom: 12px; padding: 10px 14px; background: #ECFDF5; border: 1.5px solid #A7F3D0; border-radius: 12px; align-items: center; justify-content: space-between;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 11px; font-weight: 700; color: #065F46;">Verification Code:</span>
-                                <strong id="signupOtpAutoFillCodeText" style="font-size: 15px; letter-spacing: 2px; color: #047857; font-family: monospace;"></strong>
-                            </div>
-                            <button type="button" class="btn btn-sm" onclick="triggerAutoFillOtp('signup')" style="background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 8px; border: none; cursor: pointer;">
-                                Auto-Fill
-                            </button>
-                        </div>
-
                         <div class="otp-inputs-grid" id="signupOtpBoxesContainer">
                             <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="0" autocomplete="one-time-code" aria-label="Signup Digit 1">
                             <input type="text" class="otp-digit-input signup-otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" data-index="1" aria-label="Signup Digit 2">
@@ -5377,18 +5355,6 @@
                             if (typeof showToast === 'function') {
                                 showToast('Verification code dispatched to ' + email, 'success');
                             }
-                            const receivedOtp = data.devOtp || data.otp;
-                            if (receivedOtp) {
-                                window._lastDevLoginOtp = receivedOtp;
-                                const banner = document.getElementById('otpAutoFillBanner');
-                                const codeText = document.getElementById('otpAutoFillCodeText');
-                                if (banner && codeText) {
-                                    codeText.innerText = receivedOtp;
-                                    banner.style.display = 'flex';
-                                }
-                                const inputs = Array.from(document.querySelectorAll('#otpBoxesContainer .otp-digit-input'));
-                                receivedOtp.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
-                            }
                             showValidationMsg('otpValidationFeedback', '', '');
                         } else if (data && data.error) {
                             showValidationMsg('loginEmailValidationFeedback', data.error, 'error');
@@ -5399,23 +5365,7 @@
             }
             window.handleSendOtpCode = handleSendOtpCode;
 
-            function triggerAutoFillOtp(mode) {
-                const code = mode === 'signup' ? window._lastDevSignupOtp : window._lastDevLoginOtp;
-                if (!code) return;
-                if (mode === 'signup') {
-                    const inputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
-                    code.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
-                    if (typeof handleVerifyAndCreateAccount === 'function') {
-                        handleVerifyAndCreateAccount();
-                    }
-                } else {
-                    const inputs = Array.from(document.querySelectorAll('#otpBoxesContainer .otp-digit-input'));
-                    code.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
-                    if (typeof handleVerifyOtpCode === 'function') {
-                        handleVerifyOtpCode();
-                    }
-                }
-            }
+            function triggerAutoFillOtp() {}
             window.triggerAutoFillOtp = triggerAutoFillOtp;
 
             function handleResendOtpCode() {
@@ -5722,18 +5672,6 @@
                             if (typeof showToast === 'function') {
                                 showToast('Verification code sent to ' + email, 'success');
                             }
-                            const receivedOtp = data.devOtp || data.otp;
-                            if (receivedOtp) {
-                                window._lastDevSignupOtp = receivedOtp;
-                                const banner = document.getElementById('signupOtpAutoFillBanner');
-                                const codeText = document.getElementById('signupOtpAutoFillCodeText');
-                                if (banner && codeText) {
-                                    codeText.innerText = receivedOtp;
-                                    banner.style.display = 'flex';
-                                }
-                                const inputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
-                                receivedOtp.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
-                            }
                             showValidationMsg('signupOtpValidationFeedback', '', '');
                         } else if (data && data.error) {
                             alert(data.error);
@@ -5759,18 +5697,6 @@
                         if (data && data.success) {
                             if (typeof showToast === 'function') {
                                 showToast('New verification code sent to ' + email, 'success');
-                            }
-                            const receivedOtp = data.devOtp || data.otp;
-                            if (receivedOtp) {
-                                window._lastDevSignupOtp = receivedOtp;
-                                const banner = document.getElementById('signupOtpAutoFillBanner');
-                                const codeText = document.getElementById('signupOtpAutoFillCodeText');
-                                if (banner && codeText) {
-                                    codeText.innerText = receivedOtp;
-                                    banner.style.display = 'flex';
-                                }
-                                const inputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
-                                receivedOtp.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
                             }
                             showValidationMsg('signupOtpValidationFeedback', '', '');
                         }
@@ -5872,7 +5798,6 @@
                             showValidationMsg('signupOtpValidationFeedback', errMsg, 'error');
                             if (typeof showToast === 'function') showToast(errMsg, 'error');
                             else alert(errMsg);
-                        }
                         }
                     }).catch((err) => {
                         alert('Signup verification error: ' + (err.message || 'Please check your connection and retry.'));
