@@ -11,7 +11,9 @@
     "cap:sync": "npx cap sync",
     "cap:build:android": "npx cap build android",
     "cap:open:android": "npx cap open android",
-    "test": "node scratch/test_vector_audit.cjs && node scratch/test_blueprint_audit.cjs && node scratch/test_rush_hour.cjs && node scratch/test_user_fixes.cjs && node scratch/test_part1_audit.cjs && node scratch/test_auth_suite.cjs && node scratch/test_user_reported_4_fixes.cjs && node scratch/test_user_reported_theme_otp_tables.cjs && node scratch/test_culinary_and_sessions.cjs && node scratch/test_ui_ux_and_isolation.cjs && node scratch/test_ai_curated_visuals.cjs && node scratch/test_ui_ux_production_refactor.cjs"
+    "test:refactor": "node scratch/test_phase3_core_backbone.cjs && node scratch/test_phase4_features.cjs && node scratch/test_phase5_packaging.cjs",
+    "test:all": "npm test && npm run test:refactor",
+    "test": "node scratch/test_vector_audit.cjs && node scratch/test_blueprint_audit.cjs && node scratch/test_rush_hour.cjs && node scratch/test_user_fixes.cjs && node scratch/test_part1_audit.cjs && node scratch/test_auth_suite.cjs && node scratch/test_user_reported_4_fixes.cjs && node scratch/test_user_reported_theme_otp_tables.cjs && node scratch/test_culinary_and_sessions.cjs && node scratch/test_ui_ux_and_isolation.cjs && node scratch/test_ai_curated_visuals.cjs && node scratch/test_ui_ux_production_refactor.cjs && node scratch/test_phase3_core_backbone.cjs && node scratch/test_phase4_features.cjs && node scratch/test_phase5_packaging.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
