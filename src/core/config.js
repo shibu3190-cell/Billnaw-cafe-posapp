@@ -33,6 +33,8 @@ export function getActiveCafeId() {
   return activeContext.cafeId;
 }
 
+export const getTenantCafeId = getActiveCafeId;
+
 /**
  * Updates active tenant context.
  * @param {string} cafeId
@@ -52,6 +54,8 @@ export function getActiveTerminalId() {
   return activeContext.terminalId;
 }
 
+export const getTerminalId = getActiveTerminalId;
+
 /**
  * Sets terminal identifier.
  * @param {string} terminalId
@@ -60,6 +64,17 @@ export function setActiveTerminalId(terminalId) {
   if (terminalId && typeof terminalId === 'string') {
     activeContext.terminalId = terminalId.trim().toUpperCase();
     safeStorageSet('billnaw_terminal_id', activeContext.terminalId);
+  }
+}
+
+export function clearActiveTerminalSession() {
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.removeItem('billnaw_store_code');
+      localStorage.removeItem('billnaw_terminal_id');
+      localStorage.removeItem('billnaw_last_staff_id');
+      localStorage.removeItem('pos_current_staff');
+    } catch (e) {}
   }
 }
 

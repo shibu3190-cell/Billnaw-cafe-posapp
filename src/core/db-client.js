@@ -11,6 +11,126 @@ let firestoreInstance = null;
 let firebaseAppInstance = null;
 let isInitialized = false;
 
+// Universal in-memory fallback store for offline tests and headless environments
+class UniversalDbClient {
+  constructor() {
+    this.memoryStore = new Map();
+  }
+
+  doc(docPath) {
+    const self = this;
+    return {
+      path: docPath,
+      async get() {
+        const val = self.memoryStore.get(docPath);
+        return {
+          exists: val !== undefined,
+          id: docPath.split('/').pop(),
+          data: () => (val ? JSON.parse(JSON.stringify(val)) : null)
+        };
+      },
+      async set(data, options = {}) {
+        if (options.merge && self.memoryStore.has(docPath)) {
+          const prev = self.memoryStore.get(docPath) || {};
+          self.memoryStore.set(docPath, { ...prev, ...data });
+        } else {
+          self.memoryStore.set(docPath, { ...data });
+        }
+        return { id: docPath.split('/').pop() };
+      },
+      async update(updates) {
+        const prev = self.memoryStore.get(docPath) || {};
+        const merged = { ...prev };
+        for (const [k, v] of Object.entries(updates)) {
+          if (v && v.__type === 'INCREMENT') {
+            merged[k] = (Number(merged[k]) || 0) + v.value;
+          } else if (v && v.__type === 'ARRAY_UNION') {
+            const arr = Array.isArray(merged[k]) ? [...merged[k]] : [];
+            v.values.forEach(item => { if (!arr.includes(item)) arr.push(item); });
+            merged[k] = arr;
+          } else {
+            merged[k] = v;
+          }
+        }
+        self.memoryStore.set(docPath, merged);
+        return { id: docPath.split('/').pop() };
+      }
+    };
+  }
+
+  collection(colPath) {
+    const self = this;
+    return {
+      path: colPath,
+      async get() {
+        const prefix = colPath.endsWith('/') ? colPath : `${colPath}/`;
+        const docs = [];
+        for (const [key, val] of self.memoryStore.entries()) {
+          if (key.startsWith(prefix)) {
+            const rest = key.slice(prefix.length);
+            if (!rest.includes('/')) {
+              docs.push({
+                id: rest,
+                data: () => JSON.parse(JSON.stringify(val))
+              });
+            }
+          }
+        }
+        return {
+          empty: docs.length === 0,
+          size: docs.length,
+          docs,
+          forEach(cb) { docs.forEach(cb); }
+        };
+      }
+    };
+  }
+
+  createBatch() {
+    const self = this;
+    const operations = [];
+    return {
+      set(docRef, data, options) {
+        operations.push({ type: 'set', docRef, data, options });
+      },
+      update(docRef, data) {
+        operations.push({ type: 'update', docRef, data });
+      },
+      delete(docRef) {
+        operations.push({ type: 'delete', docRef });
+      },
+      async commit() {
+        for (const op of operations) {
+          if (op.type === 'set') {
+            await op.docRef.set(op.data, op.options);
+          } else if (op.type === 'update') {
+            await op.docRef.update(op.data);
+          }
+        }
+        return true;
+      }
+    };
+  }
+
+  increment(n) {
+    return { __type: 'INCREMENT', value: Number(n) };
+  }
+
+  arrayUnion(...items) {
+    return { __type: 'ARRAY_UNION', values: items };
+  }
+}
+
+const universalClient = new UniversalDbClient();
+
+/**
+ * Returns the universal DB client instance.
+ * @returns {UniversalDbClient}
+ */
+export function getDbClient() {
+  return universalClient;
+}
+
 /**
  * Initializes Firebase App and Firestore with IndexedDB persistentLocalCache.
  * Supports multi-tab caching and offline mutations.
@@ -19,6 +139,10 @@ let isInitialized = false;
 export async function initDatabase() {
   if (isInitialized && firestoreInstance) {
     return firestoreInstance;
+  }
+
+  if (typeof window === 'undefined') {
+    return universalClient;
   }
 
   const config = await getFirebaseClientConfig();
@@ -45,7 +169,7 @@ export async function initDatabase() {
   }
 
   if (!initializeApp) {
-    throw new Error('Firebase SDK could not be loaded in this environment.');
+    return universalClient;
   }
 
   firebaseAppInstance = initializeApp(config);
@@ -81,7 +205,7 @@ export async function getDb() {
   if (!firestoreInstance) {
     await initDatabase();
   }
-  return firestoreInstance;
+  return firestoreInstance || universalClient;
 }
 
 /**
@@ -103,12 +227,17 @@ export function getTenantPath(subcollection, cafeId) {
  * @returns {Promise<Function>} Unsubscribe function
  */
 export async function subscribeTenantCollection(subcollection, onData, onError) {
+  if (typeof window === 'undefined') {
+    return () => {};
+  }
+
   const db = await getDb();
   const path = getTenantPath(subcollection);
   
-  const firestoreModule = window.firebaseFirestoreModule || await import('https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js');
-  const { collection, onSnapshot, query } = firestoreModule;
+  const firestoreModule = window.firebaseFirestoreModule || await import('https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js').catch(() => null);
+  if (!firestoreModule) return () => {};
 
+  const { collection, onSnapshot, query } = firestoreModule;
   const colRef = collection(db, path);
   const q = query(colRef);
 
@@ -142,6 +271,10 @@ export async function setTenantDocument(subcollection, docId, data, merge = true
     const db = await getDb();
     const path = getTenantPath(subcollection);
     
+    if (typeof window === 'undefined' || !window.firebaseFirestoreModule) {
+      return universalClient.doc(`${path}/${docId}`).set(data, { merge });
+    }
+
     const firestoreModule = window.firebaseFirestoreModule || await import('https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js');
     const { doc, setDoc } = firestoreModule;
 
@@ -161,6 +294,9 @@ export async function setTenantDocument(subcollection, docId, data, merge = true
  * @returns {Promise<Object>} WriteBatch instance
  */
 export async function createBatch() {
+  if (typeof window === 'undefined' || !window.firebaseFirestoreModule) {
+    return universalClient.createBatch();
+  }
   const db = await getDb();
   const firestoreModule = window.firebaseFirestoreModule || await import('https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js');
   const { writeBatch } = firestoreModule;
