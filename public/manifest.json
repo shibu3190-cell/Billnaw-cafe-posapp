@@ -1,0 +1,67 @@
+{
+  "id": "com.billnaw.pos.app",
+  "name": "Billnaw Cafe POS — Restaurant ERP",
+  "short_name": "Billnaw POS",
+  "description": "Mobile-first, offline-capable SaaS Point-of-Sale & Kitchen Order Management system for cafes, restaurants, and bakeries.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "background_color": "#FAF7F4",
+  "theme_color": "#143832",
+  "categories": [
+    "business",
+    "food",
+    "finance",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Order (Counter)",
+      "short_name": "New Bill",
+      "description": "Start a new dine-in or takeaway counter sale",
+      "url": "./index.html#pos",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Table Management",
+      "short_name": "Tables & KOT",
+      "description": "View live table occupancy and kitchen tickets",
+      "url": "./index.html#tables",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Sales Register",
+      "short_name": "Reports",
+      "description": "View daily GST breakdown and sales analytics",
+      "url": "./index.html#dashboard",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "com.billnaw.pos"
+    }
+  ],
+  "prefer_related_applications": false
+}
