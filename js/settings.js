@@ -849,6 +849,9 @@ function switchTab(tabId) {
     if (tabId === 'staff') {
         if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
     }
+    if (tabId === 'khata') {
+        if (typeof renderKhataUI === 'function') renderKhataUI();
+    }
     if (tabId === 'settings') {
         if (typeof refreshAiQuotaDisplay === 'function') refreshAiQuotaDisplay();
         if (typeof generateSettingsQRPreview === 'function') generateSettingsQRPreview();

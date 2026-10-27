@@ -921,14 +921,15 @@ export function calculateDishCosting() {
         compTotalCost = comp.exact_quantity * compUnitCost;
       }
 
-      dishCost += compTotalCost;
+      const roundedCompCost = Math.round(compTotalCost * 100) / 100;
+      dishCost += roundedCompCost;
       itemized.push({
         type: comp.type,
         name: comp.name,
         quantity: comp.exact_quantity,
         unit: comp.unit,
         unit_cost: Math.round(compUnitCost * 100) / 100,
-        component_cost: Math.round(compTotalCost * 100) / 100
+        component_cost: roundedCompCost
       });
     });
 

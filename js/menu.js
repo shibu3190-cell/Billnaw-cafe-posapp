@@ -86,8 +86,9 @@ function renderMenuUI() {
     const posGrid = document.getElementById('menuGridUI');
     if (!posGrid) return;
 
-    // Zero phantom data: render welcoming empty slate if no menu items exist
-    if (!Array.isArray(menuItems) || menuItems.length === 0) {
+    // Zero phantom data: render welcoming empty slate if no active user-created menu items exist
+    const activeItems = (Array.isArray(menuItems) ? menuItems : []).filter(i => !i.is_template && i.source !== 'template' && i.is_active !== false);
+    if (activeItems.length === 0) {
         posGrid.innerHTML = `
             <div id="posMenuEmptyState" style="grid-column: 1 / -1; text-align: center; padding: 40px 16px; background: #FFFFFF; border: 1.5px dashed #CBD5E1; border-radius: 16px; margin: 10px 0;">
                 <div style="width: 52px; height: 52px; border-radius: 50%; background: #F0FDF4; color: #143832; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; border: 1px solid #BBF7D0;">
@@ -112,7 +113,7 @@ function renderMenuUI() {
     }
 
     // Auto-reset category if activeCategory has no matching items
-    if (activeCategory !== "All" && !menuItems.some(i => i.category === activeCategory)) {
+    if (activeCategory !== "All" && !activeItems.some(i => i.category === activeCategory)) {
         activeCategory = "All";
         window.activeCategory = "All";
         if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
@@ -121,7 +122,7 @@ function renderMenuUI() {
     posGrid.innerHTML = '';
     const searchInput = document.getElementById('menuSearchInput');
     const searchText = (searchInput ? searchInput.value : '').toLowerCase().trim();
-    let filteredMenu = activeCategory === "All" ? menuItems : menuItems.filter(i => i.category === activeCategory);
+    let filteredMenu = activeCategory === "All" ? activeItems : activeItems.filter(i => i.category === activeCategory);
     if (searchText) filteredMenu = filteredMenu.filter(i => i.name.toLowerCase().includes(searchText));
 
     if (filteredMenu.length === 0) {
@@ -218,17 +219,18 @@ window.switchMenuSubTab = switchMenuSubTab;
 function renderMenuCatalogUI() {
     const cleanCardsContainer = document.getElementById('cleanItemCardsList');
     const { mode: gstCurrentMode, defaultRate: gstStoreRate } = getStoreGstConfig();
+    const activeCatalogItems = (Array.isArray(menuItems) ? menuItems : []).filter(i => !i.is_template && i.source !== 'template' && i.is_active !== false);
 
     // 1. Update count badges
     const invCountEl = document.getElementById('menuInventoryCount');
-    if (invCountEl) invCountEl.innerText = menuItems.length;
+    if (invCountEl) invCountEl.innerText = activeCatalogItems.length;
 
     const catCountEl = document.getElementById('menuCategoriesCount');
     if (catCountEl) catCountEl.innerText = menuCategories.filter(c => c !== 'All').length;
 
     const countBadge = document.getElementById('catalogItemCountBadge');
     if (countBadge) {
-        countBadge.innerText = `${menuItems.length} Item${menuItems.length === 1 ? '' : 's'}`;
+        countBadge.innerText = `${activeCatalogItems.length} Item${activeCatalogItems.length === 1 ? '' : 's'}`;
     }
 
     // 2. Render Category Filter Chips
@@ -245,7 +247,7 @@ function renderMenuCatalogUI() {
     const searchInput = document.getElementById('catalogSearchInput');
     const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
 
-    let itemsToRender = menuItems;
+    let itemsToRender = activeCatalogItems;
     if (catalogActiveCategoryFilter && catalogActiveCategoryFilter !== 'All') {
         itemsToRender = itemsToRender.filter(i => i.category === catalogActiveCategoryFilter);
     }

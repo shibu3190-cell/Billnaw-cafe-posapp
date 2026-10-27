@@ -33,10 +33,16 @@ export async function getMenuItems(category = 'All') {
 
     let items = [];
     if (!snap.empty) {
-      snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+      snap.forEach(doc => {
+        const d = doc.data();
+        // Filter database queries to display only active, user-created items rather than pre-populated template data
+        if (d && !d.is_template && d.source !== 'template' && d.is_active !== false && d.is_available !== false) {
+          items.push({ id: doc.id, ...d });
+        }
+      });
     } else {
       // Local dev fallback
-      items = getDefaultMenuItems();
+      items = getDefaultMenuItems().filter(it => !it.is_template && it.source !== 'template' && it.is_available !== false && it.is_active !== false);
     }
 
     if (category && category !== 'All') {
@@ -77,6 +83,9 @@ export async function saveMenuItem(itemData) {
       gst_rate: Number(itemData.gst_rate ?? 5),
       hsn_code: itemData.hsn_code || '996331',
       is_available: itemData.is_available !== false,
+      is_active: itemData.is_active !== false,
+      is_user_created: true,
+      is_template: false,
       image_url: itemData.image_url || '',
       variation_idx: itemData.variation_idx || 0,
       recipe_id: itemData.recipe_id || null,
@@ -123,6 +132,9 @@ function getDefaultMenuItems() {
       gst_rate: 5,
       hsn_code: '996331',
       is_available: true,
+      is_active: true,
+      is_user_created: true,
+      is_template: false,
       image_url: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80'
     },
     {
@@ -134,6 +146,9 @@ function getDefaultMenuItems() {
       gst_rate: 5,
       hsn_code: '996331',
       is_available: true,
+      is_active: true,
+      is_user_created: true,
+      is_template: false,
       image_url: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=600&auto=format&fit=crop&q=80'
     },
     {
@@ -145,6 +160,9 @@ function getDefaultMenuItems() {
       gst_rate: 5,
       hsn_code: '996331',
       is_available: true,
+      is_active: true,
+      is_user_created: true,
+      is_template: false,
       image_url: 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80'
     }
   ];

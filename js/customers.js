@@ -1307,6 +1307,12 @@ window.toggleMobileSlideMenu = toggleMobileSlideMenu;
 // ============================================================
 
 function switchCustomerHubTab(tabName) {
+    if (tabName === 'khata') {
+        if (typeof switchTab === 'function') {
+            switchTab('khata');
+            return;
+        }
+    }
     const activeTab = (tabName === 'whatsapp') ? 'marketing' : tabName;
     
     // Update segmented tab buttons

@@ -19,13 +19,19 @@ export async function getRawMaterials() {
     const db = getDbClient();
     const snap = await db.collection(`cafes/${cafeId}/raw_materials`).get();
 
-    const defaults = getDefaultRawMaterials();
+    const defaults = getDefaultRawMaterials().filter(m => !m.is_template && m.is_active !== false);
     if (snap.empty) {
       return defaults;
     }
 
     const storedMap = new Map();
-    snap.forEach(doc => storedMap.set(doc.id, doc.data()));
+    snap.forEach(doc => {
+      const data = doc.data();
+      // Filter database queries to display only active, user-created items rather than pre-populated template data
+      if (data && !data.is_template && data.source !== 'template' && data.is_active !== false) {
+        storedMap.set(doc.id, data);
+      }
+    });
 
     const merged = defaults.map(m => {
       const stored = storedMap.get(m.id);
@@ -62,6 +68,9 @@ export async function saveRawMaterial(matData) {
       current_stock: Number(matData.current_stock || 0),
       low_stock_threshold: Number(matData.low_stock_threshold || 10),
       cost_per_unit_paise: Number(matData.cost_per_unit_paise || 0),
+      is_user_created: true,
+      is_template: false,
+      is_active: matData.is_active !== false,
       updated_at: new Date().toISOString()
     };
 
@@ -176,11 +185,11 @@ export async function calculateDishFoodCost(dishId, sellingPricePaise = 0) {
 
 function getDefaultRawMaterials() {
   return [
-    { id: 'mat_potato', name: 'Potatoes', unit: 'kg', current_stock: 45, low_stock_threshold: 10, cost_per_unit_paise: 2500 },
-    { id: 'mat_flour', name: 'Refined Flour (Maida)', unit: 'kg', current_stock: 30, low_stock_threshold: 8, cost_per_unit_paise: 3800 },
-    { id: 'mat_oil', name: 'Cooking Oil', unit: 'l', current_stock: 20, low_stock_threshold: 5, cost_per_unit_paise: 12000 },
-    { id: 'mat_tea_leaves', name: 'Assam Tea Leaves', unit: 'kg', current_stock: 12, low_stock_threshold: 2, cost_per_unit_paise: 32000 },
-    { id: 'mat_milk', name: 'Full Cream Milk', unit: 'l', current_stock: 25, low_stock_threshold: 5, cost_per_unit_paise: 6400 }
+    { id: 'mat_potato', name: 'Potatoes', unit: 'kg', current_stock: 45, low_stock_threshold: 10, cost_per_unit_paise: 2500, is_user_created: true, is_template: false, is_active: true },
+    { id: 'mat_flour', name: 'Refined Flour (Maida)', unit: 'kg', current_stock: 30, low_stock_threshold: 8, cost_per_unit_paise: 3800, is_user_created: true, is_template: false, is_active: true },
+    { id: 'mat_oil', name: 'Cooking Oil', unit: 'l', current_stock: 20, low_stock_threshold: 5, cost_per_unit_paise: 12000, is_user_created: true, is_template: false, is_active: true },
+    { id: 'mat_tea_leaves', name: 'Assam Tea Leaves', unit: 'kg', current_stock: 12, low_stock_threshold: 2, cost_per_unit_paise: 32000, is_user_created: true, is_template: false, is_active: true },
+    { id: 'mat_milk', name: 'Full Cream Milk', unit: 'l', current_stock: 25, low_stock_threshold: 5, cost_per_unit_paise: 6400, is_user_created: true, is_template: false, is_active: true }
   ];
 }
 
