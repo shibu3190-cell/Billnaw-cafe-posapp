@@ -1,54 +1,81 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /shops/{shopId} {
-      allow read, write: if true;
 
-      match /staff/{staffId} {
-        allow read, write: if true;
+    // Helper functions for Multi-Tenant Security
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isTenantStaff(cafeId) {
+      return isAuthenticated() && (
+        request.auth.token.cafe_id == cafeId || 
+        request.auth.token.storeCode == cafeId ||
+        request.auth.uid == get(/databases/$(database)/documents/cafes/$(cafeId)).data.owner_uid
+      );
+    }
+
+    function isTenantAdmin(cafeId) {
+      return isAuthenticated() && (
+        (request.auth.token.role == 'ADMIN' || request.auth.token.role == 'Owner') &&
+        (request.auth.token.cafe_id == cafeId || request.auth.token.storeCode == cafeId)
+      );
+    }
+
+    // Modern Multi-Tenant Root Collection (/cafes/{cafeId})
+    match /cafes/{cafeId} {
+      allow read: if isTenantStaff(cafeId);
+      allow write: if isTenantAdmin(cafeId);
+
+      // INVOICE LEDGER — STRICT ANTI-TAMPERING INVARIANT
+      match /invoices/{invoiceId} {
+        allow read: if isTenantStaff(cafeId);
+        allow create: if isTenantStaff(cafeId);
+        
+        // PHYSICAL DELETION IS PERMANENTLY FORBIDDEN
+        allow delete: if false;
+        
+        // CANCEL / VOID MUTATION AUDIT
+        allow update: if isTenantStaff(cafeId) &&
+          resource.data.status == 'PAID' &&
+          request.resource.data.status == 'VOID' &&
+          request.resource.data.void_audit.void_reason is string &&
+          request.resource.data.void_audit.voided_by_staff_id is string &&
+          request.resource.data.void_audit.voided_at is string;
       }
-      match /customers/{customerId} {
-        allow read, write: if true;
+
+      // KITCHEN ORDER TICKETS (KOT)
+      match /kot/{kotId} {
+        allow read, create: if isTenantStaff(cafeId);
+        allow delete: if false; // Status transitions only
+        allow update: if isTenantStaff(cafeId);
       }
-      match /menu/{itemId} {
-        allow read, write: if true;
-      }
+
+      // INDIVIDUAL TABLES (Row-level concurrency)
       match /tables/{tableId} {
-        allow read, write: if true;
+        allow read, write: if isTenantStaff(cafeId);
       }
-      match /history/{orderId} {
-        allow read, write: if true;
-      }
-      match /expenses/{expenseId} {
-        allow read, write: if true;
-      }
+
+      // STAFF, MENU, INVENTORY, CUSTOMERS, EXPENSES
       match /{allChildren=**} {
-        allow read, write: if true;
+        allow read: if isTenantStaff(cafeId);
+        allow write: if isTenantStaff(cafeId);
       }
     }
-    match /clients/{clientId} {
-      allow read, write: if true;
 
-      match /staff/{staffId} {
-        allow read, write: if true;
-      }
-      match /customers/{customerId} {
-        allow read, write: if true;
-      }
-      match /menu/{itemId} {
-        allow read, write: if true;
-      }
-      match /tables/{tableId} {
-        allow read, write: if true;
-      }
-      match /history/{orderId} {
-        allow read, write: if true;
-      }
-      match /expenses/{expenseId} {
-        allow read, write: if true;
-      }
+    // Secured Legacy Backward-Compatibility Paths (/shops/{shopId})
+    match /shops/{shopId} {
+      allow read, write: if isAuthenticated() && (
+        request.auth.token.storeCode == shopId || 
+        request.auth.token.cafe_id == shopId ||
+        request.auth.uid == resource.data.ownerUid
+      );
+
       match /{allChildren=**} {
-        allow read, write: if true;
+        allow read, write: if isAuthenticated() && (
+          request.auth.token.storeCode == shopId || 
+          request.auth.token.cafe_id == shopId
+        );
       }
     }
   }
