@@ -1,7 +1,10 @@
 {
-  "firestore": {
-    "rules": "firestore.rules"
-  },
+  "firestore": [
+    {
+      "database": "ai-studio-billnawcafepos-3ac17879-08c8-4e15-9a3d-a965f7d92fda",
+      "rules": "firestore.rules"
+    }
+  ],
   "functions": [
     {
       "source": "database/server-functions",
