@@ -50,7 +50,7 @@ function renderCustomersUI() {
 
     if (statTotalEl) statTotalEl.innerText = totalCustomers;
     if (statPtsEl) statPtsEl.innerText = `${totalPoints} pts`;
-    if (statRevEl) statRevEl.innerText = `₹${totalRevenue.toLocaleString()}`;
+    if (statRevEl) statRevEl.innerText = `₹ ${totalRevenue.toLocaleString()}`;
 
     const query = (document.getElementById('customerSearchInput')?.value || '').toLowerCase().trim();
 
@@ -116,7 +116,7 @@ function renderCustomersUI() {
                     ${visits} ${visits === 1 ? 'visit' : 'visits'}
                 </td>
                 <td style="font-weight: 800; color: var(--success); font-size: 14px;">
-                    ₹${totalSpent}
+                    ₹ ${totalSpent}
                 </td>
                 <td style="font-size: 12px; color: var(--text-muted);">
                     ${lastVisit}
@@ -306,7 +306,7 @@ function openCustomerHistoryModal(id) {
     tierBadge.innerHTML = `${tier.icon} <span>${tier.name}</span>`;
 
     document.getElementById('custHistVisits').innerText = cust.totalVisits || 0;
-    document.getElementById('custHistTotalSpend').innerText = `₹${(Number(cust.totalSpend) || 0).toFixed(2)}`;
+    document.getElementById('custHistTotalSpend').innerText = `₹ ${(Number(cust.totalSpend) || 0).toFixed(2)}`;
     document.getElementById('custHistPoints').innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>${cust.loyaltyPoints || 0} pts`;
 
     const notesEl = document.getElementById('custHistNotes');
@@ -337,7 +337,7 @@ function openCustomerHistoryModal(id) {
                     ${escapeHtml(h.items || 'Order items')}
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 800; color: var(--success); font-size: 13px;">₹${Number(h.amount).toFixed(2)}</span>
+                    <span style="font-weight: 800; color: var(--success); font-size: 13px;">₹ ${Number(h.amount).toFixed(2)}</span>
                     <span style="font-size: 11px; font-weight: 700; color: var(--warning);">+${h.pointsEarned || Math.max(1, Math.floor(h.amount / 50))} pts</span>
                 </div>
             </div>
@@ -532,7 +532,7 @@ function openCustomerActionHub(customerId) {
         tierEl.innerHTML = `${tier.icon} <span>${tier.name}</span>`;
     }
     if (pointsEl) pointsEl.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>${cust.loyaltyPoints || 0} pts`;
-    if (spendEl) spendEl.innerText = `Spent: ₹${Number(cust.totalSpend || 0).toFixed(2)}`;
+    if (spendEl) spendEl.innerText = `Spent: ₹ ${Number(cust.totalSpend || 0).toFixed(2)}`;
     if (notesEl) {
         notesEl.innerHTML = cust.notes ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>${escapeHtml(cust.notes)}` : '';
         notesEl.style.display = cust.notes ? 'block' : 'none';
@@ -1506,7 +1506,7 @@ function formatKhataReminder(entry) {
     if (!entry) return '';
     const storeName = (window.shopProfile && window.shopProfile.name) || "Billnaw Cafe";
     const dueStr = entry.dueDate || 'soon';
-    return `Dear ${entry.name}, your pending bill of ₹${entry.balanceDue} at ${storeName} is due on ${dueStr}. Kindly clear your balance. Thank you! - ${storeName}`;
+    return `Dear ${entry.name}, your pending bill of ₹ ${entry.balanceDue} at ${storeName} is due on ${dueStr}. Kindly clear your balance. Thank you! - ${storeName}`;
 }
 window.formatKhataReminder = formatKhataReminder;
 
@@ -1680,7 +1680,7 @@ function renderKhataUI() {
     const statTotalDue = document.getElementById('khataStatTotalDue');
     const statOverdue = document.getElementById('khataStatOverdueCount');
     const statCleared = document.getElementById('khataStatClearedCount');
-    if (statTotalDue) statTotalDue.innerText = `₹${totalDue.toLocaleString()}`;
+    if (statTotalDue) statTotalDue.innerText = `₹ ${totalDue.toLocaleString()}`;
     if (statOverdue) statOverdue.innerText = overdueCount;
     if (statCleared) statCleared.innerText = clearedCount;
 
@@ -1754,11 +1754,11 @@ function renderKhataUI() {
                 </td>
                 <td>${phoneDisplay}</td>
                 <td>
-                    <div style="font-weight: 600; font-size: 13px;">₹${Number(item.amount || item.balanceDue || 0).toFixed(2)}</div>
+                    <div style="font-weight: 600; font-size: 13px;">₹ ${Number(item.amount || item.balanceDue || 0).toFixed(2)}</div>
                     ${billBadge}
                 </td>
                 <td>
-                    <strong style="color: ${balanceColor}; font-size: 14px;">₹${Number(item.balanceDue || 0).toFixed(2)}</strong>
+                    <strong style="color: ${balanceColor}; font-size: 14px;">₹ ${Number(item.balanceDue || 0).toFixed(2)}</strong>
                 </td>
                 <td style="font-size: 12px; color: var(--text-dark);">
                     ${item.dueDate || '-'}
@@ -1795,7 +1795,7 @@ function openRecordPaymentModal(entryId) {
 
     document.getElementById('khataPaymentEntryId').value = entry.id;
     document.getElementById('khataPaymentPartyName').innerText = entry.name;
-    document.getElementById('khataPaymentCurrentDue').innerText = `₹${Number(entry.balanceDue).toFixed(2)}`;
+    document.getElementById('khataPaymentCurrentDue').innerText = `₹ ${Number(entry.balanceDue).toFixed(2)}`;
     document.getElementById('khataPaymentDueDate').innerText = entry.dueDate || '-';
     const amtInput = document.getElementById('khataPaymentAmount');
     if (amtInput) amtInput.value = entry.balanceDue;
@@ -1863,7 +1863,7 @@ function saveKhataPayment() {
     if (rec) {
         closeRecordKhataPaymentModal();
         renderKhataUI();
-        showToast(`✅ Payment of ₹${amount} recorded successfully!`);
+        showToast(`✅ Payment of ₹ ${amount} recorded successfully!`);
     } else {
         showToast("⚠️ Failed to record payment.");
     }
@@ -1968,7 +1968,7 @@ function saveNewKhataEntry() {
     } else {
         renderKhataUI();
     }
-    showToast(`✅ Added ₹${amount} due entry for ${name}`);
+    showToast(`✅ Added ₹ ${amount} due entry for ${name}`);
 }
 window.saveNewKhataEntry = saveNewKhataEntry;
 

@@ -78,11 +78,15 @@ body {
 h1, h2, h3, h4, h5, h6 { margin: 0; color: var(--text-dark); font-weight: 700; letter-spacing: -0.02em; }
 input:focus, select:focus, textarea:focus { outline: none; }
 
-/* 🔢 Tabular Numerical Alignment (Prevents Layout Shifting & Fast Scanning) */
-.price, .cart-item-price, .huge-total, #totalUI, #fc-total, .kpi-value, #invModalGrandTotal, .table-item-badge {
+/* 🔢 Tabular Numerical Alignment & Non-Breaking Rupee Layout (Prevents Split Lines & Layout Shifting) */
+.price, .cart-item-price, .huge-total, #totalUI, #fc-total, .kpi-value, #invModalGrandTotal, .table-item-badge, .clean-item-price, .ledger-amount, .card-price-col {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
     letter-spacing: -0.02em;
+    white-space: nowrap !important;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.2rem;
 }
 
 ::-webkit-scrollbar { width: 0; height: 0; display: none; } 
@@ -156,17 +160,22 @@ input:focus, select:focus, textarea:focus { outline: none; }
 #shopAuthModal { z-index: 1000008 !important; }
 #loginOverlay, #terminalLockOverlay { z-index: 1000005 !important; }
 #spotManagerOverrideModal { z-index: 1000010 !important; }
+#checkoutModal { z-index: 1000010 !important; }
+#customerModal { z-index: 1000040 !important; }
 .modal-overlay.stacked-level-1 { z-index: 1000010 !important; }
 .modal-overlay.stacked-level-2 { z-index: 1000030 !important; }
 .modal-overlay.stacked-level-3 { z-index: 1000050 !important; }
 #expensesDetailModal { z-index: 1000015 !important; }
 #customerActionHubModal { z-index: 1000020 !important; }
+#reportExportModal { z-index: 1000020 !important; }
+#reportDatePopover { z-index: 1000030 !important; }
 #moreHubModal { z-index: 1000025 !important; }
 #aiPreviewModal { z-index: 1000025 !important; }
 #quickExpenseModal { z-index: 1000030 !important; }
 #quickDiscountModal { z-index: 1000030 !important; }
 #clientQuotaModal { z-index: 1000030 !important; }
 #staffSwitchModal { z-index: 1000030 !important; }
+#dishRecipeConfigModal, #itemAlertModal, #restockExpenseModal { z-index: 1000035 !important; }
 #addStaffModal { z-index: 1000040 !important; }
 #aiMenuZoomModal { z-index: 1000050 !important; }
 
@@ -1609,7 +1618,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
 .staff-pick-card:hover, .staff-pick-card.selected { border-color: var(--primary); background: rgba(74, 51, 42, 0.05); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
 
 /* TOASTS */
-#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 999999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; width: 90%; max-width: 380px; }
+#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000060 !important; display: flex; flex-direction: column; gap: 8px; pointer-events: none; width: 90%; max-width: 380px; }
 .toast { background: var(--primary); color: #FFFFFF; padding: 12px 20px; border-radius: 20px; box-shadow: var(--shadow-lg); font-weight: 600; text-align: center; font-size: 13px; border: 1px solid rgba(255,255,255,0.1); }
 
 /* 🤖 AI MENU REVIEW COMPACT PREVIEW STYLES (PC, LAPTOP & MOBILE) */
@@ -2262,11 +2271,10 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
         justify-content: space-around; 
         padding: 6px 6px 0 6px; 
         padding-bottom: max(12px, env(safe-area-inset-bottom, 24px)); 
-        padding-bottom: max(16px, env(safe-area-inset-bottom, 24px)); 
         position: fixed; 
         bottom: 0; 
         left: 0; 
-        z-index: 3000; 
+        z-index: 900 !important; 
         border: none; 
         background: rgba(255, 255, 255, 0.94) !important; 
         backdrop-filter: blur(20px); 
@@ -2402,7 +2410,8 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
         padding-right: 0;
-        padding-bottom: calc(80px + env(safe-area-inset-bottom, 24px));
+        padding-bottom: calc(88px + env(safe-area-inset-bottom, 24px));
+        background: transparent;
     }
     
     .drawer-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(28, 18, 13, 0.65); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 500000; opacity: 0; pointer-events: none; transition: opacity 0.28s ease; }
@@ -2426,7 +2435,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     .item-qty-control button { font-size: 15px; width: 26px; height: 26px; }
     .item-qty-control span { font-size: 12px; }
 
-    .mobile-pos-actions { display: flex; flex-direction: column; position: fixed; bottom: calc(76px + env(safe-area-inset-bottom, 24px)); left: 0; width: 100%; padding: 6px 12px; background: linear-gradient(to top, var(--bg-body) 70%, transparent); z-index: 4000; pointer-events: none; }
+    .mobile-pos-actions { display: flex; flex-direction: column; position: fixed; bottom: calc(76px + env(safe-area-inset-bottom, 24px)); left: 0; width: 100%; padding: 0 12px; background: transparent !important; z-index: 950; pointer-events: none; }
     .mobile-pos-actions > * { pointer-events: auto; }
     .sleek-checkout-bar { background: var(--primary); color: #FFFFFF; border-radius: 28px; display: flex; justify-content: space-between; align-items: center; padding: 7px 7px 7px 16px; box-shadow: 0 8px 24px rgba(35, 22, 16, 0.35); cursor: pointer; width: 100%; max-width: 380px; margin: 0 auto; transition: all 0.2s ease; }
     .sc-left { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 5px; color: rgba(255,255,255,0.9); }
@@ -5477,27 +5486,84 @@ body.printing { background: #fff !important; }
     display: block;
 }
 
-/* ✨ REPORTS EXPORT STICKY FOOTER ✨ */
-.reports-export-sticky-footer {
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-top: 1.5px solid var(--border);
-    padding: 12px 18px;
-    display: flex;
-    justify-content: space-between;
+/* 📊 Minimalist Reports Action Bar & Popover */
+.report-action-pill {
+    display: inline-flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    z-index: 100;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05);
-    border-radius: 14px 14px 0 0;
-    box-sizing: border-box;
-    margin-top: 20px;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary);
+    cursor: pointer;
+    box-shadow: var(--shadow-xs);
+    transition: all 0.15s ease;
+}
+.report-action-pill:hover {
+    border-color: var(--primary);
+    background: #FAF7F4;
+    transform: translateY(-1px);
+}
+.report-popover-card {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 220px;
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    z-index: 1000030 !important;
+    animation: fadeInModal 0.15s ease;
+}
+.popover-presets-list {
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+}
+.popover-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dark);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.12s ease;
+}
+.popover-item:hover {
+    background: #FAF7F4;
+    color: var(--primary);
+}
+.popover-item.active {
+    background: var(--primary);
+    color: #FFFFFF !important;
+    font-weight: 700;
+}
+.report-export-close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: all 0.15s ease;
+}
+.report-export-close-btn:hover {
+    background: var(--bg-body);
+    color: var(--text-dark);
 }
 
 /* High-Contrast Telemetry Table (Tab 1: Vertical Data Table to eliminate horizontal scrolling) */

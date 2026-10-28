@@ -18,7 +18,7 @@ let monthlyChartInstance = null;
 
 // Authoritative Currency & Formatting Helpers
 function formatCurrency(amount) {
-    return '₹' + Number(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return '₹ ' + Number(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 window.formatCurrency = formatCurrency;
 
@@ -202,25 +202,45 @@ window.staffList = staffList;
 window.currentStaff = currentStaff;
 window.myClientID = myClientID;
 
-// Toast Notifications (Polymorphic: info, success, warning, error)
+// Toast Notifications (Polymorphic: info, success, warning, error - Deduplicated Single-Instance)
+let activeToastTimeout = null;
+let lastToastMessage = '';
+let lastToastTime = 0;
+
 function showToast(message, type = 'info') {
+    if (!message) return;
+    const now = Date.now();
+    // Throttle identical rapid clicks
+    if (message === lastToastMessage && now - lastToastTime < 350) return;
+    lastToastMessage = message;
+    lastToastTime = now;
+
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'toast-container';
         document.body.appendChild(container);
     }
+
+    // Deduplicate: remove/replace currently visible toast immediately so only 1 appears
+    container.innerHTML = '';
+    if (activeToastTimeout) {
+        clearTimeout(activeToastTimeout);
+        activeToastTimeout = null;
+    }
+
     const toast = document.createElement('div');
     const safeType = type || 'info';
     toast.className = `toast toast-${safeType}`;
     toast.innerText = message;
     container.appendChild(toast);
-    setTimeout(() => {
+
+    activeToastTimeout = setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(-10px)';
-        toast.style.transition = 'all 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    }, 2800);
+        toast.style.transition = 'all 0.25s ease';
+        setTimeout(() => toast.remove(), 250);
+    }, 2500);
 }
 window.showToast = showToast;
 

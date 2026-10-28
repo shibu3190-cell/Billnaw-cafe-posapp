@@ -86,7 +86,7 @@ function renderExpensesUI() {
     if (!tbody) return;
     tbody.innerHTML = dailyExpenses.map((exp, index) => {
         if(!exp.id) exp.id = Date.now() + index;
-        return `<tr><td style="color: var(--text-muted);">${exp.time}</td><td style="font-weight: 600; color: var(--text-dark);">${escapeHtml(exp.name)}</td><td style="color: var(--danger); font-weight: 800;">-₹${exp.cost.toFixed(2)}</td><td><button class="btn btn-outline" style="padding: 6px 10px; font-size: 12px; margin-right: 5px;" onclick="editExpense(${exp.id})">Edit</button><button class="btn btn-danger" style="padding: 6px 10px; font-size: 12px;" onclick="deleteExpense(${exp.id})">Del</button></td></tr>`;
+        return `<tr><td style="color: var(--text-muted);">${exp.time}</td><td style="font-weight: 600; color: var(--text-dark);">${escapeHtml(exp.name)}</td><td style="color: var(--danger); font-weight: 800;">-₹ ${exp.cost.toFixed(2)}</td><td><button class="btn btn-outline" style="padding: 6px 10px; font-size: 12px; margin-right: 5px;" onclick="editExpense(${exp.id})">Edit</button><button class="btn btn-danger" style="padding: 6px 10px; font-size: 12px;" onclick="deleteExpense(${exp.id})">Del</button></td></tr>`;
     }).join(''); 
 }
 window.renderExpensesUI = renderExpensesUI;
@@ -150,7 +150,7 @@ function saveQuickExpense() {
         dailyExpenses.unshift(newExpense);
         if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addExpense', newExpense);
         if (typeof persistExpensesFirebase === 'function') persistExpensesFirebase(newExpense);
-        showToast(`Recorded expense: ${name} (₹${cost.toFixed(2)})`);
+        showToast(`Recorded expense: ${name} (₹ ${cost.toFixed(2)})`);
     }
     if (typeof saveToLocal === 'function') saveToLocal();
     renderExpensesUI();
@@ -161,7 +161,7 @@ function saveQuickExpense() {
         const todayISO = (typeof getLocalISODate === 'function') ? getLocalISODate() : '';
         const todayExp = dailyExpenses.filter(e => e.filterDate === todayISO || (e.date && e.date.startsWith(new Date().toLocaleDateString())));
         const sum = todayExp.reduce((s, e) => s + (Number(e.cost) || 0), 0);
-        totEl.innerText = `Today's Total: ₹${sum.toFixed(2)}`;
+        totEl.innerText = `Today's Total: ₹ ${sum.toFixed(2)}`;
     }
 }
 window.saveQuickExpense = saveQuickExpense;
@@ -263,6 +263,53 @@ function applyCustomDashboardDateRange() {
 }
 window.applyCustomDashboardDateRange = applyCustomDashboardDateRange;
 
+function toggleReportDatePopover() {
+    const popover = document.getElementById('reportDatePopover');
+    if (!popover) return;
+    const isShowing = popover.style.display !== 'none';
+    popover.style.display = isShowing ? 'none' : 'block';
+}
+window.toggleReportDatePopover = toggleReportDatePopover;
+
+function closeReportDatePopover() {
+    const popover = document.getElementById('reportDatePopover');
+    if (popover) popover.style.display = 'none';
+}
+window.closeReportDatePopover = closeReportDatePopover;
+
+function selectReportDatePreset(range, label) {
+    const labelSpan = document.getElementById('reportActiveRangeLabel');
+    if (labelSpan) labelSpan.textContent = label;
+    setDashboardDateRange(range);
+    if (range !== 'custom') {
+        closeReportDatePopover();
+    }
+}
+window.selectReportDatePreset = selectReportDatePreset;
+
+function openReportExportModal() {
+    const modal = document.getElementById('reportExportModal');
+    if (modal) modal.style.display = 'flex';
+}
+window.openReportExportModal = openReportExportModal;
+
+function closeReportExportModal() {
+    const modal = document.getElementById('reportExportModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeReportExportModal = closeReportExportModal;
+
+// Dismiss date range popover on outside click
+document.addEventListener('click', (e) => {
+    const popover = document.getElementById('reportDatePopover');
+    const trigger = document.getElementById('reportDateRangeBtn');
+    if (popover && popover.style.display !== 'none') {
+        if (!popover.contains(e.target) && !trigger?.contains(e.target)) {
+            popover.style.display = 'none';
+        }
+    }
+});
+
 function filterDashboardByMetric(metric) {
     if (metric === 'expenses') {
         openExpensesDetailModal();
@@ -356,14 +403,14 @@ async function renderDashboardAnalytics() {
     const kpiOrdersEl = document.getElementById('kpiTotalOrders');
     const kpiAvgEl = document.getElementById('kpiAvgOrderValue');
     
-    if (kpiSalesEl) kpiSalesEl.innerText = `₹${totalSales.toFixed(2)}`;
-    if (kpiExpEl) kpiExpEl.innerText = `₹${totalExpenses.toFixed(2)}`;
+    if (kpiSalesEl) kpiSalesEl.innerText = `₹ ${totalSales.toFixed(2)}`;
+    if (kpiExpEl) kpiExpEl.innerText = `₹ ${totalExpenses.toFixed(2)}`;
     if (kpiProfitEl) {
-        kpiProfitEl.innerText = `₹${netProfit.toFixed(2)}`;
+        kpiProfitEl.innerText = `₹ ${netProfit.toFixed(2)}`;
         kpiProfitEl.style.color = (netProfit < 0) ? 'var(--danger)' : 'var(--success)';
     }
     if (kpiOrdersEl) kpiOrdersEl.innerText = orderCount;
-    if (kpiAvgEl) kpiAvgEl.innerText = `₹${avgOrderVal.toFixed(2)}`;
+    if (kpiAvgEl) kpiAvgEl.innerText = `₹ ${avgOrderVal.toFixed(2)}`;
 
     const kpiGrossSub = document.getElementById('kpiGrossSub');
     if (kpiGrossSub) kpiGrossSub.innerText = `From ${orderCount} transactions`;
@@ -375,11 +422,11 @@ async function renderDashboardAnalytics() {
     if (kpiProfitSub) kpiProfitSub.innerText = `${profitMargin}% operating margin`;
 
     const kpiOrdersSub = document.getElementById('kpiOrdersSub');
-    if (kpiOrdersSub) kpiOrdersSub.innerText = `Avg ticket ₹${avgOrderVal.toFixed(0)}`;
+    if (kpiOrdersSub) kpiOrdersSub.innerText = `Avg ticket ₹ ${avgOrderVal.toFixed(0)}`;
 
-    if (document.getElementById('statSales')) document.getElementById('statSales').innerText = `₹${totalSales.toFixed(2)}`;
-    if (document.getElementById('statExpenses')) document.getElementById('statExpenses').innerText = `₹${totalExpenses.toFixed(2)}`;
-    if (document.getElementById('statProfit')) document.getElementById('statProfit').innerText = `₹${netProfit.toFixed(2)}`;
+    if (document.getElementById('statSales')) document.getElementById('statSales').innerText = `₹ ${totalSales.toFixed(2)}`;
+    if (document.getElementById('statExpenses')) document.getElementById('statExpenses').innerText = `₹ ${totalExpenses.toFixed(2)}`;
+    if (document.getElementById('statProfit')) document.getElementById('statProfit').innerText = `₹ ${netProfit.toFixed(2)}`;
 
     // 4. Secondary Filters
     const payModeFilter = document.getElementById('dashPayModeFilter')?.value || 'all';
@@ -444,7 +491,7 @@ async function renderDashboardAnalytics() {
                         <td style="font-size: 12px; max-width: 200px; color: var(--text-dark); white-space: normal;">${escapeHtml(order.items || '-')}</td>
                         <td><span class="custom-pill ${payBadgeClass}">${order.paymentMode || 'Cash'}</span></td>
                         <td class="ledger-amount" style="font-weight: 800; color: var(--success); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums;">
-                            <div>₹${Number(order.amount).toFixed(2)}</div>
+                            <div>₹ ${Number(order.amount).toFixed(2)}</div>
                             ${discountBadge}
                         </td>
                         <td class="ledger-actions" style="text-align: center; white-space: nowrap; position: relative;" onclick="event.stopPropagation();">
@@ -518,7 +565,7 @@ async function renderDashboardAnalytics() {
                         </div>
                         <div style="text-align: right;">
                             <span style="font-weight: 700; color: var(--primary);">${data.qty} sold</span>
-                            ${data.revenue > 0 ? `<span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">(₹${data.revenue.toFixed(0)})</span>` : ''}
+                            ${data.revenue > 0 ? `<span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">(₹ ${data.revenue.toFixed(0)})</span>` : ''}
                         </div>
                     </div>
                 `;
@@ -635,7 +682,7 @@ async function renderDashboardChart(orders, expenses, selectedMonth) {
                 y: {
                     beginAtZero: true,
                     grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                    ticks: { callback: val => `₹${val}` }
+                    ticks: { callback: val => `₹ ${val}` }
                 },
                 x: {
                     grid: { display: false }
@@ -645,7 +692,7 @@ async function renderDashboardChart(orders, expenses, selectedMonth) {
                 legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11, weight: 'bold' } } },
                 tooltip: {
                     callbacks: {
-                        label: ctx => ` ${ctx.dataset.label}: ₹${ctx.parsed.y.toFixed(2)}`
+                        label: ctx => ` ${ctx.dataset.label}: ₹ ${ctx.parsed.y.toFixed(2)}`
                     }
                 }
             }
@@ -818,7 +865,7 @@ async function renderDonutChart(orders, expenses) {
                     callbacks: {
                         label: ctx => {
                             if (!isCurrency) return ` ${ctx.label}`;
-                            return ` ${ctx.label}: ₹${Number(ctx.raw).toFixed(2)}`;
+                            return ` ${ctx.label}: ₹ ${Number(ctx.raw).toFixed(2)}`;
                         }
                     }
                 }
@@ -838,25 +885,25 @@ async function renderDonutChart(orders, expenses) {
             const netProfit = Math.max(0, totalRev - totalExp);
             const marginPct = totalRev > 0 ? Math.round((netProfit / totalRev) * 100) : 0;
             centerLabelEl.innerText = "Net Margin";
-            centerValEl.innerText = `₹${Math.round(netProfit).toLocaleString('en-IN')}`;
+            centerValEl.innerText = `₹ ${Math.round(netProfit).toLocaleString('en-IN')}`;
             if (centerSubEl) centerSubEl.innerText = `${marginPct}% Margin`;
         } else if (currentDonutDataset === 'category') {
             const catSum = isCurrency ? datasetData.reduce((sum, v) => sum + (Number(v) || 0), 0) : 0;
             centerLabelEl.innerText = "Category Total";
-            centerValEl.innerText = `₹${Math.round(catSum).toLocaleString('en-IN')}`;
+            centerValEl.innerText = `₹ ${Math.round(catSum).toLocaleString('en-IN')}`;
             const topPct = (isCurrency && catSum > 0) ? Math.round(((datasetData[0] || 0) / catSum) * 100) : 0;
             if (centerSubEl) centerSubEl.innerText = `${topPct}% Top Share`;
         } else if (currentDonutDataset === 'payment') {
             const paySum = isCurrency ? datasetData.reduce((sum, v) => sum + (Number(v) || 0), 0) : 0;
             centerLabelEl.innerText = "Settled Total";
-            centerValEl.innerText = `₹${Math.round(paySum).toLocaleString('en-IN')}`;
+            centerValEl.innerText = `₹ ${Math.round(paySum).toLocaleString('en-IN')}`;
             const cashVal = isCurrency ? (Number(datasetData[0]) || 0) : 0;
             const cashPct = (isCurrency && paySum > 0) ? Math.round((cashVal / paySum) * 100) : 0;
             if (centerSubEl) centerSubEl.innerText = `${cashPct}% Cash`;
         } else if (currentDonutDataset === 'channel') {
             const chanSum = isCurrency ? datasetData.reduce((sum, v) => sum + (Number(v) || 0), 0) : 0;
             centerLabelEl.innerText = "Orders Volume";
-            centerValEl.innerText = `₹${Math.round(chanSum).toLocaleString('en-IN')}`;
+            centerValEl.innerText = `₹ ${Math.round(chanSum).toLocaleString('en-IN')}`;
             const dineInVal = isCurrency ? (Number(datasetData[0]) || 0) : 0;
             const dineInPct = (isCurrency && chanSum > 0) ? Math.round((dineInVal / chanSum) * 100) : 0;
             if (centerSubEl) centerSubEl.innerText = `${dineInPct}% Dine-In`;
@@ -977,18 +1024,18 @@ function printDailyZReport() {
             <div style="display: flex; justify-content: space-between; font-size: 11px;"><span>• Takeaway Bills:</span><span>${takeawayCount}</span></div>
             <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
 
-            <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: bold;"><span>GROSS SALES:</span><span>₹${totalGross.toFixed(2)}</span></div>
-            <div style="display: flex; justify-content: space-between; font-size: 11px;"><span>Total GST Tax:</span><span>₹${totalTax.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: bold;"><span>GROSS SALES:</span><span>₹ ${totalGross.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px;"><span>Total GST Tax:</span><span>₹ ${totalTax.toFixed(2)}</span></div>
             <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
 
             <div style="font-weight: bold; text-align: left; margin-bottom: 4px;">PAYMENT BREAKDOWN:</div>
-            <div style="display: flex; justify-content: space-between;"><span>💵 Cash:</span><span>₹${cashSales.toFixed(2)}</span></div>
-            <div style="display: flex; justify-content: space-between;"><span>📱 UPI / QR:</span><span>₹${upiSales.toFixed(2)}</span></div>
-            <div style="display: flex; justify-content: space-between;"><span>💳 Card:</span><span>₹${cardSales.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>💵 Cash:</span><span>₹ ${cashSales.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>📱 UPI / QR:</span><span>₹ ${upiSales.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>💳 Card:</span><span>₹ ${cardSales.toFixed(2)}</span></div>
             <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
 
-            <div style="display: flex; justify-content: space-between; color: #B53B3B;"><span>Total Expenses:</span><span>-₹${totalExp.toFixed(2)}</span></div>
-            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-top: 4px;"><span>EST. CASH IN DRAWER:</span><span>₹${netCashInDrawer.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between; color: #B53B3B;"><span>Total Expenses:</span><span>-₹ ${totalExp.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-top: 4px;"><span>EST. CASH IN DRAWER:</span><span>₹ ${netCashInDrawer.toFixed(2)}</span></div>
             <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
             
             <div style="font-size: 11px; margin-top: 10px;">Generated by Royal Cafe POS</div>
@@ -1042,7 +1089,7 @@ function renderEditOrderItems() {
             <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border);">
                 <div>
                     <div style="font-size: 13px; font-weight: 700; color: var(--text-main);">${item.name}</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">₹${item.price} each • ₹${itemTotal}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">₹ ${item.price} each • ₹ ${itemTotal}</div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <button type="button" class="btn btn-outline" style="width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-weight: 800;" onclick="editOrderItemQty(${idx}, -1)">−</button>
@@ -1136,7 +1183,7 @@ function openTransactionActionSheet(orderId) {
     if (itemsEl) itemsEl.innerText = order.items || '-';
 
     const amtEl = document.getElementById('txnSheetTotalAmount');
-    if (amtEl) amtEl.innerText = `₹${Number(order.amount || 0).toFixed(2)}`;
+    if (amtEl) amtEl.innerText = `₹ ${Number(order.amount || 0).toFixed(2)}`;
 
     // Direct Action Button bindings
     const btnEdit = document.getElementById('txnSheetBtnEdit');
@@ -1193,7 +1240,7 @@ function voidTransaction(orderId, bypassRoleCheck = false) {
         }
     }
 
-    const confirmVoid = confirm(`⚠️ Are you sure you want to cancel / void Bill #${order.billNo || order.id} (₹${order.amount})?\n\nThis will remove it from sales records and recalculate revenue.`);
+    const confirmVoid = confirm(`⚠️ Are you sure you want to cancel / void Bill #${order.billNo || order.id} (₹ ${order.amount})?\n\nThis will remove it from sales records and recalculate revenue.`);
     if (!confirmVoid) return;
 
     // Remove from orderHistory
@@ -1319,7 +1366,7 @@ function renderVerticalProgressMeters(orders) {
     });
 
     const totalCatRev = Object.values(catTotals).reduce((a, b) => a + b, 0);
-    if (catTotalEl) catTotalEl.innerText = `Total: ₹${Math.round(totalCatRev).toLocaleString('en-IN')}`;
+    if (catTotalEl) catTotalEl.innerText = `Total: ₹ ${Math.round(totalCatRev).toLocaleString('en-IN')}`;
 
     if (catContainer) {
         const catConfig = [
@@ -1335,7 +1382,7 @@ function renderVerticalProgressMeters(orders) {
             const barHeight = val > 0 ? Math.max(6, Math.min(100, pct)) : 0;
             return `
                 <div class="vertical-meter-col">
-                    <span class="meter-val-text">₹${Math.round(val)}</span>
+                    <span class="meter-val-text">₹ ${Math.round(val)}</span>
                     <div class="meter-track-vertical">
                         <div class="meter-fill-vertical" style="height: ${barHeight}%; background: ${c.color};"></div>
                     </div>
@@ -1356,7 +1403,7 @@ function renderVerticalProgressMeters(orders) {
     });
 
     const totalPayRev = Object.values(payTotals).reduce((a, b) => a + b, 0);
-    if (payTotalEl) payTotalEl.innerText = `Total: ₹${Math.round(totalPayRev).toLocaleString('en-IN')}`;
+    if (payTotalEl) payTotalEl.innerText = `Total: ₹ ${Math.round(totalPayRev).toLocaleString('en-IN')}`;
 
     if (payContainer) {
         const payConfig = [
@@ -1371,7 +1418,7 @@ function renderVerticalProgressMeters(orders) {
             const barHeight = val > 0 ? Math.max(6, Math.min(100, pct)) : 0;
             return `
                 <div class="vertical-meter-col">
-                    <span class="meter-val-text">₹${Math.round(val)}</span>
+                    <span class="meter-val-text">₹ ${Math.round(val)}</span>
                     <div class="meter-track-vertical">
                         <div class="meter-fill-vertical" style="height: ${barHeight}%; background: ${p.color};"></div>
                     </div>

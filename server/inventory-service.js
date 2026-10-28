@@ -344,9 +344,9 @@ let wastageHistory = [];
 let restockExpensesHistory = [];
 
 /**
- * Resets stores to default seed data (useful for test isolation).
+ * Clears all inventory stores to an empty state (used for clean live operations).
  */
-export function resetInventoryStore() {
+export function clearInventoryStore() {
   rawMaterialsStore.clear();
   subRecipesStore.clear();
   recipesStore.clear();
@@ -356,6 +356,13 @@ export function resetInventoryStore() {
   transfersStore.clear();
   wastageHistory = [];
   restockExpensesHistory = [];
+}
+
+/**
+ * Resets stores to default seed data (useful for test isolation).
+ */
+export function resetInventoryStore() {
+  clearInventoryStore();
 
   DEFAULT_RAW_MATERIALS.forEach(item => {
     rawMaterialsStore.set(item.id, JSON.parse(JSON.stringify(item)));
@@ -402,8 +409,9 @@ export function resetInventoryStore() {
   transfersStore.set(seedTransfer.id, seedTransfer);
 }
 
-// Initial seed
-resetInventoryStore();
+// Initial state: Start clean with zero dummy seed data for live operations.
+// Automated test suites explicitly call resetInventoryStore() for test fixtures.
+clearInventoryStore();
 
 // ==========================================
 // 2. RAW MATERIALS MANAGEMENT

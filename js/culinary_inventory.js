@@ -32,217 +32,11 @@
         ];
     }
 
-    // 10 Matched Ingredients Strictly Required by the 4 Dishes
-    const MATCHED_RAW_MATERIALS_IDS = [
-        'RM-OIL', 'RM-MAIDA', 'RM-POTATO', 'RM-MILK', 'RM-TEA-LEAVES',
-        'RM-SUGAR', 'RM-POULTRY', 'RM-ONION-SPICES', 'RM-COLA', 'RM-CHAAT-MASALA'
-    ];
-
-    // Offline / Local defaults fallback (Clean Baseline for the 4 dishes)
-    const DEFAULT_LOCAL_MATERIALS = [
-        // 10 Core Ingredients for the 4 Dishes
-        { id: 'RM-OIL', name: 'Refined Cooking Oil', category: 'Pantry', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 25.0, min_threshold: 5.0, cost_per_unit: 135, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-MAIDA', name: 'Wheat Flour / Maida', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 20.0, min_threshold: 5.0, cost_per_unit: 45, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-POTATO', name: 'Spiced Potatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 25.0, min_threshold: 5.0, cost_per_unit: 30, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-MILK', name: 'Fresh Cow Milk', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 20.0, min_threshold: 5.0, cost_per_unit: 64, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-TEA-LEAVES', name: 'CTC Tea Leaves', category: 'Beverages', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 5.0, min_threshold: 1.0, cost_per_unit: 380, supplier: 'Assam Tea Direct', unit_type: 'raw' },
-        { id: 'RM-SUGAR', name: 'Granulated Sugar', category: 'Pantry', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 2.0, cost_per_unit: 44, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-POULTRY', name: 'Fresh Farm Poultry', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
-        { id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', category: 'Meat', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 240, supplier: 'Farm Fresh Poultry', unit_type: 'raw' },
-        { id: 'RM-ONION-SPICES', name: 'Sliced Onions & Spices', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 3.0, cost_per_unit: 50, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-ONION', name: 'Red Onions & Veggies', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 3.0, cost_per_unit: 35, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-COLA', name: 'Classic Cola Cans/Syrup', category: 'Beverages', purchase_unit: 'units', consumption_unit: 'units', conversion_factor: 1, current_stock: 50.0, min_threshold: 10.0, cost_per_unit: 20, supplier: 'Beverage Distributor', unit_type: 'raw' },
-        { id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 2.0, min_threshold: 0.5, cost_per_unit: 300, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-TOMATO', name: 'Vine-Ripe Tomatoes', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 50.0, min_threshold: 15.0, cost_per_unit: 40, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-GINGER-GARLIC', name: 'Ginger-Garlic Paste', category: 'Produce', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 150, supplier: 'Kolkata Fresh Veggies Mandi', unit_type: 'raw' },
-        { id: 'RM-BUTTER', name: 'Dairy Butter (Amul/Dairy)', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 20.0, min_threshold: 5.0, cost_per_unit: 520, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-CREAM', name: 'Fresh Dairy Malai / Cream', category: 'Dairy', purchase_unit: 'Litre', consumption_unit: 'Litre', conversion_factor: 1, current_stock: 15.0, min_threshold: 4.0, cost_per_unit: 220, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-PANEER', name: 'Malai Paneer Blocks', category: 'Dairy', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 25.0, min_threshold: 6.0, cost_per_unit: 380, supplier: 'Dairy Farm Co-op', unit_type: 'raw' },
-        { id: 'RM-CASHEW', name: 'Premium Cashew Nut Paste', category: 'Dry Fruits & Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 10.0, min_threshold: 2.5, cost_per_unit: 720, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-KASURI-METHI', name: 'Kasuri Methi (Fenugreek Leaves)', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 4.0, min_threshold: 1.0, cost_per_unit: 320, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-GARAM-MASALA', name: 'Royal Shahi Garam Masala', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 5.0, min_threshold: 1.5, cost_per_unit: 850, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-KASHMIRI-MIRCH', name: 'Kashmiri Degi Mirch Powder', category: 'Spices', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 6.0, min_threshold: 1.5, cost_per_unit: 480, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' },
-        { id: 'RM-BASMATI-RICE', name: 'Royal Dum Biryani Basmati Rice', category: 'Grains', purchase_unit: 'kg', consumption_unit: 'kg', conversion_factor: 1, current_stock: 60.0, min_threshold: 15.0, cost_per_unit: 115, supplier: 'Metro Cash & Carry Wholesale', unit_type: 'raw' }
-    ];
-
-    const DEFAULT_LOCAL_RECIPES = [
-        {
-            id: 'REC-SAMOSA',
-            menu_item_id: '1',
-            dish_name: 'Samosa',
-            menu_category: 'Snacks',
-            selling_price: 15,
-            gst_percentage: 5,
-            components: [
-                { type: 'raw', id: 'RM-MAIDA', name: 'Wheat Flour / Maida', exact_quantity: 0.04, unit: 'kg' },
-                { type: 'raw', id: 'RM-POTATO', name: 'Spiced Potatoes', exact_quantity: 0.05, unit: 'kg' },
-                { type: 'raw', id: 'RM-OIL', name: 'Refined Cooking Oil', exact_quantity: 0.015, unit: 'Litre' }
-            ]
-        },
-        {
-            id: 'REC-TEA',
-            menu_item_id: '2',
-            dish_name: 'Tea',
-            menu_category: 'Beverages',
-            selling_price: 10,
-            gst_percentage: 5,
-            components: [
-                { type: 'raw', id: 'RM-MILK', name: 'Fresh Cow Milk', exact_quantity: 0.08, unit: 'Litre' },
-                { type: 'raw', id: 'RM-TEA-LEAVES', name: 'CTC Tea Leaves', exact_quantity: 0.005, unit: 'kg' },
-                { type: 'raw', id: 'RM-SUGAR', name: 'Granulated Sugar', exact_quantity: 0.008, unit: 'kg' }
-            ]
-        },
-        {
-            id: 'REC-CHICKEN-CURRY',
-            menu_item_id: '3',
-            dish_name: 'Chicken Curry',
-            menu_category: 'Main Course',
-            selling_price: 140,
-            gst_percentage: 5,
-            components: [
-                { type: 'raw', id: 'RM-POULTRY', name: 'Fresh Farm Poultry', exact_quantity: 0.18, unit: 'kg' },
-                { type: 'raw', id: 'RM-ONION-SPICES', name: 'Sliced Onions & Spices', exact_quantity: 0.05, unit: 'kg' },
-                { type: 'sub_recipe', id: 'SUB-GRAVY-BASE', name: 'Cooking Oil / Gravy Base', exact_quantity: 0.15, unit: 'Litre' }
-            ]
-        },
-        {
-            id: 'REC-MASALA-COKE',
-            menu_item_id: '4',
-            dish_name: 'Masala Coke',
-            menu_category: 'Beverages',
-            selling_price: 40,
-            gst_percentage: 5,
-            components: [
-                { type: 'raw', id: 'RM-COLA', name: 'Classic Cola Cans/Syrup', exact_quantity: 1.0, unit: 'units' },
-                { type: 'raw', id: 'RM-CHAAT-MASALA', name: 'Chaat Masala & Lemon Spice Blend', exact_quantity: 0.005, unit: 'kg' }
-            ]
-        },
-        {
-            id: 'REC-BC',
-            menu_item_id: '5',
-            dish_name: 'Butter Chicken',
-            menu_category: 'Main Course',
-            selling_price: 340,
-            gst_percentage: 5,
-            components: [
-                { type: 'sub_recipe', id: 'SUB-MAK-01', name: 'Makhani Gravy Base', exact_quantity: 0.22, unit: 'Litre' },
-                { type: 'raw', id: 'RM-OIL', name: 'Refined Cooking Oil', exact_quantity: 0.02, unit: 'Litre' },
-                { type: 'raw', id: 'RM-CHICKEN', name: 'Fresh Farm Chicken', exact_quantity: 0.20, unit: 'kg' },
-                { type: 'raw', id: 'RM-BUTTER', name: 'Dairy Butter', exact_quantity: 0.025, unit: 'kg' }
-            ]
-        },
-        {
-            id: 'REC-PBM',
-            menu_item_id: '6',
-            dish_name: 'Paneer Butter Masala',
-            menu_category: 'Main Course',
-            selling_price: 280,
-            gst_percentage: 5,
-            components: [
-                { type: 'sub_recipe', id: 'SUB-MAK-01', name: 'Makhani Gravy Base', exact_quantity: 0.20, unit: 'Litre' },
-                { type: 'raw', id: 'RM-OIL', name: 'Refined Cooking Oil', exact_quantity: 0.02, unit: 'Litre' },
-                { type: 'raw', id: 'RM-PANEER', name: 'Malai Paneer Blocks', exact_quantity: 0.15, unit: 'kg' },
-                { type: 'raw', id: 'RM-BUTTER', name: 'Dairy Butter', exact_quantity: 0.02, unit: 'kg' }
-            ]
-        },
-        {
-            id: 'REC-DAL-MAKHANI',
-            menu_item_id: '7',
-            dish_name: 'Dal Makhani',
-            menu_category: 'Main Course',
-            selling_price: 220,
-            gst_percentage: 5,
-            components: [
-                { type: 'sub_recipe', id: 'SUB-DAL-01', name: 'Dal Makhani Slow-Cook Base', exact_quantity: 0.25, unit: 'Litre' },
-                { type: 'raw', id: 'RM-BUTTER', name: 'Dairy Butter', exact_quantity: 0.015, unit: 'kg' },
-                { type: 'raw', id: 'RM-CREAM', name: 'Fresh Dairy Malai / Cream', exact_quantity: 0.01, unit: 'Litre' }
-            ]
-        }
-    ];
-
-    const DEFAULT_LOCAL_SUB_RECIPES = [
-        {
-            id: 'SUB-GRAVY-BASE',
-            name: 'Cooking Oil / Gravy Base',
-            yield_quantity: 15.0,
-            yield_unit: 'Litre',
-            current_stock: 15.0,
-            min_threshold: 4.0,
-            unit_production_cost: 95.0,
-            ingredients: [
-                { material_id: 'RM-OIL', quantity: 2.0, unit: 'Litre' },
-                { material_id: 'RM-ONION-SPICES', quantity: 8.0, unit: 'kg' }
-            ]
-        },
-        {
-            id: 'SUB-MAK-01',
-            name: 'Makhani Gravy Base (Shahi Butter Masala Gravy)',
-            yield_quantity: 20.0,
-            yield_unit: 'Litre',
-            current_stock: 0.0,
-            min_threshold: 5.0,
-            unit_production_cost: 132.5,
-            ingredients: [
-                { material_id: 'RM-TOMATO', quantity: 15.0, unit: 'kg' },
-                { material_id: 'RM-GINGER-GARLIC', quantity: 2.0, unit: 'kg' },
-                { material_id: 'RM-OIL', quantity: 1.5, unit: 'Litre' },
-                { material_id: 'RM-BUTTER', quantity: 1.2, unit: 'kg' },
-                { material_id: 'RM-CASHEW', quantity: 1.5, unit: 'kg' },
-                { material_id: 'RM-KASHMIRI-MIRCH', quantity: 0.4, unit: 'kg' },
-                { material_id: 'RM-GARAM-MASALA', quantity: 0.2, unit: 'kg' },
-                { material_id: 'RM-CREAM', quantity: 1.0, unit: 'Litre' },
-                { material_id: 'RM-KASURI-METHI', quantity: 0.1, unit: 'kg' }
-            ]
-        },
-        {
-            id: 'SUB-BROWN-01',
-            name: 'Bhuna Onion-Tomato Gravy Base',
-            yield_quantity: 15.0,
-            yield_unit: 'Litre',
-            current_stock: 0.0,
-            min_threshold: 4.0,
-            unit_production_cost: 98.0,
-            ingredients: [
-                { material_id: 'RM-ONION', quantity: 12.0, unit: 'kg' },
-                { material_id: 'RM-TOMATO', quantity: 6.0, unit: 'kg' },
-                { material_id: 'RM-GINGER-GARLIC', quantity: 1.5, unit: 'kg' },
-                { material_id: 'RM-OIL', quantity: 2.0, unit: 'Litre' },
-                { material_id: 'RM-GARAM-MASALA', quantity: 0.3, unit: 'kg' },
-                { material_id: 'RM-KASHMIRI-MIRCH', quantity: 0.3, unit: 'kg' }
-            ]
-        },
-        {
-            id: 'SUB-YAKHNI-01',
-            name: 'Dum Biryani Yakhni / Meat Stock Base',
-            yield_quantity: 10.0,
-            yield_unit: 'kg',
-            current_stock: 0.0,
-            min_threshold: 3.0,
-            unit_production_cost: 248.0,
-            ingredients: [
-                { material_id: 'RM-CHICKEN', quantity: 8.0, unit: 'kg' },
-                { material_id: 'RM-ONION', quantity: 3.0, unit: 'kg' },
-                { material_id: 'RM-GINGER-GARLIC', quantity: 1.0, unit: 'kg' },
-                { material_id: 'RM-OIL', quantity: 1.0, unit: 'Litre' },
-                { material_id: 'RM-GARAM-MASALA', quantity: 0.25, unit: 'kg' }
-            ]
-        },
-        {
-            id: 'SUB-DAL-01',
-            name: 'Dal Makhani Slow-Cook Base',
-            yield_quantity: 15.0,
-            yield_unit: 'Litre',
-            current_stock: 0.0,
-            min_threshold: 4.0,
-            unit_production_cost: 85.0,
-            ingredients: [
-                { material_id: 'RM-BUTTER', quantity: 1.5, unit: 'kg' },
-                { material_id: 'RM-CREAM', quantity: 1.0, unit: 'Litre' },
-                { material_id: 'RM-TOMATO', quantity: 4.0, unit: 'kg' },
-                { material_id: 'RM-GINGER-GARLIC', quantity: 0.8, unit: 'kg' }
-            ]
-        }
-    ];
+    // Clean initial arrays - strictly zero pre-loaded dummy seed data (pure user-created inventory only)
+    const MATCHED_RAW_MATERIALS_IDS = [];
+    const DEFAULT_LOCAL_MATERIALS = [];
+    const DEFAULT_LOCAL_RECIPES = [];
+    const DEFAULT_LOCAL_SUB_RECIPES = [];
 
     // Load initial state from backend or local fallback
     async function loadAllInventoryData() {
@@ -259,10 +53,10 @@
             ]);
 
             if (matRes && matRes.materials) rawMaterials = matRes.materials;
-            else rawMaterials = JSON.parse(localStorage.getItem('billnaw_culinary_materials') || 'null') || DEFAULT_LOCAL_MATERIALS;
+            else rawMaterials = JSON.parse(localStorage.getItem('billnaw_culinary_materials') || '[]');
 
             if (subRes && subRes.sub_recipes) subRecipes = subRes.sub_recipes;
-            else subRecipes = JSON.parse(localStorage.getItem('billnaw_culinary_subs') || 'null') || DEFAULT_LOCAL_SUB_RECIPES;
+            else subRecipes = JSON.parse(localStorage.getItem('billnaw_culinary_subs') || '[]');
 
             if (recipeRes && recipeRes.recipes) recipes = recipeRes.recipes;
             if (costRes && costRes.costing) costingReport = costRes.costing;
@@ -277,8 +71,8 @@
             if (typeof renderInventoryTelemetryUI === 'function') renderInventoryTelemetryUI();
         } catch (e) {
             console.warn('[Culinary Inventory] Backend sync notice, using resilient offline store:', e);
-            rawMaterials = JSON.parse(localStorage.getItem('billnaw_culinary_materials') || 'null') || DEFAULT_LOCAL_MATERIALS;
-            subRecipes = JSON.parse(localStorage.getItem('billnaw_culinary_subs') || 'null') || DEFAULT_LOCAL_SUB_RECIPES;
+            rawMaterials = JSON.parse(localStorage.getItem('billnaw_culinary_materials') || '[]');
+            subRecipes = JSON.parse(localStorage.getItem('billnaw_culinary_subs') || '[]');
             switchInventoryHubTab(activeHubTab || 'raw_stock');
             renderActiveSubTab();
             if (typeof renderInventoryTelemetryUI === 'function') renderInventoryTelemetryUI();
@@ -440,6 +234,25 @@
     function renderRawStockTab(container) {
         const targetContainer = (container && container.nodeType) ? container : document.getElementById('invTabRawStock');
         if (!targetContainer) return;
+
+        if (rawMaterials.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-inventory-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No inventory items added yet</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Start tracking raw ingredients, pantry supplies, and packaging. Click below to record your first purchase or restock.
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="padding: 9px 18px; border-radius: 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>+ Quick Restock / Purchase</span>
+                    </button>
+                </div>
+            `;
+            return;
+        }
 
         const query = (rawStockSearchQuery || '').toLowerCase().trim();
         const activeCat = rawStockActiveCategory || 'all';
@@ -622,7 +435,7 @@
                                             </td>
                                             <td>
                                                 <div style="font-size: 12.5px; font-weight: 700; color: #0F172A;">
-                                                    ₹${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
+                                                    ₹ ${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
                                                 </div>
                                             </td>
                                             <td>
@@ -722,7 +535,7 @@
                                                 <div class="inv-level-row">
                                                     <span class="inv-level-label">Purchase Rate:</span>
                                                     <span class="inv-level-value">
-                                                        ₹${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
+                                                        ₹ ${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
                                                     </span>
                                                 </div>
                                             </div>
@@ -757,6 +570,21 @@
     function renderMorningPrepTab(container) {
         const targetContainer = (container && container.nodeType) ? container : document.getElementById('invTabMorningPrep');
         if (!targetContainer) return;
+
+        if (subRecipes.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-prep-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/><path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No morning prep batches configured</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Configure daily bulk bases, sauces, gravies, or prep batches to streamline kitchen operations and stock deductions.
+                    </p>
+                </div>
+            `;
+            return;
+        }
 
         targetContainer.innerHTML = `
             <div style="margin-bottom: 24px;">
@@ -857,7 +685,7 @@
 
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid #F1F5F9; flex-wrap: wrap; gap: 8px;">
                                     <div style="font-size: 11.5px; color: var(--text-muted);">
-                                        Unit Prep Cost: <strong style="color: #143832; font-size: 13px;">₹${liveUnitCost} / ${escapeHtml(sub.yield_unit)}</strong>
+                                        Unit Prep Cost: <strong style="color: #143832; font-size: 13px;">₹ ${liveUnitCost} / ${escapeHtml(sub.yield_unit)}</strong>
                                     </div>
                                     <div style="display: inline-flex; gap: 6px;">
                                         <button type="button" class="inv-batch-btn" ${hasShortage ? 'disabled' : ''} onclick="window.culinaryInventory.produceMorningBatch('${sub.id}', 1.0)">
@@ -905,8 +733,8 @@
                                         <td style="font-family: monospace; font-size: 11.5px; font-weight: 700;">${escapeHtml(b.id)}</td>
                                         <td style="font-weight: 800; color: var(--text-dark);">${escapeHtml(b.name)}</td>
                                         <td style="font-weight: 700; color: #143832;">${b.quantity} ${escapeHtml(b.unit)}</td>
-                                        <td>₹${Number(b.unitCost || 0).toFixed(2)}</td>
-                                        <td style="font-weight: 800; color: #166534;">₹${Number(b.totalCost || 0).toFixed(2)}</td>
+                                        <td>₹ ${Number(b.unitCost || 0).toFixed(2)}</td>
+                                        <td style="font-weight: 800; color: #166534;">₹ ${Number(b.totalCost || 0).toFixed(2)}</td>
                                         <td style="color: var(--text-muted); font-size: 11px;">${b.date || 'Today'} • ${b.timestamp}</td>
                                         <td>
                                             <span class="inv-margin-badge inv-margin-healthy" style="font-size: 10px;">
@@ -1296,7 +1124,7 @@
 
                                 const sPrice = parseFloat(dish.price) || parseFloat(rec.selling_price) || 0;
                                 const marginPct = sPrice > 0 ? Math.round(((sPrice - totalCost) / sPrice) * 100) : 0;
-                                costHtml = `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Food Cost: <strong>₹${totalCost.toFixed(2)}</strong> • Margin: <strong style="color: #16A34A;">${marginPct}%</strong></div>`;
+                                costHtml = `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Food Cost: <strong>₹ ${totalCost.toFixed(2)}</strong> • Margin: <strong style="color: #16A34A;">${marginPct}%</strong></div>`;
                             } else {
                                 pillsHtml = `<span style="font-size: 12px; color: #D97706; display:inline-flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Needs Recipe Mapping — Tap to configure portion quantities</span></span>`;
                             }
@@ -1307,7 +1135,7 @@
                                         <div style="display: flex; align-items: center; gap: 8px;">
                                             <span style="font-size: 15px; font-weight: 800; color: var(--text-dark);">${escapeHtml(dish.name)}</span>
                                             <span class="badge" style="background: #F1F5F9; color: #475569; font-size: 11px;">${escapeHtml(dish.category)}</span>
-                                            <span style="font-size: 13px; font-weight: 800; color: #143832;">₹${dish.price}</span>
+                                            <span style="font-size: 13px; font-weight: 800; color: #143832;">₹ ${dish.price}</span>
                                         </div>
                                         <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
                                             ${pillsHtml}
@@ -1367,7 +1195,7 @@
 
         document.getElementById('rtrDishNameBadge').innerText = dish.name;
         document.getElementById('rtrDishCategoryBadge').innerText = dish.category || 'Main Course';
-        document.getElementById('rtrDishPriceBadge').innerText = `₹${dish.price || 0}`;
+        document.getElementById('rtrDishPriceBadge').innerText = `₹ ${dish.price || 0}`;
 
         const rec = dish.recipe;
         if (rec && Array.isArray(rec.components) && rec.components.length > 0) {
@@ -1588,8 +1416,8 @@
         const profit = Math.max(0, sellingPrice - totalCost);
         const marginPct = sellingPrice > 0 ? Math.round((profit / sellingPrice) * 1000) / 10 : 0;
 
-        if (costDisplay) costDisplay.innerText = `₹${totalCost.toFixed(2)}`;
-        if (profitDisplay) profitDisplay.innerText = `₹${profit.toFixed(2)}`;
+        if (costDisplay) costDisplay.innerText = `₹ ${totalCost.toFixed(2)}`;
+        if (profitDisplay) profitDisplay.innerText = `₹ ${profit.toFixed(2)}`;
         if (marginDisplay) marginDisplay.innerText = `${marginPct}%`;
     }
 
@@ -1840,7 +1668,7 @@
         document.getElementById('rtrRestockQtyInput').value = '';
         document.getElementById('rtrRestockCostInput').value = item.cost_per_unit || (item.unit_production_cost || 100);
         document.getElementById('rtrRestockSupplierInput').value = item.supplier || 'Kolkata Fresh Veggies Mandi';
-        document.getElementById('rtrRestockTotalExpense').innerText = '₹0.00';
+        document.getElementById('rtrRestockTotalExpense').innerText = '₹ 0.00';
 
         modal.style.display = 'flex';
     }
@@ -1850,7 +1678,7 @@
         const rate = parseFloat(document.getElementById('rtrRestockCostInput')?.value) || 0;
         const total = qty * rate;
         const display = document.getElementById('rtrRestockTotalExpense');
-        if (display) display.innerText = `₹${total.toFixed(2)}`;
+        if (display) display.innerText = `₹ ${total.toFixed(2)}`;
     }
 
     async function submitRestockExpense() {
@@ -1957,7 +1785,7 @@
                                 </div>
 
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed #E5E7EB; font-size: 11px;">
-                                    <span style="color: var(--text-muted);">Cost: ₹${s.cost_per_unit} / ${s.purchase_unit}</span>
+                                    <span style="color: var(--text-muted);">Cost: ₹ ${s.cost_per_unit} / ${s.purchase_unit}</span>
                                     <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 12px;" onclick="window.culinaryInventory.promptRestock('${s.id}')">
                                         ➕ Restock Keg/Bottle
                                     </button>
@@ -2015,7 +1843,7 @@
                                 </div>
 
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px; padding-top: 8px; border-top: 1px solid #F3F4F6;">
-                                    <span style="color: var(--text-muted);">Rate: <strong>₹${item.cost_per_unit} / ${item.purchase_unit}</strong></span>
+                                    <span style="color: var(--text-muted);">Rate: <strong>₹ ${item.cost_per_unit} / ${item.purchase_unit}</strong></span>
                                     <div style="display: flex; gap: 6px;">
                                         <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="window.culinaryInventory.promptRestock('${item.id}')">➕ Add</button>
                                         <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="window.culinaryInventory.promptPriceEdit('${item.id}')">₹ Rate</button>
@@ -2083,7 +1911,7 @@
 
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid #F3F4F6;">
                                     <div style="font-size: 11px; color: var(--text-muted);">
-                                        Unit Prep Cost: <strong style="color: #143832;">₹${sub.unit_production_cost || '130.00'} / ${sub.yield_unit}</strong>
+                                        Unit Prep Cost: <strong style="color: #143832;">₹ ${sub.unit_production_cost || '130.00'} / ${sub.yield_unit}</strong>
                                     </div>
                                     <button class="btn btn-primary" style="padding: 7px 16px; font-size: 12px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.promptProduceBatch('${sub.id}', ${sub.yield_quantity})">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
@@ -2102,6 +1930,21 @@
     function renderDishCostingTab(container) {
         const targetContainer = (container && container.nodeType) ? container : document.getElementById('invTabDishCosting');
         if (!targetContainer) return;
+
+        if (recipes.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-recipe-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No dish recipes configured</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Map your menu items to raw ingredients or prep batches to calculate live food cost and automate ingredient deductions.
+                    </p>
+                </div>
+            `;
+            return;
+        }
 
         // Calculate live dish costing for all recipes
         const costingData = recipes.map(recipe => {
@@ -2183,15 +2026,15 @@
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                         <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.simulateRateChange('RM-TOMATO', 90)" style="font-size: 11.5px; padding: 6px 12px; border-radius: 14px; background: #FFFFFF; font-weight: 700; color: #DC2626; border-color: #FCA5A5; display: inline-flex; align-items: center; gap: 6px;">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                            <span>Simulate Tomato Surge (₹40 -&gt; ₹90/kg)</span>
+                            <span>Simulate Tomato Surge (₹ 40 -&gt; ₹ 90/kg)</span>
                         </button>
                         <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.simulateRateChange('RM-PANEER', 450)" style="font-size: 11.5px; padding: 6px 12px; border-radius: 14px; background: #FFFFFF; font-weight: 700; color: #D97706; border-color: #FCD34D; display: inline-flex; align-items: center; gap: 6px;">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                            <span>Simulate Dairy Paneer Hike (₹380 -&gt; ₹450/kg)</span>
+                            <span>Simulate Dairy Paneer Hike (₹ 380 -&gt; ₹ 450/kg)</span>
                         </button>
                         <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.simulateRateChange('RM-OIL', 200)" style="font-size: 11.5px; padding: 6px 12px; border-radius: 14px; background: #FFFFFF; font-weight: 700; color: #B45309; border-color: #FDE68A; display: inline-flex; align-items: center; gap: 6px;">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                            <span>Simulate Oil Spike (₹135 -&gt; ₹200/L)</span>
+                            <span>Simulate Oil Spike (₹ 135 -&gt; ₹ 200/L)</span>
                         </button>
                         <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.resetDefaultRates()" style="font-size: 11.5px; padding: 6px 12px; border-radius: 14px; background: #143832; color: #FFFFFF; font-weight: 700; border-color: #143832; display: inline-flex; align-items: center; gap: 6px;">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
@@ -2245,9 +2088,9 @@
                                                 <div style="font-size: 10px; color: var(--text-muted); font-family: monospace;">${escapeHtml(c.recipe_id)}</div>
                                             </td>
                                             <td style="color: var(--text-muted); font-size: 12px;">${escapeHtml(c.category)}</td>
-                                            <td style="font-weight: 800; font-size: 13px;">₹${c.selling_price}</td>
-                                            <td style="font-weight: 800; color: #DC2626; font-size: 13px;">₹${c.food_cost.toFixed(2)}</td>
-                                            <td style="font-weight: 800; color: #166534; font-size: 13px;">₹${c.gross_profit.toFixed(2)}</td>
+                                            <td style="font-weight: 800; font-size: 13px;">₹ ${c.selling_price}</td>
+                                            <td style="font-weight: 800; color: #DC2626; font-size: 13px;">₹ ${c.food_cost.toFixed(2)}</td>
+                                            <td style="font-weight: 800; color: #166534; font-size: 13px;">₹ ${c.gross_profit.toFixed(2)}</td>
                                             <td style="font-weight: 800; font-size: 13.5px; color: #0F172A;">${c.gross_margin_pct.toFixed(1)}%</td>
                                             <td>${badgeHtml}</td>
                                             <td style="text-align: right;">
@@ -2282,7 +2125,7 @@
                                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
                                     <div>
                                         <div style="font-size: 15px; font-weight: 800; color: var(--text-dark);">${escapeHtml(c.dish_name)}</div>
-                                        <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(c.category)} • Selling: <strong>₹${c.selling_price}</strong></div>
+                                        <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(c.category)} • Selling: <strong>₹ ${c.selling_price}</strong></div>
                                     </div>
                                     <span class="inv-margin-badge ${c.gross_margin_pct >= 65 ? 'inv-margin-healthy' : (c.gross_margin_pct >= 50 ? 'inv-margin-moderate' : 'inv-margin-low')}" style="font-size: 10px;">
                                         ${c.gross_margin_pct.toFixed(1)}%
@@ -2297,7 +2140,7 @@
                                         ${(c.components || []).map(comp => `
                                             <div style="display: flex; justify-content: space-between; align-items: center; color: #334155;">
                                                 <span>• ${escapeHtml(comp.name)} (${comp.exact_quantity} ${escapeHtml(comp.unit || 'L')})</span>
-                                                <span style="font-weight: 700; color: #64748B;">₹${comp.component_cost.toFixed(2)}</span>
+                                                <span style="font-weight: 700; color: #64748B;">₹ ${comp.component_cost.toFixed(2)}</span>
                                             </div>
                                         `).join('')}
                                     </div>
@@ -2305,7 +2148,7 @@
 
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 11.5px;">
                                     <div>
-                                        Food Cost: <strong style="color: #DC2626;">₹${c.food_cost.toFixed(2)}</strong>
+                                        Food Cost: <strong style="color: #DC2626;">₹ ${c.food_cost.toFixed(2)}</strong>
                                     </div>
                                     <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openDishRecipeModal('${c.recipe_id}')" style="padding: 3px 9px; font-size: 11px; border-radius: 10px;">
                                         Configure Portions
@@ -2429,13 +2272,13 @@
                                 <div style="font-weight: 700; color: #143832; margin-bottom: 4px;">Line Items:</div>
                                 ${(po.items || []).map(i => `
                                     <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-                                        <span>• ${escapeHtml(i.name)} (${i.quantity} ${i.unit} @ ₹${i.unit_price})</span>
-                                        <span style="font-weight: 600;">₹${i.line_total}</span>
+                                        <span>• ${escapeHtml(i.name)} (${i.quantity} ${i.unit} @ ₹ ${i.unit_price})</span>
+                                        <span style="font-weight: 600;">₹ ${i.line_total}</span>
                                     </div>
                                 `).join('')}
                                 <div style="display: flex; justify-content: space-between; margin-top: 6px; padding-top: 4px; border-top: 1px dashed #E6DCCD; font-weight: 800; color: #143832;">
                                     <span>Total PO Value:</span>
-                                    <span>₹${po.total}</span>
+                                    <span>₹ ${po.total}</span>
                                 </div>
                             </div>
                         </div>
@@ -2468,7 +2311,7 @@
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px;">
                     <div class="card" style="padding: 14px; border-left: 3px solid #DC2626;">
                         <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Recorded Waste Cost</div>
-                        <div style="font-size: 18px; font-weight: 800; color: #DC2626; margin-top: 4px;">₹${wastage.total_loss_inr || 0}</div>
+                        <div style="font-size: 18px; font-weight: 800; color: #DC2626; margin-top: 4px;">₹ ${wastage.total_loss_inr || 0}</div>
                         <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Trim, spoilage & tap foam losses</div>
                     </div>
                     <div class="card" style="padding: 14px; border-left: 3px solid #10B981;">
@@ -2716,7 +2559,7 @@
             }).then(r => r.json());
 
             if (res && res.success) {
-                if (typeof showToast === 'function') showToast(`✓ Updated ${res.name || (item ? item.name : materialId)} to ₹${newPrice}. Margins recalculated!`);
+                if (typeof showToast === 'function') showToast(`✓ Updated ${res.name || (item ? item.name : materialId)} to ₹ ${newPrice}. Margins recalculated!`);
                 loadAllInventoryData();
                 return;
             }
@@ -2724,7 +2567,7 @@
             console.warn('[Culinary] Rate updated locally:', e);
         }
 
-        if (typeof showToast === 'function') showToast(`✓ Simulated rate update for ${item ? item.name : materialId} to ₹${newPrice}.`);
+        if (typeof showToast === 'function') showToast(`✓ Simulated rate update for ${item ? item.name : materialId} to ₹ ${newPrice}.`);
         renderActiveHubTab();
         renderActiveSubTab();
         if (typeof renderInventoryTelemetryUI === 'function') renderInventoryTelemetryUI();

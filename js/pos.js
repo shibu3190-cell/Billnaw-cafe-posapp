@@ -402,7 +402,7 @@ function renderDiscountPresetPills() {
         btn.className = 'filter-pill' + (currentVal === p ? ' active' : '');
         btn.style.fontSize = '12px';
         btn.style.padding = '6px 12px';
-        btn.innerText = currentDiscountModalType === 'percent' ? `${p}%` : `₹${p}`;
+        btn.innerText = currentDiscountModalType === 'percent' ? `${p}%` : `₹ ${p}`;
         btn.onclick = () => {
             const input = document.getElementById('discountCustomValInput');
             if (input) input.value = p;
@@ -451,9 +451,9 @@ function updateDiscountPreview() {
     const amtEl = document.getElementById('discountPreviewAmt');
     const netEl = document.getElementById('discountPreviewNet');
 
-    if (grossEl) grossEl.innerText = `₹${totals.grossSubtotal.toFixed(2)}`;
-    if (amtEl) amtEl.innerText = `-₹${totals.discountAmount.toFixed(2)}`;
-    if (netEl) netEl.innerText = `₹${totals.finalTotal.toFixed(2)}`;
+    if (grossEl) grossEl.innerText = `₹ ${totals.grossSubtotal.toFixed(2)}`;
+    if (amtEl) amtEl.innerText = `-₹ ${totals.discountAmount.toFixed(2)}`;
+    if (netEl) netEl.innerText = `₹ ${totals.finalTotal.toFixed(2)}`;
 }
 window.updateDiscountPreview = updateDiscountPreview;
 
@@ -474,7 +474,7 @@ function applyQuickDiscount() {
     } else {
         const maxFixed = shopProfile.maxDiscountFixed || 1000;
         if (val > maxFixed) {
-            return showToast(`⚠️ Fixed discount cannot exceed max limit of ₹${maxFixed}`);
+            return showToast(`⚠️ Fixed discount cannot exceed max limit of ₹ ${maxFixed}`);
         }
     }
 
@@ -550,7 +550,7 @@ function updateCartUI() {
     } else {
         currentCart.forEach((item) => {
             let itemTotal = item.price * item.qty;
-            cartDiv.innerHTML += `<div class="cart-item"><div class="cart-item-top"><span class="cart-item-name">${escapeHtml(item.name)}</span><span class="cart-item-price">₹${itemTotal.toFixed(2)}</span></div><div class="cart-item-bottom"><span class="cart-item-math">₹${item.price.toFixed(2)} each</span><div class="qty-pill"><button onclick="modifyQty(${item.id}, -1)">-</button><span>${item.qty}</span><button onclick="modifyQty(${item.id}, 1)">+</button></div></div></div>`;
+            cartDiv.innerHTML += `<div class="cart-item"><div class="cart-item-top"><span class="cart-item-name">${escapeHtml(item.name)}</span><span class="cart-item-price">₹ ${itemTotal.toFixed(2)}</span></div><div class="cart-item-bottom"><span class="cart-item-math">₹ ${item.price.toFixed(2)} each</span><div class="qty-pill"><button onclick="modifyQty(${item.id}, -1)">-</button><span>${item.qty}</span><button onclick="modifyQty(${item.id}, 1)">+</button></div></div></div>`;
         });
     }
     
@@ -570,7 +570,7 @@ function updateCartUI() {
                 discountBtn.classList.add('active');
                 const label = currentDiscount.type === 'percent' 
                     ? `${currentDiscount.value}% Off` 
-                    : `₹${currentDiscount.value} Off`;
+                    : `₹ ${currentDiscount.value} Off`;
                 if (btnTextEl) {
                     btnTextEl.textContent = label;
                 } else {
@@ -603,7 +603,7 @@ function updateCartUI() {
                 const reasonLabel = currentDiscount.reason ? ` (${escapeHtml(currentDiscount.reason)})` : '';
                 discountDesc.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg><span>Discount ${typeLabel}${reasonLabel}:</span>`;
             }
-            if (discountAmt) discountAmt.innerText = `-₹${totals.discountAmount.toFixed(2)}`;
+            if (discountAmt) discountAmt.innerText = `-₹ ${totals.discountAmount.toFixed(2)}`;
         } else {
             discountLineRow.style.display = 'none';
         }
@@ -635,7 +635,7 @@ function updateCartUI() {
                 const ptsEst = Math.max(1, Math.floor(totals.finalTotal / 50));
                 const cashEst = Math.max(5, Math.round(totals.finalTotal * 0.05));
                 if (lossAlertMsg) {
-                    lossAlertMsg.innerHTML = `⚠️ Unclaimed Loyalty: Customer will forfeit <strong>₹${cashEst} VIP discount</strong> on this order. (Diner forfeits +${ptsEst} VIP points)`;
+                    lossAlertMsg.innerHTML = `⚠️ Unclaimed Loyalty: Customer will forfeit <strong>₹ ${cashEst} VIP discount</strong> on this order. (Diner forfeits +${ptsEst} VIP points)`;
                 }
                 lossAlertEl.style.display = 'flex';
             } else {
@@ -652,13 +652,13 @@ function updateCartUI() {
         const taxPct = totals.finalTotal > 0 ? ((totals.totalTax / totals.finalTotal) * 100).toFixed(1) : '0';
         if (totals.gstMode === 'exclusive') {
             gstBreakdownEl.innerHTML = totals.totalTax > 0 
-                ? `Subtotal ₹${totals.subtotal.toFixed(2)} + GST: ₹${totals.totalTax.toFixed(2)} <span class="gst-pct-pill">Just ${taxPct}%</span>` 
+                ? `Subtotal ₹ ${totals.subtotal.toFixed(2)} + GST: ₹ ${totals.totalTax.toFixed(2)} <span class="gst-pct-pill">Just ${taxPct}%</span>` 
                 : "No GST Applied";
         } else if (totals.gstMode === 'none') {
             gstBreakdownEl.innerText = "GST Exempt (0%)";
         } else {
             gstBreakdownEl.innerHTML = totals.totalTax > 0 
-                ? `GST & Service: ₹${totals.totalTax.toFixed(2)} <span class="gst-pct-pill">Just ${taxPct}% of total</span>` 
+                ? `GST & Service: ₹ ${totals.totalTax.toFixed(2)} <span class="gst-pct-pill">Just ${taxPct}% of total</span>` 
                 : "No GST Applied";
         }
     }
@@ -671,7 +671,7 @@ function updateCartUI() {
     if (desktopBtn) {
         if (totalItems > 0) {
             desktopBtn.disabled = false;
-            if (desktopBtnSub) desktopBtnSub.innerText = `₹${totals.finalTotal.toFixed(2)} ➔`;
+            if (desktopBtnSub) desktopBtnSub.innerText = `₹ ${totals.finalTotal.toFixed(2)} ➔`;
         } else {
             desktopBtn.disabled = true;
             if (desktopBtnSub) desktopBtnSub.innerText = `(Empty)`;
@@ -831,7 +831,7 @@ function updateCheckoutKhataCustomerInfo() {
         const balance = Number(matched.balanceDue) || 0;
         if (prevAmt) prevAmt.innerText = balance.toFixed(2);
         if (prevBadge) prevBadge.style.display = balance > 0 ? 'inline-block' : 'none';
-        if (balDisplay) balDisplay.innerText = `₹${balance.toFixed(2)}`;
+        if (balDisplay) balDisplay.innerText = `₹ ${balance.toFixed(2)}`;
         if (balInfo) balInfo.style.display = 'flex';
     } else {
         if (prevBadge) prevBadge.style.display = 'none';
@@ -876,7 +876,7 @@ function setupCheckoutTenderEngine(orderTotal) {
 
     denomRow.innerHTML = sorted.map(d => {
         const isExact = Math.abs(d - orderTotal) < 0.01;
-        const label = isExact ? `Exact (₹${orderTotal.toFixed(0)})` : `₹${d}`;
+        const label = isExact ? `Exact (₹ ${orderTotal.toFixed(0)})` : `₹ ${d}`;
         const activeClass = isExact ? 'active' : '';
         return `<button type="button" class="denom-pill ${activeClass}" onclick="setTenderAmount(${d}, this)">${label}</button>`;
     }).join('');
@@ -910,16 +910,16 @@ function onCashTenderedChange(val) {
     if (diff >= 0) {
         dueBox.classList.remove('shortage');
         if (dueLabel) dueLabel.innerText = 'Change Due to Diner:';
-        dueDisplay.innerText = `₹${diff.toFixed(2)}`;
+        dueDisplay.innerText = `₹ ${diff.toFixed(2)}`;
     } else {
         dueBox.classList.add('shortage');
         if (dueLabel) dueLabel.innerText = 'Amount Short:';
-        dueDisplay.innerText = `₹${Math.abs(diff).toFixed(2)}`;
+        dueDisplay.innerText = `₹ ${Math.abs(diff).toFixed(2)}`;
     }
 
     document.querySelectorAll('#checkoutDenomPills .denom-pill').forEach(p => {
         const text = p.innerText;
-        if ((text.includes('Exact') && Math.abs(tendered - orderTotal) < 0.01) || text === `₹${tendered}`) {
+        if ((text.includes('Exact') && Math.abs(tendered - orderTotal) < 0.01) || text === `₹ ${tendered}` || text === `₹ ${tendered}`) {
             p.classList.add('active');
         } else {
             p.classList.remove('active');
@@ -994,17 +994,17 @@ function openCheckoutModal(bypassRoleCheck = false) {
     if (tInfo.discount && totals.discountAmount > 0) {
         if (discBox) discBox.style.display = 'block';
         if (discPrompt) discPrompt.style.display = 'none';
-        if (grossSubEl) grossSubEl.innerText = `₹${totals.grossSubtotal.toFixed(2)}`;
+        if (grossSubEl) grossSubEl.innerText = `₹ ${totals.grossSubtotal.toFixed(2)}`;
         if (discLabelEl) {
             const dType = tInfo.discount.type === 'percent' ? `${tInfo.discount.value}%` : 'Fixed';
             discLabelEl.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg><span>Discount (${dType}${tInfo.discount.reason ? ' • ' + escapeHtml(tInfo.discount.reason) : ''}):</span>`;
         }
-        if (discAmtEl) discAmtEl.innerText = `-₹${totals.discountAmount.toFixed(2)}`;
+        if (discAmtEl) discAmtEl.innerText = `-₹ ${totals.discountAmount.toFixed(2)}`;
         if (gstNoteEl) {
             const taxPct = totals.finalTotal > 0 ? ((totals.totalTax / totals.finalTotal) * 100).toFixed(1) : '0';
             gstNoteEl.innerHTML = totals.gstMode === 'exclusive' 
-                ? `+₹${totals.totalTax.toFixed(2)} GST Added <span class="gst-pct-pill">Just ${taxPct}%</span>` 
-                : (totals.gstMode === 'none' ? 'Tax Exempt' : `Includes ₹${totals.totalTax.toFixed(2)} GST <span class="gst-pct-pill">Just ${taxPct}%</span>`);
+                ? `+₹ ${totals.totalTax.toFixed(2)} GST Added <span class="gst-pct-pill">Just ${taxPct}%</span>` 
+                : (totals.gstMode === 'none' ? 'Tax Exempt' : `Includes ₹ ${totals.totalTax.toFixed(2)} GST <span class="gst-pct-pill">Just ${taxPct}%</span>`);
         }
     } else {
         if (discBox) discBox.style.display = 'none';
@@ -1285,7 +1285,7 @@ async function confirmCheckout() {
             if (typeof renderKhataUI === 'function') {
                 renderKhataUI();
             }
-            showToast(`📝 ₹${total.toFixed(2)} added to ${effectiveCustName}'s Khata Due ledger!`);
+            showToast(`📝 ₹ ${total.toFixed(2)} added to ${effectiveCustName}'s Khata Due ledger!`);
         }
         selectedCustomerForOrder = null;
 
@@ -1486,7 +1486,7 @@ async function sendEscPosToPrinter(order) {
                 let gst = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : defaultRate;
                 if (gstMode === 'none') gst = 0;
 
-                printItemsEl.innerHTML += `<div class="print-row"><span>${escapeHtml(item.name)} x${item.qty}</span><span>₹${itemTotal.toFixed(2)}</span></div>`; 
+                printItemsEl.innerHTML += `<div class="print-row"><span>${escapeHtml(item.name)} x${item.qty}</span><span>₹ ${itemTotal.toFixed(2)}</span></div>`; 
             });
 
             // Use order totals if available, otherwise recalculate
@@ -1498,13 +1498,13 @@ async function sendEscPosToPrinter(order) {
             if (hasDiscount || gstMode === 'exclusive') {
                 printItemsEl.innerHTML += `<div class="print-line"></div>`;
                 if (hasDiscount) {
-                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Gross Subtotal</span><span>₹${grossSubtotal.toFixed(2)}</span></div>`;
+                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Gross Subtotal</span><span>₹ ${grossSubtotal.toFixed(2)}</span></div>`;
                     const dLabel = order.discount && order.discount.type === 'percent' ? `Discount (${order.discount.value}%)` : 'Discount (Flat)';
-                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600; color:#c00;"><span>${dLabel}</span><span>-₹${discountAmount.toFixed(2)}</span></div>`;
+                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600; color:#c00;"><span>${dLabel}</span><span>-₹ ${discountAmount.toFixed(2)}</span></div>`;
                 }
                 if (gstMode === 'exclusive' && totalTax > 0) {
-                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Net Taxable Subtotal</span><span>₹${rawSubtotal.toFixed(2)}</span></div>`;
-                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Total GST</span><span>₹${totalTax.toFixed(2)}</span></div>`;
+                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Net Taxable Subtotal</span><span>₹ ${rawSubtotal.toFixed(2)}</span></div>`;
+                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Total GST</span><span>₹ ${totalTax.toFixed(2)}</span></div>`;
                 }
             }
 
@@ -1512,21 +1512,21 @@ async function sendEscPosToPrinter(order) {
                 let htmlGstContent = '<div class="print-line"></div><div style="font-weight:600; font-size:12px; margin-bottom:5px;">--- GST Breakdown ---</div>';
                 for(let rate in gstSummary) {
                     let base = gstSummary[rate].base.toFixed(2); let half = (gstSummary[rate].tax / 2).toFixed(2);
-                    htmlGstContent += `<div style="font-size:11px; color:#444; margin-bottom:6px;"><div style="display:flex; justify-content:space-between;"><span>Taxable Value (${rate}%)</span><span>₹${base}</span></div><div style="display:flex; justify-content:space-between;"><span>CGST @ ${rate/2}%</span><span>₹${half}</span></div><div style="display:flex; justify-content:space-between;"><span>SGST @ ${rate/2}%</span><span>₹${half}</span></div></div>`;
+                    htmlGstContent += `<div style="font-size:11px; color:#444; margin-bottom:6px;"><div style="display:flex; justify-content:space-between;"><span>Taxable Value (${rate}%)</span><span>₹ ${base}</span></div><div style="display:flex; justify-content:space-between;"><span>CGST @ ${rate/2}%</span><span>₹ ${half}</span></div><div style="display:flex; justify-content:space-between;"><span>SGST @ ${rate/2}%</span><span>₹ ${half}</span></div></div>`;
                 }
                 printItemsEl.innerHTML += htmlGstContent;
             }
 
             if (order.paymentMode === 'Cash' && order.amountTendered && order.amountTendered > order.amount) {
                 printItemsEl.innerHTML += `<div class="print-line"></div>`;
-                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Cash Tendered</span><span>₹${Number(order.amountTendered).toFixed(2)}</span></div>`;
-                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#266838;"><span>Change Due</span><span>₹${Number(order.changeReturned).toFixed(2)}</span></div>`;
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Cash Tendered</span><span>₹ ${Number(order.amountTendered).toFixed(2)}</span></div>`;
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#266838;"><span>Change Due</span><span>₹ ${Number(order.changeReturned).toFixed(2)}</span></div>`;
             } else if (order.paymentMode === 'Khata') {
                 printItemsEl.innerHTML += `<div class="print-line"></div>`;
-                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#b45309;"><span>Khata Due (Pay Later)</span><span>₹${Number(order.amount).toFixed(2)}</span></div>`;
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#b45309;"><span>Khata Due (Pay Later)</span><span>₹ ${Number(order.amount).toFixed(2)}</span></div>`;
             }
         }
-        const pTot = document.getElementById('printTotal'); if (pTot) pTot.innerText = `₹${order.amount.toFixed(2)}`;
+        const pTot = document.getElementById('printTotal'); if (pTot) pTot.innerText = `₹ ${order.amount.toFixed(2)}`;
         
         await executeHtmlPrint('print-receipt');
         return;
@@ -1816,10 +1816,10 @@ function viewOrderInvoiceModal(orderId) {
                         x${item.qty}
                     </td>
                     <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: right; font-size: 13px; font-family: monospace;">
-                        ₹${Number(item.price).toFixed(2)}
+                        ₹ ${Number(item.price).toFixed(2)}
                     </td>
                     <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: right; font-size: 13px; font-weight: 700; font-family: monospace;">
-                        ₹${itemTotal.toFixed(2)}
+                        ₹ ${itemTotal.toFixed(2)}
                     </td>
                 </tr>
             `;
@@ -1834,7 +1834,7 @@ function viewOrderInvoiceModal(orderId) {
         : (Array.isArray(order.rawItems) ? order.rawItems.reduce((s, i) => s + (i.price * i.qty), 0) : order.amount);
     
     const grossEl = document.getElementById('invModalGrossSubtotal');
-    if (grossEl) grossEl.innerText = `₹${grossSubtotal.toFixed(2)}`;
+    if (grossEl) grossEl.innerText = `₹ ${grossSubtotal.toFixed(2)}`;
 
     const discountRow = document.getElementById('invModalDiscountRow');
     const discountLabel = document.getElementById('invModalDiscountLabel');
@@ -1845,7 +1845,7 @@ function viewOrderInvoiceModal(orderId) {
             const typeStr = order.discount && order.discount.type === 'percent' ? `${order.discount.value}%` : 'Flat';
             const reasonStr = order.discount && order.discount.reason ? ` (${escapeHtml(order.discount.reason)})` : '';
             if (discountLabel) discountLabel.innerText = `🏷️ Discount ${typeStr}${reasonStr}:`;
-            if (discountAmtEl) discountAmtEl.innerText = `-₹${Number(order.discountAmount).toFixed(2)}`;
+            if (discountAmtEl) discountAmtEl.innerText = `-₹ ${Number(order.discountAmount).toFixed(2)}`;
         } else {
             discountRow.style.display = 'none';
         }
@@ -1856,7 +1856,7 @@ function viewOrderInvoiceModal(orderId) {
     if (netTaxableRow && netTaxableEl) {
         if (order.gstMode === 'exclusive' && (order.tax || 0) > 0) {
             netTaxableRow.style.display = 'flex';
-            netTaxableEl.innerText = `₹${(order.subtotal || (order.amount - order.tax)).toFixed(2)}`;
+            netTaxableEl.innerText = `₹ ${(order.subtotal || (order.amount - order.tax)).toFixed(2)}`;
         } else {
             netTaxableRow.style.display = 'none';
         }
@@ -1867,14 +1867,14 @@ function viewOrderInvoiceModal(orderId) {
     if (taxRow && taxAmtEl) {
         if ((order.tax || 0) > 0) {
             taxRow.style.display = 'flex';
-            taxAmtEl.innerText = `₹${Number(order.tax).toFixed(2)}`;
+            taxAmtEl.innerText = `₹ ${Number(order.tax).toFixed(2)}`;
         } else {
             taxRow.style.display = 'none';
         }
     }
 
     const grandTotalEl = document.getElementById('invModalGrandTotal');
-    if (grandTotalEl) grandTotalEl.innerText = `₹${Number(order.amount).toFixed(2)}`;
+    if (grandTotalEl) grandTotalEl.innerText = `₹ ${Number(order.amount).toFixed(2)}`;
 
     // Set action buttons
     const printBtn = document.getElementById('invModalPrintBtn');

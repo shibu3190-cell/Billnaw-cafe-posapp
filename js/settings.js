@@ -354,13 +354,13 @@ function setBillingCycle(cycle) {
     const periodEnterprise = document.getElementById('periodEnterprise');
     const enterpriseBilledInfo = document.getElementById('enterpriseBilledInfo');
 
-    if (pricePro) pricePro.innerText = isAnnual ? '₹399' : '₹499';
+    if (pricePro) pricePro.innerText = isAnnual ? '₹ 399' : '₹ 499';
     if (periodPro) periodPro.innerText = isAnnual ? '/mo (billed annually)' : '/mo';
-    if (proBilledInfo) proBilledInfo.innerText = isAnnual ? '₹4,788 billed annually (Save ₹1,200)' : 'Billed monthly, cancel anytime';
+    if (proBilledInfo) proBilledInfo.innerText = isAnnual ? '₹ 4,788 billed annually (Save ₹ 1,200)' : 'Billed monthly, cancel anytime';
 
-    if (priceEnterprise) priceEnterprise.innerText = isAnnual ? '₹1,199' : '₹1,499';
+    if (priceEnterprise) priceEnterprise.innerText = isAnnual ? '₹ 1,199' : '₹ 1,499';
     if (periodEnterprise) periodEnterprise.innerText = isAnnual ? '/mo (billed annually)' : '/mo';
-    if (enterpriseBilledInfo) enterpriseBilledInfo.innerText = isAnnual ? '₹14,388 billed annually (Save ₹3,600)' : 'Billed monthly, cancel anytime';
+    if (enterpriseBilledInfo) enterpriseBilledInfo.innerText = isAnnual ? '₹ 14,388 billed annually (Save ₹ 3,600)' : 'Billed monthly, cancel anytime';
 }
 window.setBillingCycle = setBillingCycle;
 window.toggleBillingCycle = setBillingCycle;
@@ -397,7 +397,7 @@ function openExpensesDetailModal() {
             const todayISO = (typeof getLocalISODate === 'function') ? getLocalISODate() : '';
             const todayExp = dailyExpenses.filter(e => e.filterDate === todayISO || (e.date && e.date.startsWith(new Date().toLocaleDateString())));
             const sum = todayExp.reduce((s, e) => s + (Number(e.cost) || 0), 0);
-            totEl.innerText = `Today's Total: ₹${sum.toFixed(2)}`;
+            totEl.innerText = `Today's Total: ₹ ${sum.toFixed(2)}`;
         }
         el.style.display = 'flex';
     }
