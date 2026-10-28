@@ -5,9 +5,25 @@
 import express from 'express';
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { CONFIG } from './server/config.js';
-import { extractMenuFromDocument, generateMenuItemImage, getCuratedFoodPhotoServer, generateMarketingCampaign, isGeminiKeyOperational, clearGeminiCaches, resolveGeminiApiKey } from './server/gemini-service.js';
+import {
+  extractMenuFromDocument,
+  generateMenuItemImage,
+  getCuratedFoodPhotoServer,
+  searchDishFoodImages,
+  generateMarketingCampaign,
+  isGeminiKeyOperational,
+  clearGeminiCaches,
+  resolveGeminiApiKey,
+  generateImagenFoodImage,
+  sanitizeErrorForClient,
+  validateFoodImageGenRequest,
+  checkFoodImageRateLimit,
+  resetFoodImageRateLimits,
+  buildCommercialFoodPrompt
+} from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
@@ -15,6 +31,7 @@ import { parseMenuFromText, generateDefaultMenuTemplate } from './server/menu-pa
 import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData } from './server/auth-service.js';
 import {
   getRawMaterials,
+  addRawMaterial,
   updateRawMaterialStock,
   updateRawMaterialPrice,
   getSubRecipes,
@@ -41,6 +58,15 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Persistent Disk Storage for Food Images (Milestone M2)
+const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsFoodImagesDir = path.join(uploadsDir, 'food-images');
+try {
+  fs.mkdirSync(uploadsFoodImagesDir, { recursive: true });
+} catch (e) {
+  console.warn('[Storage] Could not create uploads/food-images directory:', e.message);
+}
 
 const app = express();
 
@@ -304,6 +330,316 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
       warning: 'Menu imported via smart layout parser.',
       quota: null
     });
+  }
+});
+
+// Protected Google Imagen 3 Food Image Generation Endpoint (Milestone M1)
+// Enforces server-side rate limits (5s cooldown, 20/hr burst), input validation,
+// strict API key security with error scrubbing, and non-crashing safe error envelope.
+app.post('/api/food-images/generate', async (req, res) => {
+  try {
+    const clientIp = req.ip || req.socket?.remoteAddress || '127.0.0.1';
+    const clientId = req.body?.clientId ? String(req.body.clientId).trim() : '';
+    const rateLimitKey = clientId ? `${clientIp}_${clientId}` : clientIp;
+
+    // 1. Rate Limiting (5-second cooldown and 20/hr burst limit)
+    const rateLimit = checkFoodImageRateLimit(rateLimitKey);
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: rateLimit.message,
+        cooldown: rateLimit.cooldown,
+        retryAfter: rateLimit.retryAfter
+      });
+    }
+
+    // 2. Input Validation & Prompt Sanitization
+    const validation = validateFoodImageGenRequest(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: validation.error
+      });
+    }
+
+    const { dishName, cuisine, servingStyle, dietary, aspectRatio, variation = 0 } = validation.data;
+
+    // 3. Resolve API Key strictly on server
+    let customKey = null;
+    if (clientId) {
+      const info = await getClientQuotaInfo(clientId).catch(() => null);
+      if (info?.hasCustomKey) {
+        const fullProfile = await getClientProfileData(clientId).catch(() => null);
+        customKey = fullProfile?.customGeminiKey || null;
+      }
+    }
+    const effectiveKey = resolveGeminiApiKey(customKey);
+
+    if (!effectiveKey) {
+      const fallbackUrl = getCuratedFoodPhotoServer(dishName, cuisine || '', 0) || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80';
+      return res.json({
+        success: false,
+        error: 'NO_API_KEY: Gemini API Key is not configured on the server.',
+        fallbackUrl
+      });
+    }
+
+    // 4. Generate Image via Gemini Multi-Strategy
+    try {
+      const result = await generateImagenFoodImage({
+        dishName,
+        cuisine,
+        servingStyle,
+        dietary,
+        aspectRatio,
+        apiKey: effectiveKey
+      });
+
+      return res.json({
+        success: true,
+        imageUrl: result.base64Data,
+        rawBase64: result.rawBase64,
+        mimeType: result.mimeType,
+        prompt: result.prompt,
+        model: result.model,
+        source: result.source,
+        isAiGenerated: true,
+        variation: Math.max(0, parseInt(variation, 10) || 0)
+      });
+    } catch (genError) {
+      const cleanError = sanitizeErrorForClient(genError.message, effectiveKey);
+      const isFreeTierZeroQuota = genError.message.includes('FREE_TIER_NO_IMAGE_QUOTA') ||
+                                  genError.message.includes('limit: 0') ||
+                                  genError.message.includes('Quota exceeded');
+
+      const vIdx = Math.max(0, parseInt(variation, 10) || 0);
+      let authenticUrl = getCuratedFoodPhotoServer(dishName, cuisine || '', vIdx, false);
+      let photoSource = 'curated-culinary';
+
+      if (!authenticUrl) {
+        authenticUrl = await searchDishFoodImages(dishName, cuisine || '', vIdx).catch(() => null);
+        if (authenticUrl) photoSource = 'online-food-search';
+      }
+
+      if (!authenticUrl) {
+        authenticUrl = getCuratedFoodPhotoServer(dishName, cuisine || 'Snacks', vIdx, true);
+        if (authenticUrl) photoSource = 'category-fallback';
+      }
+
+      if (!authenticUrl) {
+        authenticUrl = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80';
+      }
+
+      return res.json({
+        success: true,
+        imageUrl: authenticUrl,
+        fallbackUrl: authenticUrl,
+        source: photoSource,
+        isAiGenerated: false,
+        isFreeTierQuota: isFreeTierZeroQuota,
+        variation: vIdx,
+        dishName,
+        notice: isFreeTierZeroQuota
+          ? 'Google AI Studio Free Tier has 0 quota for AI image generation (Google requires linking a billing account to generate new AI pixels). Showing authentic dish photography.'
+          : cleanError
+      });
+    }
+  } catch (unexpectedError) {
+    const cleanError = sanitizeErrorForClient(unexpectedError.message);
+    console.error('[Imagen 3 Unexpected Error]:', cleanError);
+    return res.json({
+      success: false,
+      error: cleanError,
+      fallbackUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80'
+    });
+  }
+});
+
+// Magic byte binary validator for food image uploads (JPEG, PNG, WebP)
+export function detectImageMagicBytes(buffer) {
+  if (!buffer || buffer.length < 4) return null;
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return { mime: 'image/jpeg', ext: 'jpg' };
+  }
+  // PNG: 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return { mime: 'image/png', ext: 'png' };
+  }
+  // WebP: RIFF .... WEBP
+  if (buffer.length >= 12) {
+    const riff = buffer.subarray(0, 4).toString('ascii');
+    const webp = buffer.subarray(8, 12).toString('ascii');
+    if (riff === 'RIFF' && webp === 'WEBP') {
+      return { mime: 'image/webp', ext: 'webp' };
+    }
+  }
+  return null;
+}
+
+// Persistent Food Image Save Endpoint (Milestone M2)
+// Saves approved AI-generated base64 image data to persistent disk storage under uploads/food-images/
+app.post('/api/food-images/save', (req, res) => {
+  try {
+    const { dishId, dishName, base64Data, mimeType } = req.body || {};
+    if (!dishId) {
+      return res.status(400).json({ success: false, error: 'dishId is required' });
+    }
+    if (!base64Data || typeof base64Data !== 'string') {
+      return res.status(400).json({ success: false, error: 'base64Data is required' });
+    }
+
+    const cleanBase64 = base64Data.replace(/^data:image\/[a-zA-Z+]+;base64,/, '').trim();
+    if (!cleanBase64) {
+      return res.status(400).json({ success: false, error: 'base64Data content is empty' });
+    }
+
+    let buffer;
+    try {
+      buffer = Buffer.from(cleanBase64, 'base64');
+    } catch (e) {
+      return res.status(400).json({ success: false, error: 'Invalid base64 payload' });
+    }
+
+    if (buffer.length === 0) {
+      return res.status(400).json({ success: false, error: 'Decoded buffer has 0 bytes' });
+    }
+
+    const safeDishId = String(dishId).replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 32) || 'dish';
+    const now = Date.now();
+    const filename = `${safeDishId}_${now}.jpg`;
+    const targetPath = path.join(uploadsFoodImagesDir, filename);
+
+    fs.writeFileSync(targetPath, buffer);
+
+    const relativeUrl = `/uploads/food-images/${filename}`;
+    return res.json({
+      success: true,
+      image: {
+        id: `img_${safeDishId}_${now}`,
+        url: relativeUrl,
+        filename,
+        source: 'gemini-imagen',
+        createdAt: new Date(now).toISOString(),
+        approved: true
+      }
+    });
+  } catch (err) {
+    console.error('[Food Image Save Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to save food image' });
+  }
+});
+
+// Admin Direct Food Image Upload Endpoint (Milestone M2)
+// Direct upload with <= 3MB limit, MIME whitelisting, and strict binary magic byte verification
+app.post('/api/food-images/upload', (req, res) => {
+  try {
+    const { dishId, base64Data, mimeType, filename: clientFilename } = req.body || {};
+    if (!base64Data || typeof base64Data !== 'string') {
+      return res.status(400).json({ success: false, error: 'base64Data is required' });
+    }
+
+    const cleanBase64 = base64Data.replace(/^data:image\/[a-zA-Z+]+;base64,/, '').trim();
+    if (!cleanBase64) {
+      return res.status(400).json({ success: false, error: 'Uploaded file payload is empty' });
+    }
+
+    let buffer;
+    try {
+      buffer = Buffer.from(cleanBase64, 'base64');
+    } catch (e) {
+      return res.status(400).json({ success: false, error: 'Malformed base64 encoding' });
+    }
+
+    // 1. Payload size check: <= 3MB (3,145,728 bytes)
+    const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+    if (buffer.length > MAX_UPLOAD_BYTES) {
+      return res.status(413).json({
+        success: false,
+        error: `Payload exceeds 3MB limit (actual size: ${(buffer.length / 1024 / 1024).toFixed(2)}MB)`
+      });
+    }
+
+    // 2. Binary magic byte verification & MIME type whitelist
+    const detected = detectImageMagicBytes(buffer);
+    if (!detected || !['image/jpeg', 'image/png', 'image/webp'].includes(detected.mime)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.'
+      });
+    }
+
+    // Whitelist check on declared mimeType if provided
+    if (mimeType && typeof mimeType === 'string') {
+      const cleanMime = mimeType.trim().toLowerCase();
+      if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(cleanMime)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.'
+        });
+      }
+    }
+
+    const safeDishId = String(dishId || 'upload').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 32) || 'upload';
+    const now = Date.now();
+    const serverFilename = `${safeDishId}_${now}.${detected.ext}`;
+    const targetPath = path.join(uploadsFoodImagesDir, serverFilename);
+
+    fs.writeFileSync(targetPath, buffer);
+
+    const relativeUrl = `/uploads/food-images/${serverFilename}`;
+    return res.json({
+      success: true,
+      image: {
+        id: `img_${safeDishId}_${now}`,
+        url: relativeUrl,
+        filename: serverFilename,
+        source: 'upload',
+        createdAt: new Date(now).toISOString(),
+        approved: true
+      }
+    });
+  } catch (err) {
+    console.error('[Food Image Upload Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to upload food image' });
+  }
+});
+
+// Food Image Deletion Endpoint (Milestone M2)
+// Path traversal protection with path.basename, unlink target file from uploads/food-images/
+app.delete('/api/food-images/:filename', (req, res) => {
+  try {
+    const rawFilename = req.params.filename;
+    if (!rawFilename || typeof rawFilename !== 'string') {
+      return res.status(400).json({ success: false, error: 'Filename is required' });
+    }
+
+    // Strip null bytes and sanitize using path.basename
+    const cleanRaw = rawFilename.replace(/\0/g, '');
+    const safeFilename = path.basename(cleanRaw);
+
+    if (!safeFilename || safeFilename === '.' || safeFilename === '..') {
+      return res.status(400).json({ success: false, error: 'Invalid filename' });
+    }
+
+    // Path traversal verification
+    const targetPath = path.join(uploadsFoodImagesDir, safeFilename);
+    const resolvedPath = path.resolve(targetPath);
+    const resolvedUploads = path.resolve(uploadsFoodImagesDir);
+
+    if (!resolvedPath.startsWith(resolvedUploads)) {
+      return res.status(403).json({ success: false, error: 'Access forbidden: Path traversal rejected' });
+    }
+
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+      return res.json({ success: true, deletedFilename: safeFilename });
+    } else {
+      return res.json({ success: true, notFound: true, deletedFilename: safeFilename });
+    }
+  } catch (err) {
+    console.error('[Food Image Delete Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to delete food image' });
   }
 });
 
@@ -590,6 +926,15 @@ app.get('/api/inventory/raw-materials', (req, res) => {
   }
 });
 
+app.post('/api/inventory/raw-materials', (req, res) => {
+  try {
+    const result = addRawMaterial(req.body);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/inventory/raw-materials/stock', (req, res) => {
   try {
     const { materialId, adjustment, isAbsolute } = req.body || {};
@@ -797,12 +1142,31 @@ app.post('/api/inventory/audit', (req, res) => {
   }
 });
 
+// Explicit static route for /uploads BEFORE app.get('*') and general express.static
+// fallthrough: false ensures missing image files return HTTP 404 instead of falling through to index.html (which returns HTTP 200)
+app.use('/uploads', express.static(uploadsDir, {
+  fallthrough: false,
+  maxAge: '7d',
+  immutable: true
+}));
+
 // Serve static assets from project root
 app.use(express.static(__dirname));
 
 // Fallback to index.html for navigation
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Explicit error handler for non-falling-through static 404s
+app.use((err, req, res, next) => {
+  if (err.status === 404 || err.statusCode === 404) {
+    return res.status(404).send('Cannot GET ' + req.path);
+  }
+  res.status(err.status || err.statusCode || 500).json({
+    success: false,
+    error: err.message || 'Internal Server Error'
+  });
 });
 
 function getNetworkIp() {
@@ -819,12 +1183,18 @@ function getNetworkIp() {
   return null;
 }
 
-app.listen(CONFIG.port, CONFIG.host, () => {
-  const netIp = getNetworkIp();
-  console.log(`\n🚀 Billnaw POS Server running:`);
-  console.log(`  ➜  Local:   http://localhost:${CONFIG.port}`);
-  if (netIp) {
-    console.log(`  ➜  Network: http://${netIp}:${CONFIG.port}`);
-  }
-  console.log(`  ➜  Host:    ${CONFIG.host}\n`);
-});
+let serverInstance = null;
+if (process.env.NODE_ENV !== 'test') {
+  serverInstance = app.listen(CONFIG.port, CONFIG.host, () => {
+    const netIp = getNetworkIp();
+    console.log(`\n🚀 Billnaw POS Server running:`);
+    console.log(`  ➜  Local:   http://localhost:${CONFIG.port}`);
+    if (netIp) {
+      console.log(`  ➜  Network: http://${netIp}:${CONFIG.port}`);
+    }
+    console.log(`  ➜  Host:    ${CONFIG.host}\n`);
+  });
+}
+
+export { app, serverInstance };
+

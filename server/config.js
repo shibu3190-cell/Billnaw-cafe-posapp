@@ -28,7 +28,8 @@ export const CONFIG = {
       return (k && k.length > 15) ? k : '';
     },
     model: 'gemini-3.5-flash',
-    imageModel: 'gemini-3.5-flash'
+    imageModel: 'gemini-3.5-flash',
+    imagenModel: 'imagen-3.0-generate-002'
   },
   sheets: {
     // Default fallback webhook url kept strictly server-side

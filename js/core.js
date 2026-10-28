@@ -329,7 +329,7 @@ const CULINARY_PHOTO_MAP = [
             'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=600&auto=format&fit=crop&q=80',
             'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=600&auto=format&fit=crop&q=80',
             'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80',
-            'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=600&auto=format&fit=crop&q=80'
+            'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=600&auto=format&fit=crop&q=80'
         ],
         icon: '🧀',
         theme: 'curry',
@@ -537,7 +537,7 @@ const CULINARY_PHOTO_MAP = [
         url: 'https://images.unsplash.com/photo-1605197584547-c93de1a00564?w=600&auto=format&fit=crop&q=80',
         urls: [
             'https://images.unsplash.com/photo-1605197584547-c93de1a00564?w=600&auto=format&fit=crop&q=80',
-            'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=600&auto=format&fit=crop&q=80',
+            'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?w=600&auto=format&fit=crop&q=80',
             'https://images.unsplash.com/photo-1541544741938-0af808871cc0?w=600&auto=format&fit=crop&q=80',
             'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80'
         ],
@@ -920,7 +920,48 @@ function getGourmetFoodImage(name, category = '', variationIndex = 0) {
 window.getGourmetFoodImage = getGourmetFoodImage;
 
 function getDishVariationCount(name, category = '') {
-    return 10;
+    if (!name && !category) return 4;
+    const clean = String(name || '').toLowerCase().trim();
+    const cleanCat = String(category || '').toLowerCase().trim();
+    if (clean) {
+        for (const entry of CULINARY_PHOTO_MAP) {
+            for (const k of entry.keys) {
+                if (clean === k) {
+                    return (entry.urls && entry.urls.length > 0) ? entry.urls.length : 4;
+                }
+            }
+        }
+        let bestEntry = null;
+        let highestScore = 0;
+        for (const entry of CULINARY_PHOTO_MAP) {
+            let entryScore = 0;
+            for (const k of entry.keys) {
+                const escapedK = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const wordBoundaryRegex = new RegExp('(?:^|\\s|_|-|\\/)' + escapedK + '(?:$|\\s|_|-|\\/)', 'i');
+                if (wordBoundaryRegex.test(clean)) {
+                    const matchScore = k.length * 10;
+                    if (matchScore > entryScore) entryScore = matchScore;
+                }
+            }
+            if (entryScore > 0) {
+                if (cleanCat && (
+                    (entry.theme && cleanCat.includes(entry.theme)) ||
+                    (entry.badge && cleanCat.includes(entry.badge.toLowerCase())) ||
+                    entry.keys.some(k => cleanCat.includes(k) || k.includes(cleanCat))
+                )) {
+                    entryScore += 50;
+                }
+                if (entryScore > highestScore) {
+                    highestScore = entryScore;
+                    bestEntry = entry;
+                }
+            }
+        }
+        if (bestEntry && bestEntry.urls && bestEntry.urls.length > 0) {
+            return bestEntry.urls.length;
+        }
+    }
+    return 4;
 }
 window.getDishVariationCount = getDishVariationCount;
 
@@ -1366,16 +1407,36 @@ window.addEventListener('firebaseLoaded', () => {
     attachFirestoreListener();
 });
 
+// Food Image Storage Hygiene - Strips raw base64 data URLs > 2048 chars before cloud sync to protect Firestore 1MB document limit
+function sanitizeMenuItemForStorage(item) {
+    if (!item || typeof item !== 'object') return item;
+    const clone = { ...item };
+    if (typeof clone.image === 'string' && clone.image.startsWith('data:image/') && clone.image.length > 2048) {
+        console.warn(`[Menu Storage Hygiene] Stripping inline base64 image (${clone.image.length} chars) for dish "${clone.name || clone.id}" before cloud sync to protect 1MB Firestore limit.`);
+        const fallbackUrl = (typeof getCuratedFoodPhoto === 'function' ? getCuratedFoodPhoto(clone.name || '', clone.category || '') : '') ||
+            'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop';
+        clone.image = fallbackUrl;
+    }
+    return clone;
+}
+if (typeof window !== 'undefined') {
+    window.sanitizeMenuItemForStorage = sanitizeMenuItemForStorage;
+}
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports.sanitizeMenuItemForStorage = sanitizeMenuItemForStorage;
+}
+
 async function persistAllToFirestore() {
     if (!window.firestoreDB || !window.firestoreDoc || !window.firestoreSetDoc) return;
     setCloudSyncStatus('syncing', 'Backing up to Cloud...');
     try {
         const storeDocRef = getStoreDocRef();
         if (!storeDocRef) return;
+        const sanitizedMenu = Array.isArray(menuItems) ? menuItems.map(item => sanitizeMenuItemForStorage(item)) : menuItems;
         await window.firestoreSetDoc(storeDocRef, {
             profile: shopProfile,
             staff: staffList,
-            menu: menuItems,
+            menu: sanitizedMenu,
             categories: menuCategories,
             customers: customersList,
             history: orderHistory,
@@ -1409,11 +1470,14 @@ function persistTables() {
 window.persistTables = persistTables;
 
 function persistMenu() { 
-    idb.set('cafe_menu', menuItems); 
+    const sanitizedMenu = Array.isArray(menuItems)
+        ? menuItems.map(item => sanitizeMenuItemForStorage(item))
+        : menuItems;
+    idb.set('cafe_menu', sanitizedMenu); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { menu: menuItems, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, { menu: sanitizedMenu, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
     }
 }

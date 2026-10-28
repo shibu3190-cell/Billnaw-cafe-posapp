@@ -233,6 +233,41 @@ const html = fs.readFileSync(htmlPath, 'utf8');
   });
 
   // ----------------------------------------------------
+  // SECTION 6: PANEER PHOTO AUTHENTICITY & PURGE OF AQUARIUM FISH (R3)
+  // ----------------------------------------------------
+  console.log("\n📍 SECTION 6: PANEER PHOTO AUTHENTICITY & PURGE OF AQUARIUM FISH (R3)");
+
+  test("R3-PANEER-1: photo-1599488615731-7e5c2823ff28 is purged completely from server and client photo maps", () => {
+    const serverContent = fs.readFileSync('server/gemini-service.js', 'utf8');
+    const coreContent = fs.readFileSync('js/core.js', 'utf8');
+    assert.ok(!serverContent.includes('photo-1599488615731-7e5c2823ff28'), "Server photo map must not contain aquarium fish");
+    assert.ok(!coreContent.includes('photo-1599488615731-7e5c2823ff28'), "Client photo map must not contain aquarium fish");
+  });
+
+  test("R3-PANEER-2: Paneer variations cycle authentic gourmet photos and loop seamlessly across index >= 4", () => {
+    const p0 = geminiService.getCuratedFoodPhotoServer('Paneer', 'Main Course', 0);
+    const p1 = geminiService.getCuratedFoodPhotoServer('Paneer', 'Main Course', 1);
+    const p2 = geminiService.getCuratedFoodPhotoServer('Paneer', 'Main Course', 2);
+    const p3 = geminiService.getCuratedFoodPhotoServer('Paneer', 'Main Course', 3);
+    const p4 = geminiService.getCuratedFoodPhotoServer('Paneer', 'Main Course', 4);
+    const p5 = geminiService.getCuratedFoodPhotoServer('Paneer', 'Main Course', 5);
+
+    assert.ok(p3.includes('photo-1603894584373-5ac82b2ae398'), "Variation 3 must be authentic Kadai Paneer photo");
+    assert.strictEqual(p4, p0, "Variation 4 must loop back to Variation 0");
+    assert.strictEqual(p5, p1, "Variation 5 must loop back to Variation 1");
+  });
+
+  await testAsync("R3-PANEER-3: generateMenuItemImage for Paneer at variation 4 returns curated photo without Wikimedia fallthrough", async () => {
+    const result = await geminiService.generateMenuItemImage({
+      itemName: 'Paneer Butter Masala',
+      category: 'Main Course',
+      variation: 4
+    });
+    assert.strictEqual(result.source, 'curated-culinary', "Must remain on curated library at variation 4");
+    assert.ok(result.imageUrl.startsWith('https://images.unsplash.com/'), "Must return Unsplash photo");
+  });
+
+  // ----------------------------------------------------
   // SUMMARY
   // ----------------------------------------------------
   console.log("\n====================================================");

@@ -572,19 +572,137 @@ function syncMenuUIQuantities() {
 }
 window.syncMenuUIQuantities = syncMenuUIQuantities;
 
-function handleItemImageUpload(event) {
-    const file = event.target.files[0]; if (!file) return;
+// --- 📸 FOOD IMAGE MANAGER (MILESTONE M3) HELPERS & STATE ---
+currentItemImageBase64 = "";
+window.currentItemImageBase64 = currentItemImageBase64;
+let currentItemImageMetadata = null;
+window.currentItemImageMetadata = currentItemImageMetadata;
+let originalDishImage = "";
+let originalImageMetadata = null;
+let isGeneratingFoodImage = false;
+
+function toggleDietaryPill(btn) {
+    if (!btn) return;
+    btn.classList.toggle('active');
+}
+window.toggleDietaryPill = toggleDietaryPill;
+
+function getSelectedDietaryTags() {
+    const container = document.getElementById('fimDietaryPills');
+    if (!container) return [];
+    const activePills = container.querySelectorAll('.fim-dietary-pill.active');
+    return Array.from(activePills).map(p => p.getAttribute('data-diet') || p.innerText.trim()).filter(Boolean);
+}
+window.getSelectedDietaryTags = getSelectedDietaryTags;
+
+function updateFimStatusPill(statusText, statusClass) {
+    const pill = document.getElementById('fimStatusPill');
+    if (!pill) return;
+    pill.className = `fim-status-pill ${statusClass || 'status-none'}`;
+    pill.innerText = statusText;
+}
+window.updateFimStatusPill = updateFimStatusPill;
+
+function setFimActionDockVisible(visible) {
+    const dock = document.getElementById('fimActionDock');
+    if (dock) {
+        dock.style.display = visible ? 'grid' : 'none';
+    }
+}
+window.setFimActionDockVisible = setFimActionDockVisible;
+
+async function handleItemImageUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    // Size validation <= 3MB
+    if (file.size > 3 * 1024 * 1024) {
+        showToast("⚠️ Image file exceeds 3MB limit!");
+        return;
+    }
+
+    // MIME type validation
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedMimes.includes(file.type)) {
+        showToast("⚠️ Only JPEG, PNG, and WebP images are allowed!");
+        return;
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
         const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-            const MAX_DIM = 300; let w = img.width, h = img.height;
-            if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
-            canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0, w, h);
-            currentItemImageBase64 = canvas.toDataURL('image/jpeg', 0.7);
-            document.getElementById('newItemImagePreview').src = currentItemImageBase64;
-            document.getElementById('newItemImagePreview').style.display = "block";
+        img.onload = async () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const MAX_DIM = 800;
+            let w = img.width, h = img.height;
+            if (w > h && w > MAX_DIM) {
+                h *= MAX_DIM / w;
+                w = MAX_DIM;
+            } else if (h > MAX_DIM) {
+                w *= MAX_DIM / h;
+                h = MAX_DIM;
+            }
+            canvas.width = Math.round(w);
+            canvas.height = Math.round(h);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+            const preview = document.getElementById('newItemImagePreview');
+            const placeholder = document.getElementById('fimPlaceholder');
+            if (preview) {
+                preview.src = compressedBase64;
+                preview.style.display = 'block';
+                preview.style.opacity = '1';
+            }
+            if (placeholder) placeholder.style.display = 'none';
+
+            const dishId = editingMenuItemId ? String(editingMenuItemId) : ('dish_' + Date.now());
+
+            // Attempt server upload
+            try {
+                const uploadResp = await fetch('/api/food-images/upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        dishId,
+                        base64Data: compressedBase64,
+                        mimeType: 'image/jpeg',
+                        filename: file.name
+                    })
+                });
+                if (uploadResp.ok) {
+                    const uploadData = await uploadResp.json();
+                    if (uploadData.success && uploadData.image) {
+                        currentItemImageBase64 = uploadData.image.url;
+                        window.currentItemImageBase64 = currentItemImageBase64;
+                        currentItemImageMetadata = uploadData.image;
+                        window.currentItemImageMetadata = currentItemImageMetadata;
+                        if (preview) preview.src = currentItemImageBase64;
+                        updateFimStatusPill("Device Upload", "status-upload");
+                        setFimActionDockVisible(true);
+                        showToast("✅ Image uploaded & saved to server!");
+                        return;
+                    }
+                }
+            } catch (uploadErr) {
+                console.warn("[FoodImageManager] Upload endpoint unreachable, retaining local copy:", uploadErr.message);
+            }
+
+            // Local fallback if offline or server unreachable
+            currentItemImageBase64 = compressedBase64;
+            window.currentItemImageBase64 = currentItemImageBase64;
+            currentItemImageMetadata = {
+                id: 'img_upload_' + Date.now(),
+                url: compressedBase64,
+                source: 'upload',
+                approved: true,
+                createdAt: new Date().toISOString()
+            };
+            window.currentItemImageMetadata = currentItemImageMetadata;
+            updateFimStatusPill("Device Upload", "status-upload");
+            setFimActionDockVisible(true);
+            showToast("✅ Photo loaded from device!");
         };
         img.src = e.target.result;
     };
@@ -601,7 +719,7 @@ async function fetchImageAsBase64(promptText, itemName = '', variationIndex = 0,
     const cat = String(category || '').trim();
 
     // 1. Direct Curated Gourmet Culinary Photo Library matching locally (for first 4 variations)
-    if (vIdx < 4 && typeof getCuratedFoodPhoto === 'function') {
+    if (typeof getCuratedFoodPhoto === 'function') {
         const directCurated = getCuratedFoodPhoto(dishName, cat, vIdx, false);
         if (directCurated) return directCurated;
     }
@@ -649,16 +767,32 @@ async function generateAIImage() {
     const nameInput = document.getElementById('newItemName');
     const name = nameInput ? nameInput.value.trim() : '';
     if (!name) return showToast("⚠️ Enter an Item Name first to generate image!");
+
+    // Prevent duplicate concurrent generation clicks
+    if (isGeneratingFoodImage) return;
+    isGeneratingFoodImage = true;
     
     const catInput = document.getElementById('newItemCategory');
     const cat = catInput ? catInput.value : '';
 
+    const cuisine = document.getElementById('newItemCuisine')?.value.trim() || '';
+    const servingStyle = document.getElementById('newItemServingStyle')?.value.trim() || '';
+    const dietary = getSelectedDietaryTags();
+
     const btn = document.getElementById('btnGenerateAI'); 
+    const regenBtn = document.getElementById('btnRegenAI');
     const preview = document.getElementById('newItemImagePreview');
+    const placeholder = document.getElementById('fimPlaceholder');
+    const shimmer = document.getElementById('fimShimmer');
+
+    // Loading / shimmer state
+    if (shimmer) shimmer.style.display = 'flex';
     if (btn) {
-        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>⏳ Generating...</span>`; 
+        btn.innerHTML = `<svg class="fim-spinner" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg><span>Generating Imagen 3...</span>`; 
         btn.disabled = true;
     }
+    if (regenBtn) regenBtn.disabled = true;
+    updateFimStatusPill("Generating...", "status-generating");
     
     // Cycle variation index on each successive click
     const normKey = name.toLowerCase().trim();
@@ -671,49 +805,231 @@ async function generateAIImage() {
     const totalVars = typeof getDishVariationCount === 'function' ? getDishVariationCount(name, cat) : 4;
     const varNum = (currentVarIndex % totalVars) + 1;
 
-    // Immediate instant responsive preview for the selected variation
-    const instantPreview = typeof getGourmetFoodImage === 'function' 
-        ? getGourmetFoodImage(name, cat, currentVarIndex) 
-        : (typeof generateFallbackImage === 'function' ? generateFallbackImage(name, cat, currentVarIndex) : '');
-    
-    if (preview && instantPreview) {
-        preview.src = instantPreview; 
-        preview.style.display = "block"; 
-        preview.style.opacity = "0.85";
-    }
-    currentItemImageBase64 = instantPreview;
-    window.currentItemImageBase64 = currentItemImageBase64;
-    
+    // Prepare reliable curated fallback image for offline / rate-limit resilience
+    const curatedFallback = (typeof getCuratedFoodPhoto === 'function' ? getCuratedFoodPhoto(name, cat, currentVarIndex, false) : '') ||
+        (typeof getCuratedFoodPhoto === 'function' ? getCuratedFoodPhoto(name, cat, currentVarIndex, true) : '') ||
+        (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name, cat, currentVarIndex) : '') ||
+        (typeof generateFallbackImage === 'function' ? generateFallbackImage(name, cat, currentVarIndex) : '');
+
     try {
-        const promptStr = `Gourmet culinary photography of ${name}, variation ${varNum}, elegant plating, cafe presentation, natural studio lighting, 4k quality`;
-        const generatedImg = await fetchImageAsBase64(promptStr, name, currentVarIndex, cat);
-        currentItemImageBase64 = generatedImg || instantPreview;
-        window.currentItemImageBase64 = currentItemImageBase64;
-        if (preview && currentItemImageBase64) {
-            preview.src = currentItemImageBase64; 
-            preview.style.opacity = "1";
+        let apiSuccess = false;
+        let serverData = null;
+
+        // Call protected server-side Imagen 3 endpoint
+        try {
+            const resp = await fetch('/api/food-images/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dishName: name,
+                    cuisine,
+                    servingStyle,
+                    dietary,
+                    aspectRatio: '1:1',
+                    variation: currentVarIndex,
+                    clientId: typeof myClientID !== 'undefined' ? myClientID : 'admin_pos'
+                })
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.success && data.imageUrl) {
+                    apiSuccess = true;
+                    serverData = data;
+                } else if (data.fallbackUrl) {
+                    serverData = data;
+                } else if (data.rateLimited || data.cooldown) {
+                    showToast(data.error || "⏳ Please wait before generating another image.");
+                }
+            }
+        } catch (netErr) {
+            console.warn("[FoodImageManager] Imagen 3 network note:", netErr.message);
         }
+
+        if (apiSuccess && serverData && serverData.imageUrl) {
+            currentItemImageBase64 = serverData.imageUrl;
+            window.currentItemImageBase64 = currentItemImageBase64;
+            currentItemImageMetadata = {
+                id: 'img_' + Date.now(),
+                url: serverData.imageUrl,
+                source: serverData.isAiGenerated ? (serverData.source || 'gemini-ai') : 'authentic-curated',
+                createdAt: new Date().toISOString(),
+                approved: false
+            };
+            window.currentItemImageMetadata = currentItemImageMetadata;
+
+            if (preview) {
+                preview.src = currentItemImageBase64;
+                preview.style.display = 'block';
+                preview.style.opacity = '1';
+            }
+            if (placeholder) placeholder.style.display = 'none';
+
+            if (serverData.isAiGenerated) {
+                updateFimStatusPill("✨ AI Generated (Gemini)", "status-ai");
+                showToast(`✨ AI image generated for ${name}`);
+            } else {
+                const statusLabel = serverData.isFreeTierQuota ? "📸 Authentic Photo (Free Tier Key)" : "📸 Authentic Photo";
+                updateFimStatusPill(statusLabel, "status-fallback");
+                showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${name}`);
+            }
+
+            const noticeEl = document.getElementById('fimTierNotice');
+            if (noticeEl) {
+                if (serverData.isFreeTierQuota && serverData.notice) {
+                    noticeEl.style.display = 'flex';
+                    noticeEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>${serverData.notice}</span>`;
+                } else {
+                    noticeEl.style.display = 'none';
+                }
+            }
+
+            setFimActionDockVisible(true);
+        } else {
+            // Offline / fallback path
+            const fallbackUrl = (serverData && serverData.fallbackUrl) || curatedFallback;
+            currentItemImageBase64 = fallbackUrl;
+            window.currentItemImageBase64 = currentItemImageBase64;
+            currentItemImageMetadata = {
+                id: 'img_curated_' + Date.now(),
+                url: fallbackUrl,
+                source: 'curated',
+                createdAt: new Date().toISOString(),
+                approved: false
+            };
+            window.currentItemImageMetadata = currentItemImageMetadata;
+
+            if (preview && fallbackUrl) {
+                preview.src = currentItemImageBase64;
+                preview.style.display = 'block';
+                preview.style.opacity = '1';
+            }
+            if (placeholder) placeholder.style.display = 'none';
+
+            updateFimStatusPill("📸 Authentic Photo", "status-fallback");
+            setFimActionDockVisible(true);
+            showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${name}`);
+        }
+    } catch (err) {
+        console.warn("[FoodImageManager] Generation error:", err.message);
+        currentItemImageBase64 = curatedFallback;
+        window.currentItemImageBase64 = currentItemImageBase64;
+        if (preview && curatedFallback) {
+            preview.src = currentItemImageBase64;
+            preview.style.display = 'block';
+            preview.style.opacity = '1';
+        }
+        if (placeholder) placeholder.style.display = 'none';
+        updateFimStatusPill("📸 Authentic Photo", "status-fallback");
+        setFimActionDockVisible(true);
+        showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${name}`);
+    } finally {
+        isGeneratingFoodImage = false;
+        if (shimmer) shimmer.style.display = 'none';
         if (btn) {
-            btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>🎲 Next Photo</span>`; 
+            btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>Next Photo</span>`; 
             btn.disabled = false;
         }
-        showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${name}`);
-    } catch (error) { 
-        console.warn("AI Image note:", error.message); 
-        currentItemImageBase64 = instantPreview;
-        window.currentItemImageBase64 = currentItemImageBase64;
-        if (preview && instantPreview) {
-            preview.src = instantPreview;
-            preview.style.opacity = "1";
-        }
-        if (btn) {
-            btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>🎲 Next Photo</span>`; 
-            btn.disabled = false;
-        }
-        showToast(`📸 Variation ${varNum} of ${totalVars} selected for ${name}`);
+        if (regenBtn) regenBtn.disabled = false;
     }
 }
 window.generateAIImage = generateAIImage;
+
+async function approveAndSaveFoodImage() {
+    if (!currentItemImageBase64) {
+        showToast("⚠️ No image available to approve!");
+        return;
+    }
+
+    const dishId = editingMenuItemId ? String(editingMenuItemId) : ('dish_' + Date.now());
+    const dishName = document.getElementById('newItemName')?.value.trim() || 'dish';
+
+    // If current image is raw base64 from AI generator or local canvas, persist to server disk
+    if (currentItemImageBase64.startsWith('data:image')) {
+        try {
+            const resp = await fetch('/api/food-images/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dishId,
+                    dishName,
+                    base64Data: currentItemImageBase64,
+                    mimeType: 'image/jpeg'
+                })
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.success && data.image) {
+                    currentItemImageBase64 = data.image.url;
+                    window.currentItemImageBase64 = currentItemImageBase64;
+                    currentItemImageMetadata = data.image;
+                    window.currentItemImageMetadata = currentItemImageMetadata;
+                    const preview = document.getElementById('newItemImagePreview');
+                    if (preview) preview.src = currentItemImageBase64;
+                    updateFimStatusPill("Approved & Saved", "status-approved");
+                    showToast("✅ Food image approved & saved to disk!");
+                    return;
+                }
+            }
+        } catch (saveErr) {
+            console.warn("[FoodImageManager] Save image error:", saveErr.message);
+        }
+    }
+
+    // Static URL (/uploads/food-images/...) or curated remote URL
+    currentItemImageMetadata = currentItemImageMetadata || {
+        id: 'img_' + dishId,
+        url: currentItemImageBase64,
+        source: currentItemImageBase64.startsWith('/uploads/') ? (currentItemImageBase64.includes('upload') ? 'upload' : 'gemini-imagen') : 'curated',
+        createdAt: new Date().toISOString(),
+        approved: true
+    };
+    currentItemImageMetadata.approved = true;
+    window.currentItemImageMetadata = currentItemImageMetadata;
+    updateFimStatusPill("Approved & Saved", "status-approved");
+    showToast("✅ Food image approved!");
+}
+window.approveAndSaveFoodImage = approveAndSaveFoodImage;
+
+function discardFoodImage() {
+    const preview = document.getElementById('newItemImagePreview');
+    const placeholder = document.getElementById('fimPlaceholder');
+
+    const noticeEl = document.getElementById('fimTierNotice');
+    if (noticeEl) noticeEl.style.display = 'none';
+
+    if (originalDishImage) {
+        currentItemImageBase64 = originalDishImage;
+        window.currentItemImageBase64 = currentItemImageBase64;
+        currentItemImageMetadata = originalImageMetadata;
+        window.currentItemImageMetadata = currentItemImageMetadata;
+        if (preview) {
+            preview.src = originalDishImage;
+            preview.style.display = 'block';
+            preview.style.opacity = '1';
+        }
+        if (placeholder) placeholder.style.display = 'none';
+        const isAppr = originalImageMetadata && originalImageMetadata.approved;
+        updateFimStatusPill(isAppr ? "Approved & Saved" : "AI Generated (Imagen 3)", isAppr ? "status-approved" : "status-ai");
+        setFimActionDockVisible(true);
+        showToast("Image restored to previous saved state.");
+    } else {
+        currentItemImageBase64 = "";
+        window.currentItemImageBase64 = currentItemImageBase64;
+        currentItemImageMetadata = null;
+        window.currentItemImageMetadata = currentItemImageMetadata;
+        if (preview) {
+            preview.src = "";
+            preview.style.display = 'none';
+        }
+        if (placeholder) placeholder.style.display = 'flex';
+        updateFimStatusPill("No Image", "status-none");
+        setFimActionDockVisible(false);
+        showToast("Image discarded.");
+    }
+}
+window.discardFoodImage = discardFoodImage;
 
 function openAddMenuItemModal() {
     editingMenuItemId = null; 
@@ -726,12 +1042,43 @@ function openAddMenuItemModal() {
     document.getElementById('newItemTrackStock').checked = false; 
     document.getElementById('newItemStock').style.display = 'none'; 
     document.getElementById('newItemStock').value = '';
+
+    // Reset Food Image Manager state to clean initial state
     currentItemImageBase64 = ""; 
-    document.getElementById('newItemImagePreview').src = ""; 
-    document.getElementById('newItemImagePreview').style.display = "none";
+    window.currentItemImageBase64 = currentItemImageBase64;
+    currentItemImageMetadata = null;
+    window.currentItemImageMetadata = currentItemImageMetadata;
+    originalDishImage = "";
+    originalImageMetadata = null;
+    isGeneratingFoodImage = false;
+
+    const noticeEl = document.getElementById('fimTierNotice');
+    if (noticeEl) noticeEl.style.display = 'none';
+
+    const cuisineInput = document.getElementById('newItemCuisine');
+    if (cuisineInput) cuisineInput.value = '';
+    const servingStyleInput = document.getElementById('newItemServingStyle');
+    if (servingStyleInput) servingStyleInput.value = '';
+
+    const dietaryPills = document.querySelectorAll('.fim-dietary-pill');
+    dietaryPills.forEach(pill => pill.classList.remove('active'));
+
+    const preview = document.getElementById('newItemImagePreview');
+    if (preview) {
+        preview.src = "";
+        preview.style.display = "none";
+    }
+    const placeholder = document.getElementById('fimPlaceholder');
+    if (placeholder) placeholder.style.display = "flex";
+    const shimmer = document.getElementById('fimShimmer');
+    if (shimmer) shimmer.style.display = "none";
+
+    updateFimStatusPill("No Image", "status-none");
+    setFimActionDockVisible(false);
+
     const genBtn = document.getElementById('btnGenerateAI');
     if (genBtn) {
-        genBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>AI Photo</span>`;
+        genBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg><span>Generate Food Image</span>`;
         genBtn.disabled = false;
     }
     document.getElementById('menuItemModal').style.display = 'flex'; 
@@ -750,14 +1097,51 @@ function editMenuItem(id) {
         document.getElementById('newItemTrackStock').checked = item.trackStock || false; 
         document.getElementById('newItemStock').style.display = item.trackStock ? 'block' : 'none'; 
         document.getElementById('newItemStock').value = item.stockQty || '';
+
+        // Context fields
+        const cuisineInput = document.getElementById('newItemCuisine');
+        if (cuisineInput) cuisineInput.value = item.cuisine || '';
+        const servingStyleInput = document.getElementById('newItemServingStyle');
+        if (servingStyleInput) servingStyleInput.value = item.servingStyle || '';
+
+        const dietaryTags = Array.isArray(item.dietary) ? item.dietary : [];
+        const dietaryPills = document.querySelectorAll('.fim-dietary-pill');
+        dietaryPills.forEach(pill => {
+            const tag = pill.getAttribute('data-diet') || pill.innerText.trim();
+            if (dietaryTags.includes(tag)) {
+                pill.classList.add('active');
+            } else {
+                pill.classList.remove('active');
+            }
+        });
         
         currentItemImageBase64 = item.image || "";
+        window.currentItemImageBase64 = currentItemImageBase64;
+        originalDishImage = item.image || "";
+        currentItemImageMetadata = item.imageMetadata || null;
+        window.currentItemImageMetadata = currentItemImageMetadata;
+        originalImageMetadata = item.imageMetadata || null;
+        isGeneratingFoodImage = false;
+
+        const preview = document.getElementById('newItemImagePreview');
+        const placeholder = document.getElementById('fimPlaceholder');
+        const shimmer = document.getElementById('fimShimmer');
+        if (shimmer) shimmer.style.display = 'none';
+
         if(currentItemImageBase64 && (currentItemImageBase64.startsWith('data:image') || currentItemImageBase64.startsWith('http') || currentItemImageBase64.startsWith('/'))) { 
-            document.getElementById('newItemImagePreview').src = currentItemImageBase64; 
-            document.getElementById('newItemImagePreview').style.display = "block"; 
-            document.getElementById('newItemImagePreview').style.opacity = "1";
+            if (preview) {
+                preview.src = currentItemImageBase64; 
+                preview.style.display = "block"; 
+                preview.style.opacity = "1";
+            }
+            if (placeholder) placeholder.style.display = "none";
+            updateFimStatusPill("Approved & Saved", "status-approved");
+            setFimActionDockVisible(true);
         } else { 
-            document.getElementById('newItemImagePreview').style.display = "none"; 
+            if (preview) preview.style.display = "none"; 
+            if (placeholder) placeholder.style.display = "flex";
+            updateFimStatusPill("No Image", "status-none");
+            setFimActionDockVisible(false);
         }
         
         const genBtn = document.getElementById('btnGenerateAI');
@@ -775,12 +1159,15 @@ function editMenuItem(id) {
 window.editMenuItem = editMenuItem;
 
 function addMenuItem() {
-    const name = document.getElementById('newItemName').value; 
+    const name = document.getElementById('newItemName').value.trim(); 
     const price = parseFloat(document.getElementById('newItemPrice').value); 
     const category = document.getElementById('newItemCategory').value; 
     const gstRate = parseFloat(document.getElementById('newItemGst').value) || 0; 
     const trackStock = document.getElementById('newItemTrackStock').checked; 
     const stockQty = parseInt(document.getElementById('newItemStock').value) || 0;
+    const cuisine = document.getElementById('newItemCuisine')?.value.trim() || '';
+    const servingStyle = document.getElementById('newItemServingStyle')?.value.trim() || '';
+    const dietary = getSelectedDietaryTags();
 
     if(name && !isNaN(price)) { 
         let savedDishId = null;
@@ -788,16 +1175,51 @@ function addMenuItem() {
         const previewSrc = (previewEl && previewEl.src && !previewEl.src.includes('placeholder') && !previewEl.src.startsWith('data:image/svg+xml')) ? previewEl.src : '';
         const dishPhoto = currentItemImageBase64 || previewSrc || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name, category) : generateFallbackImage(name, category));
 
+        const imgMeta = currentItemImageMetadata || {
+            id: 'img_' + (editingMenuItemId || Date.now()),
+            url: dishPhoto,
+            source: dishPhoto.startsWith('/uploads/') ? (dishPhoto.includes('upload') ? 'upload' : 'gemini-imagen') : 'curated',
+            createdAt: new Date().toISOString(),
+            approved: true
+        };
+
         if (editingMenuItemId) {
             const index = menuItems.findIndex(i => i.id === editingMenuItemId);
             if(index > -1) { 
-                menuItems[index] = { id: editingMenuItemId, name, category, price, gstRate, trackStock, stockQty, image: dishPhoto }; 
+                menuItems[index] = {
+                    ...menuItems[index],
+                    id: editingMenuItemId,
+                    name,
+                    category,
+                    price,
+                    gstRate,
+                    trackStock,
+                    stockQty,
+                    cuisine,
+                    servingStyle,
+                    dietary,
+                    image: dishPhoto,
+                    imageMetadata: imgMeta
+                }; 
                 savedDishId = editingMenuItemId;
             }
             showToast("✅ Item updated!");
         } else { 
             savedDishId = Date.now();
-            menuItems.push({ id: savedDishId, name, category, price, gstRate, trackStock, stockQty, image: dishPhoto }); 
+            menuItems.push({
+                id: savedDishId,
+                name,
+                category,
+                price,
+                gstRate,
+                trackStock,
+                stockQty,
+                cuisine,
+                servingStyle,
+                dietary,
+                image: dishPhoto,
+                imageMetadata: imgMeta
+            }); 
             showToast("✅ Item added!"); 
         }
         persistMenu(); 

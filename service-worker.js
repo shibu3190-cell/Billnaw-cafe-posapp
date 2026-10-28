@@ -128,7 +128,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Stale-While-Revalidate for static assets
+  // 3. Stale-While-Revalidate for food photography (/uploads/food-images/*)
+  if (url.pathname.startsWith('/uploads/food-images/') || url.pathname.startsWith('/uploads/')) {
+    event.respondWith(
+      caches.open(CACHE_VERSION).then((cache) => {
+        return cache.match(req).then((cachedResponse) => {
+          const fetchPromise = fetch(req)
+            .then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                cache.put(req, networkResponse.clone());
+              }
+              return networkResponse;
+            })
+            .catch(() => cachedResponse);
+
+          return cachedResponse || fetchPromise;
+        });
+      })
+    );
+    return;
+  }
+
+  // 4. Stale-While-Revalidate for static assets
   event.respondWith(
     caches.open(CACHE_VERSION).then((cache) => {
       return cache.match(req).then((cachedResponse) => {

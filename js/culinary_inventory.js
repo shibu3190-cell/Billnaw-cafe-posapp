@@ -79,6 +79,69 @@
         }
     }
 
+
+    // --- Operational Inventory Telemetry UI Controller (4 Stat Cards & Badges) ---
+    function renderInventoryTelemetryUI() {
+        const totalMaterials = rawMaterials.length;
+        const categories = new Set(rawMaterials.map(m => m.category || 'General'));
+        const lowStock = rawMaterials.filter(m => m.current_stock > 0 && m.current_stock <= m.min_threshold);
+        const outStock = rawMaterials.filter(m => m.current_stock <= 0);
+        const inStock = rawMaterials.filter(m => m.current_stock > m.min_threshold);
+
+        const statTotal = document.getElementById('invStatTotalCount');
+        if (statTotal) statTotal.textContent = `${totalMaterials} Items`;
+
+        const statTotalSub = document.getElementById('invStatTotalSub');
+        if (statTotalSub) statTotalSub.textContent = `Across ${categories.size} categories`;
+
+        const statLow = document.getElementById('invStatRiskCount') || document.getElementById('invStatLowCount');
+        if (statLow) statLow.textContent = `${lowStock.length} Low Stock`;
+
+        const statLowSub = document.getElementById('invStatRiskSummary');
+        if (statLowSub) statLowSub.textContent = lowStock.length > 0 ? `${lowStock.length} items require reordering` : 'All safety levels normal';
+
+        const statInStock = document.getElementById('invStatReadyPercent') || document.getElementById('invStatInStockCount');
+        if (statInStock) statInStock.textContent = `${inStock.length} Items`;
+
+        const statInStockSub = document.getElementById('invStatReadySummary');
+        if (statInStockSub) statInStockSub.textContent = 'Optimal safety levels';
+
+        const statOut = document.getElementById('invStatOutCount');
+        if (statOut) statOut.textContent = `${outStock.length} Items`;
+
+        const statOutSub = document.getElementById('invStatOutSummary');
+        if (statOutSub) statOutSub.textContent = outStock.length > 0 ? `${outStock.length} items need attention` : 'Zero stockouts';
+
+        // Tab count badges
+        const badgeRaw = document.getElementById('invBadgeRawCount');
+        if (badgeRaw) badgeRaw.textContent = totalMaterials;
+
+        const badgePrep = document.getElementById('invBadgePrepCount');
+        if (badgePrep) badgePrep.textContent = subRecipes.length;
+
+        const badgeRecipe = document.getElementById('invBadgeRecipeCount');
+        if (badgeRecipe) {
+            const menuCount = (window.menuItems && window.menuItems.length) || recipes.length || 0;
+            badgeRecipe.textContent = menuCount;
+        }
+
+        // Loss Aversion Banner if any critical items
+        const lossBanner = document.getElementById('inventoryLossAversionBanner');
+        const lossText = document.getElementById('inventoryLossAlertText');
+        if (lossBanner && lossText) {
+            if (outStock.length > 0) {
+                const names = outStock.slice(0, 3).map(m => m.name).join(', ');
+                lossText.textContent = `⚠️ Critical: ${outStock.length} ingredients out of stock (${names}${outStock.length > 3 ? '...' : ''}). Reorder immediately.`;
+            } else if (lowStock.length > 0) {
+                const names = lowStock.slice(0, 3).map(m => m.name).join(', ');
+                lossText.textContent = `⚠️ Reorder Warning: ${lowStock.length} items low (${names}).`;
+            } else {
+                lossText.textContent = 'All inventory levels healthy.';
+            }
+        }
+    }
+    window.renderInventoryTelemetryUI = renderInventoryTelemetryUI;
+
     function persistLocalSnapshot() {
         try {
             localStorage.setItem('billnaw_culinary_materials', JSON.stringify(rawMaterials));
@@ -243,12 +306,18 @@
                     </div>
                     <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No inventory items added yet</h3>
                     <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
-                        Start tracking raw ingredients, pantry supplies, and packaging. Click below to record your first purchase or restock.
+                        Start tracking raw ingredients, pantry supplies, and packaging. Click below to add an ingredient or record your first purchase.
                     </p>
-                    <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="padding: 9px 18px; border-radius: 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        <span>+ Quick Restock / Purchase</span>
-                    </button>
+                    <div style="display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openAddMaterialModal()" style="padding: 9px 18px; border-radius: 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            <span>+ Add Raw Material</span>
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="padding: 9px 18px; border-radius: 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            <span>+ Quick Restock / Purchase</span>
+                        </button>
+                    </div>
                 </div>
             `;
             return;
@@ -258,7 +327,13 @@
         const activeCat = rawStockActiveCategory || 'all';
 
         const filteredMaterials = rawMaterials.filter(item => {
-            if (activeCat !== 'all') {
+            if (activeCat === 'low') {
+                if (!(item.current_stock > 0 && item.current_stock <= item.min_threshold)) return false;
+            } else if (activeCat === 'out') {
+                if (item.current_stock > 0) return false;
+            } else if (activeCat === 'instock') {
+                if (item.current_stock <= item.min_threshold) return false;
+            } else if (activeCat !== 'all') {
                 const cat = (item.category || '').toLowerCase();
                 if (activeCat === 'dairy' && !cat.includes('dairy')) return false;
                 if (activeCat === 'produce' && !cat.includes('produce')) return false;
@@ -286,279 +361,372 @@
         const lowStockCount = rawMaterials.filter(m => m.current_stock > 0 && m.current_stock <= m.min_threshold).length;
         const outCount = rawMaterials.filter(m => m.current_stock <= 0).length;
 
+        // Morning Prep Checklist calculations
+        const todayPrepCount = commissaryBatchHistory.filter(b => b.date === 'Today').length;
+        const totalPrepTasks = Math.max(subRecipes.length, 1);
+        const prepPercent = Math.min(100, Math.round((todayPrepCount / totalPrepTasks) * 100));
+
         targetContainer.innerHTML = `
-            <div style="margin-bottom: 20px;">
-                <!-- Category Chips & Search Bar -->
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
-                    <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
-                        ${[
-                            { id: 'all', label: 'All Items' },
-                            { id: 'dairy', label: 'Dairy' },
-                            { id: 'produce', label: 'Produce & Veg' },
-                            { id: 'meat', label: 'Poultry & Meat' },
-                            { id: 'beverages', label: 'Beverages' },
-                            { id: 'pantry', label: 'Pantry & Grains' },
-                            { id: 'spices', label: 'Spices' },
-                            { id: 'spirits', label: 'Bar & Spirits' }
-                        ].map(c => `
-                            <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.filterRawStockCategory('${c.id}')" style="font-size: 11px; padding: 5px 12px; border-radius: 20px; font-weight: 700; ${activeCat === c.id ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'background: #FFFFFF; color: #475569; border-color: #CBD5E1;'}">
-                                ${c.label}
-                            </button>
-                        `).join('')}
-                    </div>
-                    <div style="position: relative; min-width: 220px; flex: 1; max-width: 320px;">
-                        <div style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #94A3B8;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <div class="inv-desktop-split-layout">
+                <!-- LEFT COLUMN: Main Data Table & Filtering -->
+                <div class="inv-main-content">
+                    <!-- Category Chips & Search Bar -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                            ${[
+                                { id: 'all', label: 'All Items' },
+                                { id: 'low', label: 'Low Stock' },
+                                { id: 'out', label: 'Out of Stock' },
+                                { id: 'instock', label: 'In Stock' },
+                                { id: 'dairy', label: 'Dairy' },
+                                { id: 'produce', label: 'Produce & Veg' },
+                                { id: 'meat', label: 'Poultry & Meat' },
+                                { id: 'beverages', label: 'Beverages' },
+                                { id: 'pantry', label: 'Pantry & Grains' },
+                                { id: 'spices', label: 'Spices' },
+                                ...(spirits.length > 0 ? [{ id: 'spirits', label: 'Bar & Spirits' }] : [])
+                            ].map(c => `
+                                <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.filterRawStockCategory('${c.id}')" style="font-size: 11px; padding: 5px 12px; border-radius: 20px; font-weight: 700; ${activeCat === c.id ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'background: #FFFFFF; color: #475569; border-color: #CBD5E1;'}">
+                                    ${c.label}
+                                </button>
+                            `).join('')}
                         </div>
-                        <input type="text" id="rawStockSearchInput" value="${escapeHtml(rawStockSearchQuery)}" oninput="window.culinaryInventory.filterRawStock(this.value)" placeholder="Search ingredients (Oil, Milk...)" style="width: 100%; padding: 7px 12px 7px 32px; font-size: 12px; border-radius: 20px; border: 1.5px solid #CBD5E1; background: #FFFFFF; outline: none; box-sizing: border-box;">
+                        <div style="position: relative; min-width: 220px; flex: 1; max-width: 320px;">
+                            <div style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #94A3B8;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                            </div>
+                            <input type="text" id="rawStockSearchInput" value="${escapeHtml(rawStockSearchQuery)}" oninput="window.culinaryInventory.filterRawStock(this.value)" placeholder="Search raw materials, suppliers..." style="width: 100%; padding: 7px 12px 7px 32px; font-size: 12px; border-radius: 20px; border: 1.5px solid #CBD5E1; background: #FFFFFF; outline: none; box-sizing: border-box;">
+                        </div>
                     </div>
-                </div>
 
-                ${showSpirits ? `
-                <!-- Spirits & Brewery Bar Matrix -->
-                <div style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div style="font-size: 13px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 6px;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 22h8"/><path d="M12 11v11"/><path d="m19 3-7 8-7-8Z"/></svg>
-                            <span>Bar & Brewery Liquid Telemetry</span>
+                    ${showSpirits ? `
+                    <!-- Spirits & Brewery Bar Matrix -->
+                    <div style="margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="font-size: 13px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 6px;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 22h8"/><path d="M12 11v11"/><path d="m19 3-7 8-7-8Z"/></svg>
+                                <span>Bar & Brewery Liquid Telemetry</span>
+                            </div>
+                            <span style="font-size: 11px; color: var(--text-muted);">Exact 30ml/60ml peg deductions & 6% tap line froth buffer</span>
                         </div>
-                        <span style="font-size: 11px; color: var(--text-muted);">Exact 30ml/60ml peg deductions & 6% tap line froth buffer</span>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px;">
+                            ${spirits.map(s => {
+                                const isBeer = s.unit_type === 'draught_beer';
+                                const totalMl = s.conversion_factor || 1000;
+                                const pct = Math.min(100, Math.round((s.current_stock / totalMl) * 100));
+                                const gaugeColor = pct < 25 ? '#EF4444' : (pct < 50 ? '#F59E0B' : '#10B981');
+                                return `
+                                    <div class="card" style="padding: 14px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 12px;">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                            <div>
+                                                <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: ${isBeer ? '#D97706' : '#6B21A8'}; background: ${isBeer ? '#FEF3C7' : '#F3E8FF'}; padding: 2px 7px; border-radius: 8px;">
+                                                    ${isBeer ? 'Draught Keg' : 'Spirit 750ml'}
+                                                </span>
+                                                <div style="font-size: 13px; font-weight: 800; color: var(--text-dark); margin-top: 3px;">${escapeHtml(s.name)}</div>
+                                            </div>
+                                            <div style="text-align: right;">
+                                                <div style="font-size: 15px; font-weight: 800; color: #143832;">${s.current_stock} <span style="font-size: 10px;">ml</span></div>
+                                                <div style="font-size: 10px; color: var(--text-muted);">${(s.current_stock / 1000).toFixed(2)}L left</div>
+                                            </div>
+                                        </div>
+                                        <div style="background: #F1F5F9; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 0 6px 0;">
+                                            <div style="width: ${pct}%; height: 100%; background: ${gaugeColor}; border-radius: 4px; transition: width 0.3s ease;"></div>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--text-muted);">
+                                            <span>${pct}% Remaining</span>
+                                            <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openRestockModal('${s.id}')" style="padding: 2px 8px; font-size: 10px; border-radius: 10px;">+ Restock</button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px;">
-                        ${spirits.map(s => {
-                            const isBeer = s.unit_type === 'draught_beer';
-                            const totalMl = s.conversion_factor || 1000;
-                            const pct = Math.min(100, Math.round((s.current_stock / totalMl) * 100));
-                            const gaugeColor = pct < 25 ? '#EF4444' : (pct < 50 ? '#F59E0B' : '#10B981');
-                            return `
-                                <div class="card" style="padding: 14px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 12px;">
-                                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                        <div>
-                                            <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: ${isBeer ? '#D97706' : '#6B21A8'}; background: ${isBeer ? '#FEF3C7' : '#F3E8FF'}; padding: 2px 7px; border-radius: 8px;">
-                                                ${isBeer ? 'Draught Keg' : 'Spirit 750ml'}
-                                            </span>
-                                            <div style="font-size: 13px; font-weight: 800; color: var(--text-dark); margin-top: 3px;">${escapeHtml(s.name)}</div>
-                                        </div>
-                                        <div style="text-align: right;">
-                                            <div style="font-size: 15px; font-weight: 800; color: #143832;">${s.current_stock} <span style="font-size: 10px;">ml</span></div>
-                                            <div style="font-size: 10px; color: var(--text-muted);">${(s.current_stock / 1000).toFixed(2)}L left</div>
-                                        </div>
-                                    </div>
-                                    <div style="background: #F1F5F9; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 0 6px 0;">
-                                        <div style="width: ${pct}%; height: 100%; background: ${gaugeColor}; border-radius: 4px; transition: width 0.3s ease;"></div>
-                                    </div>
-                                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--text-muted);">
-                                        <span>${pct}% Remaining</span>
-                                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openRestockModal('${s.id}')" style="padding: 2px 8px; font-size: 10px; border-radius: 10px;">+ Restock</button>
-                                    </div>
+                    ` : ''}
+
+                    <!-- High-Contrast Raw Stock Telemetry Table -->
+                    <div class="inv-telemetry-container">
+                        <div style="padding: 14px 18px; border-bottom: 1.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #FFFFFF;">
+                            <div>
+                                <div style="font-size: 15px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                    <span>Raw Materials Inventory</span>
                                 </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- High-Contrast Raw Stock Telemetry Table -->
-                <div class="inv-telemetry-container">
-                    <div style="padding: 14px 18px; border-bottom: 1.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #FFFFFF;">
-                        <div>
-                            <div style="font-size: 15px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                                <span>Ingredient Stock Telemetry Matrix</span>
+                                <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                                    Showing ${filteredMaterials.length} materials • Safety reorder threshold active
+                                </div>
                             </div>
-                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-                                Showing ${filteredMaterials.length} ingredients • Minimum safety threshold tracking active
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                ${outCount > 0 ? `<span class="inv-badge-out" style="padding: 4px 10px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> ${outCount} Out</span>` : ''}
+                                ${lowStockCount > 0 ? `<span class="inv-badge-low" style="padding: 4px 10px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${lowStockCount} Low</span>` : ''}
+                                <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openAddMaterialModal()" style="font-size: 11px; padding: 6px 12px; border-radius: 14px; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>+ Material</span>
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="font-size: 11px; padding: 6px 14px; border-radius: 14px; display: inline-flex; align-items: center; gap: 6px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>+ Restock</span>
+                                </button>
                             </div>
                         </div>
-                        <div style="display: flex; gap: 8px; align-items: center;">
-                            ${outCount > 0 ? `<span class="inv-badge-out" style="padding: 4px 10px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> ${outCount} Out</span>` : ''}
-                            ${lowStockCount > 0 ? `<span class="inv-badge-low" style="padding: 4px 10px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ${lowStockCount} Low</span>` : ''}
-                            <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="font-size: 11px; padding: 6px 14px; border-radius: 14px; display: inline-flex; align-items: center; gap: 6px;">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                <span>+ Quick Restock</span>
-                            </button>
-                        </div>
-                    </div>
 
-                    <!-- Vertical Data Table for Raw Stock Telemetry (No horizontal scroll) -->
-                    <div class="inv-telemetry-table-wrap" style="width: 100%; overflow-x: auto;">
-                        <table class="inv-telemetry-table">
-                            <thead>
-                                <tr>
-                                    <th>Ingredient / Item</th>
-                                    <th>Category &amp; Supplier</th>
-                                    <th>Current Stock</th>
-                                    <th>Safety Min</th>
-                                    <th>Rate (₹/Unit)</th>
-                                    <th>Status</th>
-                                    <th style="text-align: right;">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${filteredMaterials.length === 0 ? `
+                        <!-- Vertical Data Table for Raw Stock Telemetry -->
+                        <div class="inv-telemetry-table-wrap">
+                            <table class="inv-telemetry-table">
+                                <thead>
                                     <tr>
-                                        <td colspan="7" style="text-align: center; padding: 28px; color: var(--text-muted);">
-                                            No ingredients match current search or category filter.
-                                        </td>
+                                        <th>Item &amp; Category</th>
+                                        <th>Current Stock</th>
+                                        <th>Min Level</th>
+                                        <th>Cost Rate</th>
+                                        <th>Supplier</th>
+                                        <th>Status</th>
+                                        <th style="text-align: right;">Actions</th>
                                     </tr>
-                                ` : filteredMaterials.map(item => {
-                                    const isOut = item.current_stock <= 0;
-                                    const isLow = !isOut && item.current_stock <= item.min_threshold;
-                                    const badgeHtml = isOut
-                                        ? `<span class="inv-badge-out"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Out</span>`
-                                        : (isLow
-                                            ? `<span class="inv-badge-low"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Low Stock</span>`
-                                            : `<span class="inv-badge-instock"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> In Stock</span>`);
-
-                                    const stockColor = isOut ? '#DC2626' : (isLow ? '#D97706' : '#143832');
-                                    const unitLabel = item.consumption_unit || item.purchase_unit || 'units';
-
-                                    return `
+                                </thead>
+                                <tbody>
+                                    ${filteredMaterials.length === 0 ? `
                                         <tr>
-                                            <td>
-                                                <div style="font-weight: 800; color: var(--text-dark); font-size: 13.5px;">${escapeHtml(item.name)}</div>
-                                                <div style="font-size: 10.5px; color: #64748B; font-family: monospace;">${escapeHtml(item.id)}</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 12px; font-weight: 600; color: #334155;">${escapeHtml(item.category || 'General')}</div>
-                                                <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(item.supplier || 'Mandi Wholesale')}</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 16px; font-weight: 800; color: ${stockColor};">
-                                                    ${item.current_stock} <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 12px; font-weight: 600; color: #475569;">
-                                                    ${item.min_threshold} <span style="font-size: 10.5px; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 12.5px; font-weight: 700; color: #0F172A;">
-                                                    ₹ ${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                ${badgeHtml}
-                                            </td>
-                                            <td style="text-align: right;">
-                                                <div style="display: inline-flex; gap: 6px; align-items: center;">
-                                                    <button type="button" class="btn btn-primary" onclick="window.culinaryInventory.openRestockModal('${item.id}')" style="font-size: 11px; padding: 5px 10px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                                        <span>+ Restock</span>
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.promptPriceEdit('${item.id}')" style="font-size: 11px; padding: 5px 9px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
-                                                        <span>Rate</span>
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openItemAlertModal('${item.id}')" style="font-size: 11px; padding: 5px 9px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                                                        <span>Min</span>
-                                                    </button>
-                                                </div>
+                                            <td colspan="7" style="text-align: center; padding: 28px; color: var(--text-muted);">
+                                                No ingredients match current search or category filter.
                                             </td>
                                         </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
+                                    ` : filteredMaterials.map(item => {
+                                        const isOut = item.current_stock <= 0;
+                                        const isLow = !isOut && item.current_stock <= item.min_threshold;
+                                        const badgeHtml = isOut
+                                            ? `<span class="inv-badge-out"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Out</span>`
+                                            : (isLow
+                                                ? `<span class="inv-badge-low"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Low</span>`
+                                                : `<span class="inv-badge-instock"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> In Stock</span>`);
+
+                                        const stockColor = isOut ? '#DC2626' : (isLow ? '#D97706' : '#143832');
+                                        const unitLabel = item.consumption_unit || item.purchase_unit || 'units';
+
+                                        const maxCap = Math.max(item.min_threshold * 2.5, item.current_stock, 1);
+                                        const stockPct = Math.min(100, Math.round((item.current_stock / maxCap) * 100));
+                                        const barColor = isOut ? '#DC2626' : (isLow ? '#F59E0B' : '#10B981');
+
+                                        return `
+                                            <tr>
+                                                <td>
+                                                    <div style="font-weight: 800; color: var(--text-dark); font-size: 13.5px;">${escapeHtml(item.name)}</div>
+                                                    <div style="font-size: 11px; color: #64748B;">${escapeHtml(item.category || 'General')} • <span style="font-family: monospace;">${escapeHtml(item.id)}</span></div>
+                                                </td>
+                                                <td>
+                                                    <div style="font-size: 15px; font-weight: 800; color: ${stockColor};">
+                                                        ${item.current_stock} <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
+                                                    </div>
+                                                    <div class="inv-stock-progress-wrap" title="${stockPct}% of standard capacity">
+                                                        <div class="inv-stock-progress-bar" style="width: ${stockPct}%; background: ${barColor};"></div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div style="font-size: 12px; font-weight: 600; color: #475569;">
+                                                        ${item.min_threshold} <span style="font-size: 10.5px; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div style="font-size: 12.5px; font-weight: 700; color: #0F172A;">
+                                                        ₹ ${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div style="font-size: 12px; font-weight: 600; color: #334155;">${escapeHtml(item.supplier || 'Mandi Wholesale')}</div>
+                                                </td>
+                                                <td>
+                                                    ${badgeHtml}
+                                                </td>
+                                                <td style="text-align: right;">
+                                                    <div style="display: inline-flex; gap: 6px; align-items: center;">
+                                                        <button type="button" class="btn btn-primary" onclick="window.culinaryInventory.openRestockModal('${item.id}')" style="font-size: 11px; padding: 5px 10px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                            <span>Restock</span>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.promptPriceEdit('${item.id}')" style="font-size: 11px; padding: 5px 9px; border-radius: 12px;" title="Edit Purchase Rate">
+                                                            <span>Rate</span>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openItemAlertModal('${item.id}')" style="font-size: 11px; padding: 5px 9px; border-radius: 12px;" title="Set Safety Threshold">
+                                                            <span>Min</span>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Mobile Touch Card List (visible on screens < 768px) -->
+                        <div class="inv-stock-cards-grid">
+                            ${filteredMaterials.map(item => {
+                                const isOut = item.current_stock <= 0;
+                                const isLow = !isOut && item.current_stock <= item.min_threshold;
+                                const cardClass = isOut ? 'card-out' : (isLow ? 'card-low' : 'card-instock');
+                                const isExpanded = expandedItemRowIds.has(item.id);
+                                const expandedClass = isExpanded ? ' expanded' : '';
+
+                                const badgeHtml = isOut
+                                    ? `<span class="inv-badge-out"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> <span class="badge-text">Out of Stock</span></span>`
+                                    : (isLow
+                                        ? `<span class="inv-badge-low"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span class="badge-text">Low Stock</span></span>`
+                                        : `<span class="inv-badge-instock"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> <span class="badge-text">In Stock</span></span>`);
+
+                                const stockColor = isOut ? '#DC2626' : (isLow ? '#D97706' : '#143832');
+                                const unitLabel = item.consumption_unit || item.purchase_unit || 'units';
+
+                                return `
+                                    <div class="inv-stock-card ${cardClass}${expandedClass}" id="invItem-${item.id}" data-item-id="${item.id}">
+                                        <div class="inv-row-master" onclick="window.culinaryInventory.toggleItemRow('${item.id}', event)" role="button" tabindex="0">
+                                            <div class="inv-master-left">
+                                                <h4 class="inv-card-name">${escapeHtml(item.name)}</h4>
+                                            </div>
+                                            <div class="inv-master-right">
+                                                <div class="inv-master-stock inv-stock-qty-chip">
+                                                    <span class="inv-stock-qty" style="color: ${stockColor};">${item.current_stock}</span>
+                                                    <span class="inv-stock-unit">${escapeHtml(unitLabel)}</span>
+                                                </div>
+                                                <div class="inv-master-badge">${badgeHtml}</div>
+                                                <div class="inv-row-chevron">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="inv-row-drawer" id="invDrawer-${item.id}">
+                                            <div class="inv-drawer-inner">
+                                                <div class="inv-card-meta">
+                                                    <span>${escapeHtml(item.category || 'General')}</span>
+                                                    <span class="inv-card-sep">•</span>
+                                                    <span>${escapeHtml(item.supplier || 'Mandi Wholesale')}</span>
+                                                </div>
+                                                <div class="inv-card-levels-stacked" style="margin: 8px 0;">
+                                                    <div class="inv-level-row">
+                                                        <span>Safety Min:</span>
+                                                        <strong>${item.min_threshold} ${escapeHtml(unitLabel)}</strong>
+                                                    </div>
+                                                    <div class="inv-level-row">
+                                                        <span>Rate:</span>
+                                                        <strong>₹ ${item.cost_per_unit} / ${escapeHtml(item.purchase_unit || unitLabel)}</strong>
+                                                    </div>
+                                                </div>
+                                                <div class="inv-card-actions" style="display: flex; gap: 8px;">
+                                                    <button type="button" class="btn btn-primary" onclick="event.stopPropagation(); window.culinaryInventory.openRestockModal('${item.id}')" style="font-size: 11px; padding: 6px 12px; border-radius: 10px;">+ Restock</button>
+                                                    <button type="button" class="btn btn-outline" onclick="event.stopPropagation(); window.culinaryInventory.promptPriceEdit('${item.id}')" style="font-size: 11px; padding: 6px 10px; border-radius: 10px;">Rate</button>
+                                                    <button type="button" class="btn btn-outline" onclick="event.stopPropagation(); window.culinaryInventory.openItemAlertModal('${item.id}')" style="font-size: 11px; padding: 6px 10px; border-radius: 10px;">Min</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT COLUMN: Morning Prep Checklist & Quick Actions (Matching Inspiration Sidebar) -->
+                <div class="inv-sidebar-aside">
+                    <!-- 1. Morning Prep Checklist Card -->
+                    <div class="inv-prep-checklist-card">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <div>
+                                <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: #143832; display: flex; align-items: center; gap: 8px;">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/><path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/></svg>
+                                    <span>Morning Prep Checklist</span>
+                                </h3>
+                                <p style="margin: 2px 0 0 0; font-size: 11px; color: var(--text-muted);">Daily kitchen bases &amp; batch progress</p>
+                            </div>
+                            <span style="font-size: 11px; font-weight: 800; color: #166534; background: #DCFCE7; padding: 3px 8px; border-radius: 10px;">
+                                ${todayPrepCount}/${subRecipes.length} Done
+                            </span>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div style="background: #F1F5F9; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 14px;">
+                            <div style="width: ${prepPercent}%; height: 100%; background: #10B981; border-radius: 4px; transition: width 0.3s ease;"></div>
+                        </div>
+
+                        <!-- Checklist Items -->
+                        <div style="max-height: 260px; overflow-y: auto;">
+                            ${subRecipes.length === 0 ? `
+                                <div style="font-size: 11.5px; color: var(--text-muted); text-align: center; padding: 16px;">
+                                    No prep bases configured yet.
+                                </div>
+                            ` : subRecipes.slice(0, 6).map(sub => {
+                                const isDone = commissaryBatchHistory.some(b => b.subRecipeId === sub.id && b.date === 'Today');
+                                return `
+                                    <div class="inv-prep-task-item ${isDone ? 'completed' : ''}">
+                                        <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+                                            <span style="color: ${isDone ? '#10B981' : '#CBD5E1'}; flex-shrink: 0;">
+                                                ${isDone ? `
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                                ` : `
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                                                `}
+                                            </span>
+                                            <div style="min-width: 0;">
+                                                <div class="inv-prep-task-name" style="font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                                    ${escapeHtml(sub.name)}
+                                                </div>
+                                                <div style="font-size: 10.5px; color: var(--text-muted);">
+                                                    Target: ${sub.yield_quantity} ${escapeHtml(sub.yield_unit)} • Stock: ${sub.current_stock} ${escapeHtml(sub.yield_unit)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            ${isDone ? `
+                                                <span style="font-size: 10px; font-weight: 700; color: #166534; background: #DCFCE7; padding: 2px 6px; border-radius: 6px;">Done</span>
+                                            ` : `
+                                                <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.produceMorningBatch('${sub.id}', 1.0)" style="font-size: 10px; padding: 3px 8px; border-radius: 8px; font-weight: 700;">
+                                                    Prep
+                                                </button>
+                                            `}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+
+                        <div style="margin-top: 10px; text-align: center; border-top: 1px dashed #E2E8F0; padding-top: 8px;">
+                            <button type="button" onclick="switchInventoryHubTab('morning_batch')" style="background: none; border: none; font-size: 11px; font-weight: 700; color: var(--primary); cursor: pointer;">
+                                View Full Prep Production Suite →
+                            </button>
+                        </div>
                     </div>
 
-                    <!-- Retained hidden card elements for backward compatibility -->
-                    <div class="inv-stock-cards-grid" style="display: none;">
-                        ${filteredMaterials.length === 0 ? `
-                            <div style="grid-column: 1 / -1; text-align: center; padding: 36px 20px; color: var(--text-muted);">
-                                No ingredients match current search or category filter.
-                            </div>
-                        ` : filteredMaterials.map(item => {
-                            const isOut = item.current_stock <= 0;
-                            const isLow = !isOut && item.current_stock <= item.min_threshold;
-                            const cardClass = isOut ? 'card-out' : (isLow ? 'card-low' : '');
-                            const isExpanded = expandedItemRowIds.has(item.id);
-                            const expandedClass = isExpanded ? ' expanded' : '';
+                    <!-- 2. Quick Actions Card -->
+                    <div class="inv-quick-actions-card">
+                        <div style="font-size: 13px; font-weight: 800; color: #143832; margin-bottom: 12px; text-transform: uppercase;">
+                            Quick Operations
+                        </div>
+                        <button type="button" class="inv-quick-act-btn" onclick="openRestockExpenseModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            <span>Receive Stock / Purchase</span>
+                        </button>
+                        <button type="button" class="inv-quick-act-btn" onclick="window.culinaryInventory.openAddMaterialModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            <span>Add New Raw Material</span>
+                        </button>
+                        <button type="button" class="inv-quick-act-btn" onclick="window.culinaryInventory.openPurchaseOrderModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                            <span>Create Purchase Order (PO)</span>
+                        </button>
+                        <button type="button" class="inv-quick-act-btn" onclick="window.culinaryInventory.openLogWasteModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                            <span>Log Kitchen Wastage / Loss</span>
+                        </button>
+                    </div>
 
-                            const badgeHtml = isOut
-                                ? `<span class="inv-badge-out"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> <span class="badge-text">Out of Stock</span></span>`
-                                : (isLow
-                                    ? `<span class="inv-badge-low"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span class="badge-text">Low Stock</span></span>`
-                                    : `<span class="inv-badge-instock"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> <span class="badge-text">In Stock</span></span>`);
-
-                            const stockColor = isOut ? '#DC2626' : (isLow ? '#D97706' : '#143832');
-                            const unitLabel = item.consumption_unit || item.purchase_unit || 'units';
-
-                            return `
-                                <div class="inv-stock-card ${cardClass}${expandedClass}" id="invItem-${item.id}" data-item-id="${item.id}">
-                                    <!-- Master Row: Tap to toggle accordion on mobile (< 768px), header on desktop -->
-                                    <div class="inv-row-master" onclick="window.culinaryInventory.toggleItemRow('${item.id}', event)" role="button" tabindex="0" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="invDrawer-${item.id}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); window.culinaryInventory.toggleItemRow('${item.id}', event);}">
-                                        <div class="inv-master-left">
-                                            <h4 class="inv-card-name">${escapeHtml(item.name)}</h4>
-                                            <div class="inv-card-code desktop-only-inline">${escapeHtml(item.id)}</div>
-                                        </div>
-                                        <div class="inv-master-right">
-                                            <div class="inv-master-stock inv-stock-qty-chip">
-                                                <span class="inv-stock-qty" style="color: ${stockColor};">${item.current_stock}</span>
-                                                <span class="inv-stock-unit">${escapeHtml(unitLabel)}</span>
-                                            </div>
-                                            <div class="inv-master-badge">${badgeHtml}</div>
-                                            <div class="inv-row-chevron" aria-hidden="true">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Inline Accordion Details Drawer -->
-                                    <div class="inv-row-drawer" id="invDrawer-${item.id}">
-                                        <div class="inv-drawer-inner">
-                                            <div class="inv-card-meta">
-                                                <span class="inv-meta-tag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg> ${escapeHtml(item.category || 'General')}</span>
-                                                <span class="inv-card-sep">•</span>
-                                                <span class="inv-meta-supplier"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg> ${escapeHtml(item.supplier || 'Mandi Wholesale')}</span>
-                                                <span class="inv-card-sep mobile-code-sep">•</span>
-                                                <span class="inv-card-code mobile-code">${escapeHtml(item.id)}</span>
-                                            </div>
-
-                                            <div class="inv-card-levels-stacked">
-                                                <div class="inv-level-row desktop-only-flex">
-                                                    <span class="inv-level-label">Current Stock:</span>
-                                                    <span class="inv-level-value stock-highlight" style="color: ${stockColor};">
-                                                        ${item.current_stock} <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
-                                                    </span>
-                                                </div>
-                                                <div class="inv-level-row">
-                                                    <span class="inv-level-label">Safety Threshold:</span>
-                                                    <span class="inv-level-value">
-                                                        ${item.min_threshold} <span style="font-size: 10.5px; color: var(--text-muted);">${escapeHtml(unitLabel)}</span>
-                                                    </span>
-                                                </div>
-                                                <div class="inv-level-row">
-                                                    <span class="inv-level-label">Purchase Rate:</span>
-                                                    <span class="inv-level-value">
-                                                        ₹ ${item.cost_per_unit} <span style="font-size: 10px; color: var(--text-muted);">/ ${escapeHtml(item.purchase_unit || unitLabel)}</span>
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div class="inv-card-actions">
-                                                <button type="button" class="btn btn-primary btn-restock-quick" onclick="event.stopPropagation(); window.culinaryInventory.openRestockModal('${item.id}')">
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                                    <span>+ Restock</span>
-                                                </button>
-                                                <button type="button" class="btn btn-outline" onclick="event.stopPropagation(); window.culinaryInventory.promptPriceEdit('${item.id}')">
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
-                                                    <span>Rate</span>
-                                                </button>
-                                                <button type="button" class="btn btn-outline" onclick="event.stopPropagation(); window.culinaryInventory.openItemAlertModal('${item.id}')">
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                                                    <span>Min</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
+                    <!-- 3. Today's Prep Summary Card -->
+                    <div class="card" style="padding: 16px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.03);">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Today's Prep Summary</div>
+                        <div style="font-size: 20px; font-weight: 800; color: #143832; margin-top: 4px;">${todayPrepCount} Batches Prepared</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${prepPercent}% of daily commissary targets</div>
+                        <div style="margin-top: 10px;">
+                            <button type="button" class="btn btn-outline" onclick="switchInventoryHubTab('morning_batch')" style="width: 100%; font-size: 11px; padding: 6px; border-radius: 10px;">
+                                View Batch History Log
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -950,6 +1118,7 @@
                 name: r.dish_name,
                 category: r.menu_category || 'Main Course',
                 price: r.selling_price || 200,
+                image: r.image || r.image_url || '',
                 recipe: r
             }));
         }
@@ -961,6 +1130,7 @@
                 name: item.name,
                 category: item.category || 'General',
                 price: item.price || 0,
+                image: item.image || item.image_url || '',
                 recipe: recipe
             };
         });
@@ -1980,6 +2150,22 @@
             const grossProfit = Math.round((sellingPrice - foodCost) * 100) / 100;
             const grossMarginPct = sellingPrice > 0 ? Math.round(((sellingPrice - foodCost) / sellingPrice) * 1000) / 10 : 0;
 
+            // Find corresponding dish image
+            let dishImg = (recipe.image || recipe.image_url || '');
+            if (!dishImg && typeof getAllMenuDishes === 'function') {
+                const dishes = getAllMenuDishes();
+                const matched = dishes.find(d => String(d.id) === String(recipe.menu_item_id) || (d.name && recipe.dish_name && d.name.toLowerCase().trim() === recipe.dish_name.toLowerCase().trim()));
+                if (matched && (matched.image || matched.image_url)) {
+                    dishImg = matched.image || matched.image_url;
+                }
+            }
+            if (!dishImg && typeof getCuratedFoodPhoto === 'function') {
+                dishImg = getCuratedFoodPhoto(recipe.dish_name, recipe.menu_category);
+            }
+            if (!dishImg && typeof generateFallbackImage === 'function') {
+                dishImg = generateFallbackImage(recipe.dish_name, recipe.menu_category);
+            }
+
             return {
                 recipe_id: recipe.id,
                 dish_name: recipe.dish_name,
@@ -1988,7 +2174,8 @@
                 food_cost: foodCost,
                 gross_profit: grossProfit,
                 gross_margin_pct: grossMarginPct,
-                components: compsBreakdown
+                components: compsBreakdown,
+                image: dishImg
             };
         });
 
@@ -2122,10 +2309,17 @@
                     <div class="inv-costing-grid">
                         ${costingData.map(c => `
                             <div class="inv-recipe-card">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-                                    <div>
-                                        <div style="font-size: 15px; font-weight: 800; color: var(--text-dark);">${escapeHtml(c.dish_name)}</div>
-                                        <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(c.category)} • Selling: <strong>₹ ${c.selling_price}</strong></div>
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 10px;">
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <img src="${c.image || (typeof generateFallbackImage === 'function' ? generateFallbackImage(c.dish_name, c.category) : 'assets/default-food.png')}"
+                                             alt="${escapeHtml(c.dish_name)}"
+                                             loading="lazy"
+                                             onerror="this.onerror=null; this.src=(typeof generateFallbackImage === 'function' ? generateFallbackImage('${escapeHtml(c.dish_name)}', '${escapeHtml(c.category)}') : 'assets/default-food.png');"
+                                             style="width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                        <div>
+                                            <div style="font-size: 15px; font-weight: 800; color: var(--text-dark);">${escapeHtml(c.dish_name)}</div>
+                                            <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(c.category)} • Selling: <strong>₹ ${c.selling_price}</strong></div>
+                                        </div>
                                     </div>
                                     <span class="inv-margin-badge ${c.gross_margin_pct >= 65 ? 'inv-margin-healthy' : (c.gross_margin_pct >= 50 ? 'inv-margin-moderate' : 'inv-margin-low')}" style="font-size: 10px;">
                                         ${c.gross_margin_pct.toFixed(1)}%
@@ -2162,6 +2356,11 @@
         `;
     }
     window.renderDishCostingTab = renderDishCostingTab;
+
+    function renderDishRecipes(container) {
+        return renderDishCostingTab(container);
+    }
+    window.renderDishRecipes = renderDishRecipes;
 
     // --- TAB 4: CENTRAL KITCHEN & INTER-OUTLET TRANSFERS ---
     function renderCentralKitchenTab(container) {
@@ -2800,6 +2999,624 @@
         }
     }
 
+
+    // ============================================================
+    // 📦 MODAL CONTROLLERS & ACTIONS
+    // ============================================================
+
+    // --- 1. ADD RAW MATERIAL MODAL ---
+    function openAddMaterialModal() {
+        const modal = document.getElementById('invAddMaterialModal');
+        if (!modal) return;
+        const form = document.getElementById('invAddMaterialForm');
+        if (form) form.reset();
+        modal.style.display = 'flex';
+    }
+
+    function closeAddMaterialModal() {
+        const modal = document.getElementById('invAddMaterialModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function syncUnitDefaults() {
+        const pUnit = document.getElementById('newMatPurchaseUnit')?.value || 'kg';
+        const cUnitSelect = document.getElementById('newMatConsumptionUnit');
+        const factorInput = document.getElementById('newMatConversionFactor');
+        if (!cUnitSelect || !factorInput) return;
+
+        if (pUnit === 'kg') {
+            cUnitSelect.value = 'kg';
+            factorInput.value = '1';
+        } else if (pUnit === 'Litre') {
+            cUnitSelect.value = 'Litre';
+            factorInput.value = '1';
+        } else if (pUnit === '750ml Bottle') {
+            cUnitSelect.value = 'ml';
+            factorInput.value = '750';
+        } else if (pUnit === '50L Keg') {
+            cUnitSelect.value = 'ml';
+            factorInput.value = '50000';
+        } else if (pUnit === 'units' || pUnit === 'Pack') {
+            cUnitSelect.value = 'units';
+            factorInput.value = '1';
+        }
+    }
+
+    async function submitAddMaterial() {
+        const name = (document.getElementById('newMatName')?.value || '').trim();
+        if (!name) {
+            if (typeof showToast === 'function') showToast('⚠️ Material name is required');
+            return;
+        }
+
+        let id = (document.getElementById('newMatId')?.value || '').trim();
+        if (!id) {
+            id = 'RM-' + name.toUpperCase().replace(/[^A-Z0-9]/g, '-').slice(0, 14);
+        }
+
+        const category = document.getElementById('newMatCategory')?.value || 'Produce';
+        const supplier = (document.getElementById('newMatSupplier')?.value || 'Local Mandi').trim();
+        const purchase_unit = document.getElementById('newMatPurchaseUnit')?.value || 'kg';
+        const consumption_unit = document.getElementById('newMatConsumptionUnit')?.value || 'kg';
+        const conversion_factor = parseFloat(document.getElementById('newMatConversionFactor')?.value || '1') || 1;
+        const current_stock = parseFloat(document.getElementById('newMatInitialStock')?.value || '0') || 0;
+        const min_threshold = parseFloat(document.getElementById('newMatMinThreshold')?.value || '2') || 2;
+        const cost_per_unit = parseFloat(document.getElementById('newMatCostPerUnit')?.value || '0') || 0;
+
+        const newMaterial = {
+            id,
+            name,
+            category,
+            supplier,
+            purchase_unit,
+            consumption_unit,
+            conversion_factor,
+            current_stock,
+            min_threshold,
+            cost_per_unit,
+            unit_type: 'raw'
+        };
+
+        const existingIdx = rawMaterials.findIndex(m => m.id === id);
+        if (existingIdx !== -1) {
+            rawMaterials[existingIdx] = newMaterial;
+        } else {
+            rawMaterials.unshift(newMaterial);
+        }
+
+        persistLocalSnapshot();
+
+        try {
+            await fetch('/api/inventory/raw-materials', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newMaterial)
+            });
+        } catch (e) {
+            console.warn('[Culinary] Added material offline:', e);
+        }
+
+        closeAddMaterialModal();
+        renderRawStockTab();
+        renderInventoryTelemetryUI();
+        if (typeof showToast === 'function') showToast(`✓ Added "${name}" to raw inventory!`);
+    }
+
+    // --- 2. RECIPE DETAIL & FOOD COST MODAL ---
+    let activeRecipeDetailDish = null;
+
+    function openRecipeDetailModal(dishId) {
+        const dishes = getAllMenuDishes();
+        const dish = dishes.find(d => String(d.id) === String(dishId)) || dishes[0];
+        if (!dish) return;
+
+        activeRecipeDetailDish = dish;
+        const modal = document.getElementById('invRecipeDetailModal');
+        if (!modal) return;
+
+        // Populate header & photo
+        const titleEl = document.getElementById('recDetailModalTitle');
+        if (titleEl) titleEl.textContent = dish.name;
+        const catEl = document.getElementById('recDetailModalCategory');
+        if (catEl) catEl.textContent = `${dish.category || 'Main Course'} • 1 Portion Yield`;
+        const dishNameEl = document.getElementById('recDetailDishName');
+        if (dishNameEl) dishNameEl.textContent = dish.name;
+
+        const heroImg = document.getElementById('recDetailHeroImg');
+        if (heroImg) {
+            const photoUrl = dish.image || dish.image_url || (typeof getCuratedFoodPhoto === 'function' ? getCuratedFoodPhoto(dish.name, dish.category) : '') || (typeof generateFallbackImage === 'function' ? generateFallbackImage(dish.name, dish.category) : 'assets/default-food.png');
+            heroImg.src = photoUrl;
+            heroImg.onerror = function() {
+                this.onerror = null;
+                this.src = (typeof generateFallbackImage === 'function' ? generateFallbackImage(dish.name, dish.category) : 'assets/default-food.png');
+            };
+        }
+
+        const priceEl = document.getElementById('recDetailPrice');
+        if (priceEl) priceEl.textContent = `₹ ${(dish.price || 0).toFixed(2)}`;
+
+        // Render ingredients table
+        renderRecipeDetailIngredients(dish);
+        recalcRecipeDetailMargin();
+        modal.style.display = 'flex';
+    }
+
+    function closeRecipeDetailModal() {
+        const modal = document.getElementById('invRecipeDetailModal');
+        if (modal) modal.style.display = 'none';
+        activeRecipeDetailDish = null;
+    }
+
+    function renderRecipeDetailIngredients(dish) {
+        const tbody = document.getElementById('recDetailIngredientsTbody');
+        if (!tbody) return;
+
+        const rec = dish.recipe;
+        let components = [];
+        if (rec && Array.isArray(rec.components) && rec.components.length > 0) {
+            components = rec.components;
+        } else {
+            // Default breakdown for standard cafe dishes
+            components = [
+                { id: 'RM-OIL', quantity: 0.02, unit: 'Litre', type: 'raw' },
+                { id: 'RM-ONION', quantity: 0.05, unit: 'kg', type: 'raw' }
+            ];
+        }
+
+        tbody.innerHTML = components.map((c, idx) => {
+            let itemName = c.name || c.id;
+            let unitCost = 0;
+            const rm = rawMaterials.find(m => m.id === c.id);
+            const sub = subRecipes.find(s => s.id === c.id);
+            if (rm) {
+                itemName = rm.name;
+                unitCost = rm.cost_per_unit || 0;
+            } else if (sub) {
+                itemName = sub.name;
+                unitCost = sub.unit_production_cost || 100;
+            }
+            const qty = c.exact_quantity || c.quantity || 0.1;
+            const contrib = Math.round(qty * unitCost * 100) / 100;
+
+            return `
+                <tr data-row-idx="${idx}">
+                    <td style="padding: 8px 10px;">
+                        <select class="rec-ing-select form-input" onchange="window.culinaryInventory.recalcRecipeDetailMargin()" style="width: 100%; font-size: 11.5px; padding: 4px 6px;">
+                            <optgroup label="Semi-Finished Bases">
+                                ${subRecipes.map(s => `<option value="${s.id}" ${s.id === c.id ? 'selected' : ''}>${escapeHtml(s.name)} (₹ ${s.unit_production_cost}/${s.yield_unit})</option>`).join('')}
+                            </optgroup>
+                            <optgroup label="Raw Materials">
+                                ${rawMaterials.map(m => `<option value="${m.id}" ${m.id === c.id ? 'selected' : ''}>${escapeHtml(m.name)} (₹ ${m.cost_per_unit}/${m.purchase_unit})</option>`).join('')}
+                            </optgroup>
+                        </select>
+                    </td>
+                    <td style="padding: 8px 10px;">
+                        <input type="number" class="rec-ing-qty form-input" value="${qty}" step="0.005" min="0" oninput="window.culinaryInventory.recalcRecipeDetailMargin()" style="width: 70px; font-size: 12px; font-weight: 700; padding: 4px 6px;">
+                        <span style="font-size: 10px; color: var(--text-muted);">${c.unit || 'units'}</span>
+                    </td>
+                    <td style="padding: 8px 10px; font-size: 11px; color: var(--text-muted);" class="rec-ing-rate">
+                        ₹ ${unitCost.toFixed(2)}
+                    </td>
+                    <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #143832;" class="rec-ing-contrib">
+                        ₹ ${contrib.toFixed(2)}
+                    </td>
+                    <td style="padding: 8px 6px; text-align: center;">
+                        <button type="button" onclick="window.culinaryInventory.removeRecipeDetailRow(this)" style="background: none; border: none; color: #EF4444; cursor: pointer; padding: 2px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function addRecipeDetailRow() {
+        const tbody = document.getElementById('recDetailIngredientsTbody');
+        if (!tbody) return;
+        const newRow = document.createElement('tr');
+        const defaultMat = rawMaterials[0] || { id: 'RM-OIL', name: 'Cooking Oil', cost_per_unit: 135, purchase_unit: 'Litre' };
+        newRow.innerHTML = `
+            <td style="padding: 8px 10px;">
+                <select class="rec-ing-select form-input" onchange="window.culinaryInventory.recalcRecipeDetailMargin()" style="width: 100%; font-size: 11.5px; padding: 4px 6px;">
+                    <optgroup label="Semi-Finished Bases">
+                        ${subRecipes.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (₹ ${s.unit_production_cost}/${s.yield_unit})</option>`).join('')}
+                    </optgroup>
+                    <optgroup label="Raw Materials">
+                        ${rawMaterials.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (₹ ${m.cost_per_unit}/${m.purchase_unit})</option>`).join('')}
+                    </optgroup>
+                </select>
+            </td>
+            <td style="padding: 8px 10px;">
+                <input type="number" class="rec-ing-qty form-input" value="0.1" step="0.005" min="0" oninput="window.culinaryInventory.recalcRecipeDetailMargin()" style="width: 70px; font-size: 12px; font-weight: 700; padding: 4px 6px;">
+                <span style="font-size: 10px; color: var(--text-muted);">${defaultMat.purchase_unit || 'units'}</span>
+            </td>
+            <td style="padding: 8px 10px; font-size: 11px; color: var(--text-muted);" class="rec-ing-rate">
+                ₹ ${(defaultMat.cost_per_unit || 0).toFixed(2)}
+            </td>
+            <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #143832;" class="rec-ing-contrib">
+                ₹ 0.00
+            </td>
+            <td style="padding: 8px 6px; text-align: center;">
+                <button type="button" onclick="window.culinaryInventory.removeRecipeDetailRow(this)" style="background: none; border: none; color: #EF4444; cursor: pointer; padding: 2px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(newRow);
+        recalcRecipeDetailMargin();
+    }
+
+    function removeRecipeDetailRow(btn) {
+        const row = btn.closest('tr');
+        if (row) {
+            row.remove();
+            recalcRecipeDetailMargin();
+        }
+    }
+
+    function recalcRecipeDetailMargin() {
+        const tbody = document.getElementById('recDetailIngredientsTbody');
+        if (!tbody || !activeRecipeDetailDish) return;
+
+        let totalCost = 0;
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach(row => {
+            const select = row.querySelector('.rec-ing-select');
+            const qtyInput = row.querySelector('.rec-ing-qty');
+            const rateEl = row.querySelector('.rec-ing-rate');
+            const contribEl = row.querySelector('.rec-ing-contrib');
+
+            const itemId = select?.value;
+            const qty = parseFloat(qtyInput?.value || '0') || 0;
+
+            let rate = 0;
+            const rm = rawMaterials.find(m => m.id === itemId);
+            const sub = subRecipes.find(s => s.id === itemId);
+            if (rm) rate = rm.cost_per_unit || 0;
+            else if (sub) rate = sub.unit_production_cost || 100;
+
+            const lineCost = Math.round(qty * rate * 100) / 100;
+            totalCost += lineCost;
+
+            if (rateEl) rateEl.textContent = `₹ ${rate.toFixed(2)}`;
+            if (contribEl) contribEl.textContent = `₹ ${lineCost.toFixed(2)}`;
+        });
+
+        const yieldInput = document.getElementById('recDetailYieldInput');
+        const yieldVal = Math.max(1, parseInt(yieldInput?.value || '1', 10));
+        const portionCost = Math.round((totalCost / yieldVal) * 100) / 100;
+
+        const sellingPrice = activeRecipeDetailDish.price || 200;
+        const grossProfit = Math.max(0, Math.round((sellingPrice - portionCost) * 100) / 100);
+        const marginPct = sellingPrice > 0 ? Math.round((grossProfit / sellingPrice) * 1000) / 10 : 0;
+
+        const costEl = document.getElementById('recDetailCost');
+        if (costEl) costEl.textContent = `₹ ${portionCost.toFixed(2)}`;
+
+        const profitEl = document.getElementById('recDetailProfit');
+        if (profitEl) profitEl.textContent = `₹ ${grossProfit.toFixed(2)}`;
+
+        const marginEl = document.getElementById('recDetailMargin');
+        if (marginEl) {
+            marginEl.textContent = `${marginPct}%`;
+            marginEl.style.color = marginPct >= 65 ? '#166534' : (marginPct >= 50 ? '#D97706' : '#DC2626');
+        }
+    }
+
+    async function saveRecipeDetailChanges() {
+        if (!activeRecipeDetailDish) return;
+        const tbody = document.getElementById('recDetailIngredientsTbody');
+        if (!tbody) return;
+
+        const components = [];
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach(row => {
+            const select = row.querySelector('.rec-ing-select');
+            const qtyInput = row.querySelector('.rec-ing-qty');
+            const itemId = select?.value;
+            const qty = parseFloat(qtyInput?.value || '0') || 0;
+            if (itemId && qty > 0) {
+                const isSub = itemId.startsWith('SUB-');
+                components.push({
+                    id: itemId,
+                    type: isSub ? 'sub_recipe' : 'raw',
+                    exact_quantity: qty,
+                    quantity: qty,
+                    unit: isSub ? 'Litre' : 'kg'
+                });
+            }
+        });
+
+        const yieldInput = document.getElementById('recDetailYieldInput');
+        const yieldVal = Math.max(1, parseInt(yieldInput?.value || '1', 10));
+
+        let existingRec = recipes.find(r => String(r.menu_item_id) === String(activeRecipeDetailDish.id) || String(r.id) === String(activeRecipeDetailDish.id));
+        if (!existingRec) {
+            existingRec = {
+                id: 'REC-' + String(activeRecipeDetailDish.id),
+                menu_item_id: activeRecipeDetailDish.id,
+                dish_name: activeRecipeDetailDish.name,
+                selling_price: activeRecipeDetailDish.price || 200,
+                components: []
+            };
+            recipes.push(existingRec);
+        }
+
+        existingRec.components = components;
+        existingRec.yield_quantity = yieldVal;
+
+        try {
+            await fetch('/api/inventory/save-recipe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dishId: activeRecipeDetailDish.id,
+                    recipe: existingRec
+                })
+            });
+        } catch (e) {
+            console.warn('[Culinary] Recipe saved offline:', e);
+        }
+
+        closeRecipeDetailModal();
+        renderDishCostingTab();
+        renderInventoryTelemetryUI();
+        if (typeof showToast === 'function') showToast(`✓ Updated recipe for ${activeRecipeDetailDish.name}!`);
+    }
+
+    // --- 3. LOG WASTE & LOSS AUDIT MODAL ---
+    function openLogWasteModal() {
+        const modal = document.getElementById('invLogWasteModal');
+        if (!modal) return;
+
+        const select = document.getElementById('wasteItemSelect');
+        if (select) {
+            select.innerHTML = [
+                ...rawMaterials.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (Current: ${m.current_stock} ${m.consumption_unit})</option>`),
+                ...subRecipes.map(s => `<option value="${s.id}">[Base] ${escapeHtml(s.name)} (Current: ${s.current_stock} ${s.yield_unit})</option>`)
+            ].join('');
+        }
+        recalcWasteCost();
+        modal.style.display = 'flex';
+    }
+
+    function closeLogWasteModal() {
+        const modal = document.getElementById('invLogWasteModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function recalcWasteCost() {
+        const select = document.getElementById('wasteItemSelect');
+        const qtyInput = document.getElementById('wasteQtyInput');
+        const lossEl = document.getElementById('wasteFinancialLoss');
+        if (!select || !qtyInput || !lossEl) return;
+
+        const id = select.value;
+        const qty = parseFloat(qtyInput.value || '0') || 0;
+
+        let unitCost = 0;
+        const rm = rawMaterials.find(m => m.id === id);
+        const sub = subRecipes.find(s => s.id === id);
+        if (rm) unitCost = rm.cost_per_unit || 0;
+        else if (sub) unitCost = sub.unit_production_cost || 100;
+
+        const totalLoss = Math.round(qty * unitCost * 100) / 100;
+        lossEl.textContent = `₹ ${totalLoss.toFixed(2)}`;
+    }
+
+    async function submitLogWaste() {
+        const select = document.getElementById('wasteItemSelect');
+        const qtyInput = document.getElementById('wasteQtyInput');
+        const reasonSelect = document.getElementById('wasteReasonSelect');
+        if (!select || !qtyInput) return;
+
+        const id = select.value;
+        const qty = parseFloat(qtyInput.value || '0') || 0;
+        const reason = reasonSelect?.value || 'Spoilage';
+
+        if (qty <= 0) {
+            if (typeof showToast === 'function') showToast('⚠️ Enter a valid wasted quantity');
+            return;
+        }
+
+        let unitCost = 0;
+        let itemName = id;
+        let unitLabel = 'units';
+        const rm = rawMaterials.find(m => m.id === id);
+        const sub = subRecipes.find(s => s.id === id);
+        if (rm) {
+            rm.current_stock = Math.max(0, Math.round((rm.current_stock - qty) * 100) / 100);
+            unitCost = rm.cost_per_unit || 0;
+            itemName = rm.name;
+            unitLabel = rm.consumption_unit;
+        } else if (sub) {
+            sub.current_stock = Math.max(0, Math.round((sub.current_stock - qty) * 100) / 100);
+            unitCost = sub.unit_production_cost || 100;
+            itemName = sub.name;
+            unitLabel = sub.yield_unit;
+        }
+
+        const totalLoss = Math.round(qty * unitCost * 100) / 100;
+        if (!wastage.history) wastage.history = [];
+        wastage.history.unshift({
+            date: 'Today',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            item: itemName,
+            quantity: `${qty} ${unitLabel}`,
+            reason: reason,
+            monetary_loss: totalLoss
+        });
+        wastage.total_loss_inr = (wastage.total_loss_inr || 0) + totalLoss;
+
+        persistLocalSnapshot();
+
+        try {
+            await fetch('/api/inventory/wastage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ materialId: id, quantity: qty, reason })
+            });
+        } catch (e) {
+            console.warn('[Culinary] Wastage logged offline:', e);
+        }
+
+        closeLogWasteModal();
+        renderActiveHubTab();
+        renderInventoryTelemetryUI();
+        if (typeof showToast === 'function') showToast(`🗑️ Recorded ₹ ${totalLoss.toFixed(2)} wastage loss for ${itemName}.`);
+    }
+
+    // --- 4. PURCHASE ORDER MODAL ---
+    function openPurchaseOrderModal() {
+        const modal = document.getElementById('invPurchaseOrderModal');
+        if (!modal) return;
+
+        const suppliers = Array.from(new Set(rawMaterials.map(m => m.supplier || 'Mandi Wholesale').filter(Boolean)));
+        const select = document.getElementById('poSupplierSelect');
+        if (select) {
+            select.innerHTML = suppliers.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+        }
+        renderPoItemsForSupplier();
+        modal.style.display = 'flex';
+    }
+
+    function closePurchaseOrderModal() {
+        const modal = document.getElementById('invPurchaseOrderModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function renderPoItemsForSupplier() {
+        const select = document.getElementById('poSupplierSelect');
+        const tbody = document.getElementById('poItemsTbody');
+        if (!select || !tbody) return;
+
+        const supplier = select.value;
+        const items = rawMaterials.filter(m => (m.supplier || 'Mandi Wholesale') === supplier);
+
+        if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="padding: 16px; text-align: center; color: var(--text-muted);">No materials assigned to this supplier.</td></tr>';
+            recalcPoTotal();
+            return;
+        }
+
+        tbody.innerHTML = items.map((item, idx) => {
+            const isLow = item.current_stock <= item.min_threshold;
+            const suggested = Math.max(1, Math.ceil(item.min_threshold * 2.5 - item.current_stock));
+            const estCost = Math.round(suggested * item.cost_per_unit * 100) / 100;
+
+            return `
+                <tr data-po-id="${item.id}">
+                    <td style="padding: 8px 10px;">
+                        <div style="font-weight: 700; color: var(--text-dark);">${escapeHtml(item.name)}</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">${escapeHtml(item.id)}</div>
+                    </td>
+                    <td style="padding: 8px 10px; font-size: 11.5px;">
+                        <span style="color: ${isLow ? '#DC2626' : '#143832'}; font-weight: 700;">${item.current_stock}</span> / ${item.min_threshold} ${item.purchase_unit}
+                    </td>
+                    <td style="padding: 8px 10px;">
+                        <input type="number" class="po-qty-input form-input" data-rate="${item.cost_per_unit}" value="${suggested}" min="0" step="any" oninput="window.culinaryInventory.recalcPoTotal()" style="width: 70px; padding: 4px 6px; font-weight: 700; font-size: 12px;">
+                        <span style="font-size: 10px; color: var(--text-muted);">${item.purchase_unit}</span>
+                    </td>
+                    <td style="padding: 8px 10px; text-align: right; font-weight: 800; color: #143832;" class="po-line-cost">
+                        ₹ ${estCost.toFixed(2)}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        recalcPoTotal();
+    }
+
+    function recalcPoTotal() {
+        const tbody = document.getElementById('poItemsTbody');
+        const totalEl = document.getElementById('poTotalEstimatedValue');
+        if (!tbody || !totalEl) return;
+
+        let total = 0;
+        const rows = tbody.querySelectorAll('tr[data-po-id]');
+        rows.forEach(row => {
+            const input = row.querySelector('.po-qty-input');
+            const costCell = row.querySelector('.po-line-cost');
+            const rate = parseFloat(input?.getAttribute('data-rate') || '0') || 0;
+            const qty = parseFloat(input?.value || '0') || 0;
+            const line = Math.round(qty * rate * 100) / 100;
+            total += line;
+            if (costCell) costCell.textContent = `₹ ${line.toFixed(2)}`;
+        });
+        totalEl.textContent = `₹ ${total.toFixed(2)}`;
+    }
+
+    function sharePoWhatsApp() {
+        const select = document.getElementById('poSupplierSelect');
+        const supplier = select ? select.value : 'Wholesale Supplier';
+        const tbody = document.getElementById('poItemsTbody');
+        if (!tbody) return;
+
+        let itemsText = '';
+        let total = 0;
+        const rows = tbody.querySelectorAll('tr[data-po-id]');
+        rows.forEach(row => {
+            const id = row.getAttribute('data-po-id');
+            const item = rawMaterials.find(m => m.id === id);
+            const input = row.querySelector('.po-qty-input');
+            const qty = parseFloat(input?.value || '0') || 0;
+            if (qty > 0 && item) {
+                const line = Math.round(qty * item.cost_per_unit * 100) / 100;
+                total += line;
+                itemsText += `• ${item.name}: ${qty} ${item.purchase_unit} @ ₹ ${item.cost_per_unit} = ₹ ${line.toFixed(2)}\n`;
+            }
+        });
+
+        const msg = `*PURCHASE ORDER - Billnaw Cafe*\n*Supplier:* ${supplier}\n*Date:* ${new Date().toLocaleDateString()}\n\n*Required Items:*\n${itemsText}\n*Total Estimated:* ₹ ${total.toFixed(2)}\n\nPlease confirm delivery time. Thank you!`;
+        const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+        window.open(waUrl, '_blank');
+        if (typeof showToast === 'function') showToast('📱 Opening WhatsApp with PO draft...');
+    }
+
+    async function savePurchaseOrder() {
+        const select = document.getElementById('poSupplierSelect');
+        const supplier = select ? select.value : 'Wholesale Supplier';
+        const tbody = document.getElementById('poItemsTbody');
+        if (!tbody) return;
+
+        const items = [];
+        let total = 0;
+        const rows = tbody.querySelectorAll('tr[data-po-id]');
+        rows.forEach(row => {
+            const id = row.getAttribute('data-po-id');
+            const item = rawMaterials.find(m => m.id === id);
+            const input = row.querySelector('.po-qty-input');
+            const qty = parseFloat(input?.value || '0') || 0;
+            if (qty > 0 && item) {
+                const line = Math.round(qty * item.cost_per_unit * 100) / 100;
+                total += line;
+                items.push({ material_id: id, name: item.name, quantity: qty, unit: item.purchase_unit, cost: line });
+            }
+        });
+
+        const newPo = {
+            id: 'PO-' + Date.now().toString().slice(-5),
+            supplier,
+            date: 'Today',
+            items,
+            total_amount: total,
+            status: 'Draft / Sent to Supplier'
+        };
+        purchaseOrders.unshift(newPo);
+
+        try {
+            await fetch('/api/inventory/purchase-orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newPo)
+            });
+        } catch (e) {
+            console.warn('[Culinary] PO saved offline:', e);
+        }
+
+        closePurchaseOrderModal();
+        if (typeof showToast === 'function') showToast(`✓ Purchase Order ${newPo.id} created for ${supplier}!`);
+    }
+
     // Public API
     window.culinaryInventory = {
         init: loadAllInventoryData,
@@ -2847,7 +3664,29 @@
         getCoreStaples,
         getAllMenuDishes,
         registerNewDishRecipe,
-        toggleItemRow
+        toggleItemRow,
+        // Upgraded Modals & Actions
+        openAddMaterialModal,
+        closeAddMaterialModal,
+        submitAddMaterial,
+        syncUnitDefaults,
+        openRecipeDetailModal,
+        closeRecipeDetailModal,
+        recalcRecipeDetailMargin,
+        addRecipeDetailRow,
+        removeRecipeDetailRow,
+        saveRecipeDetailChanges,
+        openLogWasteModal,
+        closeLogWasteModal,
+        recalcWasteCost,
+        submitLogWaste,
+        openPurchaseOrderModal,
+        closePurchaseOrderModal,
+        renderPoItemsForSupplier,
+        recalcPoTotal,
+        sharePoWhatsApp,
+        savePurchaseOrder,
+        renderDishRecipes
     };
 
     window.toggleItemRow = toggleItemRow;
@@ -2858,6 +3697,7 @@
     window.renderRawStockTab = renderRawStockTab;
     window.renderMorningPrepTab = renderMorningPrepTab;
     window.renderDishCostingTab = renderDishCostingTab;
+    window.renderDishRecipes = renderDishRecipes;
     window.openRestockModal = openRestockModal;
     window.closeRestockModal = closeRestockModal;
     window.submitRestockExpense = submitRestockExpense;

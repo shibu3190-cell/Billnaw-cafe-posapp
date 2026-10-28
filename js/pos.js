@@ -223,7 +223,7 @@ function addToCart(itemId, event) {
     if(!menuItem || !tInfo) return;
     const existing = tInfo.items.find(i => i.id === itemId);
     if (menuItem.trackStock && (existing ? existing.qty + 1 : 1) > menuItem.stockQty) return showToast(`Only ${menuItem.stockQty} left!`);
-    if(existing) existing.qty++; else tInfo.items.push({ id: menuItem.id, name: menuItem.name, price: menuItem.price, gstRate: menuItem.gstRate, qty: 1 });
+    if(existing) existing.qty++; else tInfo.items.push({ id: menuItem.id, name: menuItem.name, price: menuItem.price, gstRate: menuItem.gstRate, qty: 1, image: menuItem.image || menuItem.image_url || '' });
     if(tInfo.status === 'empty' || tInfo.status === 'booked' || !tInfo.status) tInfo.status = 'occupied'; 
     if(!tInfo.savedTime) tInfo.savedTime = Date.now();
     persistTables(); 
@@ -550,7 +550,27 @@ function updateCartUI() {
     } else {
         currentCart.forEach((item) => {
             let itemTotal = item.price * item.qty;
-            cartDiv.innerHTML += `<div class="cart-item"><div class="cart-item-top"><span class="cart-item-name">${escapeHtml(item.name)}</span><span class="cart-item-price">₹ ${itemTotal.toFixed(2)}</span></div><div class="cart-item-bottom"><span class="cart-item-math">₹ ${item.price.toFixed(2)} each</span><div class="qty-pill"><button onclick="modifyQty(${item.id}, -1)">-</button><span>${item.qty}</span><button onclick="modifyQty(${item.id}, 1)">+</button></div></div></div>`;
+            const menuItem = (Array.isArray(window.menuItems) ? window.menuItems : []).find(m => String(m.id) === String(item.id));
+            const itemImg = item.image || item.image_url || (menuItem && (menuItem.image || menuItem.image_url)) || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category || (menuItem && menuItem.category)) : '') || '';
+            const fallbackSrc = typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category || (menuItem && menuItem.category) || '') : 'assets/default-food.png';
+            const finalThumbSrc = itemImg || fallbackSrc;
+            const thumbHtml = `<img src="${finalThumbSrc}" alt="${escapeHtml(item.name)}" class="cart-item-thumb" loading="lazy" onerror="this.onerror=null; this.src='${fallbackSrc}';">`;
+
+            cartDiv.innerHTML += `<div class="cart-item">
+                ${thumbHtml}
+                <div class="cart-item-info">
+                    <div class="cart-item-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+                    <div class="cart-item-math">₹ ${item.price.toFixed(2)} each</div>
+                </div>
+                <div class="cart-item-right">
+                    <span class="cart-item-price">₹ ${itemTotal.toFixed(2)}</span>
+                    <div class="qty-pill">
+                        <button type="button" onclick="modifyQty(${item.id}, -1, event)" aria-label="Decrease quantity">-</button>
+                        <span>${item.qty}</span>
+                        <button type="button" onclick="modifyQty(${item.id}, 1, event)" aria-label="Increase quantity">+</button>
+                    </div>
+                </div>
+            </div>`;
         });
     }
     
@@ -1440,6 +1460,11 @@ async function connectBluetoothPrinter() {
 }
 window.connectBluetoothPrinter = connectBluetoothPrinter;
 
+/**
+ * Non-Blocking ESC/POS Thermal Receipt Generator
+ * Strictly transmits text-only ESC/POS commands with zero raster graphics overhead for food images.
+ * Food photography is completely omitted from thermal transmission to guarantee 0ms print queue delay.
+ */
 async function sendEscPosToPrinter(order) {
     let gstSummary = {}; 
     const gstMode = order.gstMode || getStoreGstConfig().mode;
@@ -1655,6 +1680,10 @@ async function sendEscPosToPrinter(order) {
 }
 window.sendEscPosToPrinter = sendEscPosToPrinter;
 
+/**
+ * Non-Blocking Kitchen Order Ticket (KOT) Generator
+ * Strictly text-only ESC/POS command stream with zero raster graphics overhead.
+ */
 async function sendKotToPrinter(tableNo, items) {
     const billerName = (currentStaff && currentStaff.name) ? currentStaff.name : 'Admin';
     const billerRole = (currentStaff && currentStaff.role) ? currentStaff.role : 'Server';
@@ -2039,3 +2068,90 @@ function toggleNotificationDrawer(openState) {
 }
 window.toggleNotificationDrawer = toggleNotificationDrawer;
 window.closeNotificationDrawer = () => toggleNotificationDrawer(false);
+
+// ============================================================================
+// POS Catalog Tiles, Item Cards & Search Filtering with Lazy Loading & Fallbacks
+// ============================================================================
+
+/**
+ * Render a single POS catalog tile / item card with lazy loading and instant SVG onerror fallback.
+ */
+function renderCatalogTile(item) {
+    if (!item) return '';
+    const thumbSrc = item.image || item.image_url || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : (typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category) : 'assets/default-food.png'));
+    const fallbackSrc = typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category || '') : 'assets/default-food.png';
+    const popularBadge = item.badge ? `<div class="badge-popular">${escapeHtml(item.badge)}</div>` : '';
+    const stockBadge = item.trackStock && item.stockQty <= 5 && item.stockQty > 0 
+        ? `<div class="stock-badge low">${item.stockQty} left</div>` 
+        : (item.trackStock && item.stockQty > 5 ? `<div class="stock-badge">${item.stockQty} left</div>` : '');
+
+    return `
+    <div class="menu-card clean-item-card" onclick="addToCart(${item.id}, event)">
+        <div class="card-img-wrapper">
+            <img src="${thumbSrc}" class="card-img" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.onerror=null; this.src='${fallbackSrc}';">
+            ${popularBadge}
+            ${stockBadge}
+        </div>
+        <div class="card-content">
+            <div class="card-top-row">
+                <span class="cat-label">${escapeHtml(item.category || 'General')}</span>
+                ${item.trackStock && item.stockQty > 0 ? `<span class="stock-pill">+${item.stockQty}pc</span>` : ''}
+            </div>
+            <div class="name">${escapeHtml(item.name)}</div>
+            <div class="card-bottom-row">
+                <div class="card-price-col">
+                    <span class="price">₹ ${item.price}</span>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+window.renderCatalogTile = renderCatalogTile;
+
+/**
+ * Filter POS catalog items by search term and category.
+ */
+function filterPosCatalogItems(searchTerm, category = 'All') {
+    const term = (searchTerm || '').toLowerCase().trim();
+    const items = (Array.isArray(window.menuItems) ? window.menuItems : []).filter(i => !i.is_template && i.source !== 'template' && i.is_active !== false);
+    return items.filter(item => {
+        const matchesCat = category === 'All' || item.category === category;
+        const matchesSearch = !term || (item.name && item.name.toLowerCase().includes(term)) || (item.category && item.category.toLowerCase().includes(term));
+        return matchesCat && matchesSearch;
+    });
+}
+window.filterPosCatalogItems = filterPosCatalogItems;
+
+/**
+ * Render live search suggestions with dish thumbnails and instant fallbacks.
+ */
+function renderPosSearchSuggestions(query, targetElementId = 'posSearchSuggestions') {
+    const container = typeof targetElementId === 'string' ? document.getElementById(targetElementId) : targetElementId;
+    if (!container) return;
+    const term = (query || '').toLowerCase().trim();
+    if (!term) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+        return;
+    }
+    const matches = filterPosCatalogItems(term).slice(0, 6);
+    if (matches.length === 0) {
+        container.innerHTML = '<div style="padding: 10px 14px; font-size: 12px; color: var(--text-muted);">No matching dishes found.</div>';
+        container.style.display = 'block';
+        return;
+    }
+    container.innerHTML = matches.map(item => {
+        const thumbSrc = item.image || item.image_url || (typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category) : 'assets/default-food.png');
+        const fallbackSrc = typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category || '') : 'assets/default-food.png';
+        return `<div class="pos-search-suggestion-item" onclick="addToCart(${item.id}, event); if(document.getElementById('${targetElementId}')) document.getElementById('${targetElementId}').style.display='none';" style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-subtle);">
+            <img src="${thumbSrc}" class="suggestion-thumb" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.onerror=null; this.src='${fallbackSrc}';" style="width: 32px; height: 32px; border-radius: 6px; object-fit: cover; flex-shrink: 0;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 13px; font-weight: 700; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(item.name)}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(item.category || '')}</div>
+            </div>
+            <div style="font-size: 13px; font-weight: 800; color: #143832;">₹ ${item.price}</div>
+        </div>`;
+    }).join('');
+    container.style.display = 'block';
+}
+window.renderPosSearchSuggestions = renderPosSearchSuggestions;

@@ -10,6 +10,7 @@ const keyVerificationCache = new Map();
 export function clearGeminiCaches() {
   clientsCache.clear();
   keyVerificationCache.clear();
+  resetFoodImageRateLimits();
   return true;
 }
 
@@ -282,7 +283,7 @@ const SERVER_CULINARY_PHOTO_MAP = [
       'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=600&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=600&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=600&auto=format&fit=crop&q=80'
+      'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=600&auto=format&fit=crop&q=80'
     ]
   },
   // 7. Cold Coffee, Frappes & Shakes
@@ -434,7 +435,7 @@ const SERVER_CULINARY_PHOTO_MAP = [
     url: 'https://images.unsplash.com/photo-1605197584547-c93de1a00564?w=600&auto=format&fit=crop&q=80',
     urls: [
       'https://images.unsplash.com/photo-1605197584547-c93de1a00564?w=600&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=600&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?w=600&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1541544741938-0af808871cc0?w=600&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80'
     ]
@@ -746,17 +747,15 @@ export async function generateMenuItemImage({ prompt, itemName, category = '', v
   const cleanItemName = (itemName || prompt || '').trim();
   const cleanCat = (category || '').trim();
 
-  // 1. Primary Engine: Direct Curated Culinary Library Match (for first 4 variations of known core dishes)
-  if (vIdx < 4) {
-    const directCuratedUrl = getCuratedFoodPhotoServer(cleanItemName, cleanCat, vIdx, false);
-    if (directCuratedUrl) {
-      return {
-        imageUrl: directCuratedUrl,
-        source: 'curated-culinary',
-        variation: vIdx,
-        success: true
-      };
-    }
+  // 1. Primary Engine: Direct Curated Culinary Library Match with seamless variation looping
+  const directCuratedUrl = getCuratedFoodPhotoServer(cleanItemName, cleanCat, vIdx, false);
+  if (directCuratedUrl) {
+    return {
+      imageUrl: directCuratedUrl,
+      source: 'curated-culinary',
+      variation: vIdx,
+      success: true
+    };
   }
 
   // 2. Real Dish Online Image Search Engine (Google / Wikimedia authentic food photography)
@@ -922,3 +921,406 @@ Guidelines:
     source: 'template-engine'
   };
 }
+
+export const IMAGEN_NEGATIVE_PROMPT = 'text, watermark, typography, letters, font, logo, signature, brand name, sticker, packaging, plastic wrapper, box, cartoon, illustration, drawing, 3d render, cgi, blurry, distorted, disfigured, low resolution, multiple dishes, collage, split screen, dirty background, hands, fingers, human face, people';
+
+/**
+ * Synthesizes an 8-layer commercial food photography prompt for Google Imagen 3.
+ * Layers:
+ * 1. Subject / Core Dish Specification
+ * 2. Authentic Cuisine Context
+ * 3. Dietary Specifics & Guardrails
+ * 4. Plating & Restaurant-Grade Tableware/Vessels
+ * 5. Sensory Textures, Fresh Garnishes & Steam
+ * 6. Directional Natural Lighting & Ambient Warmth
+ * 7. Professional Camera Optics, 85mm f/1.8 Shallow Depth-of-Field & Bokeh
+ * 8. Active Composition Purity & Suppression (zero text/watermark/logos/packaging)
+ */
+export function buildCommercialFoodPrompt({ dishName, cuisine = '', servingStyle = '', dietary = [] }) {
+  const cleanName = String(dishName || '').replace(/[<>`$\x00-\x1F]/g, '').trim();
+  const cleanCuisine = String(cuisine || '').replace(/[<>`$\x00-\x1F]/g, '').trim();
+  const cleanServing = String(servingStyle || '').replace(/[<>`$\x00-\x1F]/g, '').trim();
+
+  // Normalize dietary array/string
+  let dietaryList = [];
+  if (Array.isArray(dietary)) {
+    dietaryList = dietary.map(d => String(d || '').replace(/[<>`$\x00-\x1F]/g, '').trim()).filter(Boolean);
+  } else if (typeof dietary === 'string' && dietary.trim()) {
+    dietaryList = dietary.split(',').map(d => d.replace(/[<>`$\x00-\x1F]/g, '').trim()).filter(Boolean);
+  }
+
+  // Layer 1: Subject / Core Dish Specification
+  const layer1Subject = `Award-winning commercial food photography of ${cleanName}`;
+
+  // Layer 2: Authentic Cuisine Context
+  const layer2Cuisine = cleanCuisine ? `authentic ${cleanCuisine} culinary preparation` : '';
+
+  // Layer 3: Dietary Specifics
+  let layer3Dietary = '';
+  if (dietaryList.length > 0) {
+    layer3Dietary = `${dietaryList.join(', ')} presentation, authentic fresh wholesome ingredients`;
+  }
+
+  // Layer 4: Plating & Vessels
+  let layer4Plating = cleanServing;
+  if (!layer4Plating) {
+    const lowerName = cleanName.toLowerCase();
+    const lowerCuisine = cleanCuisine.toLowerCase();
+    if (lowerName.includes('biryani') || lowerName.includes('pulao') || lowerName.includes('rice')) {
+      layer4Plating = 'served in an artisanal brass handi, garnished with golden fried birista onions and fresh mint sprigs, accompanied by a small brass bowl of chilled cucumber raita';
+    } else if (lowerName.includes('curry') || lowerName.includes('gravy') || lowerName.includes('dal') || lowerName.includes('paneer') || lowerName.includes('chicken') || lowerName.includes('makhani')) {
+      layer4Plating = 'served in a rustic glazed ceramic bowl with a delicate swirl of fresh cream and chopped coriander microgreens, artisanal plating';
+    } else if (lowerName.includes('tea') || lowerName.includes('chai')) {
+      layer4Plating = 'served in a traditional terracotta kulhad cup with cardamom garnish and steaming hot aromatic chai';
+    } else if (lowerName.includes('coffee') || lowerName.includes('latte') || lowerName.includes('cappuccino') || lowerName.includes('espresso')) {
+      layer4Plating = 'served in a clean clear glass latte mug with velvety smooth microfoam latte art and light dusting of cinnamon';
+    } else if (lowerName.includes('pizza') || lowerName.includes('burger') || lowerName.includes('sandwich') || lowerName.includes('wrap') || lowerName.includes('roll') || lowerName.includes('fries')) {
+      layer4Plating = 'appetizingly served on a dark slate board and rustic wooden board with a ramekin of homemade artisanal dipping sauce';
+    } else if (lowerName.includes('dosa') || lowerName.includes('idli') || lowerName.includes('vada') || lowerCuisine.includes('south indian')) {
+      layer4Plating = 'served on a fresh vibrant green banana leaf liner with traditional steel katoris of fresh coconut chutney and steaming lentil sambar';
+    } else {
+      layer4Plating = 'elegantly plated on restaurant-grade artisanal matte ceramic tableware with clean appetizing presentation';
+    }
+  }
+
+  // Layer 5: Sensory Textures, Fresh Garnishes & Delicate Steam
+  const layer5Sensory = 'vibrant natural textures, appetizing glossy culinary glaze, fresh herb garnishes, delicate subtle steam rising from the dish';
+
+  // Layer 6: Directional Natural Lighting & Ambient Warmth
+  const layer6Lighting = 'diffused warm natural morning window daylight at 5000K, soft gentle directional shadows, warm ambient cafe lighting';
+
+  // Layer 7: Professional Camera Optics & Depth of Field
+  const layer7Optics = 'shot on Hasselblad 50MP medium format, 85mm f/1.8 lens, tack-sharp focal plane on hero garnish, shallow depth-of-field, silky smooth creamy background bokeh';
+
+  // Layer 8: Active Composition Purity & Cleanliness Guardrails
+  const layer8Purity = 'single isolated hero dish on a clean rustic dining tabletop, zero text, zero watermark, zero logos, zero packaging, ultra-realistic editorial food photograph, 4k commercial cafe standard';
+
+  const layers = [
+    layer1Subject,
+    layer2Cuisine,
+    layer3Dietary,
+    layer4Plating,
+    layer5Sensory,
+    layer6Lighting,
+    layer7Optics,
+    layer8Purity
+  ].filter(Boolean);
+
+  return layers.join(', ');
+}
+
+/**
+ * Generates commercial food image using Google Imagen 3 (imagen-3.0-generate-002)
+ * Dual-strategy:
+ * 1. Official @google/genai SDK ai.models.generateImages
+ * 2. Official Google AI Studio Developer API REST predict fallback (for Google AI Studio keys)
+ * Seamlessly normalizes base64 image data.
+ */
+export async function generateImagenFoodImage({
+  dishName,
+  cuisine = '',
+  servingStyle = '',
+  dietary = [],
+  aspectRatio = '1:1',
+  apiKey = null
+}) {
+  const resolvedKey = resolveGeminiApiKey(apiKey);
+  if (!resolvedKey || resolvedKey.length < 15) {
+    throw new Error('NO_API_KEY: Gemini API Key is missing or not configured on the server.');
+  }
+
+  const cleanDishName = String(dishName || '').trim();
+  if (!cleanDishName || cleanDishName.length < 2) {
+    throw new Error('dishName is required (minimum 2 characters).');
+  }
+
+  const prompt = buildCommercialFoodPrompt({ dishName: cleanDishName, cuisine, servingStyle, dietary });
+  const ALLOWED_ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+  const validAspectRatio = ALLOWED_ASPECT_RATIOS.includes(aspectRatio) ? aspectRatio : '1:1';
+  const usedModel = CONFIG.gemini.imagenModel || 'imagen-3.0-generate-002';
+
+  let base64Image = null;
+  let mimeType = 'image/jpeg';
+  let source = 'gemini-imagen';
+
+  // Strategy A: Modern Gemini Multimodal Image Generation via generateContent
+  const candidateImageModels = [
+    'gemini-2.5-flash-image',
+    'gemini-3.1-flash-image',
+    'gemini-3.1-flash-lite-image',
+    'gemini-3-pro-image'
+  ];
+
+  let isFreeTierNoQuota = false;
+  for (const modelName of candidateImageModels) {
+    try {
+      const restEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(resolvedKey)}`;
+      const restRes = await fetch(restEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseModalities: ['IMAGE', 'TEXT']
+          }
+        })
+      });
+
+      if (restRes.ok) {
+        const data = await restRes.json();
+        const candidate = data?.candidates?.[0];
+        const parts = candidate?.content?.parts || [];
+        for (const p of parts) {
+          if (p.inlineData && p.inlineData.data) {
+            base64Image = p.inlineData.data;
+            mimeType = p.inlineData.mimeType || 'image/jpeg';
+            source = 'gemini-ai';
+            break;
+          }
+        }
+        if (base64Image) break;
+      } else {
+        const errorJson = await restRes.json().catch(() => ({}));
+        const errMsg = String(errorJson?.error?.message || '');
+        if (restRes.status === 429 && (errMsg.includes('limit: 0') || errMsg.includes('free_tier'))) {
+          isFreeTierNoQuota = true;
+          break;
+        }
+      }
+    } catch (modelErr) {
+      continue;
+    }
+  }
+
+  if (isFreeTierNoQuota) {
+    throw new Error('FREE_TIER_NO_IMAGE_QUOTA: Google AI Studio Free Tier has 0 quota for AI image generation. Linking a billing account in Google AI Studio is required for AI-rendered images.');
+  }
+
+  // Strategy B: Try official @google/genai SDK generateImages (if available)
+  let sdkFailedDueToPlatform = false;
+  if (!base64Image) {
+    try {
+      const ai = getGeminiClient(resolvedKey);
+      const sdkResponse = await ai.models.generateImages({
+        model: usedModel,
+        prompt,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: 'image/jpeg',
+          outputCompressionQuality: 85,
+          aspectRatio: validAspectRatio,
+          personGeneration: 'DONT_ALLOW',
+          safetyFilterLevel: 'BLOCK_MEDIUM_AND_ABOVE',
+          negativePrompt: IMAGEN_NEGATIVE_PROMPT,
+          includeRaiReason: true,
+          addWatermark: false
+        }
+      });
+
+      const firstImg = sdkResponse?.generatedImages?.[0];
+      if (firstImg?.image?.imageBytes) {
+        base64Image = firstImg.image.imageBytes;
+        mimeType = firstImg.image.mimeType || 'image/jpeg';
+        source = 'imagen-3.0-sdk';
+      } else if (firstImg?.raiFilteredReason) {
+        throw new Error(`RAI_FILTERED: Image generation filtered by safety guidelines: ${firstImg.raiFilteredReason}`);
+      }
+    } catch (sdkError) {
+      const errText = String(sdkError?.message || sdkError);
+      if (
+        errText.includes('Enterprise Agent Platform') ||
+        errText.includes('Vertex AI') ||
+        errText.includes('not supported') ||
+        errText.includes('deprecated') ||
+        errText.includes('is not a function') ||
+        errText.includes('404')
+      ) {
+        sdkFailedDueToPlatform = true;
+      } else {
+        throw sdkError;
+      }
+    }
+  }
+
+  // Strategy C: Official Google AI Studio Developer API REST predict endpoint
+  if (!base64Image && sdkFailedDueToPlatform) {
+    const restEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${usedModel}:predict?key=${encodeURIComponent(resolvedKey)}`;
+    const restBody = {
+      instances: [{ prompt }],
+      parameters: {
+        sampleCount: 1,
+        aspectRatio: validAspectRatio,
+        outputMimeType: 'image/jpeg',
+        outputCompressionQuality: 85,
+        personGeneration: 'dont_allow',
+        negativePrompt: IMAGEN_NEGATIVE_PROMPT
+      }
+    };
+
+    const restRes = await fetch(restEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(restBody)
+    });
+
+    if (!restRes.ok) {
+      const errorJson = await restRes.json().catch(() => ({}));
+      const msg = errorJson?.error?.message || `Imagen API returned status ${restRes.status}`;
+      throw new Error(msg);
+    }
+
+    const data = await restRes.json();
+    const firstPrediction = data?.predictions?.[0];
+    if (firstPrediction?.bytesBase64Encoded) {
+      base64Image = firstPrediction.bytesBase64Encoded;
+      mimeType = firstPrediction.mimeType || 'image/jpeg';
+      source = 'imagen-3.0-rest';
+    } else {
+      throw new Error('NO_PREDICTIONS: Imagen API did not return image bytes.');
+    }
+  }
+
+  if (!base64Image) {
+    throw new Error('FAILED_TO_GENERATE: No image bytes returned.');
+  }
+
+  // Ensure clean base64 string without data prefix
+  if (base64Image.startsWith('data:')) {
+    const commaIdx = base64Image.indexOf(',');
+    if (commaIdx !== -1) {
+      base64Image = base64Image.substring(commaIdx + 1);
+    }
+  }
+
+  return {
+    success: true,
+    base64Data: `data:${mimeType};base64,${base64Image}`,
+    rawBase64: base64Image,
+    mimeType,
+    prompt,
+    source,
+    model: usedModel
+  };
+}
+
+/**
+ * Sanitizes error messages by aggressively redacting any Gemini/Google API keys.
+ */
+export function sanitizeErrorForClient(errMsg, apiKey = '') {
+  let clean = String(errMsg || 'An error occurred during image generation.');
+  if (apiKey && apiKey.length > 5) {
+    clean = clean.split(apiKey).join('[REDACTED_API_KEY]');
+  }
+  const envKey1 = process.env.GEMINI_API_KEY;
+  if (envKey1 && envKey1.length > 5) {
+    clean = clean.split(envKey1).join('[REDACTED_API_KEY]');
+  }
+  const envKey2 = process.env.GEMINI_API_KEY2;
+  if (envKey2 && envKey2.length > 5) {
+    clean = clean.split(envKey2).join('[REDACTED_API_KEY]');
+  }
+  const envKey3 = CONFIG.gemini?.apiKey;
+  if (envKey3 && envKey3.length > 5) {
+    clean = clean.split(envKey3).join('[REDACTED_API_KEY]');
+  }
+  clean = clean.replace(/AIzaSy[A-Za-z0-9_-]{33}/g, '[REDACTED_API_KEY]');
+  return clean;
+}
+
+/**
+ * Validates request payload for food image generation.
+ */
+export function validateFoodImageGenRequest(body) {
+  if (!body || typeof body !== 'object') {
+    return { valid: false, error: 'Request body must be a valid JSON object.' };
+  }
+
+  const rawDishName = String(body.dishName || body.itemName || body.prompt || '').trim();
+  if (!rawDishName || rawDishName.length < 2) {
+    return { valid: false, error: 'dishName is required (minimum 2 characters).' };
+  }
+  if (rawDishName.length > 100) {
+    return { valid: false, error: 'dishName cannot exceed 100 characters.' };
+  }
+
+  const sanitizedDishName = rawDishName.replace(/[<>`$\x00-\x1F]/g, '').trim();
+  if (sanitizedDishName.length < 2) {
+    return { valid: false, error: 'dishName must contain at least 2 valid characters.' };
+  }
+
+  const ALLOWED_ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+  const aspectRatio = ALLOWED_ASPECT_RATIOS.includes(body.aspectRatio) ? body.aspectRatio : '1:1';
+
+  let dietary = [];
+  if (Array.isArray(body.dietary)) {
+    dietary = body.dietary.map(d => String(d || '').replace(/[<>`$\x00-\x1F]/g, '').trim()).filter(Boolean).slice(0, 5);
+  } else if (typeof body.dietary === 'string' && body.dietary.trim()) {
+    dietary = body.dietary.split(',').map(d => d.replace(/[<>`$\x00-\x1F]/g, '').trim()).filter(Boolean).slice(0, 5);
+  }
+
+  return {
+    valid: true,
+    data: {
+      dishName: sanitizedDishName,
+      cuisine: String(body.cuisine || '').replace(/[<>`$\x00-\x1F]/g, '').trim().slice(0, 50),
+      servingStyle: String(body.servingStyle || '').replace(/[<>`$\x00-\x1F]/g, '').trim().slice(0, 150),
+      dietary,
+      aspectRatio,
+      clientId: String(body.clientId || '').trim().slice(0, 50),
+      variation: Math.max(0, parseInt(body.variation, 10) || 0)
+    }
+  };
+}
+
+const foodImageCooldownMap = new Map();
+const FOOD_IMAGE_COOLDOWN_MS = 5000;
+const FOOD_IMAGE_HOURLY_LIMIT = 20;
+const FOOD_IMAGE_HOURLY_WINDOW_MS = 3600000;
+
+/**
+ * Enforces per-client/IP rate limits:
+ * - 5 second minimum cooldown between successive calls
+ * - 20 requests per hour burst limit
+ */
+export function checkFoodImageRateLimit(clientKey) {
+  const now = Date.now();
+  const entry = foodImageCooldownMap.get(clientKey) || { lastRequest: 0, requestsThisHour: [] };
+
+  // 1. Minimum 5-second cooldown
+  const elapsed = now - entry.lastRequest;
+  if (elapsed < FOOD_IMAGE_COOLDOWN_MS) {
+    const waitSecs = Math.max(1, Math.ceil((FOOD_IMAGE_COOLDOWN_MS - elapsed) / 1000));
+    return {
+      allowed: false,
+      message: `Please wait ${waitSecs}s before generating another food image.`,
+      retryAfter: waitSecs,
+      cooldown: true
+    };
+  }
+
+  // 2. Sliding 1-hour burst limit (max 20)
+  const recentRequests = entry.requestsThisHour.filter(t => (now - t) < FOOD_IMAGE_HOURLY_WINDOW_MS);
+  if (recentRequests.length >= FOOD_IMAGE_HOURLY_LIMIT) {
+    const oldest = recentRequests[0];
+    const retryAfter = Math.max(1, Math.ceil((FOOD_IMAGE_HOURLY_WINDOW_MS - (now - oldest)) / 1000));
+    return {
+      allowed: false,
+      message: 'Hourly image generation quota reached for this terminal. Please try again later or upload an image.',
+      retryAfter,
+      cooldown: false
+    };
+  }
+
+  // Record timestamp
+  recentRequests.push(now);
+  foodImageCooldownMap.set(clientKey, { lastRequest: now, requestsThisHour: recentRequests });
+  return { allowed: true };
+}
+
+/**
+ * Resets food image rate limits (used in testing or cache resets).
+ */
+export function resetFoodImageRateLimits() {
+  foodImageCooldownMap.clear();
+}
+

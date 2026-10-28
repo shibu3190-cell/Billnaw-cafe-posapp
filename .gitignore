@@ -59,5 +59,13 @@ TEST_INFRA.md
 TEST_READY.md
 data/
 scratch/chrome-profile-*
+scratch/chrome_fixes_profile/
+
+# Uploaded food images
+uploads/**
+!uploads/
+!uploads/**/
+!uploads/**/.gitkeep
+!uploads/.gitkeep
 
 

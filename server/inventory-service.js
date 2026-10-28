@@ -421,6 +421,12 @@ export function getRawMaterials() {
   return Array.from(rawMaterialsStore.values());
 }
 
+export function addRawMaterial(material) {
+  if (!material || !material.id) return { status: 400, data: { success: false, error: 'Valid material is required' } };
+  rawMaterialsStore.set(material.id, material);
+  return { status: 200, data: { success: true, material } };
+}
+
 export function updateRawMaterialStock(materialId, adjustment, isAbsolute = false) {
   const item = rawMaterialsStore.get(materialId);
   if (!item) return { status: 404, data: { success: false, error: 'Raw material not found' } };
