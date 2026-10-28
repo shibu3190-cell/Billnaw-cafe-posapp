@@ -154,6 +154,8 @@ input:focus, select:focus, textarea:focus { outline: none; }
 
 /* 🛡️ Strict Modal Stacking & Z-Index Hierarchy (Prevents Popup-Under-Popup Bugs) */
 #shopAuthModal { z-index: 1000008 !important; }
+#loginOverlay, #terminalLockOverlay { z-index: 1000005 !important; }
+#spotManagerOverrideModal { z-index: 1000010 !important; }
 .modal-overlay.stacked-level-1 { z-index: 1000010 !important; }
 .modal-overlay.stacked-level-2 { z-index: 1000030 !important; }
 .modal-overlay.stacked-level-3 { z-index: 1000050 !important; }
@@ -187,6 +189,56 @@ input:focus, select:focus, textarea:focus { outline: none; }
 .key-input, .pin-input { width: 100%; padding: 14px; font-size: 18px; text-align: center; letter-spacing: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px; background: var(--bg-body); color: var(--text-dark); font-family: monospace; font-weight: 700; transition: all 0.2s ease; }
 .key-input:focus, .pin-input:focus { border-color: var(--milk-choc); box-shadow: 0 0 0 3px rgba(125, 79, 66, 0.18); background: #fff;}
 .pin-input { letter-spacing: 12px; font-size: 24px; font-weight: 800; }
+
+/* 🔢 TOUCH-FRIENDLY NUMERIC PIN KEYPAD */
+.pin-numpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+    margin-bottom: 8px;
+}
+.pin-numpad-btn {
+    padding: 12px 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary);
+    background: #FAF7F4;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    touch-action: manipulation;
+}
+.pin-numpad-btn:hover {
+    background: #F0EAE1;
+    border-color: var(--primary);
+}
+.pin-numpad-btn:active {
+    transform: scale(0.96);
+    background: var(--primary);
+    color: #FAF7F4;
+}
+.pin-numpad-btn.action-btn {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.nav-btn.locked, .slide-nav-item.locked {
+    opacity: 0.45;
+    position: relative;
+}
+.nav-btn.locked::after, .slide-nav-item.locked::after {
+    content: "🔒";
+    font-size: 10px;
+    position: absolute;
+    top: 4px;
+    right: 4px;
+}
 
 /* ✨ DESKTOP SIDEBAR ✨ */
 .sidebar { 
@@ -2106,9 +2158,10 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     /* Split-screen Menu Grid: strictly 4 columns on tablet & desktop (>= 641px) */
     .menu-grid {
         grid-template-columns: repeat(4, 1fr) !important;
-        gap: 12px;
+        gap: 6px !important;
     }
-    .menu-card {
+    .menu-card,
+    .menu-item-card {
         min-height: 140px;
         border-radius: 12px;
     }
@@ -2116,14 +2169,58 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
         height: 70px;
     }
     .card-content {
-        padding: 8px 10px;
+        padding: 6px 6px !important;
     }
-    .menu-card .name {
-        font-size: 12px;
-        min-height: 28px;
+    .menu-card .name,
+    .menu-item-card .item-name {
+        font-size: 11px !important;
+        min-height: 24px !important;
+        line-height: 1.15 !important;
+        margin-bottom: 2px !important;
     }
-    .menu-card .price {
-        font-size: 13px;
+    .menu-card .price,
+    .menu-item-card .item-price {
+        font-size: 12px !important;
+    }
+    .card-top-row,
+    .menu-item-card .item-card-top {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 4px !important;
+    }
+    .card-bottom-row,
+    .menu-item-card .item-bottom-bar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 4px !important;
+    }
+    .card-price-col {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        width: 100% !important;
+    }
+    .stock-indicator {
+        font-size: 9px !important;
+    }
+    .menu-card .add-btn,
+    .item-add-btn {
+        width: 100% !important;
+        justify-content: center !important;
+        padding: 4px 6px !important;
+        font-size: 10px !important;
+        min-height: 24px !important;
+        height: 24px !important;
+        border-radius: 6px !important;
+    }
+    .item-qty-control {
+        width: 100% !important;
+        height: 24px !important;
+    }
+    .item-qty-control button {
+        width: 22px !important;
+        height: 22px !important;
+        font-size: 12px !important;
     }
 
     /* Dashboard Stack for Split Screen */
@@ -2265,7 +2362,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     }
     
     .main-wrapper { 
-        padding-bottom: 72px; 
+        padding-bottom: calc(74px + env(safe-area-inset-bottom, 24px)); 
         overflow: hidden; 
     } 
     .main-content { 
@@ -2288,7 +2385,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
         overflow: hidden;
         height: 100%;
         min-height: 0;
-        padding-bottom: calc(84px + env(safe-area-inset-bottom, 24px));
+        padding-bottom: 0;
         box-sizing: border-box;
     }
     .pos-layout {
@@ -2305,7 +2402,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
         padding-right: 0;
-        padding-bottom: 130px;
+        padding-bottom: calc(80px + env(safe-area-inset-bottom, 24px));
     }
     
     .drawer-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(28, 18, 13, 0.65); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 500000; opacity: 0; pointer-events: none; transition: opacity 0.28s ease; }
@@ -4887,6 +4984,72 @@ body.printing { background: #fff !important; }
         from { transform: translateY(100%); }
         to { transform: translateY(0); }
     }
+
+    /* Khata Due Ledger Mobile Responsive Cards */
+    #khata .table-container {
+        border: none !important;
+        overflow-x: visible !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+    #khata .table thead {
+        display: none !important;
+    }
+    #khata .table, 
+    #khata .table tbody {
+        display: block !important;
+        width: 100% !important;
+        border: none !important;
+        background: transparent !important;
+    }
+    #khataTableBody {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+        width: 100% !important;
+    }
+    #khataTableBody tr {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        background: #FFFFFF !important;
+        border: 1.5px solid var(--border) !important;
+        border-radius: 14px !important;
+        padding: 14px !important;
+        margin-bottom: 12px !important;
+        box-shadow: var(--shadow-xs) !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+    }
+    #khataTableBody tr td {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 4px 0 !important;
+        border: none !important;
+        font-size: 13px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    #khataTableBody tr td:last-child {
+        margin-top: 6px !important;
+        padding-top: 8px !important;
+        border-top: 1px dashed var(--border) !important;
+        justify-content: flex-end !important;
+    }
+
+    /* Mobile Search Inputs iOS Auto-Zoom Fix (< 640px font-size: 16px) */
+    .search-bar,
+    .search-container input,
+    #menuSearchInput,
+    #customerSearchInput,
+    #khataSearchInput,
+    #dashSearchInput,
+    #catalogSearchInput,
+    #rawStockSearchInput,
+    #rtrDishSearchInput {
+        font-size: 16px !important;
+    }
 }
 
 /* ==========================================================================
@@ -6183,6 +6346,23 @@ body.printing { background: #fff !important; }
         display: grid !important;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
         gap: 14px !important;
+    }
+}
+
+#inventory.view {
+    min-width: 0;
+    width: 100%;
+    overflow-x: hidden;
+}
+
+@media screen and (max-width: 768px) {
+    #inventoryLandingHub {
+        width: 100% !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+    }
+    .inv-telemetry-table-wrap {
+        display: none !important;
     }
 }
 

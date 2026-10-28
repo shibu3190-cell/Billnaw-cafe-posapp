@@ -330,7 +330,7 @@
     </div>
 
     <!-- 🔒 LOGIN OVERLAY (PART 1: REDUCING DECISION FATIGUE) -->
-    <div id="loginOverlay" class="modal-overlay" style="display: none;">
+    <div id="loginOverlay" class="modal-overlay" style="display: none; z-index: 1000005;">
         <div class="auth-box" style="max-width: 440px;">
             <div class="modal-header" style="align-items: center;">
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -356,6 +356,21 @@
             <div style="margin-top: 10px; text-align: left;">
                 <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Enter 4-Digit PIN</label>
                 <input type="password" id="staffLoginPinInput" class="pin-input" placeholder="••••" inputmode="numeric" maxlength="4" style="margin-top: 5px;" oninput="if(this.value.length === 4) confirmStaffLogin()">
+            </div>
+
+            <div class="pin-numpad" id="terminalPinNumpad">
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('1')">1</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('2')">2</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('3')">3</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('4')">4</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('5')">5</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('6')">6</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('7')">7</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('8')">8</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('9')">9</button>
+                <button type="button" class="pin-numpad-btn action-btn" onclick="clearTerminalPin()">C</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendTerminalPin('0')">0</button>
+                <button type="button" class="pin-numpad-btn action-btn" onclick="backspaceTerminalPin()">⌫</button>
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
@@ -1321,7 +1336,7 @@
     </div>
 
     <!-- 👤 STAFF QUICK SWITCH MODAL -->
-    <div id="staffSwitchModal" class="modal-overlay" style="display: none;">
+    <div id="staffSwitchModal" class="modal-overlay" style="display: none; z-index: 1000030;">
         <div class="auth-box" style="max-width: 420px;">
             <div class="modal-header">
                 <h2>Switch Active Staff</h2>
@@ -1330,11 +1345,71 @@
             <div id="quickSwitchStaffList" class="staff-grid-picker"></div>
             <div class="form-group" style="text-align: left; margin-top: 10px;">
                 <label style="font-weight: 700; font-size: 11px;">Staff PIN</label>
-                <input type="password" id="quickSwitchPinInput" placeholder="••••" maxlength="4" inputmode="numeric">
+                <input type="password" id="quickSwitchPinInput" placeholder="••••" maxlength="4" inputmode="numeric" oninput="if(this.value.length === 4) confirmQuickStaffSwitch()">
             </div>
-            <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <div class="pin-numpad" id="quickSwitchPinNumpad">
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('1')">1</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('2')">2</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('3')">3</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('4')">4</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('5')">5</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('6')">6</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('7')">7</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('8')">8</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('9')">9</button>
+                <button type="button" class="pin-numpad-btn action-btn" onclick="clearSwitchPin()">C</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendSwitchPin('0')">0</button>
+                <button type="button" class="pin-numpad-btn action-btn" onclick="backspaceSwitchPin()">⌫</button>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 12px;">
                 <button class="btn btn-outline" style="flex: 1;" onclick="document.getElementById('staffSwitchModal').style.display='none'">Cancel</button>
                 <button class="btn" style="flex: 2; background: var(--primary);" onclick="confirmQuickStaffSwitch()">Switch Staff</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🛡️ SPOT MANAGER PIN OVERRIDE MODAL -->
+    <div id="spotManagerOverrideModal" class="modal-overlay" style="display: none; z-index: 1000010;">
+        <div class="auth-box" style="max-width: 400px; text-align: center;">
+            <div class="modal-header" style="align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(220, 38, 38, 0.1); display: flex; align-items: center; justify-content: center; color: var(--danger); flex-shrink: 0;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    </div>
+                    <div style="text-align: left;">
+                        <h2 id="spotOverrideTitle" style="font-size: 16px; font-weight: 800; color: var(--primary); margin: 0;">Manager Approval Required</h2>
+                        <p id="spotOverrideSubtitle" style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">Enter Manager or Admin 4-digit PIN</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="spotOverrideActionBadge" style="background: rgba(180, 83, 9, 0.08); border: 1px dashed #B45309; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #B45309; margin: 12px 0; text-align: left; font-weight: 600;">
+                Restricted action requires spot authorization.
+            </div>
+
+            <div style="margin: 10px 0; text-align: left;">
+                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Manager / Admin PIN</label>
+                <input type="password" id="spotOverridePinInput" class="pin-input" placeholder="••••" inputmode="numeric" maxlength="4" style="margin-top: 5px;" oninput="if(this.value.length === 4) confirmSpotManagerOverride()">
+            </div>
+
+            <div class="pin-numpad" id="spotOverridePinNumpad">
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('1')">1</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('2')">2</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('3')">3</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('4')">4</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('5')">5</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('6')">6</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('7')">7</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('8')">8</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('9')">9</button>
+                <button type="button" class="pin-numpad-btn action-btn" onclick="clearOverridePin()">C</button>
+                <button type="button" class="pin-numpad-btn" onclick="appendOverridePin('0')">0</button>
+                <button type="button" class="pin-numpad-btn action-btn" onclick="backspaceOverridePin()">⌫</button>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 14px;">
+                <button type="button" class="btn btn-outline" style="flex: 1;" onclick="closeSpotManagerOverrideModal()">Cancel</button>
+                <button type="button" class="btn" style="flex: 2; background: var(--primary);" onclick="confirmSpotManagerOverride()">Authorize Action</button>
             </div>
         </div>
     </div>
@@ -2881,6 +2956,10 @@
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                                 <span>Quick Settings</span>
                             </button>
+                            <button type="button" class="account-popover-item" style="color: var(--danger);" onclick="toggleAccountPopover(event, false); lockTerminal();">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                <span>Lock Terminal</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -3759,7 +3838,7 @@
                     </div>
 
                     <!-- Filters & Search Toolbar -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: gap; gap: 10px; margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
                         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                             <button type="button" class="filter-pill active" id="khataFilter-all" onclick="filterKhataByStatus('all')">
                                 <span>All Records</span>
@@ -3782,7 +3861,7 @@
 
                     <!-- Ledger Table -->
                     <div class="table-container" style="border: 1px solid var(--border); border-radius: var(--radius-md); overflow-x: auto;">
-                        <table class="table" style="margin: 0; min-width: 650px;">
+                        <table class="table" style="margin: 0;">
                             <thead>
                                 <tr>
                                     <th>Party Name</th>
@@ -4273,7 +4352,7 @@
                  HUB 4: 📦 INVENTORY & CULINARY PRODUCTION SUITE (3-TAB DESIGN)
             ============================================================ -->
             <div id="inventory" class="view">
-                <div id="inventoryLandingHub" style="display: block; max-width: 960px; margin: 0 auto 24px auto;">
+                <div id="inventoryLandingHub" style="display: block; min-width: 0; width: 100%; max-width: 960px; margin: 0 auto 24px auto; overflow-x: hidden;">
                     
                     <!-- Deep Emerald Gradient Header Banner -->
                     <div class="inv-header-card" style="background: linear-gradient(135deg, #143832 0%, #0F2D28 50%, #0A1F1B 100%); border-radius: 24px; padding: 24px 26px; color: #FFFFFF; margin-bottom: 20px; box-shadow: 0 8px 24px rgba(20,56,50,0.25); position: relative; overflow: hidden;">
@@ -5072,14 +5151,24 @@
                                 attachFirestoreListener(activeStoreCode);
                             }
                         } else {
-                            console.log("⚡ Firebase Auth: In Guest / Demo POS Mode");
+                            console.log("⚡ Firebase Auth: Unauthenticated / Local session check");
                             window.currentAuthUser = null;
                             const currentAuthMode = localStorage.getItem('billnaw_auth_mode');
+                            const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
+                            const isExplicitDemo = currentAuthMode === 'demo';
+
                             if (typeof updateCloudStoreTopbar === 'function') {
-                                updateCloudStoreTopbar(null, false, currentAuthMode || 'demo');
+                                updateCloudStoreTopbar(null, false, isExplicitDemo ? 'demo' : (currentAuthMode || 'unauthenticated'));
                             }
                             if (typeof updateShopAuthUI === 'function') {
                                 updateShopAuthUI();
+                            }
+
+                            // Strict Auth Gate: No silent fallback into Demo/Guest mode
+                            if (!activeToken && !isExplicitDemo) {
+                                if (typeof openShopAuthModal === 'function') {
+                                    openShopAuthModal();
+                                }
                             }
                         }
                     });
@@ -5163,7 +5252,7 @@
 
             function openShopAuthModal(isReLogin = false) {
                 const modal = document.getElementById('shopAuthModal');
-                const isExplicitLogin = isReLogin || (window.location.search && window.location.search.includes('auth=login'));
+                const isExplicitLogin = isReLogin || (window.location.search && window.location.search.includes('auth=login')) || (!localStorage.getItem('billnaw_auth_token') && !sessionStorage.getItem('billnaw_auth_token'));
                 if (modal) {
                     if (isExplicitLogin) {
                         modal.dataset.relogin = 'true';
@@ -5935,13 +6024,32 @@
                 if (typeof showToast === 'function') {
                     showToast('Registration required: Please create a shop account or sign in.', 'warning');
                 }
-                openShopAuthModal(true);
+                openShopAuthModal();
             }
             window.skipShopAuthToDemo = skipShopAuthToDemo;
 
             async function clearAllTenantLocalData() {
                 try {
-                    if (typeof idb !== 'undefined') {
+                    localStorage.removeItem('billnaw_shop_session');
+                    localStorage.removeItem('billnaw_auth_token');
+                    localStorage.removeItem('billnaw_auth_email');
+                    localStorage.removeItem('billnaw_auth_phone');
+                    localStorage.removeItem('billnaw_store_code');
+                    localStorage.removeItem('billnaw_active_user');
+                    localStorage.removeItem('billnaw_auth_mode');
+                    localStorage.removeItem('billnaw_last_staff_id');
+                    localStorage.removeItem('billnaw_active_staff');
+                    localStorage.removeItem('billnaw_terminal_locked');
+                    localStorage.removeItem('cafe_khata');
+                    localStorage.removeItem('billnaw_culinary_materials');
+                    localStorage.removeItem('billnaw_culinary_batches');
+                    if (typeof sessionStorage !== 'undefined') {
+                        sessionStorage.clear();
+                    }
+                } catch(e) {}
+
+                try {
+                    if (typeof idb !== 'undefined' && typeof idb.clear === 'function') {
                         await idb.clear('cafe_menu').catch(() => {});
                         await idb.clear('cafe_history').catch(() => {});
                         await idb.clear('cafe_tables').catch(() => {});
@@ -5953,28 +6061,23 @@
                         await idb.clear('cafe_raw_materials').catch(() => {});
                         await idb.clear('cafe_sub_recipes').catch(() => {});
                     }
-                    localStorage.removeItem('billnaw_shop_session');
-                    localStorage.removeItem('billnaw_auth_token');
-                    localStorage.removeItem('billnaw_auth_email');
-                    localStorage.removeItem('billnaw_auth_phone');
-                    localStorage.removeItem('billnaw_store_code');
-                    localStorage.removeItem('billnaw_active_user');
-                    localStorage.removeItem('billnaw_auth_mode');
-                    localStorage.removeItem('cafe_khata');
-                    localStorage.removeItem('billnaw_culinary_materials');
-                    localStorage.removeItem('billnaw_culinary_batches');
-                    if (typeof sessionStorage !== 'undefined') {
-                        sessionStorage.clear();
-                    }
                 } catch(e) {}
             }
             window.clearAllTenantLocalData = clearAllTenantLocalData;
 
-            function logoutShop() {
+            async function logoutShop() {
                 const activeToken = localStorage.getItem('billnaw_auth_token');
                 const activeEmail = localStorage.getItem('billnaw_auth_email') || (document.getElementById('shopAuthEmail') ? document.getElementById('shopAuthEmail').value.trim() : '');
 
-                // Send invalidation request to backend to purge session & pending OTPs
+                // 1. Unsubscribe real-time Firestore listeners immediately
+                if (typeof window.detachFirestoreListener === 'function') {
+                    window.detachFirestoreListener();
+                }
+                if (typeof window.unsubscribeFirestoreListeners === 'function') {
+                    window.unsubscribeFirestoreListeners();
+                }
+
+                // 2. Invalidate session on backend
                 try {
                     if (typeof fetch === 'function') {
                         fetch('/api/auth/logout', {
@@ -5988,13 +6091,27 @@
                     }
                 } catch (e) {}
 
+                // 3. Await Firebase signOut
                 if (window.auth && typeof window.firebaseSignOut === 'function') {
                     try {
-                        window.firebaseSignOut(window.auth).catch(() => {});
+                        await window.firebaseSignOut(window.auth).catch(() => {});
                     } catch (e) {}
                 }
                 window.currentAuthUser = null;
-                clearAllTenantLocalData();
+
+                // 4. Purge storage & IndexedDB
+                await clearAllTenantLocalData();
+
+                // 5. Reset reactive in-memory state
+                window.currentStaff = null;
+                window.currentRole = null;
+                if (typeof staffList !== 'undefined') staffList = [];
+                if (typeof tablesInfo !== 'undefined') tablesInfo = [];
+                if (typeof orderHistory !== 'undefined') orderHistory = [];
+                if (typeof customersList !== 'undefined') customersList = [];
+                if (typeof dailyExpenses !== 'undefined') dailyExpenses = [];
+                if (typeof inventoryRawMaterials !== 'undefined') inventoryRawMaterials = [];
+                if (typeof culinaryBatches !== 'undefined') culinaryBatches = [];
 
                 // Reset login and signup OTP states & wipe digit inputs so no stale OTP can ever be used
                 if (typeof resetLoginOtpView === 'function') resetLoginOtpView();
@@ -6026,7 +6143,7 @@
                 if (typeof toggleLoginAuthMode === 'function') toggleLoginAuthMode('otp');
 
                 // Close settings or other open modals
-                const otherModals = ['activeSessionsModal', 'storeProfileModal', 'staffManagementModal', 'subscriptionModal', 'expensesDetailModal'];
+                const otherModals = ['activeSessionsModal', 'storeProfileModal', 'staffManagementModal', 'subscriptionModal', 'expensesDetailModal', 'loginOverlay', 'staffSwitchModal', 'spotManagerOverrideModal'];
                 otherModals.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.style.display = 'none';
@@ -6034,16 +6151,17 @@
 
                 updateShopAuthUI();
                 if (typeof updateCloudStoreTopbar === 'function') {
-                    updateCloudStoreTopbar(null, false, 'demo');
+                    updateCloudStoreTopbar(null, false, 'unauthenticated');
                 }
                 if (typeof showToast === 'function') {
                     showToast('Logged out of cloud shop. Session destroyed.', 'info');
                 }
+
                 openShopAuthModal();
                 if (typeof window !== 'undefined' && window.location) {
                     setTimeout(() => {
                         window.location.replace(window.location.origin + window.location.pathname + '?auth=login');
-                    }, 120);
+                    }, 80);
                 }
             }
             window.logoutShop = logoutShop;
@@ -6385,26 +6503,29 @@
                 wireContainer('signupOtpBoxesContainer', handleVerifyAndCreateAccount);
             }
 
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', () => {
-                    setupOtpDigitInputs();
-                    updateShopAuthUI();
-                    if (window.location.search && window.location.search.includes('auth=login')) {
-                        setTimeout(() => {
-                            if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
-                            try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
-                        }, 120);
-                    }
-                });
-            } else {
+            function checkStrictRootAuth() {
                 setupOtpDigitInputs();
                 updateShopAuthUI();
-                if (window.location.search && window.location.search.includes('auth=login')) {
+                const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
+                const authMode = localStorage.getItem('billnaw_auth_mode');
+                const isExplicitDemo = authMode === 'demo';
+                const isAuth = activeToken && authMode === 'authenticated';
+                const hasAuthParam = window.location.search && window.location.search.includes('auth=login');
+
+                if (hasAuthParam || (!isAuth && !isExplicitDemo)) {
                     setTimeout(() => {
                         if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
-                        try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
-                    }, 120);
+                        if (hasAuthParam) {
+                            try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+                        }
+                    }, 60);
                 }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', checkStrictRootAuth);
+            } else {
+                checkStrictRootAuth();
             }
             // App Version & Update Manager
             let appUpdateWorker = null;

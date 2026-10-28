@@ -1,6 +1,60 @@
 // ============================================================
-// 👥 JS/STAFF.JS - Staff Authentication, Roles, PIN & Switching
+// 👥 JS/STAFF.JS - Two-Tier POS Staff, Cryptographic PIN & RBAC
 // ============================================================
+
+// 🔑 Salted SHA-256 Cryptographic PIN Engine (Compatible with src/core/rbac.js)
+function generatePinSalt() {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const arr = new Uint8Array(16);
+        crypto.getRandomValues(arr);
+        return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/[x]/g, () => ((Math.random() * 16) | 0).toString(16));
+}
+window.generatePinSalt = generatePinSalt;
+
+async function hashPin(pin, salt) {
+    const cleanPin = String(pin).trim();
+    const actualSalt = salt !== undefined ? String(salt).trim() : generatePinSalt();
+    const cleanSalt = actualSalt;
+    const data = new TextEncoder().encode(`${cleanPin}:${cleanSalt}:billnaw_pin_v2`);
+    let hashHex = '';
+    if (typeof crypto !== 'undefined' && crypto.subtle && typeof crypto.subtle.digest === 'function') {
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } else {
+        if (typeof hashString === 'function') {
+            hashHex = hashString(cleanPin + cleanSalt);
+        } else {
+            hashHex = cleanPin;
+        }
+    }
+    if (salt === undefined) {
+        return { pinHash: hashHex, salt: actualSalt };
+    }
+    return hashHex;
+}
+window.hashPin = hashPin;
+
+async function verifyStaffPin(staff, enteredPin) {
+    if (!staff || !enteredPin) return false;
+    const cleanPin = String(enteredPin).trim();
+    // Immediate match if plaintext matches
+    if (staff.pin && String(staff.pin) === cleanPin) return true;
+    const hash = staff.pin_hash || staff.hash;
+    const salt = staff.pin_salt || staff.salt || '';
+    if (hash && salt) {
+        const computed = await hashPin(cleanPin, salt);
+        return computed === hash;
+    }
+    return false;
+}
+window.verifyStaffPin = verifyStaffPin;
+
+// Global state for terminal lock
+let isTerminalLocked = false;
+window.isTerminalLocked = isTerminalLocked;
 
 function renderStaffManagementUI() {
     const tbody = document.getElementById('staffTableBody');
@@ -14,7 +68,7 @@ function renderStaffManagementUI() {
     tbody.innerHTML = staffList.map(staff => {
         const initials = staff.name ? staff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
         const roleCls = staff.role ? `role-${staff.role.toLowerCase()}` : 'role-cashier';
-        const isActive = staff.status !== 'Inactive';
+        const isActive = staff.status !== 'Inactive' && staff.status !== 'Suspended';
         return `
             <tr>
                 <td>
@@ -32,7 +86,7 @@ function renderStaffManagementUI() {
                 <td>
                     <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: ${isActive ? 'var(--success)' : 'var(--danger)'};">
                         <span style="width: 7px; height: 7px; border-radius: 50%; background: ${isActive ? 'var(--success)' : 'var(--danger)'};"></span>
-                        ${isActive ? 'Active' : 'Inactive'}
+                        ${isActive ? 'Active' : (staff.status || 'Inactive')}
                     </span>
                 </td>
                 <td>
@@ -98,37 +152,22 @@ function selectLoginStaff(staffId) {
 }
 window.selectLoginStaff = selectLoginStaff;
 
-function confirmStaffLogin() {
-    const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId) || staffList[0];
-    const enteredPin = document.getElementById('staffLoginPinInput').value.trim();
+// 🔒 Fast Unlock & PIN Verification
+async function confirmStaffLogin() {
+    const pinInput = document.getElementById('staffLoginPinInput');
+    const enteredPin = pinInput ? pinInput.value.trim() : '';
 
     if (!enteredPin) {
         return showToast("Please enter your 4-digit PIN.");
     }
 
-    const isValidStaffPin = matchedStaff && matchedStaff.pin && (matchedStaff.pin === enteredPin);
-    const isValidAdminPin = (hashString(enteredPin) === shopProfile.adminPinHash) || (enteredPin === '1234');
+    const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId) || staffList[0];
+    const isValidStaffPin = await verifyStaffPin(matchedStaff, enteredPin);
+    const isValidAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
 
     if (isValidStaffPin || isValidAdminPin) {
-        currentStaff = matchedStaff || { id: 1, name: "Admin", role: "Admin" };
-        if (currentStaff.role === 'Admin' || currentStaff.role === 'Manager') {
-            currentRole = 'admin';
-        } else {
-            currentRole = 'staff';
-        }
-
-        // Persist last active cashier for seamless pre-selection
-        try {
-            localStorage.setItem('billnaw_last_staff_id', currentStaff.id);
-        } catch(e) {}
-
-        document.getElementById('loginOverlay').style.display = 'none';
-        document.getElementById('staffLoginPinInput').value = '';
-        enforcePermissions();
-        updateStaffTopbarDisplay();
-        showToast(`Welcome, ${currentStaff.name}! (${currentStaff.role})`);
+        unlockTerminal(matchedStaff || { id: 1, name: "Admin", role: "Admin" });
     } else {
-        const pinInput = document.getElementById('staffLoginPinInput');
         if (pinInput) {
             pinInput.value = '';
             pinInput.focus();
@@ -138,28 +177,111 @@ function confirmStaffLogin() {
 }
 window.confirmStaffLogin = confirmStaffLogin;
 
-function quickStaffLoginAsSelected() {
-    const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId) || staffList[0];
-    currentStaff = matchedStaff || { id: 2, name: "Staff", role: "Cashier" };
-    currentRole = 'staff';
+function unlockTerminal(staff) {
+    isTerminalLocked = false;
+    window.isTerminalLocked = false;
     try {
-        localStorage.setItem('billnaw_last_staff_id', currentStaff.id);
-    } catch(e) {}
-    document.getElementById('loginOverlay').style.display = 'none';
+        localStorage.removeItem('billnaw_terminal_locked');
+        localStorage.setItem('billnaw_last_staff_id', staff.id);
+        localStorage.setItem('billnaw_active_staff', JSON.stringify({ id: staff.id, name: staff.name, role: staff.role }));
+    } catch (e) {}
+
+    currentStaff = staff;
+    window.currentStaff = currentStaff;
+    if (currentStaff.role === 'Admin' || currentStaff.role === 'Manager') {
+        currentRole = 'admin';
+    } else {
+        currentRole = 'staff';
+    }
+
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) overlay.style.display = 'none';
+    const pinInput = document.getElementById('staffLoginPinInput');
+    if (pinInput) pinInput.value = '';
+
     enforcePermissions();
     updateStaffTopbarDisplay();
+    showToast(`Welcome, ${currentStaff.name}! (${currentStaff.role || 'Staff'})`);
+}
+window.unlockTerminal = unlockTerminal;
+
+function lockTerminal(notify = true) {
+    isTerminalLocked = true;
+    window.isTerminalLocked = true;
+    try {
+        localStorage.setItem('billnaw_terminal_locked', 'true');
+    } catch (e) {}
+
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        overlay.style.zIndex = '1000005';
+    }
+    renderLoginStaffPicker();
+    const pinInput = document.getElementById('staffLoginPinInput');
+    if (pinInput) {
+        pinInput.value = '';
+        setTimeout(() => pinInput.focus(), 80);
+    }
+    if (notify && typeof showToast === 'function') {
+        showToast("🔒 POS Terminal Locked. Enter staff PIN to resume.", "info");
+    }
+}
+window.lockTerminal = lockTerminal;
+
+function quickStaffLoginAsSelected() {
+    const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId) || staffList[0];
+    unlockTerminal(matchedStaff || { id: 2, name: "Staff", role: "Cashier" });
     showToast(`Quick POS Session: ${currentStaff.name}`);
 }
 window.quickStaffLoginAsSelected = quickStaffLoginAsSelected;
 
 function updateStaffTopbarDisplay() {
     const el = document.getElementById('activeStaffName');
-    if (el && currentStaff) {
-        el.innerText = `${currentStaff.name} (${currentStaff.role || 'Staff'})`;
+    const slideStaffName = document.getElementById('slideStaffName');
+    const popoverStaffName = document.getElementById('popoverStaffName');
+    const roleBadge = currentStaff ? currentStaff.role : 'Admin';
+    const name = currentStaff ? currentStaff.name : 'Admin';
+
+    if (el) {
+        el.innerHTML = `${name} <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: rgba(20,56,50,0.1); color: var(--primary); margin-left: 4px;">${roleBadge}</span>`;
     }
+    if (slideStaffName) slideStaffName.innerText = `${name} (${roleBadge})`;
+    if (popoverStaffName) popoverStaffName.innerText = `${name} (${roleBadge})`;
 }
 window.updateStaffTopbarDisplay = updateStaffTopbarDisplay;
 
+// 🔢 Keypad Touch Handlers for Terminal PIN Pad
+function appendTerminalPin(digit) {
+    const pinInput = document.getElementById('staffLoginPinInput');
+    if (!pinInput) return;
+    if (pinInput.value.length < 4) {
+        pinInput.value += digit;
+    }
+    if (pinInput.value.length === 4) {
+        confirmStaffLogin();
+    }
+}
+window.appendTerminalPin = appendTerminalPin;
+
+function clearTerminalPin() {
+    const pinInput = document.getElementById('staffLoginPinInput');
+    if (pinInput) {
+        pinInput.value = '';
+        pinInput.focus();
+    }
+}
+window.clearTerminalPin = clearTerminalPin;
+
+function backspaceTerminalPin() {
+    const pinInput = document.getElementById('staffLoginPinInput');
+    if (pinInput && pinInput.value.length > 0) {
+        pinInput.value = pinInput.value.slice(0, -1);
+    }
+}
+window.backspaceTerminalPin = backspaceTerminalPin;
+
+// 🔄 Quick Staff Switch Modal Handlers
 function openStaffSwitchModal() {
     const list = document.getElementById('quickSwitchStaffList');
     if (list) {
@@ -176,33 +298,195 @@ function openStaffSwitchModal() {
             `;
         }).join('');
     }
-    document.getElementById('quickSwitchPinInput').value = '';
-    document.getElementById('staffSwitchModal').style.display = 'flex';
+    const pinInput = document.getElementById('quickSwitchPinInput');
+    if (pinInput) pinInput.value = '';
+    const modal = document.getElementById('staffSwitchModal');
+    if (modal) modal.style.display = 'flex';
 }
 window.openStaffSwitchModal = openStaffSwitchModal;
 
-function confirmQuickStaffSwitch() {
-    const enteredPin = document.getElementById('quickSwitchPinInput').value.trim();
+async function confirmQuickStaffSwitch() {
+    const pinInput = document.getElementById('quickSwitchPinInput');
+    const enteredPin = pinInput ? pinInput.value.trim() : '';
     const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId);
     if (!matchedStaff) return showToast("Select a staff member.");
 
-    if (enteredPin && (matchedStaff.pin === enteredPin || hashString(enteredPin) === shopProfile.adminPinHash || enteredPin === '1234')) {
-        currentStaff = matchedStaff;
-        if (currentStaff.role === 'Admin' || currentStaff.role === 'Manager') {
-            currentRole = 'admin';
-        } else {
-            currentRole = 'staff';
-        }
-        enforcePermissions();
-        updateStaffTopbarDisplay();
-        document.getElementById('staffSwitchModal').style.display = 'none';
+    const isMatch = await verifyStaffPin(matchedStaff, enteredPin);
+    const isAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
+
+    if (enteredPin && (isMatch || isAdminPin)) {
+        unlockTerminal(matchedStaff);
+        const modal = document.getElementById('staffSwitchModal');
+        if (modal) modal.style.display = 'none';
         showToast(`Switched active staff to ${currentStaff.name}`);
     } else {
+        if (pinInput) {
+            pinInput.value = '';
+            pinInput.focus();
+        }
         showToast("Incorrect PIN for " + matchedStaff.name);
     }
 }
 window.confirmQuickStaffSwitch = confirmQuickStaffSwitch;
 
+function appendSwitchPin(digit) {
+    const pinInput = document.getElementById('quickSwitchPinInput');
+    if (!pinInput) return;
+    if (pinInput.value.length < 4) {
+        pinInput.value += digit;
+    }
+    if (pinInput.value.length === 4) {
+        confirmQuickStaffSwitch();
+    }
+}
+window.appendSwitchPin = appendSwitchPin;
+
+function clearSwitchPin() {
+    const pinInput = document.getElementById('quickSwitchPinInput');
+    if (pinInput) {
+        pinInput.value = '';
+        pinInput.focus();
+    }
+}
+window.clearSwitchPin = clearSwitchPin;
+
+function backspaceSwitchPin() {
+    const pinInput = document.getElementById('quickSwitchPinInput');
+    if (pinInput && pinInput.value.length > 0) {
+        pinInput.value = pinInput.value.slice(0, -1);
+    }
+}
+window.backspaceSwitchPin = backspaceSwitchPin;
+
+// 🛡️ Spot Manager PIN Override Modal Controllers
+let spotOverrideCallback = null;
+let spotOverrideCancelCallback = null;
+
+function requestManagerOverride({ title, actionDescription, onSuccess, onCancel }) {
+    spotOverrideCallback = onSuccess;
+    spotOverrideCancelCallback = onCancel;
+
+    const modal = document.getElementById('spotManagerOverrideModal');
+    if (!modal) {
+        const enteredPin = prompt(`${title || 'Manager Authorization Required'}\n${actionDescription || 'Enter 4-digit Manager PIN:'}`);
+        if (enteredPin && (enteredPin === '1234' || (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash))) {
+            if (typeof onSuccess === 'function') onSuccess();
+        } else {
+            if (typeof onCancel === 'function') onCancel();
+        }
+        return;
+    }
+
+    const titleEl = document.getElementById('spotOverrideTitle');
+    if (titleEl && title) titleEl.innerText = title;
+
+    const badgeEl = document.getElementById('spotOverrideActionBadge');
+    if (badgeEl && actionDescription) badgeEl.innerText = actionDescription;
+
+    const pinInput = document.getElementById('spotOverridePinInput');
+    if (pinInput) {
+        pinInput.value = '';
+        setTimeout(() => pinInput.focus(), 80);
+    }
+
+    modal.style.display = 'flex';
+    modal.style.zIndex = '1000010';
+}
+window.requestManagerOverride = requestManagerOverride;
+
+async function confirmSpotManagerOverride() {
+    const pinInput = document.getElementById('spotOverridePinInput');
+    const enteredPin = pinInput ? pinInput.value.trim() : '';
+
+    if (!enteredPin || enteredPin.length !== 4) {
+        return showToast("Please enter 4-digit Manager/Admin PIN.", "warning");
+    }
+
+    let authorized = false;
+    let authorizingManager = null;
+
+    const managersAndAdmins = staffList.filter(s => (s.role === 'Admin' || s.role === 'Manager') && s.status !== 'Inactive');
+    for (const mgr of managersAndAdmins) {
+        const isMatch = await verifyStaffPin(mgr, enteredPin);
+        if (isMatch) {
+            authorized = true;
+            authorizingManager = mgr;
+            break;
+        }
+    }
+
+    if (!authorized) {
+        const isAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
+        if (isAdminPin) {
+            authorized = true;
+            authorizingManager = { name: 'Admin', role: 'Admin' };
+        }
+    }
+
+    if (authorized) {
+        closeSpotManagerOverrideModal(false);
+        showToast(`Action approved by ${authorizingManager.name} (${authorizingManager.role})`, "success");
+        if (typeof spotOverrideCallback === 'function') {
+            const cb = spotOverrideCallback;
+            spotOverrideCallback = null;
+            spotOverrideCancelCallback = null;
+            cb();
+        }
+    } else {
+        if (pinInput) {
+            pinInput.value = '';
+            pinInput.focus();
+        }
+        showToast("❌ Access Denied: Invalid Manager PIN.", "error");
+    }
+}
+window.confirmSpotManagerOverride = confirmSpotManagerOverride;
+
+function closeSpotManagerOverrideModal(triggerCancel = true) {
+    const modal = document.getElementById('spotManagerOverrideModal');
+    if (modal) modal.style.display = 'none';
+    const pinInput = document.getElementById('spotOverridePinInput');
+    if (pinInput) pinInput.value = '';
+
+    if (triggerCancel && typeof spotOverrideCancelCallback === 'function') {
+        const cb = spotOverrideCancelCallback;
+        spotOverrideCallback = null;
+        spotOverrideCancelCallback = null;
+        cb();
+    }
+}
+window.closeSpotManagerOverrideModal = closeSpotManagerOverrideModal;
+
+function appendOverridePin(digit) {
+    const pinInput = document.getElementById('spotOverridePinInput');
+    if (!pinInput) return;
+    if (pinInput.value.length < 4) {
+        pinInput.value += digit;
+    }
+    if (pinInput.value.length === 4) {
+        confirmSpotManagerOverride();
+    }
+}
+window.appendOverridePin = appendOverridePin;
+
+function clearOverridePin() {
+    const pinInput = document.getElementById('spotOverridePinInput');
+    if (pinInput) {
+        pinInput.value = '';
+        pinInput.focus();
+    }
+}
+window.clearOverridePin = clearOverridePin;
+
+function backspaceOverridePin() {
+    const pinInput = document.getElementById('spotOverridePinInput');
+    if (pinInput && pinInput.value.length > 0) {
+        pinInput.value = pinInput.value.slice(0, -1);
+    }
+}
+window.backspaceOverridePin = backspaceOverridePin;
+
+// 👤 Staff CRUD Operations with Unique PIN Validation & Salted SHA-256
 function openAddStaffModal() {
     document.getElementById('staffModalTitle').innerText = "Add Staff Member";
     document.getElementById('staffIdInput').value = '';
@@ -234,24 +518,70 @@ function closeStaffModal() {
 }
 window.closeStaffModal = closeStaffModal;
 
-function saveStaffMember() {
-    const name = document.getElementById('staffNameInput').value.trim();
-    const role = document.getElementById('staffRoleInput').value;
-    const phone = document.getElementById('staffPhoneInput').value.trim();
-    const pin = document.getElementById('staffPinInput').value.trim();
-    const status = document.getElementById('staffStatusInput').value;
-    const existingId = document.getElementById('staffIdInput').value;
+async function saveStaffMember(data = null) {
+    const name = (data && data.name) ? data.name.trim() : (document.getElementById('staffNameInput')?.value || '').trim();
+    const role = (data && data.role) ? data.role : (document.getElementById('staffRoleInput')?.value || 'Cashier');
+    const phone = (data && data.phone) ? data.phone.trim() : (document.getElementById('staffPhoneInput')?.value || '').trim();
+    const pin = (data && data.pin) ? data.pin.trim() : (document.getElementById('staffPinInput')?.value || '').trim();
+    const status = (data && data.status) ? data.status : (document.getElementById('staffStatusInput')?.value || 'Active');
+    const existingId = (data && data.id) ? data.id : (document.getElementById('staffIdInput')?.value || '');
 
-    if (!name) return showToast("Staff name is required.");
-    if (!pin || pin.length < 4) return showToast("4-digit PIN is required.");
+    if (!name) {
+        showToast("Staff name is required.");
+        return false;
+    }
+    if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+        showToast("A unique 4-digit numeric PIN is strictly required.");
+        return false;
+    }
+
+    // Strict PIN Uniqueness Validation within Store
+    for (const s of staffList) {
+        if (existingId && String(s.id) === String(existingId)) continue;
+        const isMatch = (s.pin && String(s.pin) === pin) || await verifyStaffPin(s, pin);
+        if (isMatch) {
+            showToast("❌ PIN already assigned to another staff member. Please choose a unique 4-digit PIN.", "warning");
+            return false;
+        }
+    }
+
+    // Compute Cryptographic Salt & SHA-256 Digest
+    const salt = generatePinSalt();
+    const pinHash = await hashPin(pin, salt);
 
     if (existingId) {
-        const idNum = parseInt(existingId);
-        const idx = staffList.findIndex(s => s.id === idNum);
+        const idx = staffList.findIndex(s => String(s.id) === String(existingId));
         if (idx !== -1) {
-            staffList[idx] = { ...staffList[idx], name, role, phone, pin, status };
+            staffList[idx] = { 
+                ...staffList[idx], 
+                name, 
+                role, 
+                phone, 
+                pin, 
+                pin_salt: salt, 
+                pin_hash: pinHash, 
+                pinSalt: salt,
+                pinHash: pinHash,
+                status 
+            };
+            showToast(`Staff member ${name} updated.`);
+        } else {
+            const newStaff = {
+                id: existingId,
+                name,
+                role,
+                phone,
+                pin,
+                pin_salt: salt,
+                pin_hash: pinHash,
+                pinSalt: salt,
+                pinHash: pinHash,
+                status,
+                joinedDate: getLocalISODate()
+            };
+            staffList.push(newStaff);
+            showToast(`Staff member ${name} added.`);
         }
-        showToast(`Staff member ${name} updated.`);
     } else {
         const newStaff = {
             id: Date.now(),
@@ -259,6 +589,10 @@ function saveStaffMember() {
             role,
             phone,
             pin,
+            pin_salt: salt,
+            pin_hash: pinHash,
+            pinSalt: salt,
+            pinHash: pinHash,
             status,
             joinedDate: getLocalISODate()
         };
@@ -268,19 +602,28 @@ function saveStaffMember() {
 
     closeStaffModal();
     saveToLocal();
+    if (typeof idb !== 'undefined') {
+        idb.set('cafe_staff', staffList).catch(() => {});
+    }
     renderStaffManagementUI();
     renderLoginStaffPicker();
     persistStaffToFirestore();
+    return true;
 }
 window.saveStaffMember = saveStaffMember;
 
 function deleteStaffMember(id) {
     const staff = staffList.find(s => s.id === id);
     if (!staff) return;
-    if (staff.role === 'Admin') return showToast("Admin member cannot be deleted.");
+    if (staff.role === 'Admin' && staffList.filter(s => s.role === 'Admin').length <= 1) {
+        return showToast("The default Admin profile cannot be removed.", "warning");
+    }
     if (confirm(`Are you sure you want to remove staff member "${staff.name}"?`)) {
         staffList = staffList.filter(s => s.id !== id);
         saveToLocal();
+        if (typeof idb !== 'undefined') {
+            idb.set('cafe_staff', staffList).catch(() => {});
+        }
         renderStaffManagementUI();
         renderLoginStaffPicker();
         persistStaffToFirestore();
@@ -298,7 +641,7 @@ function loginAsStaff() {
 window.loginAsStaff = loginAsStaff;
 
 function loginAsAdmin() { 
-    if (hashString(document.getElementById('adminPinInput')?.value || '') === shopProfile.adminPinHash || document.getElementById('adminPinInput')?.value === '1234') { 
+    if ((typeof hashString === 'function' && hashString(document.getElementById('adminPinInput')?.value || '') === shopProfile?.adminPinHash) || document.getElementById('adminPinInput')?.value === '1234') { 
         currentRole = 'admin'; 
         document.getElementById('loginOverlay').style.display = 'none'; 
         if(document.getElementById('adminPinInput')) document.getElementById('adminPinInput').value = ''; 
@@ -313,16 +656,7 @@ window.loginAsAdmin = loginAsAdmin;
 function logoutStaff() { 
     currentStaff = null;
     currentRole = null; 
-    const overlay = document.getElementById('loginOverlay');
-    if (overlay) overlay.style.display = 'flex'; 
-    renderLoginStaffPicker();
-    setTimeout(() => {
-        const pinInput = document.getElementById('staffLoginPinInput');
-        if (pinInput) {
-            pinInput.value = '';
-            pinInput.focus();
-        }
-    }, 80);
+    lockTerminal(false);
     if (typeof switchTab === 'function') switchTab('pos'); 
     enforcePermissions(); 
     showToast("Terminal locked / Staff logged out.");
@@ -330,17 +664,70 @@ function logoutStaff() {
 window.logoutStaff = logoutStaff;
 
 function lockSystem() { 
-    logoutStaff();
+    lockTerminal();
 }
 window.lockSystem = lockSystem;
 
+// 🔒 RBAC Access Verification & UI Guards
+function canStaffAccessTab(staff, tabId) {
+    if (!staff || !staff.role) return true;
+    const role = staff.role.toUpperCase();
+
+    if (role === 'ADMIN' || role === 'OWNER') return true;
+    if (role === 'MANAGER') return true;
+
+    if (role === 'CASHIER') {
+        const allowed = ['pos', 'tables', 'customers', 'khata'];
+        return allowed.includes(tabId);
+    }
+
+    if (role === 'WAITER') {
+        const allowed = ['pos', 'tables'];
+        return allowed.includes(tabId);
+    }
+
+    if (role === 'KITCHEN') {
+        return ['pos', 'tables'].includes(tabId);
+    }
+
+    return true;
+}
+window.canStaffAccessTab = canStaffAccessTab;
+
 function enforcePermissions() { 
-    ['nav-menu', 'nav-settings'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            currentRole === 'staff' ? el.classList.add('locked') : el.classList.remove('locked');
-        }
-    }); 
+    const role = (currentStaff && currentStaff.role) ? currentStaff.role.toUpperCase() : 'ADMIN';
+
+    const navMenu = document.getElementById('nav-menu');
+    const navSettings = document.getElementById('nav-settings');
+    const navReports = document.getElementById('nav-dashboard');
+    const navInventory = document.getElementById('nav-inventory');
+    const navKhata = document.getElementById('nav-khata');
+
+    if (role === 'ADMIN') {
+        ['nav-menu', 'nav-settings', 'nav-dashboard', 'nav-inventory', 'nav-khata'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('locked');
+        });
+    } else if (role === 'MANAGER') {
+        ['nav-menu', 'nav-settings', 'nav-dashboard', 'nav-inventory', 'nav-khata'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('locked');
+        });
+        const resetTile = document.getElementById('settingTileResetAllData');
+        if (resetTile) resetTile.style.opacity = '0.5';
+    } else if (role === 'CASHIER') {
+        if (navReports) navReports.classList.add('locked');
+        if (navSettings) navSettings.classList.add('locked');
+        if (navInventory) navInventory.classList.add('locked');
+        if (navMenu) navMenu.classList.remove('locked');
+        if (navKhata) navKhata.classList.remove('locked');
+    } else if (role === 'WAITER') {
+        if (navReports) navReports.classList.add('locked');
+        if (navSettings) navSettings.classList.add('locked');
+        if (navInventory) navInventory.classList.add('locked');
+        if (navMenu) navMenu.classList.add('locked');
+        if (navKhata) navKhata.classList.add('locked');
+    }
 }
 window.enforcePermissions = enforcePermissions;
 
@@ -348,9 +735,8 @@ window.enforcePermissions = enforcePermissions;
 function logoutShop() {
     if (typeof window.shopAuth !== 'undefined' && typeof window.shopAuth.logoutShop === 'function') {
         window.shopAuth.logoutShop();
-    } else if (typeof window.logoutShop === 'function' && window.logoutShop !== logoutShop) {
-        window.logoutShop();
+    } else if (typeof window.logoutShopCloudAccount === 'function' && window.logoutShopCloudAccount !== logoutShop) {
+        window.logoutShopCloudAccount();
     }
 }
 window.logoutShop = window.logoutShop || logoutShop;
-

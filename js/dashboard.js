@@ -15,13 +15,21 @@ function addExpense() {
     const name = nameEl.value ? nameEl.value.trim() : ''; 
     const cost = parseFloat(costEl.value); 
     if (name && !isNaN(cost) && cost > 0) { 
+        const bName = (typeof currentStaff !== 'undefined' && currentStaff?.name) ? currentStaff.name : 'Admin';
+        const bId = (typeof currentStaff !== 'undefined' && currentStaff?.id) ? currentStaff.id : 1;
+        const bRole = (typeof currentStaff !== 'undefined' && currentStaff?.role) ? currentStaff.role : 'Admin';
+
         const newExpense = { 
             id: Date.now(), 
             date: new Date().toLocaleDateString(), 
             filterDate: (typeof getLocalISODate === 'function') ? getLocalISODate() : '', 
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
             name: name, 
-            cost: cost 
+            cost: cost,
+            biller: bName,
+            billerId: bId,
+            billerName: bName,
+            billerRole: bRole
         };
         dailyExpenses.unshift(newExpense); 
         if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addExpense', newExpense); 
@@ -1168,9 +1176,23 @@ function closeTransactionActionSheet() {
 }
 window.closeTransactionActionSheet = closeTransactionActionSheet;
 
-function voidTransaction(orderId) {
+function voidTransaction(orderId, bypassRoleCheck = false) {
     const order = orderHistory.find(o => String(o.id) === String(orderId));
     if (!order) return;
+
+    if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role !== 'Admin' && currentStaff.role !== 'Manager') {
+        if (typeof requestManagerOverride === 'function') {
+            requestManagerOverride({
+                title: "Manager Authorization Required",
+                actionDescription: `Enter Manager or Admin PIN to void Bill #${order.billNo || order.id}:`,
+                onSuccess: () => {
+                    voidTransaction(orderId, true);
+                }
+            });
+            return;
+        }
+    }
+
     const confirmVoid = confirm(`⚠️ Are you sure you want to cancel / void Bill #${order.billNo || order.id} (₹${order.amount})?\n\nThis will remove it from sales records and recalculate revenue.`);
     if (!confirmVoid) return;
 

@@ -176,7 +176,7 @@ function restoreShopSession() {
 window.restoreShopSession = restoreShopSession;
 
 // Sign out of Cloud Shop and return to Demo POS / Auth screen
-function logoutShop() {
+async function logoutShop() {
     if (typeof window.logoutShopCloudAccount === 'function' && window.logoutShopCloudAccount !== logoutShop) {
         return window.logoutShopCloudAccount();
     }
@@ -184,7 +184,15 @@ function logoutShop() {
     const activeToken = localStorage.getItem('billnaw_auth_token');
     const activeEmail = localStorage.getItem('billnaw_auth_email');
 
-    // Notify backend to purge session and active OTP
+    // 1. Unsubscribe from real-time Firestore listeners
+    if (typeof window.detachFirestoreListener === 'function') {
+        window.detachFirestoreListener();
+    }
+    if (typeof window.unsubscribeFirestoreListeners === 'function') {
+        window.unsubscribeFirestoreListeners();
+    }
+
+    // 2. Notify backend to purge session and active OTP
     try {
         if (typeof fetch === 'function') {
             fetch('/api/auth/logout', {
@@ -198,26 +206,41 @@ function logoutShop() {
         }
     } catch (e) {}
 
+    // 3. Sign out of Firebase Auth
     if (window.auth && typeof window.firebaseSignOut === 'function') {
         try {
-            window.firebaseSignOut(window.auth).catch(() => {});
+            await window.firebaseSignOut(window.auth).catch(() => {});
         } catch (e) {}
     }
     window.currentAuthUser = null;
+
+    // 4. Wipe tenant data from storage and IndexedDB
     try {
         if (typeof clearAllTenantLocalData === 'function') {
-            clearAllTenantLocalData();
+            await clearAllTenantLocalData();
         } else {
             localStorage.removeItem('billnaw_shop_session');
             localStorage.removeItem('billnaw_auth_token');
             localStorage.removeItem('billnaw_auth_email');
             localStorage.removeItem('billnaw_active_user');
             localStorage.removeItem('billnaw_auth_mode');
+            localStorage.removeItem('billnaw_last_staff_id');
+            localStorage.removeItem('billnaw_active_staff');
+            localStorage.removeItem('billnaw_terminal_locked');
             if (typeof sessionStorage !== 'undefined') {
                 sessionStorage.clear();
             }
         }
     } catch (e) {}
+
+    // 5. Reset in-memory reactive state
+    window.currentStaff = null;
+    window.currentRole = null;
+    if (typeof staffList !== 'undefined') staffList = [];
+    if (typeof tablesInfo !== 'undefined') tablesInfo = [];
+    if (typeof orderHistory !== 'undefined') orderHistory = [];
+    if (typeof customersList !== 'undefined') customersList = [];
+    if (typeof dailyExpenses !== 'undefined') dailyExpenses = [];
 
     if (typeof resetLoginOtpView === 'function') resetLoginOtpView();
     if (typeof resetSignupOtpView === 'function') resetSignupOtpView();
@@ -235,7 +258,7 @@ function logoutShop() {
     if (typeof window !== 'undefined' && window.location) {
         setTimeout(() => {
             window.location.replace(window.location.origin + window.location.pathname + '?auth=login');
-        }, 120);
+        }, 80);
     }
 }
 window.logoutShop = logoutShop;
@@ -269,27 +292,27 @@ async function initApp() {
             renderInventoryTelemetryUI();
         }
 
-        // Mandatory First-Device Registration & Auth Gate:
+        // Mandatory First-Device Registration & Strict Auth Gate:
         const hasAuthLoginParam = window.location.search && window.location.search.includes('auth=login');
         const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
-        const isAuth = activeToken && localStorage.getItem('billnaw_auth_mode') === 'authenticated';
+        const authMode = localStorage.getItem('billnaw_auth_mode');
+        const isAuth = activeToken && authMode === 'authenticated';
+        const isDemo = authMode === 'demo';
 
-        if ((hasAuthLoginParam || !isAuth) && typeof openShopAuthModal === 'function') {
+        if ((hasAuthLoginParam || (!isAuth && !isDemo)) && typeof openShopAuthModal === 'function') {
             setTimeout(() => {
                 const actOverlay = document.getElementById('activationOverlay');
-                const logOverlay = document.getElementById('loginOverlay');
                 const isActivationShowing = actOverlay && actOverlay.style.display !== 'none';
-                const isLoginShowing = logOverlay && logOverlay.style.display !== 'none';
-                if (!isActivationShowing && !isLoginShowing) {
+                if (!isActivationShowing) {
                     openShopAuthModal(true);
-                    if (!isAuth && !hasAuthLoginParam && typeof switchShopAuthTab === 'function') {
+                    if (!isAuth && !isDemo && !hasAuthLoginParam && typeof switchShopAuthTab === 'function') {
                         switchShopAuthTab('signup');
                     }
                     if (hasAuthLoginParam) {
                         try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
                     }
                 }
-            }, 120);
+            }, 60);
         }
     } catch (err) {
         console.error("Initialization error:", err);

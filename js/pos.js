@@ -960,7 +960,20 @@ function renderCheckoutUpiQr(amount) {
 }
 window.renderCheckoutUpiQr = renderCheckoutUpiQr;
 
-function openCheckoutModal() {
+function openCheckoutModal(bypassRoleCheck = false) {
+    if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role === 'Waiter') {
+        if (typeof requestManagerOverride === 'function') {
+            requestManagerOverride({
+                title: "Manager Authorization Required",
+                actionDescription: "Waiter role cannot settle bills. Enter Manager or Admin PIN to authorize payment settlement:",
+                onSuccess: () => {
+                    openCheckoutModal(true);
+                }
+            });
+            return;
+        }
+    }
+
     let tInfo = tablesInfo[activeTable]; 
     if(!tInfo || tInfo.items.length === 0) return showToast(`Table ${activeTable} is empty!`);
     const totals = calculateOrderTotals(tInfo.items, tInfo.discount);
@@ -1116,6 +1129,8 @@ async function confirmCheckout() {
         const amountTendered = pMode === 'Cash' ? (!isNaN(tenderVal) ? tenderVal : total) : total;
         const changeReturned = pMode === 'Cash' ? Math.max(0, amountTendered - total) : 0;
         const bName = document.getElementById('checkoutBillerName')?.value.trim() || (currentStaff?.name || 'Admin');
+        const bId = (currentStaff && currentStaff.id) ? currentStaff.id : 1;
+        const bRole = (currentStaff && currentStaff.role) ? currentStaff.role : 'Admin';
         const fullDateStr = new Date().toLocaleString(); 
         const safeFilterDate = getLocalISODate(); 
         const finalTableStr = oType === 'Takeaway' ? 'Takeaway' : getTableName(activeTable);
@@ -1137,6 +1152,9 @@ async function confirmCheckout() {
             changeReturned: changeReturned,
             customer: cName, 
             biller: bName, 
+            billerId: bId,
+            billerName: bName,
+            billerRole: bRole,
             items: itemNames, 
             rawItems: JSON.parse(JSON.stringify(tInfo.items)), 
             amount: total,
@@ -1638,9 +1656,13 @@ async function sendEscPosToPrinter(order) {
 window.sendEscPosToPrinter = sendEscPosToPrinter;
 
 async function sendKotToPrinter(tableNo, items) {
+    const billerName = (currentStaff && currentStaff.name) ? currentStaff.name : 'Admin';
+    const billerRole = (currentStaff && currentStaff.role) ? currentStaff.role : 'Server';
+
     if (!printCharacteristic) {
         const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
         const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
+        const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
         let itemsHtml = '';
         items.forEach(item => {
             itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${item.name}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
@@ -1657,7 +1679,7 @@ async function sendKotToPrinter(tableNo, items) {
     kotText += ALIGN_CENTER + BOLD_ON + "KITCHEN TICKET\n" + BOLD_OFF; 
     kotText += "--------------------------------\n"; 
     kotText += DOUBLE_SIZE + BOLD_ON + `TABLE: ${tableNo}\n` + NORMAL_SIZE + BOLD_OFF; 
-    kotText += `Time: ${new Date().toLocaleTimeString()}\n`; 
+    kotText += `Time: ${new Date().toLocaleTimeString()} • Server: ${billerName}\n`; 
     kotText += "--------------------------------\n"; 
     kotText += ALIGN_LEFT;
     items.forEach(item => { 

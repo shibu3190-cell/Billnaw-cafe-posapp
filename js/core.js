@@ -1144,6 +1144,20 @@ const idb = {
         await this.init(); 
         const tx = this.db.transaction('store', 'readwrite'); 
         tx.objectStore('store').put(val, key);
+    },
+    delete: async function(key) {
+        await this.init();
+        const tx = this.db.transaction('store', 'readwrite');
+        tx.objectStore('store').delete(key);
+    },
+    clear: async function(key) {
+        await this.init();
+        const tx = this.db.transaction('store', 'readwrite');
+        if (key) {
+            tx.objectStore('store').delete(key);
+        } else {
+            tx.objectStore('store').clear();
+        }
     }
 };
 window.idb = idb;
@@ -1317,6 +1331,16 @@ function attachFirestoreListener(targetStoreCode = null) {
 }
 window.attachFirestoreListener = attachFirestoreListener;
 window.initFirestoreSync = attachFirestoreListener;
+
+function detachFirestoreListener() {
+    if (firestoreUnsubscribe) {
+        try { firestoreUnsubscribe(); } catch(e) {}
+        firestoreUnsubscribe = null;
+    }
+    setCloudSyncStatus('offline', 'Disconnected');
+}
+window.detachFirestoreListener = detachFirestoreListener;
+window.unsubscribeFirestoreListeners = detachFirestoreListener;
 
 window.addEventListener('firebaseLoaded', () => {
     attachFirestoreListener();
@@ -1675,14 +1699,66 @@ window.initDatabase = initDatabase;
 function initStaffSystem() {
     if (!staffList || staffList.length === 0) {
         staffList = [
-            { id: 1, name: "Admin", role: "Admin", phone: "9876543210", pin: "1234", status: "Active", joinedDate: getLocalISODate() }
+            { 
+                id: 1, 
+                name: "Admin", 
+                role: "Admin", 
+                phone: "9876543210", 
+                pin: "1234", 
+                pin_salt: "0123456789abcdef0123456789abcdef",
+                pin_hash: "8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742",
+                status: "Active", 
+                joinedDate: getLocalISODate() 
+            }
         ];
         window.staffList = staffList;
     }
-    currentStaff = staffList[0];
-    selectedLoginStaffId = staffList[0].id;
+
+    // Ensure at least one Admin member exists so terminal is never locked out
+    if (!staffList.some(s => s.role === 'Admin')) {
+        staffList.unshift({
+            id: 1,
+            name: "Admin",
+            role: "Admin",
+            phone: "9876543210",
+            pin: "1234",
+            pin_salt: "0123456789abcdef0123456789abcdef",
+            pin_hash: "8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742",
+            status: "Active",
+            joinedDate: getLocalISODate()
+        });
+        window.staffList = staffList;
+    }
+
+    // Restore active staff from localStorage if present
+    try {
+        const savedStaffRaw = localStorage.getItem('billnaw_active_staff');
+        if (savedStaffRaw) {
+            const savedStaff = JSON.parse(savedStaffRaw);
+            const found = staffList.find(s => s.id === savedStaff.id);
+            if (found && found.status !== 'Inactive') {
+                currentStaff = found;
+                selectedLoginStaffId = found.id;
+            }
+        }
+    } catch(e) {}
+
+    if (!currentStaff) {
+        currentStaff = staffList[0];
+        selectedLoginStaffId = staffList[0].id;
+    }
     window.currentStaff = currentStaff;
+    if (typeof updateStaffTopbarDisplay === 'function') updateStaffTopbarDisplay();
+    if (typeof enforcePermissions === 'function') enforcePermissions();
     if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
+
+    // Check terminal lock persistence
+    try {
+        const isLocked = localStorage.getItem('billnaw_terminal_locked') === 'true';
+        if (isLocked && typeof lockTerminal === 'function') {
+            lockTerminal(false);
+        }
+    } catch(e) {}
 }
 window.initStaffSystem = initStaffSystem;
 

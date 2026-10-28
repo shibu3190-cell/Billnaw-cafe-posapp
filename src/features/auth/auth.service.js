@@ -130,6 +130,16 @@ export async function registerStaffMember(staffData) {
       throw new Error('PIN must be strictly 4 digits.');
     }
 
+    const staffList = getRegisteredStaff();
+    // Strict PIN Uniqueness Validation: No two staff members can have the same 4-digit PIN
+    for (const member of staffList) {
+      if (staffData.id && member.id === staffData.id) continue;
+      const isMatch = await verifyStaffPin(member, staffData.pin);
+      if (isMatch) {
+        throw new Error('PIN already assigned to another staff member. Please choose a unique 4-digit PIN.');
+      }
+    }
+
     const { pinHash, salt } = await hashPin(staffData.pin);
     const staffId = staffData.id || `staff_${Date.now()}`;
 

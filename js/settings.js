@@ -799,6 +799,31 @@ function switchTab(tabId) {
         return;
     }
 
+    // Role-Based Access Control (RBAC) Guard with Spot Manager PIN Override
+    if (typeof canStaffAccessTab === 'function' && typeof currentStaff !== 'undefined' && currentStaff && !canStaffAccessTab(currentStaff, tabId)) {
+        if (typeof requestManagerOverride === 'function') {
+            const tabNames = {
+                dashboard: 'Reports & Business Insights',
+                settings: 'Terminal Settings',
+                menu: 'Menu Management',
+                inventory: 'Inventory & Commissary',
+                khata: 'Khata Due Ledger'
+            };
+            requestManagerOverride({
+                title: 'Manager Approval Required',
+                actionDescription: `Staff role (${currentStaff.role}) is restricted from accessing ${tabNames[tabId] || tabId}. Enter Manager or Admin PIN:`,
+                onSuccess: () => {
+                    switchTabDirect(tabId);
+                }
+            });
+            return;
+        }
+    }
+
+    switchTabDirect(tabId);
+}
+
+function switchTabDirect(tabId) {
     document.querySelectorAll('.nav-btn, .tab-btn').forEach(btn => btn.classList.remove('active')); 
     document.querySelectorAll('.view, .tab-content').forEach(c => c.classList.remove('active')); 
     
@@ -859,6 +884,7 @@ function switchTab(tabId) {
     }
 }
 window.switchTab = switchTab;
+window.switchTabDirect = switchTabDirect;
 
 function factoryReset() {
     if (confirm("⚠️ EXTREME WARNING: This will permanently wipe all Menu, Orders, Customers, Expenses and Settings on this browser. Proceed?")) {

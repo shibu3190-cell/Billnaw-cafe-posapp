@@ -818,7 +818,19 @@ function addMenuItem() {
 }
 window.addMenuItem = addMenuItem;
 
-function deleteMenuItem(id) { 
+function deleteMenuItem(id, bypassRoleCheck = false) { 
+    if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role !== 'Admin' && currentStaff.role !== 'Manager') {
+        if (typeof requestManagerOverride === 'function') {
+            requestManagerOverride({
+                title: "Manager Authorization Required",
+                actionDescription: "Enter Manager or Admin PIN to delete this menu item:",
+                onSuccess: () => {
+                    deleteMenuItem(id, true);
+                }
+            });
+            return;
+        }
+    }
     if(confirm("Delete this item permanently?")) { 
         menuItems = menuItems.filter(item => item.id !== id); 
         persistMenu(); 
