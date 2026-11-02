@@ -112,7 +112,7 @@ check("CARD-05", "Lifetime spend rendered in bold emerald (#10B981) in spend gri
   assert.ok(css.includes('grid-area: spend !important;'), "Missing spend grid area assignment");
   assert.ok(css.includes('color: #10B981 !important;'), "Missing bold emerald color #10B981 on spend");
   assert.ok(css.includes('font-weight: 800 !important;'), "Missing bold font-weight: 800 on spend");
-  assert.ok(custJs.includes('₹${totalSpent}'), "Missing total spend display in customers.js");
+  assert.ok(custJs.includes('₹ ${totalSpent}'), "Missing total spend display in customers.js");
 });
 
 check("CARD-06", "Action bar includes 3-dot dropdown with >= 44x44px touch target", () => {

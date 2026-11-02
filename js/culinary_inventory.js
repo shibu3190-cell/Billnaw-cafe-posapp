@@ -306,6 +306,44 @@
                     </div>
                     <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No inventory items added yet</h3>
                     <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Start tracking raw ingredients, pantry supplies, and packaging. Click below to record your first purchase or restock.
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="padding: 9px 18px; border-radius: 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>+ Quick Restock / Purchase</span>
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        if (rawMaterials.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-inventory-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No inventory items added yet</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Start tracking raw ingredients, pantry supplies, and packaging. Click below to record your first purchase or restock.
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="padding: 9px 18px; border-radius: 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>+ Quick Restock / Purchase</span>
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        if (rawMaterials.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-inventory-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No inventory items added yet</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
                         Start tracking raw ingredients, pantry supplies, and packaging. Click below to add an ingredient or record your first purchase.
                     </p>
                     <div style="display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
@@ -738,6 +776,36 @@
     function renderMorningPrepTab(container) {
         const targetContainer = (container && container.nodeType) ? container : document.getElementById('invTabMorningPrep');
         if (!targetContainer) return;
+
+        if (subRecipes.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-prep-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/><path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No morning prep batches configured</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Configure daily bulk bases, sauces, gravies, or prep batches to streamline kitchen operations and stock deductions.
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        if (subRecipes.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-prep-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z"/><path d="M4 14h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No morning prep batches configured</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Configure daily bulk bases, sauces, gravies, or prep batches to streamline kitchen operations and stock deductions.
+                    </p>
+                </div>
+            `;
+            return;
+        }
 
         if (subRecipes.length === 0) {
             targetContainer.innerHTML = `
@@ -1956,8 +2024,9 @@
 
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed #E5E7EB; font-size: 11px;">
                                     <span style="color: var(--text-muted);">Cost: ₹ ${s.cost_per_unit} / ${s.purchase_unit}</span>
-                                    <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 12px;" onclick="window.culinaryInventory.promptRestock('${s.id}')">
-                                        ➕ Restock Keg/Bottle
+                                    <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="window.culinaryInventory.promptRestock('${s.id}')">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                        <span>Restock Keg/Bottle</span>
                                     </button>
                                 </div>
                             </div>
@@ -2015,7 +2084,7 @@
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px; padding-top: 8px; border-top: 1px solid #F3F4F6;">
                                     <span style="color: var(--text-muted);">Rate: <strong>₹ ${item.cost_per_unit} / ${item.purchase_unit}</strong></span>
                                     <div style="display: flex; gap: 6px;">
-                                        <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="window.culinaryInventory.promptRestock('${item.id}')">➕ Add</button>
+                                        <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="window.culinaryInventory.promptRestock('${item.id}')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Add</span></button>
                                         <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px; border-radius: 12px;" onclick="window.culinaryInventory.promptPriceEdit('${item.id}')">₹ Rate</button>
                                     </div>
                                 </div>
@@ -2100,6 +2169,36 @@
     function renderDishCostingTab(container) {
         const targetContainer = (container && container.nodeType) ? container : document.getElementById('invTabDishCosting');
         if (!targetContainer) return;
+
+        if (recipes.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-recipe-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No dish recipes configured</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Map your menu items to raw ingredients or prep batches to calculate live food cost and automate ingredient deductions.
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        if (recipes.length === 0) {
+            targetContainer.innerHTML = `
+                <div class="empty-recipe-state" style="padding: 48px 24px; text-align: center; background: #FFFFFF; border: 1.5px dashed var(--border); border-radius: 16px; margin: 20px 0;">
+                    <div style="width: 56px; height: 56px; border-radius: 16px; background: rgba(74, 51, 42, 0.06); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin: 0 0 6px 0;">No dish recipes configured</h3>
+                    <p style="font-size: 12px; color: var(--text-muted); max-width: 380px; margin: 0 auto 18px auto; line-height: 1.5;">
+                        Map your menu items to raw ingredients or prep batches to calculate live food cost and automate ingredient deductions.
+                    </p>
+                </div>
+            `;
+            return;
+        }
 
         if (recipes.length === 0) {
             targetContainer.innerHTML = `
@@ -2376,8 +2475,9 @@
                             Centralized commissary bulk preparation and stock transfer dispatch to retail outlets & cloud kitchens.
                         </p>
                     </div>
-                    <button class="btn btn-primary" style="font-size: 12px; padding: 6px 14px; border-radius: 16px;" onclick="window.culinaryInventory.promptDispatchTransfer()">
-                        🚚 Dispatch Stock Transfer
+                    <button class="btn btn-primary" style="font-size: 12px; padding: 6px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.promptDispatchTransfer()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17h4V5H2v12h3m10 0h2l3-3v-5h-5v8z"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+                        <span>Dispatch Stock Transfer</span>
                     </button>
                 </div>
 
@@ -2442,8 +2542,9 @@
                             Generate purchase orders directly to suppliers. Receiving PO automatically credits warehouse stock.
                         </p>
                     </div>
-                    <button class="btn btn-primary" style="font-size: 12px; padding: 6px 16px; border-radius: 16px;" onclick="window.culinaryInventory.promptCreatePO()">
-                        ➕ Create New PO
+                    <button class="btn btn-primary" style="font-size: 12px; padding: 6px 16px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.promptCreatePO()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        <span>Create New PO</span>
                     </button>
                 </div>
 
@@ -2460,8 +2561,9 @@
                                         ${po.status}
                                     </span>
                                     ${po.status !== 'Received' ? `
-                                        <button class="btn btn-success" style="padding: 4px 12px; font-size: 11px; border-radius: 12px;" onclick="window.culinaryInventory.receivePO('${po.id}')">
-                                            📥 Receive & Restock
+                                        <button class="btn btn-success" style="padding: 4px 12px; font-size: 11px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="window.culinaryInventory.receivePO('${po.id}')">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+                                            <span>Receive &amp; Restock</span>
                                         </button>
                                     ` : ''}
                                 </div>
@@ -2501,8 +2603,9 @@
                             Recommends Upscaling, Downscaling, or Maintaining order quantities to prevent stockouts while combating the ~40% restaurant food waste problem.
                         </p>
                     </div>
-                    <button class="btn btn-outline" style="font-size: 12px; padding: 6px 14px; border-radius: 16px;" onclick="window.culinaryInventory.promptLogWaste()">
-                        🗑️ Log Kitchen Spoilage / Waste
+                    <button class="btn btn-outline" style="font-size: 12px; padding: 6px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="window.culinaryInventory.promptLogWaste()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        <span>Log Kitchen Spoilage / Waste</span>
                     </button>
                 </div>
 
@@ -3685,7 +3788,6 @@
         renderPoItemsForSupplier,
         recalcPoTotal,
         sharePoWhatsApp,
-        savePurchaseOrder,
         renderDishRecipes
     };
 

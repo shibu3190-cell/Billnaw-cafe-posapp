@@ -59,6 +59,17 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Synchronize modular stylesheets from css/ into production style.css on boot
+try {
+  const cssDir = path.join(__dirname, 'css');
+  if (fs.existsSync(cssDir)) {
+    const { bundleStylesheets } = await import('./scripts/bundle-css.cjs');
+    bundleStylesheets();
+  }
+} catch (bundleErr) {
+  console.warn('[CSS Bundler] Startup note:', bundleErr.message);
+}
+
 // Persistent Disk Storage for Food Images (Milestone M2)
 const uploadsDir = path.join(__dirname, 'uploads');
 const uploadsFoodImagesDir = path.join(uploadsDir, 'food-images');

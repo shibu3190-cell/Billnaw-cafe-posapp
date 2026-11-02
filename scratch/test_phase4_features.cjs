@@ -65,7 +65,7 @@ async function runSuite() {
     assert.strictEqual(paiseToRupees(14950), 149.50);
     assert.strictEqual(paiseToRupees(30), 0.30);
     assert.strictEqual(paiseToRupees(100), 1.00);
-    assert.strictEqual(formatRupees(14950), '₹149.50');
+    assert.strictEqual(formatRupees(14950), '₹ 149.50');
   });
 
   await test("MATH-03", "Performs integer addition and multiplication with zero float drift", () => {

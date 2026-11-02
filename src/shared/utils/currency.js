@@ -48,7 +48,7 @@ export function formatRupees(paise, includeSymbol = true) {
   const formatted = `${rupeeStr}.${remainingPaise.toString().padStart(2, '0')}`;
   const prefix = isNegative ? '-' : '';
 
-  return includeSymbol ? `${prefix}₹${formatted}` : `${prefix}${formatted}`;
+  return includeSymbol ? `${prefix}₹ ${formatted}` : `${prefix}${formatted}`;
 }
 
 /**

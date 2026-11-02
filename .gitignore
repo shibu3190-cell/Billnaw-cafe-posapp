@@ -58,8 +58,10 @@ PROJECT.md
 TEST_INFRA.md
 TEST_READY.md
 data/
-scratch/chrome-profile-*
-scratch/chrome_fixes_profile/
+scratch/chrome*
+scratch/*_profile_*
+scratch/*.json
+scratch/audit_screenshots/
 
 # Uploaded food images
 uploads/**

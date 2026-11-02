@@ -1,0 +1,868 @@
+/* ✨ MODAL SYSTEM ✨ */
+.modal-overlay { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    z-index: 1000000; 
+    display: none; 
+    justify-content: center; 
+    align-items: center; 
+    flex-direction: column; 
+    background: rgba(36, 24, 18, 0.76); 
+    backdrop-filter: blur(8px); 
+    -webkit-backdrop-filter: blur(8px);
+    padding: 16px; 
+    pointer-events: auto;
+    touch-action: none;
+    box-sizing: border-box;
+}
+.modal-overlay > * {
+    pointer-events: auto;
+    touch-action: auto;
+}
+.auth-box, .modal-box { background: var(--bg-surface); padding: 28px; border-radius: var(--radius-xl); width: 100%; max-width: 480px; text-align: left; box-shadow: var(--shadow-lg); border: 1px solid var(--border); max-height: 90vh; overflow-y: auto; position: relative; }
+.modal-header { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: flex-start; }
+.modal-header h2 { color: var(--primary); font-size: 20px; font-weight: 800; letter-spacing: -0.3px; }
+.modal-header p { margin: 4px 0 0 0; font-size: 13px; color: var(--text-muted); }
+.modal-close-btn { 
+    background: transparent; 
+    border: none; 
+    color: var(--text-muted); 
+    cursor: pointer; 
+    padding: 0; 
+    width: 32px; 
+    height: 32px; 
+    border-radius: 8px; 
+    display: inline-flex; 
+    align-items: center; 
+    justify-content: center; 
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+.modal-close-btn:hover { background: var(--bg-body); color: var(--text-dark); }
+.more-close-btn { 
+    background: transparent; 
+    border: none; 
+    color: var(--text-muted); 
+    cursor: pointer; 
+    padding: 0; 
+    width: 44px; 
+    height: 44px; 
+    min-width: 44px; 
+    min-height: 44px; 
+    border-radius: 8px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+.more-close-btn:hover { background: var(--bg-body); color: var(--text-dark); }
+.modal-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+
+/* 🛡️ Strict Modal Stacking & Z-Index Hierarchy (Prevents Popup-Under-Popup Bugs) */
+#shopAuthModal { z-index: 1000008 !important; }
+#loginOverlay, #terminalLockOverlay { z-index: 1000005 !important; }
+#spotManagerOverrideModal { z-index: 1000010 !important; }
+#checkoutModal { z-index: 1000010 !important; }
+#customerModal { z-index: 1000040 !important; }
+.modal-overlay.stacked-level-1 { z-index: 1000010 !important; }
+.modal-overlay.stacked-level-2 { z-index: 1000030 !important; }
+.modal-overlay.stacked-level-3 { z-index: 1000050 !important; }
+#expensesDetailModal { z-index: 1000015 !important; }
+#customerActionHubModal { z-index: 1000020 !important; }
+#reportExportModal { z-index: 1000020 !important; }
+#reportDatePopover { z-index: 1000030 !important; }
+#moreHubModal { z-index: 1000025 !important; }
+#aiPreviewModal { z-index: 1000025 !important; }
+#quickExpenseModal { z-index: 1000030 !important; }
+#quickDiscountModal { z-index: 1000030 !important; }
+#clientQuotaModal { z-index: 1000030 !important; }
+#staffSwitchModal { z-index: 1000030 !important; }
+#dishRecipeConfigModal, #itemAlertModal, #restockExpenseModal { z-index: 1000035 !important; }
+#addStaffModal { z-index: 1000040 !important; }
+#aiMenuZoomModal { z-index: 1000050 !important; }
+
+/* 🎛️ Unified More Management Hub */
+.more-hub-overlay { display: none; align-items: center; justify-content: center; }
+.more-hub-box { background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 20px; border: 1px solid var(--border); animation: fadeInModal 0.2s ease; width: 100%; }
+.more-hub-handle { display: none; }
+.more-hub-grid { display: flex; flex-direction: column; gap: 10px; }
+.more-hub-card { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-body); border: 1px solid var(--border); cursor: pointer; width: 100%; text-align: left; min-height: 52px; min-width: 44px; transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+.more-hub-card:hover { background: #FFFFFF; border-color: var(--primary-light); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.more-hub-card:active { transform: scale(0.98); }
+.more-hub-icon-box { width: 40px; height: 40px; border-radius: 10px; background: rgba(20, 56, 50, 0.08); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.more-hub-info { flex: 1; min-width: 0; }
+.more-hub-title { font-size: 14px; font-weight: 700; color: var(--text-dark); margin-bottom: 2px; }
+.more-hub-desc { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.more-hub-arrow { color: var(--text-muted); flex-shrink: 0; display: flex; align-items: center; }
+
+.huge-total { font-size: 38px; font-weight: 800; color: var(--primary); text-align: center; margin: 12px 0; letter-spacing: -1px; }
+
+.key-input, .pin-input { width: 100%; padding: 14px; font-size: 18px; text-align: center; letter-spacing: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px; background: var(--bg-body); color: var(--text-dark); font-family: monospace; font-weight: 700; transition: all 0.2s ease; }
+.key-input:focus, .pin-input:focus { border-color: var(--milk-choc); box-shadow: 0 0 0 3px rgba(125, 79, 66, 0.18); background: #fff;}
+.pin-input { letter-spacing: 12px; font-size: 24px; font-weight: 800; }
+
+/* 🔢 TOUCH-FRIENDLY NUMERIC PIN KEYPAD */
+.pin-numpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+    margin-bottom: 8px;
+}
+.pin-numpad-btn {
+    padding: 12px 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary);
+    background: #FAF7F4;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    touch-action: manipulation;
+}
+.pin-numpad-btn:hover {
+    background: #F0EAE1;
+    border-color: var(--primary);
+}
+.pin-numpad-btn:active {
+    transform: scale(0.96);
+    background: var(--primary);
+    color: #FAF7F4;
+}
+.pin-numpad-btn.action-btn {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.nav-btn.locked, .slide-nav-item.locked {
+    opacity: 0.45;
+    position: relative;
+}
+.nav-btn.locked::after, .slide-nav-item.locked::after {
+    content: "🔒";
+    font-size: 10px;
+    position: absolute;
+    top: 4px;
+    right: 4px;
+}
+
+
+/* Royal Cafe POS Theme Brand Header */
+.shop-auth-header {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12);
+    color: #FFFFFF;
+}
+
+.shop-auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.shop-auth-logo-badge {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1.5px solid rgba(255, 255, 255, 0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    color: #FAF7F4;
+}
+
+.shop-auth-brand-name {
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.2;
+}
+
+.shop-auth-brand-badge {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--milk-choc);
+    color: #FAF7F4;
+    text-transform: uppercase;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.shop-auth-brand-sub {
+    margin: 2px 0 0 0;
+    font-size: 11px;
+    color: #D4B895;
+    font-weight: 500;
+    opacity: 0.95;
+}
+
+/* Semantic Close Button (strictly distinct from .modal-close-btn) */
+.shop-auth-close-btn {
+    display: none !important;
+    pointer-events: none !important;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #E2E8F0;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.shop-auth-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #FFFFFF;
+    transform: scale(1.05);
+}
+
+.shop-auth-close-btn:active {
+    transform: scale(0.95);
+}
+
+/* Modal Body */
+.shop-auth-body {
+    padding: 16px 22px 20px 22px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Segmented Tab Control (Login vs Sign Up) */
+.auth-segmented-control {
+    display: flex;
+    background: #FAF7F4;
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 14px;
+    border: 1.5px solid var(--border);
+    gap: 4px;
+}
+
+.auth-tab-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 9px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+}
+
+.auth-tab-btn:hover:not(.active) {
+    color: var(--primary);
+    background: rgba(20, 56, 50, 0.05);
+}
+
+.auth-tab-btn.active {
+    color: #FFFFFF;
+    background: var(--primary);
+    box-shadow: 0 2px 8px rgba(20, 56, 50, 0.22);
+}
+
+/* Labels and Inputs */
+.shop-auth-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--primary);
+    margin-bottom: 6px;
+}
+
+.shop-auth-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.shop-auth-input-wrap .input-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.shop-auth-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-dark);
+    background: #FAF7F4;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+}
+
+.shop-auth-input-wrap .shop-auth-input {
+    padding-left: 38px;
+}
+
+.shop-auth-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(20, 56, 50, 0.15);
+    background: #FFFFFF;
+    outline: none;
+}
+
+/* Two-column responsive row */
+.form-row-dual {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+/* Validation Feedback */
+.validation-feedback {
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+    min-height: 16px;
+    line-height: 1.3;
+}
+.validation-feedback.success { color: #059669; }
+.validation-feedback.error { color: #DC2626; }
+.validation-feedback.muted { color: #64748B; }
+
+/* Buttons */
+.btn-emerald {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.18s ease;
+    box-shadow: 0 4px 14px rgba(43, 28, 21, 0.22);
+}
+
+.btn-emerald:hover {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+    box-shadow: 0 6px 18px rgba(43, 28, 21, 0.32);
+    transform: translateY(-1px);
+}
+
+.btn-emerald:active {
+    transform: translateY(1px);
+}
+
+/* 6-Digit Auto-Advancing OTP Inputs */
+.otp-section {
+    background: #FAF7F4;
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+    animation: authModalFadeIn 0.2s ease;
+}
+
+.otp-header-info {
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.otp-step-label {
+    font-size: 12px;
+    color: var(--text-dark);
+}
+
+.otp-inputs-grid {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.otp-digit-input {
+    width: 46px;
+    height: 52px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 800;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    color: var(--primary);
+    background: #FFFFFF;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    transition: all 0.15s ease;
+    outline: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.otp-digit-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(43, 28, 21, 0.15);
+    transform: translateY(-2px);
+    background: #FFFFFF;
+}
+
+/* Timer and Resend Row */
+.otp-timer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    padding: 0 4px;
+}
+
+.otp-timer-text strong {
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.btn-resend-link {
+    background: transparent;
+    border: none;
+    color: var(--milk-choc);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.btn-resend-link:hover:not(:disabled) {
+    text-decoration: underline;
+    background: rgba(43, 28, 21, 0.06);
+}
+
+.btn-resend-link:disabled {
+    color: var(--text-subtle);
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
+/* Mode toggle link */
+.auth-mode-toggle-wrap {
+    text-align: center;
+    margin-top: 14px;
+}
+
+.auth-link-btn {
+    background: transparent;
+    border: none;
+    color: var(--milk-choc);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+}
+
+.auth-link-btn:hover {
+    background: rgba(43, 28, 21, 0.06);
+    color: var(--primary);
+    text-decoration: underline;
+}
+
+/* ⚡ Frictionless Skip / Demo POS Bypass Button */
+.auth-bypass-card {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid #E2E8F0;
+    text-align: center;
+}
+
+.btn-demo-bypass {
+    width: 100%;
+    padding: 13px 18px;
+    background: #F0FDF4;
+    border: 1.5px solid rgba(16, 185, 129, 0.4);
+    border-radius: 12px;
+    color: #065F46;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+}
+
+.btn-demo-bypass:hover {
+    background: #DCFCE7;
+    border-color: #10B981;
+    color: #047857;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    transform: translateY(-1px);
+}
+
+.btn-demo-bypass:active {
+    transform: translateY(1px);
+    background: #BBF7D0;
+}
+
+.btn-demo-bypass-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.demo-lightning-icon {
+    font-size: 15px;
+    color: #F59E0B;
+}
+
+.demo-arrow {
+    transition: transform 0.2s ease;
+}
+
+.btn-demo-bypass:hover .demo-arrow {
+    transform: translateX(3px);
+}
+
+.bypass-subtext {
+    font-size: 11px;
+    color: #64748B;
+    margin: 6px 0 0 0;
+    font-weight: 500;
+}
+
+/* Topbar Cloud Auth Pill (Hidden as requested: Access via Settings -> Store Profile) */
+#topbarCloudAuthBtn,
+.cloud-auth-pill {
+    display: none !important;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: rgba(20, 56, 50, 0.08);
+    border: 1px solid rgba(20, 56, 50, 0.2);
+    color: #143832;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.cloud-auth-pill:hover {
+    background: #143832;
+    color: #FFFFFF;
+    border-color: #143832;
+    box-shadow: 0 2px 8px rgba(20, 56, 50, 0.2);
+}
+
+/* ============================================================
+   📱 RESPONSIVE MOBILE VIEWPORT: NATIVE BOTTOM-SHEET STYLING
+   ============================================================ */
+@media screen and (max-width: 640px) {
+    #shopAuthModal {
+        justify-content: flex-end;
+        align-items: stretch;
+        padding: 0;
+    }
+
+    #shopAuthModal .shop-auth-card {
+        max-width: 100%;
+        width: 100%;
+        border-radius: 24px 24px 0 0;
+        max-height: 92vh;
+        margin: 0;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.35);
+        animation: shopAuthSheetSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes shopAuthSheetSlideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
+
+    .shop-auth-sheet-handle {
+        display: block;
+        width: 44px;
+        height: 5px;
+        background: rgba(255, 255, 255, 0.35);
+        border-radius: 10px;
+        margin: 8px auto 4px auto;
+    }
+
+    .otp-inputs-grid {
+        gap: 6px;
+    }
+
+    .otp-digit-input {
+        width: 42px;
+        height: 48px;
+        font-size: 20px;
+    }
+
+    .form-row-dual {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+}
+
+/* Phone & WhatsApp Feature Preview Card */
+.phone-auth-feature-preview {
+    margin-top: 18px;
+    padding: 12px 14px;
+    background: #FAF7F4;
+    border: 1.5px dashed var(--border);
+    border-radius: 14px;
+    text-align: center;
+}
+.phone-feature-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--primary);
+}
+.coming-soon-pill {
+    font-size: 9px;
+    font-weight: 800;
+    background: #E05A38;
+    color: #FFFFFF;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.phone-feature-sub {
+    margin: 4px 0 0 0;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* Table Management Modal Close Button & Presets */
+.tbl-close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: #FAF7F4;
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dark);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.tbl-close-btn:hover {
+    background: #EBE6DF;
+    color: var(--primary);
+}
+.table-preset-chip {
+    padding: 4px 10px;
+    border-radius: 14px;
+    background: #FAF7F4;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.table-preset-chip:hover {
+    background: #143832;
+    color: #FFFFFF;
+    border-color: #143832;
+}
+
+/* Session Management Modal Close Button */
+.session-close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: #FAF7F4;
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dark);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.session-close-btn:hover {
+    background: #EBE6DF;
+    color: var(--primary);
+}
+
+/* Indian Culinary & Liquid Telemetry Hub Subnav */
+.inv-subnav-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+}
+.inv-subnav-btn {
+    padding: 8px 16px;
+    background: #FAF7F4;
+    border: 1.5px solid #E6DCCD;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dark);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.inv-subnav-btn:hover {
+    background: #F3ECE2;
+    border-color: #D8C7B4;
+}
+.inv-subnav-btn.active {
+    background: #143832;
+    border-color: #143832;
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(20, 56, 50, 0.2);
+}
+
+/* ============================================================
+   🥘 RTR (REAL-TIME RAW) TRACKER & RECIPE CONFIG STYLES
+   ============================================================ */
+.rtr_close_btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+.rtr_close_btn:hover {
+    background: #FEE2E2;
+    color: #DC2626;
+}
+
+.rtr-vertical-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.rtr-staples-vertical-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rtr-staple-row {
+    background: #FFFFFF;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+.rtr-staple-row:hover {
+    border-color: #CBD5E1;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
+}
+.rtr-staple-row.low-stock {
+    border-color: #FCA5A5;
+    background: #FEF2F2;
+}
+
+.rtr-dishes-vertical-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.rtr-dish-card {
+    background: #FFFFFF;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.rtr-dish-card:hover {
+    border-color: #143832;
+    background: #FAF7F4;
+    box-shadow: 0 4px 12px rgba(20, 56, 50, 0.08);
+    transform: translateY(-1px);
+}
+
+.rtr-recipe-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #F1F5F9;
+    color: #334155;
+    border: 1px solid #E2E8F0;
+}
+
+/* ============================================================
+   ✨ CLEAN UI/UX REDESIGN (Screenshots 1-3)
+   ============================================================ */

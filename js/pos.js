@@ -495,7 +495,7 @@ function applyQuickDiscount() {
     persistTables();
     updateCartUI();
     closeQuickDiscountModal();
-    showToast(`🏷️ Discount of ${currentDiscountModalType === 'percent' ? val + '%' : '₹' + val} applied!`);
+    showToast(`🏷️ Discount of ${currentDiscountModalType === 'percent' ? val + '%' : '₹ ' + val} applied!`);
 }
 window.applyQuickDiscount = applyQuickDiscount;
 
@@ -1129,6 +1129,19 @@ async function confirmCheckout() {
         }
     }
 
+    const totals = calculateOrderTotals(tInfo.items, tInfo.discount);
+    const total = totals.finalTotal;
+
+    // Fast Cash Tender Validation
+    if (pMode === 'Cash') {
+        const tenderVal = parseFloat(document.getElementById('checkoutCashTenderedInput')?.value);
+        const amountTendered = !isNaN(tenderVal) ? tenderVal : total;
+        if (amountTendered < total - 0.01) {
+            showToast(`Amount tendered (₹ ${amountTendered.toFixed(2)}) is less than total payable (₹ ${total.toFixed(2)})`);
+            return;
+        }
+    }
+
     const payBtn = document.querySelector('#checkoutModal .btn-success');
     if (payBtn) {
         payBtn.disabled = true; 
@@ -1140,8 +1153,6 @@ async function confirmCheckout() {
     if (cModal) cModal.style.display = 'none';
     
     try {
-        const totals = calculateOrderTotals(tInfo.items, tInfo.discount);
-        const total = totals.finalTotal;
         const itemNames = tInfo.items.map(i => `${i.name} (x${i.qty})`).join(', ');
 
         const oType = document.getElementById('checkoutOrderType')?.value || 'Dine-In'; 
@@ -1399,7 +1410,7 @@ window.getLogoBytes = getLogoBytes;
 
 async function connectBluetoothPrinter() {
     const btn = document.getElementById('btnBleStatus');
-    const originalText = btn ? btn.innerHTML : '📡 Search & Pair Printer';
+    const originalText = btn ? btn.innerHTML : 'Search & Pair Printer';
     try {
         if (!navigator.bluetooth) { 
             alert("❌ BLUETOOTH NOT SUPPORTED!\n\nApple iOS (iPhone/iPad) blocks Web Bluetooth. You must use Android Chrome, Windows Chrome, or Mac Chrome."); 
@@ -1409,7 +1420,7 @@ async function connectBluetoothPrinter() {
             alert("❌ INSECURE CONNECTION!\n\nWeb Bluetooth ONLY works on 'https://' websites."); 
             return; 
         }
-        if (btn) btn.innerHTML = "⏳ Searching...";
+        if (btn) btn.innerHTML = "Searching...";
         showToast("Looking for printers...");
         bleDevice = await navigator.bluetooth.requestDevice({ 
             acceptAllDevices: true, 
@@ -1424,7 +1435,7 @@ async function connectBluetoothPrinter() {
             alert("⚠️ Printer Disconnected!");
             printCharacteristic = null;
             if (btn) {
-                btn.innerHTML = "📡 Search & Pair Printer";
+                btn.innerHTML = "Search & Pair Printer";
                 btn.style.background = "transparent";
                 btn.style.color = "var(--accent)";
             }
@@ -1438,7 +1449,7 @@ async function connectBluetoothPrinter() {
                     printCharacteristic = characteristic;
                     showToast("🖨️ Printer Connected Successfully!");
                     if (btn) {
-                        btn.innerHTML = "✅ Connected";
+                        btn.innerHTML = "Connected";
                         btn.style.background = "var(--success)";
                         btn.style.color = "#fff";
                     }

@@ -183,7 +183,7 @@ export const ThermalPrinterBridge = {
         const itemTotalPaise = item.line_total_paise !== undefined 
           ? item.line_total_paise 
           : (item.item_subtotal_paise || (item.price * 100));
-        const price = `₹${(itemTotalPaise / 100).toFixed(2)}`.padStart(9, ' ');
+        const price = ("Rs. " + (itemTotalPaise / 100).toFixed(2)).padStart(10, ' ');
         parts.push(encoder.encode(`${name} ${qty} ${price}\n`));
       }
     }
@@ -196,7 +196,7 @@ export const ThermalPrinterBridge = {
       ? invoice.final_payable_paise 
       : (invoice.final_total_paise || (invoice.amount * 100));
     const totalRupees = (totalPaise / 100).toFixed(2);
-    parts.push(encoder.encode(`TOTAL: ₹${totalRupees}\n\n`));
+    parts.push(encoder.encode("TOTAL: Rs. " + totalRupees + "\n\n"));
 
     // Center alignment & footer
     parts.push(new Uint8Array([0x1B, 0x61, 0x01]));

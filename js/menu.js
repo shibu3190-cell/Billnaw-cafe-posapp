@@ -1602,7 +1602,7 @@ function renderAiPreviewModal() {
         container.innerHTML = `
             <div style="text-align: center; padding: 30px 20px; color: var(--text-muted);">
                 <p style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">No items in review.</p>
-                <button type="button" class="btn btn-outline" style="padding: 8px 16px; font-size: 12px;" onclick="addManualPendingAiItem()">➕ Add Item</button>
+                <button type="button" class="btn btn-outline" style="padding: 8px 16px; font-size: 12px;" onclick="addManualPendingAiItem()">Add Item</button>
             </div>
         `;
         return;
@@ -1642,7 +1642,7 @@ function renderAiPreviewModal() {
                 <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px; flex-wrap: wrap;">
                     <button type="button" onclick="triggerAiItemImageUpload(${index})" style="background: none; border: none; font-size: 11px; color: var(--milk-choc); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>Upload Photo</button>
                     <span style="color: var(--border); font-size: 10px;">•</span>
-                    <button type="button" onclick="generateAiItemPhoto(${index})" id="ai-gen-btn-${index}" style="background: none; border: none; font-size: 11px; color: var(--success); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>${item.hasCustomImage || item._varIndex ? '🎲 Next Photo' : 'AI Visual'}</button>
+                    <button type="button" onclick="generateAiItemPhoto(${index})" id="ai-gen-btn-${index}" style="background: none; border: none; font-size: 11px; color: var(--success); cursor: pointer; padding: 0; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>${item.hasCustomImage || item._varIndex ? 'Next Photo' : 'AI Visual'}</button>
                     ${item.hasCustomImage ? '<span style="font-size: 10px; color: var(--success); font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">✓ Attached</span>' : ''}
                 </div>
             </div>
@@ -1803,7 +1803,7 @@ window.closeAiPreviewModal = closeAiPreviewModal;
 async function confirmAiImport() {
     const btn = document.getElementById('btnConfirmAiImport') || document.querySelector('#aiPreviewModal .btn-success');
     try {
-        if (btn) { btn.disabled = true; btn.innerText = "⏳ Importing Items..."; }
+        if (btn) { btn.disabled = true; btn.innerText = "Importing Items..."; }
         if (!pendingAiItems || pendingAiItems.length === 0) {
             throw new Error("No items in review to import.");
         }
@@ -1866,7 +1866,7 @@ async function confirmAiImport() {
         console.error(error);
         showToast("❌ Import failed: " + error.message);
     } finally {
-        if (btn) { btn.disabled = false; btn.innerText = "✅ Confirm & Import to Menu"; }
+        if (btn) { btn.disabled = false; btn.innerText = "Confirm & Import to Menu"; }
     }
 }
 window.confirmAiImport = confirmAiImport;
