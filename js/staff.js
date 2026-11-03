@@ -731,12 +731,3 @@ function enforcePermissions() {
 }
 window.enforcePermissions = enforcePermissions;
 
-// Shop Cloud Logout delegation
-function logoutShop() {
-    if (typeof window.shopAuth !== 'undefined' && typeof window.shopAuth.logoutShop === 'function') {
-        window.shopAuth.logoutShop();
-    } else if (typeof window.logoutShopCloudAccount === 'function' && window.logoutShopCloudAccount !== logoutShop) {
-        window.logoutShopCloudAccount();
-    }
-}
-window.logoutShop = window.logoutShop || logoutShop;

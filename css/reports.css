@@ -406,21 +406,6 @@
     transform: scale(0.95);
 }
 
-.app-update-popup {
-    animation: slideUpUpdate 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes slideUpUpdate {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 /* 9. Visual Charts Responsive Grid (Monthly Bar Chart, Donut Analytics, Top Selling) */
 .dash-charts-grid {
     display: grid;
@@ -844,9 +829,11 @@
 /* Dashboard responsive card spacing */
 @media screen and (max-width: 768px) {
     .dash-charts-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 18px !important;
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    .dash-charts-grid .dash-top-selling-card {
+        grid-column: auto;
     }
     .kpi-grid {
         grid-template-columns: repeat(2, 1fr) !important;

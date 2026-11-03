@@ -148,19 +148,6 @@ export async function recordSuccessfulAiUsage(clientId, checkResult) {
 }
 
 /**
- * Backward-compatible helper that checks quota and resolves key
- */
-export async function checkAndIncrementAiQuota(clientId) {
-  const res = await checkAiQuotaAndKey(clientId);
-  const quota = await recordSuccessfulAiUsage(clientId, res);
-  return {
-    apiKey: res.apiKey,
-    isCustomKey: res.isCustomKey,
-    quota
-  };
-}
-
-/**
  * Read-only quota check for client dashboard/settings
  */
 export async function getClientQuotaInfo(clientId) {

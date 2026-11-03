@@ -20,14 +20,12 @@ import {
   generateImagenFoodImage,
   sanitizeErrorForClient,
   validateFoodImageGenRequest,
-  checkFoodImageRateLimit,
-  resetFoodImageRateLimits,
-  buildCommercialFoodPrompt
+  checkFoodImageRateLimit
 } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
-import { parseMenuFromText, generateDefaultMenuTemplate } from './server/menu-parser.js';
+import { parseMenuFromText } from './server/menu-parser.js';
 import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData } from './server/auth-service.js';
 import {
   getRawMaterials,
