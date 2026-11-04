@@ -12,6 +12,18 @@ function generatePinSalt() {
     return 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/[x]/g, () => ((Math.random() * 16) | 0).toString(16));
 }
 window.generatePinSalt = generatePinSalt;
+window.generateSalt = generatePinSalt;
+
+function timingSafeEqual(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    if (a.length !== b.length) return false;
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
+}
+window.timingSafeEqual = timingSafeEqual;
 
 async function hashPin(pin, salt) {
     const cleanPin = String(pin).trim();
@@ -37,24 +49,91 @@ async function hashPin(pin, salt) {
 }
 window.hashPin = hashPin;
 
+async function verifyPin(enteredPin, salt, expectedHash) {
+    if (!enteredPin || !salt || !expectedHash) return false;
+    const computedHash = await hashPin(enteredPin, salt);
+    return timingSafeEqual(computedHash, expectedHash);
+}
+window.verifyPin = verifyPin;
+
+const ROLES = {
+    ADMIN: 'Admin',
+    MANAGER: 'Manager',
+    CASHIER: 'Cashier',
+    CHEF: 'Kitchen Chef',
+    SERVER: 'Floor Server',
+    WAITER: 'Floor Server',
+    KITCHEN: 'Kitchen Chef'
+};
+window.ROLES = ROLES;
+
+const ROLE_PERMISSIONS = {
+    [ROLES.ADMIN]: ['can_take_orders', 'can_settle_bills', 'can_apply_discount', 'can_void_invoice', 'can_manage_menu', 'can_view_reports', 'can_view_expenses', 'can_change_settings', 'can_manage_devices', 'can_manage_staff', 'can_view_kds', 'can_update_prep_status', 'can_dispatch_kot', 'can_view_tables'],
+    [ROLES.MANAGER]: ['can_take_orders', 'can_settle_bills', 'can_apply_discount', 'can_void_invoice', 'can_manage_menu'],
+    [ROLES.CASHIER]: ['can_take_orders', 'can_settle_bills'],
+    [ROLES.CHEF]: ['can_view_kds', 'can_update_prep_status'],
+    [ROLES.SERVER]: ['can_take_orders', 'can_dispatch_kot', 'can_view_tables']
+};
+window.ROLE_PERMISSIONS = ROLE_PERMISSIONS;
+
+function normalizeRole(roleInput) {
+    if (!roleInput || typeof roleInput !== 'string') return ROLES.CASHIER;
+    const clean = roleInput.trim().toLowerCase();
+    if (clean === 'admin' || clean === 'owner') return ROLES.ADMIN;
+    if (clean === 'manager') return ROLES.MANAGER;
+    if (clean === 'cashier') return ROLES.CASHIER;
+    if (clean === 'kitchen' || clean === 'kitchen chef' || clean === 'chef') return ROLES.CHEF;
+    if (clean === 'waiter' || clean === 'server' || clean === 'floor server' || clean === 'waiters') return ROLES.SERVER;
+    return ROLES.CASHIER;
+}
+window.normalizeRole = normalizeRole;
+
+function hasPermission(userOrRole, permission) {
+    if (!userOrRole) return false;
+    const rawRole = typeof userOrRole === 'string' ? userOrRole : userOrRole.role;
+    if (!rawRole) return false;
+    const normRole = normalizeRole(rawRole);
+    const allowed = ROLE_PERMISSIONS[normRole] || [];
+    return allowed.includes(permission);
+}
+window.hasPermission = hasPermission;
+
+function checkPermission(roleOrUser, permission) {
+    return hasPermission(roleOrUser, permission);
+}
+window.checkPermission = checkPermission;
+
 async function verifyStaffPin(staff, enteredPin) {
     if (!staff || !enteredPin) return false;
     const cleanPin = String(enteredPin).trim();
-    // Immediate match if plaintext matches
-    if (staff.pin && String(staff.pin) === cleanPin) return true;
-    const hash = staff.pin_hash || staff.hash;
-    const salt = staff.pin_salt || staff.salt || '';
+    // Legacy on-the-fly migration: if staff has plaintext pin, migrate to salted SHA-256
+    if (staff.pin) {
+        const salt = staff.pin_salt || staff.pinSalt || generatePinSalt();
+        const hash = await hashPin(String(staff.pin).trim(), salt);
+        staff.pin_salt = salt;
+        staff.pin_hash = hash;
+        staff.pinSalt = salt;
+        staff.pinHash = hash;
+        delete staff.pin;
+        if (typeof saveToLocal === 'function') saveToLocal();
+        if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_staff', staffList).catch(() => {});
+        if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore(staff);
+    }
+    const hash = staff.pin_hash || staff.hash || staff.pinHash;
+    const salt = staff.pin_salt || staff.salt || staff.pinSalt || '';
     if (hash && salt) {
-        const computed = await hashPin(cleanPin, salt);
-        return computed === hash;
+        return verifyPin(cleanPin, salt, hash);
     }
     return false;
 }
 window.verifyStaffPin = verifyStaffPin;
 
-// Global state for terminal lock
+// Global state for terminal lock & RBAC mode
 let isTerminalLocked = false;
 window.isTerminalLocked = isTerminalLocked;
+window.STRICT_RBAC_MODE = true;
+let failedPinAttempts = 0;
+let pinLockoutUntil = null;
 
 function renderStaffManagementUI() {
     const tbody = document.getElementById('staffTableBody');
@@ -154,6 +233,12 @@ window.selectLoginStaff = selectLoginStaff;
 
 // 🔒 Fast Unlock & PIN Verification
 async function confirmStaffLogin() {
+    if (pinLockoutUntil && Date.now() < pinLockoutUntil) {
+        const remainingSec = Math.ceil((pinLockoutUntil - Date.now()) / 1000);
+        showToast(`Keypad locked due to failed attempts. Try again in ${remainingSec}s.`, "error");
+        return;
+    }
+
     const pinInput = document.getElementById('staffLoginPinInput');
     const enteredPin = pinInput ? pinInput.value.trim() : '';
 
@@ -166,13 +251,33 @@ async function confirmStaffLogin() {
     const isValidAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
 
     if (isValidStaffPin || isValidAdminPin) {
-        unlockTerminal(matchedStaff || { id: 1, name: "Admin", role: "Admin" });
+        failedPinAttempts = 0;
+        pinLockoutUntil = null;
+        const staffToLogin = matchedStaff || { id: 1, name: "Admin", role: "Admin" };
+        if (staffToLogin.mustChangePin === true) {
+            openFirstLoginPinModal(staffToLogin);
+            return;
+        }
+        unlockTerminal(staffToLogin);
     } else {
+        failedPinAttempts++;
         if (pinInput) {
             pinInput.value = '';
             pinInput.focus();
         }
-        showToast("❌ Incorrect PIN. Please try again.");
+        const authBox = document.querySelector('#loginOverlay .auth-box');
+        if (authBox) {
+            authBox.classList.remove('pin-shake');
+            void authBox.offsetWidth;
+            authBox.classList.add('pin-shake');
+            setTimeout(() => authBox.classList.remove('pin-shake'), 400);
+        }
+        if (failedPinAttempts >= 5) {
+            pinLockoutUntil = Date.now() + 30000;
+            showToast("5 failed PIN attempts. Keypad throttled for 30 seconds.", "error");
+        } else {
+            showToast(`❌ Incorrect PIN. (${5 - failedPinAttempts} attempts remaining)`);
+        }
     }
 }
 window.confirmStaffLogin = confirmStaffLogin;
@@ -194,6 +299,38 @@ function unlockTerminal(staff) {
         currentRole = 'staff';
     }
 
+    // Milestone 4: Staff Session Lifecycle & Cloud Sync
+    const devId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (localStorage.getItem('bongbhoj_device_id') || 'DEV_MASTER');
+    const sessionId = `sess_${devId}_${staff.id}`;
+    window.currentSessionId = sessionId;
+    try {
+        localStorage.setItem('billnaw_current_session_id', sessionId);
+    } catch (e) {}
+
+    const devName = localStorage.getItem('billnaw_station_name') || (window.currentDeviceRecord && window.currentDeviceRecord.deviceName) || 'Counter 1';
+    const stationProfile = (typeof getStationProfile === 'function' ? getStationProfile() : null) || localStorage.getItem('billnaw_station_profile') || (window.currentDeviceRecord && window.currentDeviceRecord.stationProfile) || 'GENERAL_STATION';
+    const nowIso = new Date().toISOString();
+    const sessionRecord = {
+        sessionId: sessionId,
+        staffId: staff.id,
+        staffName: staff.name,
+        staffRole: staff.role || 'Cashier',
+        deviceId: devId,
+        deviceName: devName,
+        stationProfile: stationProfile,
+        status: 'ONLINE',
+        shiftStartedAt: nowIso,
+        lastActiveAt: nowIso,
+        isLocked: false
+    };
+
+    if (typeof syncSessionRecordToCloud === 'function') {
+        syncSessionRecordToCloud(sessionRecord);
+    }
+    if (typeof startSessionHeartbeat === 'function') {
+        startSessionHeartbeat(sessionRecord);
+    }
+
     const overlay = document.getElementById('loginOverlay');
     if (overlay) overlay.style.display = 'none';
     const pinInput = document.getElementById('staffLoginPinInput');
@@ -201,6 +338,20 @@ function unlockTerminal(staff) {
 
     enforcePermissions();
     updateStaffTopbarDisplay();
+
+    // Milestone 3: Route immediately to tailored station view
+    const initialView = (typeof resolveInitialViewForStation === 'function')
+        ? resolveInitialViewForStation(typeof getStationProfile === 'function' ? getStationProfile() : null, staff ? staff.role : null)
+        : 'pos';
+    if (typeof switchView === 'function') {
+        switchView(initialView);
+    } else if (typeof switchTab === 'function') {
+        switchTab(initialView);
+    }
+    if (typeof applyStationProfileRestrictions === 'function') {
+        applyStationProfileRestrictions();
+    }
+
     showToast(`Welcome, ${currentStaff.name}! (${currentStaff.role || 'Staff'})`);
 }
 window.unlockTerminal = unlockTerminal;
@@ -229,8 +380,391 @@ function lockTerminal(notify = true) {
 }
 window.lockTerminal = lockTerminal;
 
+// ============================================================================
+// 📡 Milestone 4: Session Heartbeat, Remote Lockout & Live Session Hub
+// ============================================================================
+
+let sessionHeartbeatInterval = null;
+let lastLocalActivityTimestamp = Date.now();
+let lastCloudHeartbeatTimestamp = 0;
+let currentSessionRecord = null;
+
+function trackUserInteraction() {
+    lastLocalActivityTimestamp = Date.now();
+}
+
+function startSessionHeartbeat(sessionRecord) {
+    stopSessionHeartbeat();
+    currentSessionRecord = sessionRecord;
+    lastLocalActivityTimestamp = Date.now();
+    lastCloudHeartbeatTimestamp = Date.now();
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('pointerdown', trackUserInteraction, { passive: true });
+        window.addEventListener('keydown', trackUserInteraction, { passive: true });
+        window.addEventListener('touchstart', trackUserInteraction, { passive: true });
+    }
+
+    sessionHeartbeatInterval = setInterval(async () => {
+        if (!currentSessionRecord || !currentSessionRecord.sessionId) return;
+        if (isTerminalLocked) return;
+
+        const now = Date.now();
+        const inactiveMs = now - lastLocalActivityTimestamp;
+        const timeSinceCloudHeartbeat = now - lastCloudHeartbeatTimestamp;
+
+        if (timeSinceCloudHeartbeat >= 90 * 1000) {
+            if (inactiveMs <= 5 * 60 * 1000) {
+                const nowIso = new Date().toISOString();
+                currentSessionRecord.lastActiveAt = nowIso;
+                currentSessionRecord.status = 'ONLINE';
+                lastCloudHeartbeatTimestamp = now;
+                if (typeof syncSessionRecordToCloud === 'function') {
+                    await syncSessionRecordToCloud(currentSessionRecord);
+                }
+            } else if (currentSessionRecord.status === 'ONLINE') {
+                currentSessionRecord.status = 'IDLE';
+                lastCloudHeartbeatTimestamp = now;
+                if (typeof syncSessionRecordToCloud === 'function') {
+                    await syncSessionRecordToCloud(currentSessionRecord);
+                }
+            }
+        }
+    }, 30 * 1000);
+}
+window.startSessionHeartbeat = startSessionHeartbeat;
+
+function stopSessionHeartbeat() {
+    if (sessionHeartbeatInterval) {
+        clearInterval(sessionHeartbeatInterval);
+        sessionHeartbeatInterval = null;
+    }
+    currentSessionRecord = null;
+    if (typeof window !== 'undefined' && window.removeEventListener) {
+        window.removeEventListener('pointerdown', trackUserInteraction);
+        window.removeEventListener('keydown', trackUserInteraction);
+        window.removeEventListener('touchstart', trackUserInteraction);
+    }
+}
+window.stopSessionHeartbeat = stopSessionHeartbeat;
+
+function formatShiftDuration(shiftStartedAt, now = new Date()) {
+    if (!shiftStartedAt) return '0m';
+    const start = new Date(shiftStartedAt).getTime();
+    if (isNaN(start)) return '0m';
+    const current = new Date(now).getTime();
+    const diffMs = Math.max(0, current - start);
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins === 0) return '0m';
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    if (hours === 0) return `${mins}m`;
+    return `${hours}h ${mins}m`;
+}
+window.formatShiftDuration = formatShiftDuration;
+
+function isSessionOnline(lastActiveAt, now = new Date(), thresholdMinutes = 5) {
+    if (!lastActiveAt) return false;
+    const last = new Date(lastActiveAt).getTime();
+    if (isNaN(last)) return false;
+    const current = new Date(now).getTime();
+    const diffMinutes = (current - last) / (1000 * 60);
+    return diffMinutes <= thresholdMinutes;
+}
+window.isSessionOnline = isSessionOnline;
+
+function formatLastActiveTime(lastActiveAt, now = new Date()) {
+    if (!lastActiveAt) return 'Active just now';
+    const last = new Date(lastActiveAt).getTime();
+    if (isNaN(last)) return 'Active just now';
+    const current = new Date(now).getTime();
+    const diffMs = Math.max(0, current - last);
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins <= 0) return 'Active just now';
+    if (diffMins < 60) return `Active ${diffMins}m ago`;
+    const hours = Math.floor(diffMins / 60);
+    return `Active ${hours}h ago`;
+}
+window.formatLastActiveTime = formatLastActiveTime;
+
+function lockTerminalByRemote(lockedSession) {
+    if (typeof isMasterTerminal === 'function' && isMasterTerminal()) return;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true') return;
+
+    // 1. Clear in-progress cart (Customer Privacy)
+    if (typeof clearCart === 'function') clearCart();
+    if (typeof window !== 'undefined' && typeof window.clearCart === 'function') window.clearCart();
+    if (typeof window !== 'undefined') window.cart = [];
+    if (typeof currentCart !== 'undefined') currentCart = [];
+    if (typeof renderCart === 'function') renderCart();
+    try { localStorage.removeItem('billnaw_active_cart'); } catch (e) {}
+
+    // 2. Purge active staff
+    if (typeof stopSessionHeartbeat === 'function') stopSessionHeartbeat();
+    if (typeof window !== 'undefined') {
+        window.currentSessionId = null;
+        window.currentStaff = null;
+        window.currentRole = null;
+    }
+    try {
+        localStorage.removeItem('billnaw_current_session_id');
+        localStorage.removeItem('billnaw_active_staff');
+        localStorage.removeItem('billnaw_last_staff_id');
+    } catch (e) {}
+    currentStaff = null;
+    currentRole = null;
+    if (typeof updateStaffTopbarDisplay === 'function') updateStaffTopbarDisplay();
+
+    // 3. Dismiss open modals
+    if (typeof document !== 'undefined') {
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            if (m.id !== 'loginOverlay') m.style.display = 'none';
+        });
+    }
+
+    // 4. Set locked flags
+    isTerminalLocked = true;
+    if (typeof window !== 'undefined') window.isTerminalLocked = true;
+    try { localStorage.setItem('billnaw_terminal_locked', 'true'); } catch (e) {}
+
+    // 5. Engage #loginOverlay
+    const overlay = typeof document !== 'undefined' ? document.getElementById('loginOverlay') : null;
+    if (overlay) {
+        overlay.style.display = 'flex';
+        overlay.style.zIndex = '1000005';
+    }
+
+    // 6. Render login staff picker
+    if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
+
+    // 7. Clear & focus PIN input
+    const pinInput = typeof document !== 'undefined' ? document.getElementById('staffLoginPinInput') : null;
+    if (pinInput) {
+        pinInput.value = '';
+        setTimeout(() => pinInput.focus(), 80);
+    }
+
+    // 8. Operator notification
+    if (typeof showToast === 'function') {
+        showToast("🔒 Session remotely locked by Administrator. Enter staff PIN to resume.", "warning");
+    }
+
+    // Enforce locked permissions
+    if (typeof enforcePermissions === 'function') enforcePermissions();
+
+    // 9. Dispatch event
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('billnaw:terminal-remotely-locked', {
+            detail: { session: lockedSession, timestamp: new Date().toISOString() }
+        }));
+    }
+}
+window.lockTerminalByRemote = lockTerminalByRemote;
+
+async function remoteLockStaffSession(sessionId) {
+    if (!sessionId) return { error: { code: 'INVALID_ID', message: 'sessionId is required' } };
+
+    // RBAC validation: only Admin can execute remote lock
+    const canManage = (currentStaff && (currentStaff.role === 'Admin' || hasPermission(currentStaff, 'can_manage_staff'))) ||
+                      (currentRole === 'admin') ||
+                      (typeof isMasterTerminal === 'function' && isMasterTerminal()) ||
+                      (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true');
+    if (!canManage) {
+        if (typeof showToast === 'function') showToast('Only Administrators can remotely lock sessions.', 'warning');
+        return { error: { code: 'UNAUTHORIZED', message: 'Admin role required' } };
+    }
+
+    // Retrieve active sessions list
+    let sessions = (typeof window !== 'undefined' && window.activeStaffSessions) || [];
+    if ((!sessions || sessions.length === 0) && typeof localStorage !== 'undefined') {
+        try {
+            const cached = localStorage.getItem('billnaw_active_sessions');
+            if (cached) sessions = JSON.parse(cached);
+        } catch (e) {}
+    }
+
+    const session = sessions.find(s => s.sessionId === sessionId || s.id === sessionId);
+    if (!session) {
+        if (typeof showToast === 'function') showToast('Session not found', 'warning');
+        return { data: null, error: { code: 'SESSION_NOT_FOUND', message: 'Session not found' } };
+    }
+
+    // Master Admin protection guard
+    const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (typeof localStorage !== 'undefined' ? localStorage.getItem('bongbhoj_device_id') : null);
+    const isMaster = (typeof isMasterTerminal === 'function' && isMasterTerminal()) || (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true');
+    if (session.isMaster === true || session.deviceId === 'DEV_MASTER_01' || (session.deviceId === myDevId && isMaster)) {
+        if (typeof showToast === 'function') showToast('Master Admin Terminal cannot be remotely locked.', 'warning');
+        return { error: { code: 'IMMUNE_TARGET', message: 'Master Admin Terminal cannot be remotely locked' } };
+    }
+
+    // Idempotency: if already ended, do not reactivate
+    if (session.status === 'ENDED') {
+        return { data: session, error: null };
+    }
+    // If already locked, return idempotently
+    if (session.status === 'LOCKED' && session.isLocked === true) {
+        return { data: session, error: null };
+    }
+
+    const updates = {
+        status: 'LOCKED',
+        isLocked: true,
+        lockedAt: new Date().toISOString(),
+        lockedByAdminId: currentStaff ? currentStaff.id : 'admin'
+    };
+
+    // Optimistic local update
+    Object.assign(session, updates);
+    if (typeof window !== 'undefined' && window.activeStaffSessions) {
+        const idx = window.activeStaffSessions.findIndex(s => s.sessionId === sessionId || s.id === sessionId);
+        if (idx >= 0) window.activeStaffSessions[idx] = { ...window.activeStaffSessions[idx], ...updates };
+    }
+    try {
+        localStorage.setItem('billnaw_active_sessions', JSON.stringify(sessions));
+    } catch (e) {}
+
+    // Cloud synchronization
+    try {
+        if (typeof setTenantSession === 'function') {
+            await setTenantSession(sessionId, updates);
+        } else if (typeof syncSessionRecordToCloud === 'function') {
+            await syncSessionRecordToCloud({ sessionId, ...updates });
+        } else if (typeof window !== 'undefined' && window.firestoreDB && window.firestoreSetDoc && typeof getStoreSubdocRef === 'function') {
+            const sRef = getStoreSubdocRef('sessions', sessionId);
+            if (sRef) await window.firestoreSetDoc(sRef, updates, { merge: true });
+        }
+    } catch (err) {
+        console.warn('remoteLockStaffSession cloud sync error:', err.message);
+    }
+
+    if (typeof renderLiveSessionCards === 'function') renderLiveSessionCards();
+    if (typeof showToast === 'function') {
+        showToast(`🔒 Remote lock signal dispatched to ${session.staffName || 'session'}.`, 'success');
+    }
+    return { data: session, error: null };
+}
+window.remoteLockStaffSession = remoteLockStaffSession;
+window.remoteLockSession = remoteLockStaffSession;
+
+function renderLiveSessionCards() {
+    const container = typeof document !== 'undefined' ? document.getElementById('activeSessionsListContainer') : null;
+    if (!container) return;
+
+    let sessions = (typeof window !== 'undefined' && window.activeStaffSessions) || [];
+    if ((!sessions || sessions.length === 0) && typeof localStorage !== 'undefined') {
+        try {
+            const cached = localStorage.getItem('billnaw_active_sessions');
+            if (cached) sessions = JSON.parse(cached);
+        } catch (e) {}
+    }
+
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">
+                No active staff sessions found. This device is the primary counter terminal.
+            </div>
+        `;
+        return;
+    }
+
+    const esc = typeof escapeHtml === 'function' ? escapeHtml : (str => String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+    const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (typeof localStorage !== 'undefined' ? localStorage.getItem('bongbhoj_device_id') : null);
+    const mySessId = (typeof window !== 'undefined' && window.currentSessionId) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_current_session_id') : null);
+    const isMaster = (typeof isMasterTerminal === 'function' && isMasterTerminal()) || (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true');
+
+    container.innerHTML = sessions.map(s => {
+        const staffName = s.staffName || 'Staff Member';
+        const staffRole = s.staffRole || 'Cashier';
+        const initials = staffName.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+        const devName = s.deviceName || (s.deviceId ? `Terminal ${s.deviceId.slice(-4)}` : 'POS Terminal');
+        const devId = s.deviceId || '';
+        const isCurrent = Boolean((s.sessionId && s.sessionId === mySessId) || (devId && devId === myDevId));
+        const isMasterDevice = Boolean(s.isMaster || devId === 'DEV_MASTER_01' || (isMaster && isCurrent));
+
+        const isLocked = s.status === 'LOCKED' || s.isLocked === true;
+        const isOnline = !isLocked && (s.status === 'ONLINE' || isSessionOnline(s.lastActiveAt));
+        const isIdle = !isLocked && !isOnline;
+
+        let dotClass = 'presence-dot online';
+        let statusTitle = 'Online';
+        if (isLocked) {
+            dotClass = 'presence-dot locked';
+            statusTitle = 'Locked';
+        } else if (isIdle) {
+            dotClass = 'presence-dot idle';
+            statusTitle = 'Idle';
+        }
+
+        const durationStr = formatShiftDuration(s.shiftStartedAt);
+        const lastActiveStr = isLocked ? 'Locked' : formatLastActiveTime(s.lastActiveAt);
+
+        const roleClean = String(staffRole).toLowerCase().replace(/\s+/g, '-');
+        const roleBadgeClass = `staff-badge role-${roleClean}`;
+
+        let actionHtml = '';
+        if (isMasterDevice) {
+            actionHtml = `<span class="session-current-badge">Master Terminal (Protected)</span>`;
+        } else if (isCurrent) {
+            actionHtml = `<span class="session-current-badge">Current Device</span>`;
+        } else if (isLocked) {
+            actionHtml = `<span class="presence-dot locked" style="margin-right: 4px;"></span><span style="font-size: 11px; font-weight: 700; color: var(--danger);">Remotely Locked</span>`;
+        } else {
+            actionHtml = `
+                <button type="button" class="btn btn-outline session-remote-lock-btn" onclick="remoteLockStaffSession('${esc(s.sessionId)}')" aria-label="Remote Lock ${esc(staffName)}">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span>Remote Lock</span>
+                </button>
+            `;
+        }
+
+        return `
+            <div class="session-card ${isLocked ? 'is-locked' : ''}">
+                <div class="session-staff-col">
+                    <div class="session-avatar">${esc(initials)}</div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="session-meta-name">
+                            <span class="${dotClass}" title="${statusTitle}"></span>
+                            <span>${esc(staffName)}</span>
+                            <span class="${roleBadgeClass}" style="font-size: 10px; padding: 2px 7px; border-radius: 8px;">${esc(staffRole)}</span>
+                        </div>
+                        <div class="session-telemetry">
+                            <span class="session-telemetry-item">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                <span>${esc(devName)}${devId ? ` (${esc(devId)})` : ''}</span>
+                            </span>
+                            <span class="session-telemetry-item">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span>Shift: ${esc(durationStr)} • ${esc(lastActiveStr)}</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    ${actionHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+window.renderLiveSessionCards = renderLiveSessionCards;
+
 function quickStaffLoginAsSelected() {
+    if (window.STRICT_RBAC_MODE !== false) {
+        showToast("Strict RBAC active: PIN entry required to unlock terminal.", "warning");
+        const pinInput = document.getElementById('staffLoginPinInput');
+        if (pinInput) pinInput.focus();
+        return;
+    }
     const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId) || staffList[0];
+    if (matchedStaff && matchedStaff.mustChangePin === true) {
+        showToast("First-time login requires PIN verification. Enter temporary PIN.", "warning");
+        const pinInput = document.getElementById('staffLoginPinInput');
+        if (pinInput) pinInput.focus();
+        return;
+    }
     unlockTerminal(matchedStaff || { id: 2, name: "Staff", role: "Cashier" });
     showToast(`Quick POS Session: ${currentStaff.name}`);
 }
@@ -315,6 +849,12 @@ async function confirmQuickStaffSwitch() {
     const isAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
 
     if (enteredPin && (isMatch || isAdminPin)) {
+        if (matchedStaff.mustChangePin === true) {
+            const modal = document.getElementById('staffSwitchModal');
+            if (modal) modal.style.display = 'none';
+            openFirstLoginPinModal(matchedStaff);
+            return;
+        }
         unlockTerminal(matchedStaff);
         const modal = document.getElementById('staffSwitchModal');
         if (modal) modal.style.display = 'none';
@@ -361,10 +901,12 @@ window.backspaceSwitchPin = backspaceSwitchPin;
 // 🛡️ Spot Manager PIN Override Modal Controllers
 let spotOverrideCallback = null;
 let spotOverrideCancelCallback = null;
+let spotOverrideRequiredRole = 'Manager';
 
-function requestManagerOverride({ title, actionDescription, onSuccess, onCancel }) {
+function requestManagerOverride({ title, actionDescription, requiredRole = 'Manager', onSuccess, onCancel }) {
     spotOverrideCallback = onSuccess;
     spotOverrideCancelCallback = onCancel;
+    spotOverrideRequiredRole = requiredRole;
 
     const modal = document.getElementById('spotManagerOverrideModal');
     if (!modal) {
@@ -405,7 +947,13 @@ async function confirmSpotManagerOverride() {
     let authorized = false;
     let authorizingManager = null;
 
-    const managersAndAdmins = staffList.filter(s => (s.role === 'Admin' || s.role === 'Manager') && s.status !== 'Inactive');
+    const isStrictAdminRequired = (spotOverrideRequiredRole === 'Admin');
+    const managersAndAdmins = staffList.filter(s => {
+        if (s.status === 'Inactive') return false;
+        const norm = normalizeRole(s.role);
+        if (isStrictAdminRequired) return norm === 'Admin';
+        return norm === 'Admin' || norm === 'Manager';
+    });
     for (const mgr of managersAndAdmins) {
         const isMatch = await verifyStaffPin(mgr, enteredPin);
         if (isMatch) {
@@ -507,7 +1055,11 @@ function openEditStaffModal(id) {
     document.getElementById('staffNameInput').value = staff.name || '';
     document.getElementById('staffRoleInput').value = staff.role || 'Cashier';
     document.getElementById('staffPhoneInput').value = staff.phone || '';
-    document.getElementById('staffPinInput').value = staff.pin || '';
+    const pinInput = document.getElementById('staffPinInput');
+    if (pinInput) {
+        pinInput.value = '';
+        pinInput.placeholder = '•••• (Leave blank to keep)';
+    }
     document.getElementById('staffStatusInput').value = staff.status || 'Active';
     document.getElementById('staffModal').style.display = 'flex';
 }
@@ -522,7 +1074,7 @@ async function saveStaffMember(data = null) {
     const name = (data && data.name) ? data.name.trim() : (document.getElementById('staffNameInput')?.value || '').trim();
     const role = (data && data.role) ? data.role : (document.getElementById('staffRoleInput')?.value || 'Cashier');
     const phone = (data && data.phone) ? data.phone.trim() : (document.getElementById('staffPhoneInput')?.value || '').trim();
-    const pin = (data && data.pin) ? data.pin.trim() : (document.getElementById('staffPinInput')?.value || '').trim();
+    const pin = (data && data.pin !== undefined) ? String(data.pin).trim() : (document.getElementById('staffPinInput')?.value || '').trim();
     const status = (data && data.status) ? data.status : (document.getElementById('staffStatusInput')?.value || 'Active');
     const existingId = (data && data.id) ? data.id : (document.getElementById('staffIdInput')?.value || '');
 
@@ -530,84 +1082,107 @@ async function saveStaffMember(data = null) {
         showToast("Staff name is required.");
         return false;
     }
-    if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-        showToast("A unique 4-digit numeric PIN is strictly required.");
+
+    if (!existingId && (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin))) {
+        showToast("A unique 4-digit numeric PIN is strictly required for onboarding.");
+        return false;
+    }
+    if (existingId && pin && (pin.length !== 4 || !/^\d{4}$/.test(pin))) {
+        showToast("PIN must be exactly 4 numeric digits.");
         return false;
     }
 
     // Strict PIN Uniqueness Validation within Store
-    for (const s of staffList) {
-        if (existingId && String(s.id) === String(existingId)) continue;
-        const isMatch = (s.pin && String(s.pin) === pin) || await verifyStaffPin(s, pin);
-        if (isMatch) {
-            showToast("❌ PIN already assigned to another staff member. Please choose a unique 4-digit PIN.", "warning");
-            return false;
+    if (pin) {
+        for (const s of staffList) {
+            if (existingId && String(s.id) === String(existingId)) continue;
+            const isMatch = await verifyStaffPin(s, pin);
+            if (isMatch) {
+                showToast("❌ PIN already assigned to another staff member. Please choose a unique 4-digit PIN.", "warning");
+                return false;
+            }
         }
     }
-
-    // Compute Cryptographic Salt & SHA-256 Digest
-    const salt = generatePinSalt();
-    const pinHash = await hashPin(pin, salt);
 
     if (existingId) {
         const idx = staffList.findIndex(s => String(s.id) === String(existingId));
         if (idx !== -1) {
+            let salt = staffList[idx].pin_salt || staffList[idx].pinSalt || generatePinSalt();
+            let pinHash = staffList[idx].pin_hash || staffList[idx].pinHash;
+            if (pin) {
+                salt = generatePinSalt();
+                pinHash = await hashPin(pin, salt);
+            }
+            const mustChange = (data && data.mustChangePin !== undefined)
+                ? data.mustChangePin
+                : (staffList[idx].mustChangePin || false);
+
             staffList[idx] = { 
                 ...staffList[idx], 
                 name, 
                 role, 
                 phone, 
-                pin, 
                 pin_salt: salt, 
                 pin_hash: pinHash, 
                 pinSalt: salt,
                 pinHash: pinHash,
-                status 
+                mustChangePin: mustChange,
+                status,
+                updatedAt: new Date().toISOString()
             };
+            delete staffList[idx].pin; // 🔒 Zero plaintext PIN
             showToast(`Staff member ${name} updated.`);
         } else {
+            const salt = generatePinSalt();
+            const pinHash = await hashPin(pin || '1234', salt);
             const newStaff = {
                 id: existingId,
                 name,
                 role,
                 phone,
-                pin,
                 pin_salt: salt,
                 pin_hash: pinHash,
                 pinSalt: salt,
                 pinHash: pinHash,
+                mustChangePin: (data && data.mustChangePin !== undefined) ? data.mustChangePin : true,
                 status,
-                joinedDate: getLocalISODate()
+                joinedDate: getLocalISODate(),
+                createdAt: new Date().toISOString()
             };
+            delete newStaff.pin;
             staffList.push(newStaff);
             showToast(`Staff member ${name} added.`);
         }
     } else {
+        const salt = generatePinSalt();
+        const pinHash = await hashPin(pin, salt);
         const newStaff = {
             id: Date.now(),
             name,
             role,
             phone,
-            pin,
             pin_salt: salt,
             pin_hash: pinHash,
             pinSalt: salt,
             pinHash: pinHash,
+            mustChangePin: true, // 🔒 Mandatory first-login flag
             status,
-            joinedDate: getLocalISODate()
+            joinedDate: getLocalISODate(),
+            createdAt: new Date().toISOString()
         };
+        delete newStaff.pin; // 🔒 Zero plaintext PIN
         staffList.push(newStaff);
-        showToast(`Staff member ${name} added.`);
+        showToast(`Staff member ${name} added. Temporary PIN assigned.`);
     }
 
     closeStaffModal();
     saveToLocal();
-    if (typeof idb !== 'undefined') {
+    if (typeof idb !== 'undefined' && idb.set) {
         idb.set('cafe_staff', staffList).catch(() => {});
     }
     renderStaffManagementUI();
     renderLoginStaffPicker();
-    persistStaffToFirestore();
+    if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore();
     return true;
 }
 window.saveStaffMember = saveStaffMember;
@@ -615,18 +1190,21 @@ window.saveStaffMember = saveStaffMember;
 function deleteStaffMember(id) {
     const staff = staffList.find(s => s.id === id);
     if (!staff) return;
+    if (typeof currentStaff !== 'undefined' && currentStaff && !hasPermission(currentStaff, 'can_manage_staff')) {
+        return showToast("Permission denied: Only Admin can remove staff members.", "error");
+    }
     if (staff.role === 'Admin' && staffList.filter(s => s.role === 'Admin').length <= 1) {
         return showToast("The default Admin profile cannot be removed.", "warning");
     }
     if (confirm(`Are you sure you want to remove staff member "${staff.name}"?`)) {
         staffList = staffList.filter(s => s.id !== id);
         saveToLocal();
-        if (typeof idb !== 'undefined') {
+        if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_staff', staffList).catch(() => {});
         }
         renderStaffManagementUI();
         renderLoginStaffPicker();
-        persistStaffToFirestore();
+        if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore();
         showToast("Staff member removed.");
     }
 }
@@ -654,6 +1232,28 @@ function loginAsAdmin() {
 window.loginAsAdmin = loginAsAdmin;
 
 function logoutStaff() { 
+    if (typeof stopSessionHeartbeat === 'function') {
+        stopSessionHeartbeat();
+    }
+    const currentSessId = (typeof window !== 'undefined' && window.currentSessionId) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_current_session_id') : null);
+    if (currentSessId && typeof syncSessionRecordToCloud === 'function') {
+        syncSessionRecordToCloud({
+            sessionId: currentSessId,
+            status: 'ENDED',
+            isLocked: true,
+            endedAt: new Date().toISOString()
+        });
+    }
+    try {
+        localStorage.removeItem('billnaw_current_session_id');
+        localStorage.removeItem('billnaw_active_staff');
+        localStorage.removeItem('billnaw_last_staff_id');
+    } catch (e) {}
+    if (typeof window !== 'undefined') {
+        window.currentSessionId = null;
+        window.currentStaff = null;
+        window.currentRole = null;
+    }
     currentStaff = null;
     currentRole = null; 
     lockTerminal(false);
@@ -671,63 +1271,249 @@ window.lockSystem = lockSystem;
 // 🔒 RBAC Access Verification & UI Guards
 function canStaffAccessTab(staff, tabId) {
     if (!staff || !staff.role) return true;
-    const role = staff.role.toUpperCase();
+    const normRole = normalizeRole(staff.role);
 
-    if (role === 'ADMIN' || role === 'OWNER') return true;
-    if (role === 'MANAGER') return true;
+    if (normRole === ROLES.ADMIN) return true;
 
-    if (role === 'CASHIER') {
-        const allowed = ['pos', 'tables', 'customers', 'khata'];
-        return allowed.includes(tabId);
+    if (normRole === ROLES.MANAGER) {
+        // Admin-only areas: Reports/Dashboard, Settings, Staff Hub, Devices, WhatsApp Marketing
+        if (['dashboard', 'settings', 'staff', 'devices', 'whatsapp'].includes(tabId)) return false;
+        return ['pos', 'tables', 'kds', 'menu', 'inventory', 'khata', 'customers'].includes(tabId);
     }
 
-    if (role === 'WAITER') {
-        const allowed = ['pos', 'tables'];
-        return allowed.includes(tabId);
+    if (normRole === ROLES.CASHIER) {
+        return ['pos', 'tables', 'customers', 'khata', 'menu'].includes(tabId);
     }
 
-    if (role === 'KITCHEN') {
-        return ['pos', 'tables'].includes(tabId);
+    if (normRole === ROLES.CHEF) {
+        return ['kds'].includes(tabId);
     }
 
-    return true;
+    if (normRole === ROLES.SERVER) {
+        return ['tables', 'pos'].includes(tabId);
+    }
+
+    return false;
 }
 window.canStaffAccessTab = canStaffAccessTab;
 
 function enforcePermissions() { 
-    const role = (currentStaff && currentStaff.role) ? currentStaff.role.toUpperCase() : 'ADMIN';
+    const normRole = (currentStaff && currentStaff.role) ? normalizeRole(currentStaff.role) : ROLES.ADMIN;
 
     const navMenu = document.getElementById('nav-menu');
     const navSettings = document.getElementById('nav-settings');
     const navReports = document.getElementById('nav-dashboard');
     const navInventory = document.getElementById('nav-inventory');
     const navKhata = document.getElementById('nav-khata');
+    const navTables = document.getElementById('nav-tables');
+    const navCustomers = document.getElementById('nav-customers');
 
-    if (role === 'ADMIN') {
-        ['nav-menu', 'nav-settings', 'nav-dashboard', 'nav-inventory', 'nav-khata'].forEach(id => {
+    if (normRole === ROLES.ADMIN) {
+        ['nav-menu', 'nav-settings', 'nav-dashboard', 'nav-inventory', 'nav-khata', 'nav-tables', 'nav-customers'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.remove('locked');
         });
-    } else if (role === 'MANAGER') {
-        ['nav-menu', 'nav-settings', 'nav-dashboard', 'nav-inventory', 'nav-khata'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.classList.remove('locked');
-        });
+    } else if (normRole === ROLES.MANAGER) {
+        if (navReports) navReports.classList.add('locked');
+        if (navSettings) navSettings.classList.add('locked');
+        if (navMenu) navMenu.classList.remove('locked');
+        if (navInventory) navInventory.classList.remove('locked');
+        if (navKhata) navKhata.classList.remove('locked');
+        if (navTables) navTables.classList.remove('locked');
+        if (navCustomers) navCustomers.classList.remove('locked');
         const resetTile = document.getElementById('settingTileResetAllData');
         if (resetTile) resetTile.style.opacity = '0.5';
-    } else if (role === 'CASHIER') {
+    } else if (normRole === ROLES.CASHIER) {
         if (navReports) navReports.classList.add('locked');
         if (navSettings) navSettings.classList.add('locked');
         if (navInventory) navInventory.classList.add('locked');
         if (navMenu) navMenu.classList.remove('locked');
         if (navKhata) navKhata.classList.remove('locked');
-    } else if (role === 'WAITER') {
+        if (navTables) navTables.classList.remove('locked');
+        if (navCustomers) navCustomers.classList.remove('locked');
+    } else if (normRole === ROLES.CHEF) {
         if (navReports) navReports.classList.add('locked');
         if (navSettings) navSettings.classList.add('locked');
         if (navInventory) navInventory.classList.add('locked');
         if (navMenu) navMenu.classList.add('locked');
         if (navKhata) navKhata.classList.add('locked');
+        if (navCustomers) navCustomers.classList.add('locked');
+    } else if (normRole === ROLES.SERVER) {
+        if (navReports) navReports.classList.add('locked');
+        if (navSettings) navSettings.classList.add('locked');
+        if (navInventory) navInventory.classList.add('locked');
+        if (navMenu) navMenu.classList.add('locked');
+        if (navKhata) navKhata.classList.add('locked');
+        if (navCustomers) navCustomers.classList.add('locked');
+        if (navTables) navTables.classList.remove('locked');
     }
 }
 window.enforcePermissions = enforcePermissions;
+
+// 🔐 First-Login Mandatory PIN Change Modal Controllers
+let pendingFirstLoginStaff = null;
+window.pendingFirstLoginStaff = pendingFirstLoginStaff;
+
+function openFirstLoginPinModal(staff) {
+    if (!staff) return;
+    pendingFirstLoginStaff = staff;
+    window.pendingFirstLoginStaff = pendingFirstLoginStaff;
+
+    const modal = document.getElementById('firstLoginPinModal');
+    if (!modal) return;
+
+    const nameEl = document.getElementById('firstLoginStaffName');
+    const roleEl = document.getElementById('firstLoginStaffRole');
+    const avatarEl = document.getElementById('firstLoginStaffAvatar');
+    const newPinInput = document.getElementById('firstLoginNewPin');
+    const confirmPinInput = document.getElementById('firstLoginConfirmPin');
+    const errorEl = document.getElementById('firstLoginPinError');
+
+    const initials = staff.name ? staff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
+    const norm = normalizeRole(staff.role);
+    const roleCls = `role-${norm.toLowerCase().replace(/\s+/g, '-')}`;
+
+    if (nameEl) nameEl.textContent = staff.name;
+    if (roleEl) {
+        roleEl.textContent = staff.role;
+        roleEl.className = `staff-badge ${roleCls}`;
+    }
+    if (avatarEl) avatarEl.textContent = initials;
+
+    if (newPinInput) newPinInput.value = '';
+    if (confirmPinInput) confirmPinInput.value = '';
+    if (errorEl) errorEl.style.display = 'none';
+
+    // Hide login overlay & display intercept modal
+    const loginOverlay = document.getElementById('loginOverlay');
+    if (loginOverlay) loginOverlay.style.display = 'none';
+
+    modal.style.display = 'flex';
+    setTimeout(() => {
+        if (newPinInput) newPinInput.focus();
+    }, 100);
+}
+window.openFirstLoginPinModal = openFirstLoginPinModal;
+
+function cancelFirstLoginPin() {
+    const modal = document.getElementById('firstLoginPinModal');
+    if (modal) modal.style.display = 'none';
+    const newPinInput = document.getElementById('firstLoginNewPin');
+    const confirmPinInput = document.getElementById('firstLoginConfirmPin');
+    const errorEl = document.getElementById('firstLoginPinError');
+    if (newPinInput) newPinInput.value = '';
+    if (confirmPinInput) confirmPinInput.value = '';
+    if (errorEl) errorEl.style.display = 'none';
+
+    pendingFirstLoginStaff = null;
+    window.pendingFirstLoginStaff = null;
+    lockTerminal(false); // Return to loginOverlay in locked state
+}
+window.cancelFirstLoginPin = cancelFirstLoginPin;
+window.cancelFirstLoginPinChange = cancelFirstLoginPin;
+
+async function submitFirstLoginPin() {
+    const newPinInput = document.getElementById('firstLoginNewPin');
+    const confirmPinInput = document.getElementById('firstLoginConfirmPin');
+    const errorEl = document.getElementById('firstLoginPinError');
+    const errorTextEl = document.getElementById('firstLoginPinErrorText');
+
+    function showError(msg) {
+        if (errorEl && errorTextEl) {
+            errorTextEl.textContent = msg;
+            errorEl.style.display = 'flex';
+        } else {
+            showToast(msg, 'warning');
+        }
+    }
+
+    const newPin = (newPinInput?.value || '').trim();
+    const confirmPin = (confirmPinInput?.value || '').trim();
+
+    // Rule 1: Exactly 4 numeric digits
+    if (!/^\d{4}$/.test(newPin)) {
+        showError("PIN must be exactly 4 numeric digits.");
+        if (newPinInput) newPinInput.focus();
+        return;
+    }
+
+    // Rule 2: Reject trivial, repetitive, and sequential PINs (e.g. 0000, 1111, 2222, 1234, 4321)
+    if (/^(\d)\1{3}$/.test(newPin) || newPin === '1234' || newPin === '4321' || newPin === '1111') {
+        showError("For security, please choose a non-trivial PIN (cannot be repetitive like 0000, 1111 or sequential like 1234, 4321).");
+        if (typeof showToast === 'function') {
+            showToast("⚠️ Please choose a stronger, non-trivial PIN (avoid 0000, 1111, 1234, etc.).");
+        }
+        if (newPinInput) newPinInput.focus();
+        return;
+    }
+
+    // Rule 3: Match confirmation PIN
+    if (newPin !== confirmPin) {
+        showError("PINs do not match. Please verify your confirmation PIN.");
+        if (confirmPinInput) confirmPinInput.focus();
+        return;
+    }
+
+    const targetStaff = pendingFirstLoginStaff || staffList.find(s => s.id === selectedLoginStaffId);
+    if (!targetStaff) {
+        showError("Unable to identify active staff account.");
+        return;
+    }
+
+    // Rule 4: Store uniqueness check
+    for (const s of staffList) {
+        if (String(s.id) === String(targetStaff.id)) continue;
+        const isMatch = await verifyStaffPin(s, newPin);
+        if (isMatch) {
+            showError("This PIN is already assigned to another staff member. Please choose a unique PIN.");
+            if (newPinInput) newPinInput.focus();
+            return;
+        }
+    }
+
+    // Cryptographic Salt & SHA-256 Digest
+    const newSalt = generatePinSalt();
+    const newHash = await hashPin(newPin, newSalt);
+
+    targetStaff.pin_salt = newSalt;
+    targetStaff.pin_hash = newHash;
+    targetStaff.pinSalt = newSalt;
+    targetStaff.pinHash = newHash;
+    targetStaff.mustChangePin = false;
+    targetStaff.updatedAt = new Date().toISOString();
+    delete targetStaff.pin; // Purge plaintext PIN
+
+    // Update staffList reference
+    const idx = staffList.findIndex(s => String(s.id) === String(targetStaff.id));
+    if (idx !== -1) {
+        staffList[idx] = { ...targetStaff };
+    }
+
+    // Persist multi-tier
+    saveToLocal();
+    if (typeof idb !== 'undefined' && idb.set) {
+        idb.set('cafe_staff', staffList).catch(() => {});
+    }
+    if (typeof syncStaffRecordToCloud === 'function') {
+        syncStaffRecordToCloud(targetStaff);
+    } else if (typeof persistStaffToFirestore === 'function') {
+        persistStaffToFirestore(targetStaff);
+    }
+
+    // Close modal & unlock POS
+    const modal = document.getElementById('firstLoginPinModal');
+    if (modal) modal.style.display = 'none';
+    if (newPinInput) newPinInput.value = '';
+    if (confirmPinInput) confirmPinInput.value = '';
+    if (errorEl) errorEl.style.display = 'none';
+
+    pendingFirstLoginStaff = null;
+    window.pendingFirstLoginStaff = null;
+
+    unlockTerminal(targetStaff);
+    showToast(`Private PIN configured successfully! Welcome, ${targetStaff.name}!`, "success");
+}
+window.submitFirstLoginPin = submitFirstLoginPin;
+window.submitFirstLoginPinChange = submitFirstLoginPin;
+window.confirmFirstLoginPin = submitFirstLoginPin;
 

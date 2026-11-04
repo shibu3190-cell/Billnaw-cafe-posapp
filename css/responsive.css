@@ -1249,3 +1249,33 @@ body.printing { background: #fff !important; }
         display: inline-flex !important;
     }
 }
+
+/* --- Live Staff Session Hub Mobile Responsiveness (<= 640px) (Milestone 4) --- */
+@media screen and (max-width: 640px) {
+    #activeSessionsModal .modal-box {
+        width: 94vw !important;
+        max-width: 94vw !important;
+        padding: 16px;
+        margin: 0 auto;
+    }
+    .session-card {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 12px;
+    }
+    .session-staff-col {
+        justify-content: flex-start;
+    }
+    .session-telemetry {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .session-remote-lock-btn {
+        width: 100%;
+        justify-content: center;
+        min-height: 44px;
+        font-size: 13px;
+    }
+}
+

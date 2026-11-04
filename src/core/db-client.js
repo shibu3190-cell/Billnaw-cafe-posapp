@@ -15,6 +15,17 @@ let isInitialized = false;
 class UniversalDbClient {
   constructor() {
     this.memoryStore = new Map();
+    this.listeners = new Map();
+  }
+
+  notifyListeners(changedPath) {
+    for (const [subPath, callbacks] of this.listeners.entries()) {
+      if (changedPath === subPath || changedPath.startsWith(subPath + '/') || subPath.startsWith(changedPath + '/')) {
+        callbacks.forEach(cb => {
+          try { cb(); } catch (e) {}
+        });
+      }
+    }
   }
 
   doc(docPath) {
@@ -36,6 +47,7 @@ class UniversalDbClient {
         } else {
           self.memoryStore.set(docPath, { ...data });
         }
+        self.notifyListeners(docPath);
         return { id: docPath.split('/').pop() };
       },
       async update(updates) {
@@ -53,7 +65,32 @@ class UniversalDbClient {
           }
         }
         self.memoryStore.set(docPath, merged);
+        self.notifyListeners(docPath);
         return { id: docPath.split('/').pop() };
+      },
+      onSnapshot(onNext, onError) {
+        const emit = async () => {
+          try {
+            const snap = await self.doc(docPath).get();
+            if (typeof onNext === 'function') onNext(snap);
+          } catch (err) {
+            if (typeof onError === 'function') onError(err);
+          }
+        };
+        emit();
+        if (!self.listeners.has(docPath)) {
+          self.listeners.set(docPath, new Set());
+        }
+        self.listeners.get(docPath).add(emit);
+        return () => {
+          const set = self.listeners.get(docPath);
+          if (set) {
+            set.delete(emit);
+            if (set.size === 0) {
+              self.listeners.delete(docPath);
+            }
+          }
+        };
       }
     };
   }
@@ -81,6 +118,30 @@ class UniversalDbClient {
           size: docs.length,
           docs,
           forEach(cb) { docs.forEach(cb); }
+        };
+      },
+      onSnapshot(onNext, onError) {
+        const emit = async () => {
+          try {
+            const snap = await self.collection(colPath).get();
+            if (typeof onNext === 'function') onNext(snap);
+          } catch (err) {
+            if (typeof onError === 'function') onError(err);
+          }
+        };
+        emit();
+        if (!self.listeners.has(colPath)) {
+          self.listeners.set(colPath, new Set());
+        }
+        self.listeners.get(colPath).add(emit);
+        return () => {
+          const set = self.listeners.get(colPath);
+          if (set) {
+            set.delete(emit);
+            if (set.size === 0) {
+              self.listeners.delete(colPath);
+            }
+          }
         };
       }
     };
@@ -209,33 +270,98 @@ export async function getDb() {
 }
 
 /**
- * Returns tenant collection path: cafes/{cafe_id}/{subcollection}
- * @param {string} subcollection
- * @param {string} [cafeId]
- * @returns {string}
+ * Resolves root collection name ('cafes', 'shops', or 'clients') based on identifier.
+ * @param {string} tenantId
+ * @returns {'cafes' | 'shops' | 'clients'}
  */
-export function getTenantPath(subcollection, cafeId) {
-  const activeCafe = cafeId || getActiveCafeId();
-  return `cafes/${activeCafe}/${subcollection}`;
+export function resolveTenantRoot(tenantId) {
+  if (tenantId === '') return 'cafes';
+  if (!tenantId || typeof tenantId !== 'string') return 'shops';
+  if (/^\s/.test(tenantId)) return 'shops';
+  const clean = tenantId.trim().replace(/^\/+|\/+$/g, '').toLowerCase();
+  if (clean.startsWith('shop-') || clean.startsWith('shop_')) {
+    return 'shops';
+  }
+  if (clean.startsWith('client-') || clean === 'bongbhoj-terminal') {
+    return 'clients';
+  }
+  if (clean.startsWith('cafe-') || clean.startsWith('cafe_')) {
+    return 'cafes';
+  }
+  return 'shops';
 }
 
 /**
- * Subscribes to a real-time Firestore collection scoped to the active cafe.
- * @param {string} subcollection - e.g. "tables", "menu", "invoices"
- * @param {Function} onData - Callback receiving array of documents
+ * Returns tenant collection path supporting dual-path compatibility:
+ * cafes/{cafeId}/{subcollection} or shops/{shopId}/{subcollection}
+ * If no subcollection is provided, returns root tenant document path.
+ * @param {string} [subcollection]
+ * @param {string} [cafeId]
+ * @param {string} [forcedRoot] - optional override ('cafes' | 'shops' | 'clients')
+ * @returns {string}
+ */
+export function getTenantPath(subcollection, cafeId, forcedRoot) {
+  const activeCafe = (cafeId || getActiveCafeId() || '').trim().replace(/^\/+|\/+$/g, '');
+  const cleanSub = (subcollection || '').trim().replace(/^\/+|\/+$/g, '');
+  const root = forcedRoot || resolveTenantRoot(activeCafe);
+  return cleanSub ? `${root}/${activeCafe}/${cleanSub}` : `${root}/${activeCafe}`;
+}
+
+/**
+ * Returns path explicitly under /shops/{shopId}/{subcollection}
+ * @param {string} [subcollection]
+ * @param {string} [shopId]
+ * @returns {string}
+ */
+export function getShopPath(subcollection, shopId) {
+  return getTenantPath(subcollection, shopId, 'shops');
+}
+
+/**
+ * Returns path explicitly under /cafes/{cafeId}/{subcollection}
+ * @param {string} [subcollection]
+ * @param {string} [cafeId]
+ * @returns {string}
+ */
+export function getCafePath(subcollection, cafeId) {
+  return getTenantPath(subcollection, cafeId, 'cafes');
+}
+
+/**
+ * Subscribes to a real-time Firestore collection scoped to the active cafe or shop.
+ * @param {string} subcollection - e.g. "devices", "sessions", "staff", "tables", "menu", "invoices"
+ * @param {Function} onData - Callback receiving array of documents and fromCache boolean
  * @param {Function} [onError] - Error callback
+ * @param {string} [cafeId] - Optional explicit tenant identifier
+ * @param {string} [forcedRoot] - Optional forced root ('shops' | 'cafes')
  * @returns {Promise<Function>} Unsubscribe function
  */
-export async function subscribeTenantCollection(subcollection, onData, onError) {
+export async function subscribeTenantCollection(subcollection, onData, onError, cafeId, forcedRoot) {
+  const path = getTenantPath(subcollection, cafeId, forcedRoot);
+
   if (typeof window === 'undefined') {
-    return () => {};
+    return universalClient.collection(path).onSnapshot((snapshot) => {
+      const docs = [];
+      snapshot.forEach(docSnap => {
+        docs.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      if (typeof onData === 'function') {
+        onData(docs, true);
+      }
+    }, onError);
   }
 
   const db = await getDb();
-  const path = getTenantPath(subcollection);
-  
   const firestoreModule = window.firebaseFirestoreModule || await import('https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js').catch(() => null);
-  if (!firestoreModule) return () => {};
+  if (!firestoreModule) {
+    return universalClient.collection(path).onSnapshot((snapshot) => {
+      const docs = [];
+      snapshot.forEach(docSnap => {
+        docs.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      if (typeof onData === 'function') onData(docs, true);
+    }, onError);
+  }
 
   const { collection, onSnapshot, query } = firestoreModule;
   const colRef = collection(db, path);
@@ -247,7 +373,7 @@ export async function subscribeTenantCollection(subcollection, onData, onError) 
       docs.push({ id: docSnap.id, ...docSnap.data() });
     });
     if (typeof onData === 'function') {
-      onData(docs, snapshot.metadata.fromCache);
+      onData(docs, snapshot.metadata ? snapshot.metadata.fromCache : false);
     }
   }, (err) => {
     console.warn(`[DBClient:SnapshotError] ${path}:`, err.message);
@@ -258,35 +384,110 @@ export async function subscribeTenantCollection(subcollection, onData, onError) 
 }
 
 /**
- * Writes or merges a document under the active cafe's collection.
+ * Writes or merges a document under the active tenant's collection.
  * Works seamlessly offline via Firestore's persistent cache.
  * @param {string} subcollection
  * @param {string} docId
  * @param {Object} data
  * @param {boolean} [merge=true]
+ * @param {string} [cafeId]
+ * @param {string} [forcedRoot]
  * @returns {Promise<ServiceResult<Object>>}
  */
-export async function setTenantDocument(subcollection, docId, data, merge = true) {
+export async function setTenantDocument(subcollection, docId, data, merge = true, cafeId = null, forcedRoot = null) {
   return safeExecute(async () => {
-    const db = await getDb();
-    const path = getTenantPath(subcollection);
-    
-    if (typeof window === 'undefined' || !window.firebaseFirestoreModule) {
-      return universalClient.doc(`${path}/${docId}`).set(data, { merge });
-    }
-
-    const firestoreModule = window.firebaseFirestoreModule || await import('https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js');
-    const { doc, setDoc } = firestoreModule;
-
-    const docRef = doc(db, path, String(docId));
+    const path = getTenantPath(subcollection, cafeId, forcedRoot);
     const payload = {
       ...data,
       updated_at: new Date().toISOString()
     };
+    
+    if (typeof window === 'undefined' || !window.firebaseFirestoreModule) {
+      await universalClient.doc(`${path}/${docId}`).set(payload, { merge });
+      return { id: docId, ...payload };
+    }
+
+    const db = await getDb();
+    const firestoreModule = window.firebaseFirestoreModule || await import('https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js');
+    const { doc, setDoc } = firestoreModule;
+
+    const docRef = doc(db, path, String(docId));
 
     await setDoc(docRef, payload, { merge });
     return { id: docId, ...payload };
   }, `setDoc:${subcollection}`);
+}
+
+/**
+ * Subscribes to devices under active tenant (/shops/{shopId}/devices or /cafes/{cafeId}/devices).
+ * @param {Function} onData
+ * @param {Function} [onError]
+ * @param {string} [tenantId]
+ * @param {string} [forcedRoot]
+ * @returns {Promise<Function>}
+ */
+export async function subscribeDevices(onData, onError, tenantId, forcedRoot) {
+  return subscribeTenantCollection('devices', onData, onError, tenantId, forcedRoot);
+}
+
+/**
+ * Subscribes to live sessions under active tenant (/shops/{shopId}/sessions).
+ * @param {Function} onData
+ * @param {Function} [onError]
+ * @param {string} [tenantId]
+ * @param {string} [forcedRoot]
+ * @returns {Promise<Function>}
+ */
+export async function subscribeSessions(onData, onError, tenantId, forcedRoot) {
+  return subscribeTenantCollection('sessions', onData, onError, tenantId, forcedRoot);
+}
+
+/**
+ * Subscribes to staff directory under active tenant (/shops/{shopId}/staff).
+ * @param {Function} onData
+ * @param {Function} [onError]
+ * @param {string} [tenantId]
+ * @param {string} [forcedRoot]
+ * @returns {Promise<Function>}
+ */
+export async function subscribeStaff(onData, onError, tenantId, forcedRoot) {
+  return subscribeTenantCollection('staff', onData, onError, tenantId, forcedRoot);
+}
+
+/**
+ * Writes or updates a device record under the tenant's devices subcollection.
+ * @param {string} deviceId
+ * @param {Object} data
+ * @param {string} [tenantId]
+ * @param {string} [forcedRoot]
+ * @returns {Promise<ServiceResult<Object>>}
+ */
+export async function setTenantDevice(deviceId, data, tenantId, forcedRoot) {
+  return setTenantDocument('devices', deviceId, data, true, tenantId, forcedRoot);
+}
+
+/**
+ * Writes or updates a session record under the tenant's sessions subcollection.
+ * @param {string} sessionId
+ * @param {Object} data
+ * @param {string} [tenantId]
+ * @param {string} [forcedRoot]
+ * @returns {Promise<ServiceResult<Object>>}
+ */
+export async function setTenantSession(sessionId, data, tenantId, forcedRoot) {
+  return setTenantDocument('sessions', sessionId, data, true, tenantId, forcedRoot);
+}
+
+/**
+ * Writes or updates a staff record under the tenant's staff subcollection.
+ * @param {string|number} staffId
+ * @param {Object} data
+ * @param {string} [tenantId]
+ * @param {string} [forcedRoot]
+ * @returns {Promise<ServiceResult<Object>>}
+ */
+export async function setTenantStaffMember(staffId, data, tenantId, forcedRoot) {
+  return setTenantDocument('staff', String(staffId), data, true, tenantId, forcedRoot);
 }
 
 /**

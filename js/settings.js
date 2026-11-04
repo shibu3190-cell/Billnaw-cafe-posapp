@@ -782,6 +782,12 @@ function handleRestoreShopBackup(event) {
 window.handleRestoreShopBackup = handleRestoreShopBackup;
 
 function switchTab(tabId) { 
+    if (typeof canAccessStoreData === 'function' && !canAccessStoreData()) {
+        console.warn('[ZeroStoreDataGate] Blocked tab navigation to ' + tabId + ' while device is pending or revoked.');
+        if (typeof showDevicePairingOverlay === 'function') showDevicePairingOverlay();
+        return;
+    }
+
     if (tabId === 'more') {
         openMoreHub();
         return;
@@ -795,11 +801,15 @@ function switchTab(tabId) {
                 settings: 'Terminal Settings',
                 menu: 'Menu Management',
                 inventory: 'Inventory & Commissary',
-                khata: 'Khata Due Ledger'
+                khata: 'Khata Due Ledger',
+                staff: 'Staff Management',
+                devices: 'Authorized Devices Hub'
             };
+            const isAdminOnlyTab = ['dashboard', 'settings', 'staff', 'devices', 'whatsapp'].includes(tabId);
             requestManagerOverride({
-                title: 'Manager Approval Required',
-                actionDescription: `Staff role (${currentStaff.role}) is restricted from accessing ${tabNames[tabId] || tabId}. Enter Manager or Admin PIN:`,
+                title: isAdminOnlyTab ? 'Admin Authorization Required' : 'Manager Approval Required',
+                actionDescription: `Staff role (${currentStaff.role}) is restricted from accessing ${tabNames[tabId] || tabId}. Enter ${isAdminOnlyTab ? 'Admin' : 'Manager or Admin'} PIN:`,
+                requiredRole: isAdminOnlyTab ? 'Admin' : 'Manager',
                 onSuccess: () => {
                     switchTabDirect(tabId);
                 }
@@ -869,6 +879,12 @@ function switchTabDirect(tabId) {
         if (typeof refreshAiQuotaDisplay === 'function') refreshAiQuotaDisplay();
         if (typeof generateSettingsQRPreview === 'function') generateSettingsQRPreview();
         if (typeof renderSettingsProfileHeader === 'function') renderSettingsProfileHeader();
+    }
+    if (tabId === 'kds') {
+        if (typeof renderKdsUI === 'function') renderKdsUI();
+    }
+    if (tabId === 'tables') {
+        if (typeof renderTablesFloorUI === 'function') renderTablesFloorUI();
     }
 }
 window.switchTab = switchTab;
@@ -1047,3 +1063,265 @@ function skipOnboardingWizard() {
     showToast("Ready to take orders on POS.");
 }
 window.skipOnboardingWizard = skipOnboardingWizard;
+
+// ============================================================
+// 📱 AUTHORIZED DEVICES HUB & 1-CLICK APPROVAL / REVOCATION (F7 & F8)
+// ============================================================
+
+function openAuthorizedDevicesModal() {
+    if (typeof hasPermission === 'function' && typeof currentStaff !== 'undefined' && currentStaff) {
+        if (!hasPermission(currentStaff, 'can_manage_devices') && (!currentStaff.role || currentStaff.role.toLowerCase() !== 'admin')) {
+            showToast('Permission denied: Admin access required to manage devices.');
+            return;
+        }
+    }
+    const modal = document.getElementById('authorizedDevicesModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        renderAuthorizedDevicesHub();
+    }
+}
+window.openAuthorizedDevicesModal = openAuthorizedDevicesModal;
+
+function closeAuthorizedDevicesModal() {
+    const modal = document.getElementById('authorizedDevicesModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeAuthorizedDevicesModal = closeAuthorizedDevicesModal;
+
+function renderAuthorizedDevicesHub() {
+    const pendingListEl = document.getElementById('pendingDevicesList');
+    const authListEl = document.getElementById('authorizedDevicesList');
+    const pendingCountEl = document.getElementById('pendingDevicesCount');
+    const authCountEl = document.getElementById('authorizedDevicesCount');
+    const pendingBadge = document.getElementById('pendingDeviceCountBadge');
+    const staffBadge = document.getElementById('staffModalPendingBadge');
+
+    const devices = window.authorizedDevices || [];
+    const pendingDevices = devices.filter(d => d.status === 'PENDING');
+    const authorizedDevices = devices.filter(d => d.status === 'AUTHORIZED' || d.isMaster === true);
+
+    if (pendingCountEl) pendingCountEl.innerText = pendingDevices.length;
+    if (authCountEl) authCountEl.innerText = authorizedDevices.length;
+
+    if (pendingBadge) {
+        if (pendingDevices.length > 0) {
+            pendingBadge.innerText = `${pendingDevices.length} Pending`;
+            pendingBadge.style.display = 'inline-block';
+        } else {
+            pendingBadge.style.display = 'none';
+        }
+    }
+    if (staffBadge) {
+        staffBadge.style.display = pendingDevices.length > 0 ? 'inline-block' : 'none';
+    }
+
+    // 1. Render Pending Devices
+    if (pendingListEl) {
+        if (pendingDevices.length === 0) {
+            pendingListEl.innerHTML = `
+                <div style="background: rgba(0, 0, 0, 0.02); border: 1px dashed var(--border); border-radius: 12px; padding: 18px; text-align: center; color: var(--text-muted); font-size: 12px;">
+                    No pending pairing requests. New secondary terminals will appear here automatically.
+                </div>
+            `;
+        } else {
+            pendingListEl.innerHTML = pendingDevices.map(dev => {
+                const defaultName = `Counter ${authorizedDevices.length + 1}`;
+                return `
+                    <div class="pending-device-card" style="background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 12px; padding: 14px 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <strong style="font-size: 14px; color: #92400E; font-family: monospace;">${dev.deviceId}</strong>
+                                    <span style="font-size: 11px; font-weight: 700; background: #FEF3C7; color: #B45309; padding: 2px 8px; border-radius: 6px;">Pairing Code: ${dev.pairingCode || '------'}</span>
+                                </div>
+                                <p style="font-size: 11px; color: #B45309; margin: 4px 0 0 0;">Requested: ${new Date(dev.registeredAt || dev.lastSeenAt || Date.now()).toLocaleTimeString()}</p>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center; margin-top: 10px;">
+                            <div>
+                                <label style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #92400E; margin-bottom: 4px;">Station Name</label>
+                                <input type="text" id="devName_${dev.deviceId}" value="${defaultName}" style="width: 100%; padding: 7px 10px; font-size: 12px; font-weight: 600; border: 1px solid #FCD34D; border-radius: 8px; background: #FFFFFF;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #92400E; margin-bottom: 4px;">Station Profile</label>
+                                <select id="devProfile_${dev.deviceId}" style="width: 100%; padding: 7px 10px; font-size: 12px; font-weight: 600; border: 1px solid #FCD34D; border-radius: 8px; background: #FFFFFF;">
+                                    <option value="BILLING_COUNTER" selected>Billing Counter</option>
+                                    <option value="KDS">Kitchen Display (KDS)</option>
+                                    <option value="WAITER_MOBILE">Waiter Mobile</option>
+                                    <option value="GENERAL_STATION">General Station</option>
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 6px; align-self: flex-end;">
+                                <button type="button" class="btn btn-success" style="padding: 7px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;" onclick="approveDevicePairing('${dev.deviceId}')">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Approve</span>
+                                </button>
+                                <button type="button" class="btn btn-outline" style="padding: 7px 10px; font-size: 12px; border-radius: 8px; color: var(--danger); border-color: rgba(220, 38, 38, 0.3);" onclick="rejectPendingDevice('${dev.deviceId}')" title="Reject Pairing">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    // 2. Render Authorized Devices
+    if (authListEl) {
+        if (authorizedDevices.length === 0) {
+            authListEl.innerHTML = `
+                <div style="background: rgba(0, 0, 0, 0.02); border: 1px dashed var(--border); border-radius: 12px; padding: 18px; text-align: center; color: var(--text-muted); font-size: 12px;">
+                    No authorized terminals registered yet.
+                </div>
+            `;
+        } else {
+            authListEl.innerHTML = authorizedDevices.map(dev => {
+                const isMaster = Boolean(dev.isMaster);
+                const profileBadge = dev.stationProfile || 'GENERAL_STATION';
+                const nameDisplay = typeof escapeHtml === 'function' ? escapeHtml(dev.deviceName || 'Terminal') : (dev.deviceName || 'Terminal');
+                return `
+                    <div class="auth-device-card" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 10px; background: ${isMaster ? 'rgba(20, 56, 50, 0.1)' : 'rgba(37, 99, 235, 0.1)'}; color: ${isMaster ? 'var(--primary)' : '#2563EB'}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                                </svg>
+                            </div>
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <strong style="font-size: 14px; color: var(--text-dark);">${nameDisplay}</strong>
+                                    ${isMaster ? '<span style="font-size: 10px; font-weight: 700; background: #DCFCE7; color: #15803D; padding: 2px 7px; border-radius: 10px;">Master Terminal</span>' : `<span style="font-size: 10px; font-weight: 700; background: #EFF6FF; color: #1D4ED8; padding: 2px 7px; border-radius: 10px;">${profileBadge}</span>`}
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; font-family: monospace;">ID: ${dev.deviceId} • ${isMaster ? 'Permanent' : `Approved: ${dev.approvedAt ? new Date(dev.approvedAt).toLocaleDateString() : 'Active'}`}</p>
+                            </div>
+                        </div>
+                        <div>
+                            ${isMaster ? '' : `
+                                <button type="button" class="btn btn-outline" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: var(--danger); border-color: rgba(220, 38, 38, 0.3); display: inline-flex; align-items: center; gap: 6px;" onclick="revokeAuthorizedDevice('${dev.deviceId}')">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                                    <span>Revoke</span>
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+}
+window.renderAuthorizedDevicesHub = renderAuthorizedDevicesHub;
+
+async function approveDevicePairing(deviceId) {
+    if (!deviceId) return;
+    const nameInput = document.getElementById(`devName_${deviceId}`);
+    const profileSelect = document.getElementById(`devProfile_${deviceId}`);
+
+    let stationName = nameInput ? nameInput.value : '';
+    stationName = (stationName || '').trim().slice(0, 50);
+    if (!stationName) stationName = 'Terminal';
+    stationName = typeof escapeHtml === 'function' ? escapeHtml(stationName) : stationName;
+
+    const validProfiles = ['BILLING_COUNTER', 'KDS', 'WAITER_MOBILE', 'GENERAL_STATION'];
+    let stationProfile = profileSelect ? profileSelect.value : 'BILLING_COUNTER';
+    if (!validProfiles.includes(stationProfile)) stationProfile = 'GENERAL_STATION';
+
+    const updates = {
+        deviceId: deviceId,
+        deviceName: stationName,
+        stationProfile: stationProfile,
+        status: 'AUTHORIZED',
+        approvedAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString()
+    };
+
+    // 1. Optimistic local update
+    if (window.authorizedDevices) {
+        const idx = window.authorizedDevices.findIndex(d => d.deviceId === deviceId || d.id === deviceId);
+        if (idx >= 0) {
+            window.authorizedDevices[idx] = { ...window.authorizedDevices[idx], ...updates };
+        }
+    }
+    renderAuthorizedDevicesHub();
+
+    // 2. Cloud update to Firestore
+    try {
+        if (typeof setTenantDevice === 'function') {
+            await setTenantDevice(deviceId, updates);
+        } else if (window.firestoreDB && window.firestoreSetDoc && typeof getStoreSubdocRef === 'function') {
+            const devRef = getStoreSubdocRef('devices', deviceId);
+            if (devRef) await window.firestoreSetDoc(devRef, updates, { merge: true });
+        }
+        if (typeof showToast === 'function') showToast(`Terminal "${stationName}" approved successfully.`);
+    } catch (err) {
+        console.error('Error approving device:', err);
+        if (typeof showToast === 'function') showToast('Failed to sync device approval to cloud: ' + err.message);
+    }
+}
+window.approveDevicePairing = approveDevicePairing;
+
+async function revokeAuthorizedDevice(deviceId) {
+    if (!deviceId) return;
+
+    // Safety: Master cannot be revoked
+    const dev = (window.authorizedDevices || []).find(d => d.deviceId === deviceId || d.id === deviceId);
+    if (dev && dev.isMaster) {
+        if (typeof showToast === 'function') showToast('Master Admin Terminal cannot revoke itself.');
+        return;
+    }
+
+    if (typeof confirm === 'function' && !confirm(`Are you sure you want to revoke access for terminal "${dev ? dev.deviceName : deviceId}"? This will immediately disconnect the device and wipe all its local data.`)) {
+        return;
+    }
+
+    const updates = {
+        status: 'REVOKED',
+        revokedAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString()
+    };
+
+    // 1. Optimistic local update
+    if (window.authorizedDevices) {
+        const idx = window.authorizedDevices.findIndex(d => d.deviceId === deviceId || d.id === deviceId);
+        if (idx >= 0) {
+            window.authorizedDevices[idx] = { ...window.authorizedDevices[idx], ...updates };
+        }
+    }
+    renderAuthorizedDevicesHub();
+
+    // 2. Cloud update to Firestore
+    try {
+        if (typeof setTenantDevice === 'function') {
+            await setTenantDevice(deviceId, updates);
+        } else if (window.firestoreDB && window.firestoreSetDoc && typeof getStoreSubdocRef === 'function') {
+            const devRef = getStoreSubdocRef('devices', deviceId);
+            if (devRef) await window.firestoreSetDoc(devRef, updates, { merge: true });
+        }
+        if (typeof showToast === 'function') showToast('Terminal access revoked.');
+    } catch (err) {
+        console.error('Error revoking device:', err);
+        if (typeof showToast === 'function') showToast('Failed to revoke device: ' + err.message);
+    }
+}
+window.revokeAuthorizedDevice = revokeAuthorizedDevice;
+
+async function rejectPendingDevice(deviceId) {
+    if (!deviceId) return;
+    const updates = { status: 'REVOKED', revokedAt: new Date().toISOString() };
+    if (window.authorizedDevices) {
+        window.authorizedDevices = window.authorizedDevices.filter(d => d.deviceId !== deviceId);
+    }
+    renderAuthorizedDevicesHub();
+    try {
+        if (typeof setTenantDevice === 'function') {
+            await setTenantDevice(deviceId, updates);
+        } else if (window.firestoreDB && window.firestoreSetDoc && typeof getStoreSubdocRef === 'function') {
+            const devRef = getStoreSubdocRef('devices', deviceId);
+            if (devRef) await window.firestoreSetDoc(devRef, updates, { merge: true });
+        }
+    } catch (e) {}
+}
+window.rejectPendingDevice = rejectPendingDevice;

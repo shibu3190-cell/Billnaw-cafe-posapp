@@ -315,7 +315,7 @@ async function ensureOverlaysSuppressed(cdp, allowedModalId = null) {
             if (!style) {
                 style = document.createElement('style');
                 style.id = 'browser-audit-suppression';
-                style.textContent = '#shopAuthModal, #appUpdatePopup, #activationOverlay, #loginOverlay { display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important; }';
+                style.textContent = '#shopAuthModal, #appUpdatePopup, #activationOverlay, #loginOverlay, #devicePairingOverlay, #firstLoginPinModal { display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important; }';
                 (document.head || document.documentElement).appendChild(style);
             }
 
@@ -346,6 +346,12 @@ async function ensureOverlaysSuppressed(cdp, allowedModalId = null) {
                 loginOverlay.style.setProperty('visibility', 'hidden', 'important');
             }
 
+            const pairOverlay = document.getElementById('devicePairingOverlay');
+            if (pairOverlay) {
+                pairOverlay.style.setProperty('display', 'none', 'important');
+                pairOverlay.style.setProperty('visibility', 'hidden', 'important');
+            }
+
             // 3. Dismissal functions
             if (typeof dismissAppUpdatePopup === 'function') dismissAppUpdatePopup();
             if (typeof closeShopAuthModal === 'function') closeShopAuthModal(true);
@@ -367,6 +373,15 @@ async function ensureOverlaysSuppressed(cdp, allowedModalId = null) {
             }
             if (localStorage.getItem('billnaw_pos_version') !== '2.4.0') {
                 localStorage.setItem('billnaw_pos_version', '2.4.0');
+            }
+            if (localStorage.getItem('billnaw_is_master') !== 'true') {
+                localStorage.setItem('billnaw_is_master', 'true');
+            }
+            if (localStorage.getItem('billnaw_device_status') !== 'AUTHORIZED') {
+                localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+            }
+            if (!localStorage.getItem('billnaw_device_id')) {
+                localStorage.setItem('billnaw_device_id', 'DEV_MASTER00000');
             }
         })(${allowedModalId ? JSON.stringify(allowedModalId) : 'null'})
     `);
@@ -1468,6 +1483,10 @@ async function runMasterAudit() {
                     localStorage.setItem('billnaw_store_code', 'SHOP-M2');
                     localStorage.setItem('billnaw_user_role', 'admin');
                     localStorage.setItem('billnaw_pos_version', '2.4.0');
+                    localStorage.setItem('billnaw_is_master', 'true');
+                    localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                    localStorage.setItem('billnaw_device_id', 'DEV_MASTER00000');
+                    localStorage.setItem('billnaw_station_profile', 'BILLING_COUNTER');
                     localStorage.setItem('billnaw_shop_session', JSON.stringify({
                         token: 'demo-valid-token-browser-audit',
                         storeCode: 'SHOP-M2',
@@ -1487,7 +1506,7 @@ async function runMasterAudit() {
 
                     const style = document.createElement('style');
                     style.id = 'browser-audit-suppression';
-                    style.textContent = '#shopAuthModal, #appUpdatePopup, #activationOverlay, #loginOverlay { display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important; }';
+                    style.textContent = '#shopAuthModal, #appUpdatePopup, #activationOverlay, #loginOverlay, #devicePairingOverlay, #firstLoginPinModal { display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important; }';
                     (document.head || document.documentElement).appendChild(style);
                 } catch (e) {}
             `
@@ -1503,6 +1522,10 @@ async function runMasterAudit() {
                     localStorage.setItem('billnaw_store_code', 'SHOP-M2');
                     localStorage.setItem('billnaw_user_role', 'admin');
                     localStorage.setItem('billnaw_pos_version', '2.4.0');
+                    localStorage.setItem('billnaw_is_master', 'true');
+                    localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                    localStorage.setItem('billnaw_device_id', 'DEV_MASTER00000');
+                    localStorage.setItem('billnaw_station_profile', 'BILLING_COUNTER');
                     localStorage.setItem('billnaw_shop_session', JSON.stringify({
                         token: 'demo-valid-token-browser-audit',
                         storeCode: 'SHOP-M2',
@@ -1572,6 +1595,12 @@ async function runMasterAudit() {
                 };
 
                 window.currentStaff = { id: 1, name: 'Admin', role: 'Admin' };
+                window.currentDeviceRecord = {
+                    deviceId: 'DEV_MASTER00000',
+                    isMaster: true,
+                    status: 'AUTHORIZED',
+                    stationProfile: 'BILLING_COUNTER'
+                };
                 if (typeof shopProfile !== 'undefined') Object.assign(shopProfile, profileData);
                 if (!window.shopProfile) window.shopProfile = {};
                 Object.assign(window.shopProfile, profileData);

@@ -1179,6 +1179,7 @@ const idb = {
     db: null, 
     initPromise: null,
     init: function() {
+        if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB not supported'));
         if (this.initPromise) return this.initPromise;
         this.initPromise = new Promise((resolve, reject) => {
             const req = indexedDB.open('CafePOS_DB', 1);
@@ -1318,7 +1319,7 @@ function handleRemoteFirestoreUpdate(data) {
 }
 window.handleRemoteFirestoreUpdate = handleRemoteFirestoreUpdate;
 
-// Firestore Store Resolution & Sync Integration (/shops/{storeCode} with /clients/{clientId} fallback)
+// Firestore Store Resolution & Sync Integration (Dual-path: /shops/{storeCode} and /cafes/{cafeId} with /clients/{clientId} fallback)
 function getActiveStoreIdentifier() {
     return localStorage.getItem('billnaw_store_code') || 
            localStorage.getItem('cafeLicenseKey') || 
@@ -1327,18 +1328,272 @@ function getActiveStoreIdentifier() {
 }
 window.getActiveStoreIdentifier = getActiveStoreIdentifier;
 
-function getStoreDocRef(explicitCode = null) {
+function getStoreCollectionName(code = null) {
+    if (code === '') return 'cafes';
+    const targetCode = (code !== null && code !== undefined) ? code : getActiveStoreIdentifier();
+    if (!targetCode || typeof targetCode !== 'string') return "shops";
+    if (/^\s/.test(targetCode)) return "shops";
+    const clean = targetCode.trim().replace(/^\/+|\/+$/g, '').toLowerCase();
+    if (clean.startsWith('shop-') || clean.startsWith('shop_')) {
+        return "shops";
+    }
+    if (clean.startsWith('client-') || clean === 'bongbhoj-terminal') {
+        return "clients";
+    }
+    if (clean.startsWith('cafe-') || clean.startsWith('cafe_')) {
+        return "cafes";
+    }
+    return "shops";
+}
+window.getStoreCollectionName = getStoreCollectionName;
+
+function getStoreDocRef(explicitCode = null, explicitCollection = null) {
     if (!window.firestoreDB || !window.firestoreDoc) return null;
     const code = explicitCode || getActiveStoreIdentifier();
-    const isShop = (code.startsWith('SHOP-') || localStorage.getItem('billnaw_auth_mode') === 'authenticated') && code !== 'BONGBHOJ-TERMINAL';
-    const collectionName = isShop ? "shops" : "clients";
+    const collectionName = explicitCollection || getStoreCollectionName(code);
     return window.firestoreDoc(window.firestoreDB, collectionName, code);
 }
 window.getStoreDocRef = getStoreDocRef;
 
+function getStoreSubcollectionRef(subcollection, explicitCode = null, explicitCollection = null) {
+    if (!window.firestoreDB || !window.firestoreCollection) return null;
+    const code = explicitCode || getActiveStoreIdentifier();
+    const collectionName = explicitCollection || getStoreCollectionName(code);
+    return window.firestoreCollection(window.firestoreDB, collectionName, code, subcollection);
+}
+window.getStoreSubcollectionRef = getStoreSubcollectionRef;
+
+function getStoreSubdocRef(subcollection, docId, explicitCode = null, explicitCollection = null) {
+    if (!window.firestoreDB || !window.firestoreDoc) return null;
+    const code = explicitCode || getActiveStoreIdentifier();
+    const collectionName = explicitCollection || getStoreCollectionName(code);
+    return window.firestoreDoc(window.firestoreDB, collectionName, code, subcollection, String(docId));
+}
+window.getStoreSubdocRef = getStoreSubdocRef;
+
+let firestoreDevicesUnsubscribe = null;
+let firestoreSessionsUnsubscribe = null;
+let firestoreStaffUnsubscribe = null;
+
+function subscribeDevicesCloudListener(targetStoreCode = null) {
+    if (!window.firestoreDB || !window.firestoreCollection || !window.firestoreOnSnapshot) return null;
+    if (firestoreDevicesUnsubscribe) {
+        try { firestoreDevicesUnsubscribe(); } catch (e) {}
+        firestoreDevicesUnsubscribe = null;
+    }
+    try {
+        const devicesColRef = getStoreSubcollectionRef('devices', targetStoreCode);
+        if (!devicesColRef) return null;
+
+        firestoreDevicesUnsubscribe = window.firestoreOnSnapshot(devicesColRef, (snap) => {
+            const devices = [];
+            snap.forEach(docSnap => {
+                devices.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            window.authorizedDevices = devices;
+            try { localStorage.setItem('billnaw_authorized_devices', JSON.stringify(devices)); } catch(e) {}
+            if (typeof idb !== 'undefined' && idb.set) { idb.set('billnaw_devices', devices); }
+
+            const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+            const myRecord = devices.find(d => d.deviceId === myDevId || d.id === myDevId);
+            if (myRecord) {
+                window.currentDeviceRecord = myRecord;
+
+                // Status transition: PENDING -> AUTHORIZED
+                if (myRecord.status === 'AUTHORIZED' && localStorage.getItem('billnaw_device_status') !== 'AUTHORIZED') {
+                    localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                    if (myRecord.stationProfile) localStorage.setItem('billnaw_station_profile', myRecord.stationProfile);
+                    if (myRecord.deviceName) localStorage.setItem('billnaw_station_name', myRecord.deviceName);
+
+                    if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
+                    if (typeof showToast === 'function') showToast(`Terminal approved as ${myRecord.deviceName}!`, 'success');
+
+                    if (typeof applyStationProfileRestrictions === 'function') {
+                        applyStationProfileRestrictions();
+                    }
+                    if (typeof attachFirestoreListener === 'function') {
+                        attachFirestoreListener();
+                    }
+                }
+
+                // Status transition: -> REVOKED
+                if (myRecord.status === 'REVOKED') {
+                    if (typeof handleDeviceRevocation === 'function') {
+                        handleDeviceRevocation(myRecord);
+                    }
+                }
+
+                window.dispatchEvent(new CustomEvent('billnaw:device-status-changed', { detail: { device: myRecord, allDevices: devices } }));
+            }
+            window.dispatchEvent(new CustomEvent('billnaw:devices-updated', { detail: { devices } }));
+            if (typeof renderAuthorizedDevicesHub === 'function') renderAuthorizedDevicesHub();
+            if (typeof checkDeviceAuthorizationStatus === 'function') checkDeviceAuthorizationStatus();
+        }, (err) => {
+            console.warn('[Firestore] devices listener warning:', err.message);
+        });
+        return firestoreDevicesUnsubscribe;
+    } catch (err) {
+        console.warn('Error attaching devices listener:', err);
+        return null;
+    }
+}
+window.subscribeDevicesCloudListener = subscribeDevicesCloudListener;
+
+function subscribeSessionsCloudListener(targetStoreCode = null) {
+    if (!window.firestoreDB || !window.firestoreCollection || !window.firestoreOnSnapshot) return null;
+    if (firestoreSessionsUnsubscribe) {
+        try { firestoreSessionsUnsubscribe(); } catch (e) {}
+        firestoreSessionsUnsubscribe = null;
+    }
+    try {
+        const sessionsColRef = getStoreSubcollectionRef('sessions', targetStoreCode);
+        if (!sessionsColRef) return null;
+
+        firestoreSessionsUnsubscribe = window.firestoreOnSnapshot(sessionsColRef, (snap) => {
+            const sessions = [];
+            snap.forEach(docSnap => {
+                sessions.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            window.activeStaffSessions = sessions;
+            try { localStorage.setItem('billnaw_active_sessions', JSON.stringify(sessions)); } catch(e) {}
+            if (typeof idb !== 'undefined' && idb.set) { idb.set('billnaw_sessions', sessions); }
+
+            const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+            const lockedSession = sessions.find(s => (s.deviceId === myDevId || s.sessionId === window.currentSessionId) && (s.status === 'LOCKED' || s.isLocked === true));
+            if (lockedSession) {
+                window.dispatchEvent(new CustomEvent('billnaw:session-locked', { detail: { session: lockedSession } }));
+                if (typeof lockTerminalByRemote === 'function') {
+                    lockTerminalByRemote(lockedSession);
+                } else if (typeof lockPosTerminal === 'function') {
+                    lockPosTerminal();
+                }
+            }
+
+            window.dispatchEvent(new CustomEvent('billnaw:sessions-updated', { detail: { sessions } }));
+            if (typeof renderLiveSessionCards === 'function') renderLiveSessionCards();
+        }, (err) => {
+            console.warn('[Firestore] sessions listener warning:', err.message);
+        });
+        return firestoreSessionsUnsubscribe;
+    } catch (err) {
+        console.warn('Error attaching sessions listener:', err);
+        return null;
+    }
+}
+window.subscribeSessionsCloudListener = subscribeSessionsCloudListener;
+
+function subscribeStaffCloudListener(targetStoreCode = null) {
+    if (!window.firestoreDB || !window.firestoreCollection || !window.firestoreOnSnapshot) return null;
+    if (firestoreStaffUnsubscribe) {
+        try { firestoreStaffUnsubscribe(); } catch (e) {}
+        firestoreStaffUnsubscribe = null;
+    }
+    try {
+        const staffColRef = getStoreSubcollectionRef('staff', targetStoreCode);
+        if (!staffColRef) return null;
+
+        firestoreStaffUnsubscribe = window.firestoreOnSnapshot(staffColRef, (snap) => {
+            const staffDocs = [];
+            snap.forEach(docSnap => {
+                staffDocs.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            if (staffDocs.length > 0) {
+                staffList = staffDocs;
+                window.staffList = staffList;
+                if (typeof idb !== 'undefined' && idb.set) { idb.set('cafe_staff', staffList); }
+                if (typeof renderStaffList === 'function') renderStaffList();
+                if (typeof renderAvatarPicker === 'function') renderAvatarPicker();
+            }
+            window.dispatchEvent(new CustomEvent('billnaw:staff-updated', { detail: { staff: staffDocs } }));
+        }, (err) => {
+            console.warn('[Firestore] staff listener warning:', err.message);
+        });
+        return firestoreStaffUnsubscribe;
+    } catch (err) {
+        console.warn('Error attaching staff listener:', err);
+        return null;
+    }
+}
+window.subscribeStaffCloudListener = subscribeStaffCloudListener;
+
+async function syncDeviceRecordToCloud(deviceRecord, targetStoreCode = null) {
+    if (!deviceRecord || !deviceRecord.deviceId) return;
+    try {
+        if (typeof idb !== 'undefined' && idb.set) {
+            try {
+                await idb.set('billnaw_device_' + deviceRecord.deviceId, deviceRecord);
+            } catch (err) {
+                console.warn('IndexedDB defer:', err.message);
+            }
+        }
+        if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+            const subdocRef = getStoreSubdocRef('devices', deviceRecord.deviceId, targetStoreCode);
+            if (subdocRef) {
+                await window.firestoreSetDoc(subdocRef, {
+                    ...deviceRecord,
+                    lastSeenAt: new Date().toISOString()
+                }, { merge: true });
+            }
+        }
+    } catch (e) {
+        console.warn('syncDeviceRecordToCloud offline fallback:', e.message);
+    }
+}
+window.syncDeviceRecordToCloud = syncDeviceRecordToCloud;
+
+async function syncSessionRecordToCloud(sessionRecord, targetStoreCode = null) {
+    if (!sessionRecord || !sessionRecord.sessionId) return;
+    try {
+        if (typeof idb !== 'undefined' && idb.set) {
+            try {
+                await idb.set('billnaw_session_' + sessionRecord.sessionId, sessionRecord);
+            } catch (err) {
+                console.warn('IndexedDB defer:', err.message);
+            }
+        }
+        if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+            const subdocRef = getStoreSubdocRef('sessions', sessionRecord.sessionId, targetStoreCode);
+            if (subdocRef) {
+                await window.firestoreSetDoc(subdocRef, {
+                    ...sessionRecord,
+                    lastActiveAt: new Date().toISOString()
+                }, { merge: true });
+            }
+        }
+    } catch (e) {
+        console.warn('syncSessionRecordToCloud offline fallback:', e.message);
+    }
+}
+window.syncSessionRecordToCloud = syncSessionRecordToCloud;
+
+async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
+    if (!staffRecord || !staffRecord.id) return;
+    try {
+        if (typeof idb !== 'undefined' && idb.set) {
+            try {
+                await idb.set('cafe_staff', staffList);
+            } catch (err) {
+                console.warn('IndexedDB defer:', err.message);
+            }
+        }
+        if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+            const subdocRef = getStoreSubdocRef('staff', String(staffRecord.id), targetStoreCode);
+            if (subdocRef) {
+                await window.firestoreSetDoc(subdocRef, {
+                    ...staffRecord,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+            }
+        }
+    } catch (e) {
+        console.warn('syncStaffRecordToCloud offline fallback:', e.message);
+    }
+}
+window.syncStaffRecordToCloud = syncStaffRecordToCloud;
+
 function attachFirestoreListener(targetStoreCode = null) {
     if (targetStoreCode && typeof targetStoreCode === 'string') {
-        if (targetStoreCode.startsWith('SHOP-')) {
+        if (targetStoreCode.startsWith('SHOP-') || targetStoreCode.startsWith('cafe_')) {
             try { localStorage.setItem('billnaw_store_code', targetStoreCode); } catch(e) {}
         }
         myClientID = targetStoreCode;
@@ -1355,6 +1610,21 @@ function attachFirestoreListener(targetStoreCode = null) {
         firestoreUnsubscribe = null;
     }
 
+    // 🔒 F6: ZERO-STORE-DATA GATE INTERCEPT
+    if (typeof canAccessStoreData === 'function' && !canAccessStoreData()) {
+        console.warn('[ZeroStoreDataGate] Device status: ' + (typeof getDeviceStatus === 'function' ? getDeviceStatus() : 'PENDING') + '. Suspending store data sync.');
+        // Ensure store business arrays remain empty
+        menuItems = [];
+        orderHistory = [];
+        customersList = [];
+        dailyExpenses = [];
+        tablesInfo = {};
+        // Secondary terminal MUST still listen to devices collection to receive pairing approval
+        subscribeDevicesCloudListener(targetStoreCode);
+        setCloudSyncStatus('offline', 'Awaiting Pairing Approval');
+        return;
+    }
+
     setCloudSyncStatus('syncing', 'Connecting Cloud...');
     try {
         const storeDocRef = getStoreDocRef(targetStoreCode);
@@ -1362,6 +1632,11 @@ function attachFirestoreListener(targetStoreCode = null) {
             setCloudSyncStatus('offline', 'Offline (Local)');
             return;
         }
+
+        // Attach subcollection listeners for devices, sessions, and staff
+        subscribeDevicesCloudListener(targetStoreCode);
+        subscribeSessionsCloudListener(targetStoreCode);
+        subscribeStaffCloudListener(targetStoreCode);
 
         firestoreUnsubscribe = window.firestoreOnSnapshot(storeDocRef, (snap) => {
             if (snap.exists()) {
@@ -1398,14 +1673,28 @@ function detachFirestoreListener() {
         try { firestoreUnsubscribe(); } catch(e) {}
         firestoreUnsubscribe = null;
     }
+    if (firestoreDevicesUnsubscribe) {
+        try { firestoreDevicesUnsubscribe(); } catch(e) {}
+        firestoreDevicesUnsubscribe = null;
+    }
+    if (firestoreSessionsUnsubscribe) {
+        try { firestoreSessionsUnsubscribe(); } catch(e) {}
+        firestoreSessionsUnsubscribe = null;
+    }
+    if (firestoreStaffUnsubscribe) {
+        try { firestoreStaffUnsubscribe(); } catch(e) {}
+        firestoreStaffUnsubscribe = null;
+    }
     setCloudSyncStatus('offline', 'Disconnected');
 }
 window.detachFirestoreListener = detachFirestoreListener;
 window.unsubscribeFirestoreListeners = detachFirestoreListener;
 
-window.addEventListener('firebaseLoaded', () => {
-    attachFirestoreListener();
-});
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('firebaseLoaded', () => {
+        attachFirestoreListener();
+    });
+}
 
 // Food Image Storage Hygiene - Strips raw base64 data URLs > 2048 chars before cloud sync to protect Firestore 1MB document limit
 function sanitizeMenuItemForStorage(item) {
@@ -1424,6 +1713,17 @@ if (typeof window !== 'undefined') {
 }
 if (typeof module !== 'undefined' && module.exports) {
     module.exports.sanitizeMenuItemForStorage = sanitizeMenuItemForStorage;
+    module.exports.getActiveStoreIdentifier = getActiveStoreIdentifier;
+    module.exports.getStoreCollectionName = getStoreCollectionName;
+    module.exports.getStoreDocRef = getStoreDocRef;
+    module.exports.getStoreSubcollectionRef = getStoreSubcollectionRef;
+    module.exports.getStoreSubdocRef = getStoreSubdocRef;
+    module.exports.subscribeDevicesCloudListener = subscribeDevicesCloudListener;
+    module.exports.subscribeSessionsCloudListener = subscribeSessionsCloudListener;
+    module.exports.subscribeStaffCloudListener = subscribeStaffCloudListener;
+    module.exports.syncDeviceRecordToCloud = syncDeviceRecordToCloud;
+    module.exports.syncSessionRecordToCloud = syncSessionRecordToCloud;
+    module.exports.syncStaffRecordToCloud = syncStaffRecordToCloud;
 }
 
 async function persistAllToFirestore() {
@@ -1545,6 +1845,9 @@ function persistStaffToFirestore(newStaff = null) {
         if (storeDocRef) {
             window.firestoreSetDoc(storeDocRef, { staff: staffList, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
+        if (newStaff && (newStaff.id || newStaff.staffId)) {
+            syncStaffRecordToCloud(newStaff).catch(() => {});
+        }
     }
 }
 window.persistStaffToFirestore = persistStaffToFirestore;
@@ -1560,16 +1863,437 @@ function forceCloudSyncNow() {
 }
 window.forceCloudSyncNow = forceCloudSyncNow;
 
-// Device & PWA Handlers
+// ============================================================
+// 📱 DEVICE PAIRING, STATION PROFILES & ZERO-STORE-DATA GATE (M3)
+// ============================================================
+
+function generateDeviceId() {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const bytes = new Uint8Array(6);
+        crypto.getRandomValues(bytes);
+        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+        return `DEV_${hex}`;
+    }
+    const hex = Math.random().toString(16).substring(2, 14).toUpperCase().padEnd(12, '0');
+    return `DEV_${hex}`;
+}
+window.generateDeviceId = generateDeviceId;
+
+function generatePairingCode() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+}
+window.generatePairingCode = generatePairingCode;
+
 function getOrCreateDeviceId() {
-    let devId = localStorage.getItem('bongbhoj_device_id');
-    if (!devId) {
-        devId = 'DEV-' + Math.random().toString(36).substring(2, 8).toUpperCase() + '-' + Date.now().toString(36).slice(-4).toUpperCase();
-        localStorage.setItem('bongbhoj_device_id', devId);
+    let devId = localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id');
+    if (!devId || !/^DEV_[A-F0-9]{12}$/.test(devId)) {
+        devId = generateDeviceId();
+        try {
+            localStorage.setItem('billnaw_device_id', devId);
+            localStorage.setItem('bongbhoj_device_id', devId);
+        } catch (e) {}
     }
     return devId;
 }
 window.getOrCreateDeviceId = getOrCreateDeviceId;
+
+function isMasterTerminal() {
+    return localStorage.getItem('billnaw_is_master') === 'true';
+}
+window.isMasterTerminal = isMasterTerminal;
+
+function setMasterTerminal(isMaster = true) {
+    localStorage.setItem('billnaw_is_master', isMaster ? 'true' : 'false');
+    if (isMaster) {
+        setStationProfile('BILLING_COUNTER');
+    }
+}
+window.setMasterTerminal = setMasterTerminal;
+
+function getDeviceStatus() {
+    if (isMasterTerminal()) return 'AUTHORIZED';
+    return localStorage.getItem('billnaw_device_status') || 'PENDING';
+}
+window.getDeviceStatus = getDeviceStatus;
+
+function canAccessStoreData() {
+    if (isMasterTerminal()) return true;
+    const status = localStorage.getItem('billnaw_device_status');
+    if (status === 'REVOKED') return false;
+    if (status === 'PENDING') return false;
+    if (window.currentDeviceRecord) {
+        return window.currentDeviceRecord.status === 'AUTHORIZED';
+    }
+    return status === 'AUTHORIZED';
+}
+window.canAccessStoreData = canAccessStoreData;
+
+const STATION_PROFILES = {
+    BILLING_COUNTER: 'BILLING_COUNTER',
+    KDS: 'KDS',
+    WAITER_MOBILE: 'WAITER_MOBILE',
+    GENERAL_STATION: 'GENERAL_STATION'
+};
+window.STATION_PROFILES = STATION_PROFILES;
+
+function getStationProfile() {
+    if (window.currentDeviceRecord && window.currentDeviceRecord.stationProfile) {
+        return window.currentDeviceRecord.stationProfile;
+    }
+    const stored = localStorage.getItem('billnaw_station_profile');
+    if (stored && Object.values(STATION_PROFILES).includes(stored)) {
+        return stored;
+    }
+    return isMasterTerminal() ? STATION_PROFILES.BILLING_COUNTER : STATION_PROFILES.GENERAL_STATION;
+}
+window.getStationProfile = getStationProfile;
+
+function setStationProfile(profile) {
+    const safe = Object.values(STATION_PROFILES).includes(profile) ? profile : STATION_PROFILES.GENERAL_STATION;
+    localStorage.setItem('billnaw_station_profile', safe);
+    if (window.currentDeviceRecord) {
+        window.currentDeviceRecord.stationProfile = safe;
+    }
+    applyStationProfileRestrictions();
+    return safe;
+}
+window.setStationProfile = setStationProfile;
+
+function resolveInitialViewForStation(stationProfile, staffRole = null) {
+    const profile = stationProfile || getStationProfile();
+    if (profile === STATION_PROFILES.KDS) return 'kds';
+    if (profile === STATION_PROFILES.WAITER_MOBILE) return 'tables';
+    if (profile === STATION_PROFILES.GENERAL_STATION) {
+        const normRole = staffRole ? (typeof normalizeRole === 'function' ? normalizeRole(staffRole) : staffRole) : (window.currentStaff ? (typeof normalizeRole === 'function' ? normalizeRole(window.currentStaff.role) : window.currentStaff.role) : null);
+        if (normRole === 'Kitchen Chef') return 'kds';
+        if (normRole === 'Floor Server') return 'tables';
+        return 'pos';
+    }
+    return 'pos';
+}
+window.resolveInitialViewForStation = resolveInitialViewForStation;
+
+function switchView(viewId) {
+    const clean = String(viewId || 'pos').replace(/^#/, '');
+    if (typeof switchTab === 'function') {
+        return switchTab(clean);
+    }
+}
+window.switchView = switchView;
+
+function applyStationProfileRestrictions() {
+    const profile = getStationProfile();
+    const navPos = document.getElementById('nav-pos');
+    const navKds = document.getElementById('nav-kds');
+    const navTables = document.getElementById('nav-tables');
+    const navMenu = document.getElementById('nav-menu');
+    const navReports = document.getElementById('nav-dashboard');
+    const navInventory = document.getElementById('nav-inventory');
+    const navKhata = document.getElementById('nav-khata');
+    const navMore = document.getElementById('nav-more');
+
+    const checkoutBtn = document.getElementById('checkoutBtn');
+    const cartDiscountWrap = document.getElementById('cartDiscountWrap') || document.querySelector('.cart-discount-row');
+
+    if (profile === STATION_PROFILES.KDS) {
+        if (navPos) navPos.style.display = 'none';
+        if (navTables) navTables.style.display = 'none';
+        if (navMenu) navMenu.style.display = 'none';
+        if (navReports) navReports.style.display = 'none';
+        if (navInventory) navInventory.style.display = 'none';
+        if (navKhata) navKhata.style.display = 'none';
+        if (navMore) navMore.style.display = 'none';
+        if (navKds) {
+            navKds.style.display = 'flex';
+            navKds.classList.add('active');
+        }
+        if (checkoutBtn) checkoutBtn.style.display = 'none';
+    } else if (profile === STATION_PROFILES.WAITER_MOBILE) {
+        if (navPos) navPos.style.display = 'flex';
+        if (navTables) navTables.style.display = 'flex';
+        if (navKds) navKds.style.display = 'none';
+        if (navReports) navReports.style.display = 'none';
+        if (navInventory) navInventory.style.display = 'none';
+        if (navKhata) navKhata.style.display = 'none';
+        if (checkoutBtn) checkoutBtn.style.display = 'none';
+        if (cartDiscountWrap) cartDiscountWrap.style.display = 'none';
+    } else {
+        if (navPos) navPos.style.display = 'flex';
+        if (navKds) navKds.style.display = 'flex';
+        if (navTables) navTables.style.display = 'flex';
+        if (navMenu) navMenu.style.display = 'flex';
+        if (navInventory) navInventory.style.display = 'flex';
+        if (navKhata) navKhata.style.display = 'flex';
+        if (navMore) navMore.style.display = 'flex';
+        if (checkoutBtn) checkoutBtn.style.display = '';
+        if (cartDiscountWrap) cartDiscountWrap.style.display = '';
+        if (typeof enforcePermissions === 'function') enforcePermissions();
+    }
+}
+window.applyStationProfileRestrictions = applyStationProfileRestrictions;
+
+function clearAllTenantLocalData() {
+    try {
+        localStorage.removeItem('billnaw_auth_token');
+        localStorage.removeItem('billnaw_active_staff');
+        localStorage.removeItem('billnaw_last_staff_id');
+        localStorage.removeItem('billnaw_current_session_id');
+        localStorage.removeItem('billnaw_active_cart');
+        localStorage.removeItem('billnaw_offline_orders');
+        localStorage.removeItem('billnaw_authorized_devices');
+        localStorage.removeItem('billnaw_active_sessions');
+        localStorage.removeItem('billnaw_shop_session');
+        localStorage.removeItem('billnaw_auth_email');
+        localStorage.removeItem('billnaw_auth_phone');
+        localStorage.removeItem('billnaw_store_code');
+        localStorage.removeItem('billnaw_active_user');
+        localStorage.removeItem('billnaw_terminal_locked');
+        localStorage.removeItem('cafe_khata');
+        localStorage.removeItem('billnaw_culinary_materials');
+        localStorage.removeItem('billnaw_culinary_batches');
+        if (typeof window !== 'undefined' && typeof window.stopSessionHeartbeat === 'function') {
+            try { window.stopSessionHeartbeat(); } catch (e) {}
+        }
+        if (typeof currentCart !== 'undefined') currentCart = [];
+        if (typeof tablesInfo !== 'undefined') tablesInfo = {};
+        if (typeof window.cart !== 'undefined') window.cart = [];
+        if (typeof window.clearCart === 'function') window.clearCart();
+        if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+        if (typeof idb !== 'undefined' && idb.clear) {
+            const stores = ['cafe_menu', 'cafe_history', 'cafe_tables', 'cafe_customers', 'cafe_expenses', 'cafe_staff', 'cafe_profile', 'cafe_khata', 'cafe_raw_materials', 'cafe_sub_recipes'];
+            stores.forEach(s => { try { idb.clear(s); } catch (e) {} });
+        }
+    } catch (e) {}
+}
+window.clearAllTenantLocalData = clearAllTenantLocalData;
+
+function playKdsAudioChime() {
+    if (localStorage.getItem('billnaw_kds_chime_disabled') === 'true') return;
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.6);
+    } catch (e) {}
+}
+window.playKdsAudioChime = playKdsAudioChime;
+
+function toggleKdsSound() {
+    const disabled = localStorage.getItem('billnaw_kds_chime_disabled') === 'true';
+    localStorage.setItem('billnaw_kds_chime_disabled', (!disabled) ? 'true' : 'false');
+    const label = document.getElementById('kdsSoundLabel');
+    if (label) label.innerText = !disabled ? 'Chime: OFF' : 'Chime: ON';
+    if (disabled) playKdsAudioChime();
+}
+window.toggleKdsSound = toggleKdsSound;
+
+async function checkDeviceAuthorizationStatus() {
+    const isMaster = localStorage.getItem('billnaw_is_master') === 'true';
+    if (isMaster) {
+        const revOverlay = document.getElementById('deviceRevokedOverlay');
+        if (revOverlay) revOverlay.style.display = 'none';
+        const pairOverlay = document.getElementById('devicePairingOverlay');
+        if (pairOverlay) pairOverlay.style.display = 'none';
+        return;
+    }
+
+    const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+    const devices = window.authorizedDevices || [];
+    const myRecord = devices.find(d => d.deviceId === myDevId || d.id === myDevId);
+
+    if (!myRecord) {
+        const localStatus = localStorage.getItem('billnaw_device_status');
+        if (localStatus === 'REVOKED') {
+            handleDeviceRevocation({ deviceId: myDevId });
+        }
+        return;
+    }
+
+    window.currentDeviceRecord = myRecord;
+
+    if (myRecord.status === 'REVOKED') {
+        await handleDeviceRevocation(myRecord);
+        return;
+    }
+
+    if (myRecord.status === 'AUTHORIZED') {
+        const wasPending = localStorage.getItem('billnaw_device_status') === 'PENDING';
+        localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+        if (myRecord.stationProfile) localStorage.setItem('billnaw_station_profile', myRecord.stationProfile);
+        if (myRecord.deviceName) localStorage.setItem('billnaw_station_name', myRecord.deviceName);
+
+        const revOverlay = document.getElementById('deviceRevokedOverlay');
+        if (revOverlay) revOverlay.style.display = 'none';
+        const pairOverlay = document.getElementById('devicePairingOverlay');
+        if (pairOverlay) pairOverlay.style.display = 'none';
+
+        if (wasPending) {
+            if (typeof showToast === 'function') showToast(`Terminal Authorized: ${myRecord.deviceName || 'Ready'}`);
+            if (typeof applyStationProfileRestrictions === 'function') {
+                applyStationProfileRestrictions();
+            }
+            if (typeof attachFirestoreListener === 'function') {
+                attachFirestoreListener();
+            }
+        }
+        return;
+    }
+
+    if (myRecord.status === 'PENDING') {
+        localStorage.setItem('billnaw_device_status', 'PENDING');
+        showDevicePairingOverlay();
+    }
+}
+window.checkDeviceAuthorizationStatus = checkDeviceAuthorizationStatus;
+
+async function handleDeviceRevocation(deviceRecord) {
+    if (localStorage.getItem('billnaw_is_master') === 'true') return;
+
+    localStorage.setItem('billnaw_device_status', 'REVOKED');
+
+    if (typeof clearAllTenantLocalData === 'function') {
+        await clearAllTenantLocalData();
+    }
+
+    if (typeof clearCart === 'function') clearCart();
+    window.cart = [];
+    window.currentStaff = null;
+    localStorage.removeItem('billnaw_active_staff');
+
+    if (typeof window.unsubscribeFirestoreListeners === 'function') {
+        window.unsubscribeFirestoreListeners();
+    } else if (typeof firestoreUnsubscribe === 'function') {
+        try { firestoreUnsubscribe(); } catch (e) {}
+        firestoreUnsubscribe = null;
+    }
+
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+        if (modal.id !== 'deviceRevokedOverlay') {
+            modal.style.display = 'none';
+        }
+    });
+
+    const revOverlay = document.getElementById('deviceRevokedOverlay');
+    if (revOverlay) {
+        revOverlay.style.display = 'flex';
+        const idDisplay = document.getElementById('revokedDeviceIdDisplay');
+        if (idDisplay) idDisplay.innerText = (deviceRecord && deviceRecord.deviceId) ? deviceRecord.deviceId : (localStorage.getItem('bongbhoj_device_id') || 'DEV_UNKNOWN');
+    }
+}
+window.handleDeviceRevocation = handleDeviceRevocation;
+
+function handleRequestNewPairing() {
+    localStorage.removeItem('billnaw_device_status');
+    localStorage.removeItem('billnaw_pairing_code');
+    const revOverlay = document.getElementById('deviceRevokedOverlay');
+    if (revOverlay) revOverlay.style.display = 'none';
+    initDevicePairingFlow();
+}
+window.handleRequestNewPairing = handleRequestNewPairing;
+
+function initDevicePairingFlow() {
+    if (isMasterTerminal()) {
+        hideDevicePairingOverlay();
+        return;
+    }
+    const status = getDeviceStatus();
+    if (status === 'AUTHORIZED') {
+        hideDevicePairingOverlay();
+        return;
+    }
+    if (status === 'REVOKED') {
+        showDeviceRevokedOverlay();
+        return;
+    }
+    showDevicePairingOverlay();
+}
+window.initDevicePairingFlow = initDevicePairingFlow;
+
+function showDevicePairingOverlay() {
+    const overlay = document.getElementById('devicePairingOverlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    
+    const devId = getOrCreateDeviceId();
+    let code = localStorage.getItem('billnaw_pairing_code');
+    if (!code || !/^\d{6}$/.test(code)) {
+        code = generatePairingCode();
+        localStorage.setItem('billnaw_pairing_code', code);
+    }
+    
+    const idEl = document.getElementById('pairingDeviceIdDisplay');
+    if (idEl) idEl.innerText = devId;
+    
+    const codeEl = document.getElementById('pairingCodeDisplay');
+    if (codeEl) codeEl.innerText = `${code.slice(0, 3)} ${code.slice(3)}`;
+    
+    const qrContainer = document.getElementById('pairingQrContainer');
+    if (qrContainer && window.QRCode) {
+        qrContainer.innerHTML = '';
+        try {
+            new QRCode(qrContainer, {
+                text: JSON.stringify({ deviceId: devId, pairingCode: code }),
+                width: 160,
+                height: 160,
+                colorDark: "#143832",
+                colorLight: "#FAF7F4",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        } catch(e) {}
+    }
+    
+    registerPendingDeviceToCloud(devId, code);
+}
+window.showDevicePairingOverlay = showDevicePairingOverlay;
+
+function hideDevicePairingOverlay() {
+    const overlay = document.getElementById('devicePairingOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+window.hideDevicePairingOverlay = hideDevicePairingOverlay;
+
+function showDeviceRevokedOverlay() {
+    const rev = document.getElementById('deviceRevokedOverlay');
+    if (rev) rev.style.display = 'flex';
+    const pair = document.getElementById('devicePairingOverlay');
+    if (pair) pair.style.display = 'none';
+    const idDisplay = document.getElementById('revokedDeviceIdDisplay');
+    if (idDisplay) idDisplay.innerText = getOrCreateDeviceId();
+}
+window.showDeviceRevokedOverlay = showDeviceRevokedOverlay;
+
+async function registerPendingDeviceToCloud(deviceId, pairingCode) {
+    try {
+        if (typeof window.firestoreDB !== 'undefined' && typeof window.firestoreDoc !== 'undefined') {
+            const devDocRef = getStoreSubdocRef('devices', deviceId);
+            if (devDocRef && window.firestoreSetDoc) {
+                await window.firestoreSetDoc(devDocRef, {
+                    deviceId,
+                    pairingCode,
+                    deviceName: 'Secondary Terminal',
+                    stationProfile: 'GENERAL_STATION',
+                    status: 'PENDING',
+                    isMaster: false,
+                    registeredAt: new Date().toISOString(),
+                    lastSeenAt: new Date().toISOString()
+                }, { merge: true });
+            }
+        }
+    } catch (e) {
+        console.warn('[DevicePairing] Pending device cloud registration notice:', e.message);
+    }
+}
+window.registerPendingDeviceToCloud = registerPendingDeviceToCloud;
 
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -1772,13 +2496,56 @@ async function initDatabase() {
         window.staffList = staffList;
     } else {
         staffList = [
-            { id: 1, name: "Admin", role: "Admin", phone: "9876543210", pin: "1234", status: "Active", joinedDate: getLocalISODate() }
+            { 
+                id: 1, 
+                name: "Admin", 
+                role: "Admin", 
+                phone: "9876543210", 
+                pin_salt: "0123456789abcdef0123456789abcdef",
+                pin_hash: "8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742",
+                pinSalt: "0123456789abcdef0123456789abcdef",
+                pinHash: "8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742",
+                mustChangePin: false,
+                status: "Active", 
+                joinedDate: getLocalISODate() 
+            }
         ];
         window.staffList = staffList;
         await idb.set('cafe_staff', staffList);
     }
 }
 window.initDatabase = initDatabase;
+
+async function migrateLegacyStaffPinStorage() {
+    if (!Array.isArray(staffList) || staffList.length === 0) return;
+    let mutated = false;
+    for (const staff of staffList) {
+        if (staff.pin) {
+            const cleanPin = String(staff.pin).trim();
+            const salt = staff.pin_salt || staff.pinSalt || (typeof generatePinSalt === 'function' ? generatePinSalt() : '0123456789abcdef0123456789abcdef');
+            const hash = (typeof hashPin === 'function') ? await hashPin(cleanPin, salt) : '';
+            staff.pin_salt = salt;
+            staff.pin_hash = hash;
+            staff.pinSalt = salt;
+            staff.pinHash = hash;
+            delete staff.pin;
+            if (staff.mustChangePin === undefined) {
+                staff.mustChangePin = false;
+            }
+            mutated = true;
+        }
+    }
+    if (mutated) {
+        if (typeof saveToLocal === 'function') saveToLocal();
+        if (typeof idb !== 'undefined' && idb.set) {
+            idb.set('cafe_staff', staffList).catch(() => {});
+        }
+        if (typeof persistStaffToFirestore === 'function') {
+            persistStaffToFirestore();
+        }
+    }
+}
+window.migrateLegacyStaffPinStorage = migrateLegacyStaffPinStorage;
 
 function initStaffSystem() {
     if (!staffList || staffList.length === 0) {
@@ -1788,9 +2555,11 @@ function initStaffSystem() {
                 name: "Admin", 
                 role: "Admin", 
                 phone: "9876543210", 
-                pin: "1234", 
                 pin_salt: "0123456789abcdef0123456789abcdef",
                 pin_hash: "8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742",
+                pinSalt: "0123456789abcdef0123456789abcdef",
+                pinHash: "8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742",
+                mustChangePin: false,
                 status: "Active", 
                 joinedDate: getLocalISODate() 
             }
@@ -1805,14 +2574,18 @@ function initStaffSystem() {
             name: "Admin",
             role: "Admin",
             phone: "9876543210",
-            pin: "1234",
             pin_salt: "0123456789abcdef0123456789abcdef",
             pin_hash: "8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742",
+            pinSalt: "0123456789abcdef0123456789abcdef",
+            pinHash: "8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742",
+            mustChangePin: false,
             status: "Active",
             joinedDate: getLocalISODate()
         });
         window.staffList = staffList;
     }
+
+    migrateLegacyStaffPinStorage();
 
     // Restore active staff from localStorage if present
     try {
@@ -1847,7 +2620,21 @@ function initStaffSystem() {
 window.initStaffSystem = initStaffSystem;
 
 function initFirestoreSync() {
+    if (typeof initDevicePairingFlow === 'function') {
+        initDevicePairingFlow();
+    }
     attachFirestoreListener();
 }
 window.initFirestoreSync = initFirestoreSync;
+
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof initDevicePairingFlow === 'function') {
+            initDevicePairingFlow();
+        }
+        if (typeof applyStationProfileRestrictions === 'function') {
+            applyStationProfileRestrictions();
+        }
+    });
+}
 

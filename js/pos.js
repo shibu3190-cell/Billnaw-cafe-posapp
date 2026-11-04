@@ -298,7 +298,24 @@ function getCustomerEligibleDiscountRate(cust) {
 }
 window.getCustomerEligibleDiscountRate = getCustomerEligibleDiscountRate;
 
-function openQuickDiscountModal() {
+function openQuickDiscountModal(bypassRoleCheck = false) {
+    if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff) {
+        const canDiscount = typeof hasPermission === 'function' ? hasPermission(currentStaff, 'can_apply_discount') : (currentStaff.role === 'Admin' || currentStaff.role === 'Manager');
+        if (!canDiscount) {
+            if (typeof requestManagerOverride === 'function') {
+                requestManagerOverride({
+                    title: "Manager Authorization Required",
+                    actionDescription: `${currentStaff.role} role cannot apply discounts. Enter Manager or Admin PIN:`,
+                    requiredRole: 'Manager',
+                    onSuccess: () => {
+                        openQuickDiscountModal(true);
+                    }
+                });
+                return;
+            }
+        }
+    }
+
     let tInfo = tablesInfo[activeTable];
     if (!tInfo || !tInfo.items || tInfo.items.length === 0) {
         return showToast(`Table ${activeTable} is empty! Add items first.`);
@@ -981,16 +998,24 @@ function renderCheckoutUpiQr(amount) {
 window.renderCheckoutUpiQr = renderCheckoutUpiQr;
 
 function openCheckoutModal(bypassRoleCheck = false) {
-    if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role === 'Waiter') {
-        if (typeof requestManagerOverride === 'function') {
-            requestManagerOverride({
-                title: "Manager Authorization Required",
-                actionDescription: "Waiter role cannot settle bills. Enter Manager or Admin PIN to authorize payment settlement:",
-                onSuccess: () => {
-                    openCheckoutModal(true);
-                }
-            });
-            return;
+    if (typeof canAccessStoreData === 'function' && !canAccessStoreData()) {
+        if (typeof showToast === 'function') showToast("Transaction blocked: device pending authorization or revoked.");
+        return;
+    }
+    if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff) {
+        const canSettle = typeof hasPermission === 'function' ? hasPermission(currentStaff, 'can_settle_bills') : (currentStaff.role !== 'Waiter' && currentStaff.role !== 'Floor Server' && currentStaff.role !== 'Kitchen Chef');
+        if (!canSettle) {
+            if (typeof requestManagerOverride === 'function') {
+                requestManagerOverride({
+                    title: "Manager Authorization Required",
+                    actionDescription: `${currentStaff.role} role cannot settle bills. Enter Manager or Admin PIN to authorize payment settlement:`,
+                    requiredRole: 'Manager',
+                    onSuccess: () => {
+                        openCheckoutModal(true);
+                    }
+                });
+                return;
+            }
         }
     }
 
@@ -1111,6 +1136,10 @@ function executeHtmlPrint(divId) {
 window.executeHtmlPrint = executeHtmlPrint;
 
 async function confirmCheckout() {
+    if (typeof canAccessStoreData === 'function' && !canAccessStoreData()) {
+        if (typeof showToast === 'function') showToast("Transaction blocked: device revoked or pending authorization.");
+        throw new Error('Device revoked; transaction aborted');
+    }
     let tInfo = tablesInfo[activeTable]; 
     if(!tInfo || tInfo.items.length === 0) return showToast(`Table ${activeTable} is empty!`);
     
@@ -1354,6 +1383,7 @@ async function confirmCheckout() {
     }
 }
 window.confirmCheckout = confirmCheckout;
+window.settleOrder = confirmCheckout;
 
 // --- THERMAL PRINTER ESC/POS UTILITIES ---
 let bleDevice = null; 

@@ -847,3 +847,119 @@
         gap: 12px !important;
     }
 }
+
+/* ==========================================================================
+   Live Staff Session Hub & Presence Styles (Milestone 4)
+   ========================================================================== */
+.session-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: #FFFFFF;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    gap: 12px;
+}
+.session-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 2px 8px rgba(20, 56, 50, 0.08);
+}
+.session-card.is-locked {
+    background: #FFF8F8;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+.session-staff-col {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+.session-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #143832, #1B4940);
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.session-meta-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-dark);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.presence-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.presence-dot.online {
+    background: #10B981;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+    animation: presence-pulse 2s infinite;
+}
+.presence-dot.idle {
+    background: #F59E0B;
+}
+.presence-dot.locked {
+    background: #EF4444;
+}
+@keyframes presence-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+    70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.session-telemetry {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+.session-telemetry-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.session-remote-lock-btn {
+    background: transparent;
+    border: 1.5px solid var(--danger);
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+.session-remote-lock-btn:hover {
+    background: #FEE2E2;
+    border-color: #DC2626;
+    color: #DC2626;
+}
+.session-current-badge {
+    color: #047857;
+    background: #D1FAE5;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 8px;
+    white-space: nowrap;
+}
+
