@@ -56,6 +56,23 @@ async function verifyPin(enteredPin, salt, expectedHash) {
 }
 window.verifyPin = verifyPin;
 
+function generateSecureUniqueStaffPin() {
+    const trivial = new Set(['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321', '0123', '9876']);
+    let pin;
+    let count = 0;
+    do {
+        pin = String(Math.floor(1000 + Math.random() * 9000));
+        count++;
+        if (count > 200) break;
+    } while (
+        trivial.has(pin) ||
+        /^(\d)\1{3}$/.test(pin) ||
+        (typeof staffList !== 'undefined' && Array.isArray(staffList) && staffList.some(s => s.pin === pin))
+    );
+    return pin;
+}
+window.generateSecureUniqueStaffPin = generateSecureUniqueStaffPin;
+
 const ROLES = {
     ADMIN: 'Admin',
     MANAGER: 'Manager',
@@ -144,10 +161,26 @@ function renderStaffManagementUI() {
         return;
     }
 
+    const sessions = (typeof window !== 'undefined' && window.activeStaffSessions) || [];
+    const esc = typeof escapeHtml === 'function' ? escapeHtml : (str => String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
     tbody.innerHTML = staffList.map(staff => {
         const initials = staff.name ? staff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
         const roleCls = staff.role ? `role-${staff.role.toLowerCase()}` : 'role-cashier';
         const isActive = staff.status !== 'Inactive' && staff.status !== 'Suspended';
+        const liveSess = sessions.find(s => String(s.staffId) === String(staff.id) || (s.staffName && s.staffName.toLowerCase() === staff.name.toLowerCase()));
+        let presenceBadge = '';
+        if (liveSess) {
+            const isLocked = liveSess.status === 'LOCKED' || liveSess.isLocked === true;
+            if (isLocked) {
+                presenceBadge = `<span style="display: block; font-size: 10px; color: #DC2626; font-weight: 700; margin-top: 2px;">🔴 Locked (${esc(liveSess.deviceName || 'Terminal')})</span>`;
+            } else if (liveSess.status === 'ONLINE' || isSessionOnline(liveSess.lastActiveAt)) {
+                presenceBadge = `<span style="display: block; font-size: 10px; color: #059669; font-weight: 700; margin-top: 2px;">🟢 Online (${esc(liveSess.deviceName || 'Terminal')})</span>`;
+            } else {
+                presenceBadge = `<span style="display: block; font-size: 10px; color: #D97706; font-weight: 600; margin-top: 2px;">🟡 Idle (${esc(liveSess.deviceName || 'Terminal')})</span>`;
+            }
+        }
+
         return `
             <tr>
                 <td>
@@ -167,6 +200,7 @@ function renderStaffManagementUI() {
                         <span style="width: 7px; height: 7px; border-radius: 50%; background: ${isActive ? 'var(--success)' : 'var(--danger)'};"></span>
                         ${isActive ? 'Active' : (staff.status || 'Inactive')}
                     </span>
+                    ${presenceBadge}
                 </td>
                 <td>
                     <button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; display: inline-flex; align-items: center; gap: 4px;" onclick="openEditStaffModal(${staff.id})"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg><span>Edit</span></button>
@@ -187,13 +221,23 @@ function renderLoginStaffPicker() {
         return;
     }
 
-    // Smart Defaults: Pre-select last active cashier/manager from localStorage
+    // Smart Defaults: Station Profile matching (KDS -> Kitchen Chef, WAITER_MOBILE -> Floor Server) or last active staff
+    const stationProfile = (typeof localStorage !== 'undefined') ? localStorage.getItem('billnaw_station_profile') : null;
     const savedStaffId = parseInt(localStorage.getItem('billnaw_last_staff_id'), 10);
     if (!selectedLoginStaffId || !staffList.some(s => s.id === selectedLoginStaffId)) {
-        if (savedStaffId && staffList.some(s => s.id === savedStaffId)) {
-            selectedLoginStaffId = savedStaffId;
-        } else if (staffList.length > 0) {
-            selectedLoginStaffId = staffList[0].id;
+        if (stationProfile === 'KDS') {
+            const chef = staffList.find(s => s.role === 'Kitchen Chef' || s.role === 'Chef');
+            if (chef) selectedLoginStaffId = chef.id;
+        } else if (stationProfile === 'WAITER_MOBILE') {
+            const waiter = staffList.find(s => s.role === 'Floor Server' || s.role === 'Server');
+            if (waiter) selectedLoginStaffId = waiter.id;
+        }
+        if (!selectedLoginStaffId) {
+            if (savedStaffId && staffList.some(s => s.id === savedStaffId)) {
+                selectedLoginStaffId = savedStaffId;
+            } else if (staffList.length > 0) {
+                selectedLoginStaffId = staffList[0].id;
+            }
         }
     }
 
@@ -231,7 +275,7 @@ function selectLoginStaff(staffId) {
 }
 window.selectLoginStaff = selectLoginStaff;
 
-// 🔒 Fast Unlock & PIN Verification
+// 🔒 Fast Unlock & Smart PIN Recognition
 async function confirmStaffLogin() {
     if (pinLockoutUntil && Date.now() < pinLockoutUntil) {
         const remainingSec = Math.ceil((pinLockoutUntil - Date.now()) / 1000);
@@ -246,14 +290,38 @@ async function confirmStaffLogin() {
         return showToast("Please enter your 4-digit PIN.");
     }
 
-    const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId) || staffList[0];
-    const isValidStaffPin = await verifyStaffPin(matchedStaff, enteredPin);
-    const isValidAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
+    let staffToLogin = null;
 
-    if (isValidStaffPin || isValidAdminPin) {
+    // 1. Check pre-selected staff first
+    const preselected = (staffList || []).find(s => s.id === selectedLoginStaffId);
+    if (preselected && await verifyStaffPin(preselected, enteredPin)) {
+        staffToLogin = preselected;
+    }
+
+    // 2. SMART AUTO-RECOGNITION: Scan all staff members in current store
+    // Recognizes staff automatically by their unique PIN without needing manual avatar pre-selection!
+    if (!staffToLogin && Array.isArray(staffList)) {
+        for (const s of staffList) {
+            if (await verifyStaffPin(s, enteredPin)) {
+                staffToLogin = s;
+                selectedLoginStaffId = s.id;
+                renderLoginStaffPicker(); // Visual auto-selection feedback
+                break;
+            }
+        }
+    }
+
+    // 3. Admin PIN Fallback
+    const isValidAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
+    if (!staffToLogin && isValidAdminPin) {
+        staffToLogin = (staffList || []).find(s => s.role === 'Admin') || { id: 1, name: "Admin", role: "Admin" };
+        selectedLoginStaffId = staffToLogin.id;
+        renderLoginStaffPicker();
+    }
+
+    if (staffToLogin) {
         failedPinAttempts = 0;
         pinLockoutUntil = null;
-        const staffToLogin = matchedStaff || { id: 1, name: "Admin", role: "Admin" };
         if (staffToLogin.mustChangePin === true) {
             openFirstLoginPinModal(staffToLogin);
             return;
@@ -1041,7 +1109,8 @@ function openAddStaffModal() {
     document.getElementById('staffNameInput').value = '';
     document.getElementById('staffRoleInput').value = 'Cashier';
     document.getElementById('staffPhoneInput').value = '';
-    document.getElementById('staffPinInput').value = '';
+    const autoPin = (typeof generateSecureUniqueStaffPin === 'function') ? generateSecureUniqueStaffPin() : '5829';
+    document.getElementById('staffPinInput').value = autoPin;
     document.getElementById('staffStatusInput').value = 'Active';
     document.getElementById('staffModal').style.display = 'flex';
 }

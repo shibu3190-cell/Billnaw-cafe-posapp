@@ -1325,3 +1325,97 @@ async function rejectPendingDevice(deviceId) {
     } catch (e) {}
 }
 window.rejectPendingDevice = rejectPendingDevice;
+
+// ============================================================
+// 🏢 STORE CONNECTION, STATEMENTS & SYSTEM UTILITIES
+// ============================================================
+
+function openSwitchStoreModal() {
+    const modal = document.getElementById('switchStoreModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        const input = document.getElementById('targetStoreCodeInput');
+        if (input) {
+            input.value = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || localStorage.getItem('bongbhoj_client_id') || '';
+            setTimeout(() => input.focus(), 60);
+        }
+    }
+}
+window.openSwitchStoreModal = openSwitchStoreModal;
+
+async function confirmSwitchShopCode() {
+    const input = document.getElementById('targetStoreCodeInput');
+    const newCode = (input ? input.value : '').trim().toUpperCase();
+    if (!newCode) {
+        if (typeof showToast === 'function') showToast('Please enter a valid Shop Store Code.', 'error');
+        return;
+    }
+    const modal = document.getElementById('switchStoreModal');
+    if (modal) modal.style.display = 'none';
+    if (typeof switchActiveShopCloudStore === 'function') {
+        await switchActiveShopCloudStore(newCode);
+    } else {
+        if (typeof shopProfile !== 'undefined') shopProfile.storeCode = newCode;
+        localStorage.setItem('bongbhoj_client_id', newCode);
+        localStorage.setItem('billnaw_store_code', newCode);
+        if (typeof showToast === 'function') showToast(`Connected to store: ${newCode}. Syncing...`, 'success');
+        setTimeout(() => window.location.reload(), 400);
+    }
+}
+window.confirmSwitchShopCode = confirmSwitchShopCode;
+
+function openStatementModal() {
+    const modal = document.getElementById('statementModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        if (typeof renderStatements === 'function') renderStatements();
+    }
+}
+window.openStatementModal = openStatementModal;
+
+function closeStatementModal() {
+    const modal = document.getElementById('statementModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeStatementModal = closeStatementModal;
+
+async function forceCheckAppUpdate() {
+    if (typeof showToast === 'function') showToast('Checking for updates & clearing cache...', 'info');
+    try {
+        if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        if (navigator.serviceWorker) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) {
+                await reg.update();
+                if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+        }
+    } catch (e) {
+        console.warn('forceCheckAppUpdate warning:', e);
+    }
+    if (typeof showToast === 'function') showToast('App cache purged! Reloading latest version...', 'success');
+    setTimeout(() => {
+        window.location.reload(true);
+    }, 300);
+}
+window.forceCheckAppUpdate = forceCheckAppUpdate;
+
+function openRestockExpenseModal(matId = null) {
+    if (window.culinaryInventory && typeof window.culinaryInventory.openRestockModal === 'function') {
+        window.culinaryInventory.openRestockModal(matId);
+    } else if (typeof openRestockModal === 'function') {
+        openRestockModal(matId);
+    } else if (typeof showToast === 'function') {
+        showToast('Opening restock...', 'info');
+    }
+}
+window.openRestockExpenseModal = openRestockExpenseModal;
+
+function closeInventoryHubSubView() {
+    const el = document.getElementById('inventoryDetailedSubView');
+    if (el) el.style.display = 'none';
+}
+window.closeInventoryHubSubView = closeInventoryHubSubView;

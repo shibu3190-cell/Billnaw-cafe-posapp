@@ -1258,6 +1258,9 @@ function handleRemoteFirestoreUpdate(data) {
     }
     if (Array.isArray(data.staff) && data.staff.length > 0) {
         staffList = data.staff;
+        window.staffList = staffList;
+        if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
+        if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
     }
     const isLegacyRemoteMock = Array.isArray(data.menu) && (
         data.menu.some(i => i.name === 'Steam Rice' || i.name === 'Espresso Coffee' || i.name === 'Chicken Roll' || i.name === 'Masala Chai' || i.name === 'Club Sandwich') ||
