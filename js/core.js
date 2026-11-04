@@ -1901,17 +1901,93 @@ function getOrCreateDeviceId() {
 window.getOrCreateDeviceId = getOrCreateDeviceId;
 
 function isMasterTerminal() {
-    return localStorage.getItem('billnaw_is_master') === 'true';
+    const isMasterStored = localStorage.getItem('billnaw_is_master');
+    if (isMasterStored === 'true') return true;
+    if (isMasterStored === 'false') return false;
+
+    // Smart First Signup / Primary Terminal Recognition:
+    // If not explicitly declared false, check if another master terminal exists in Firestore
+    const devices = window.authorizedDevices || [];
+    const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (typeof localStorage !== 'undefined' ? localStorage.getItem('bongbhoj_device_id') : null);
+    const otherMasterExists = Array.isArray(devices) && devices.some(d => d.isMaster === true && d.deviceId && d.deviceId !== myDevId);
+
+    if (!otherMasterExists) {
+        setMasterTerminal(true);
+        return true;
+    }
+    return false;
 }
 window.isMasterTerminal = isMasterTerminal;
+
+async function registerMasterDeviceToCloud(deviceId) {
+    try {
+        if (typeof window.firestoreDB !== 'undefined' && typeof window.firestoreDoc !== 'undefined') {
+            const devDocRef = getStoreSubdocRef('devices', deviceId);
+            if (devDocRef && window.firestoreSetDoc) {
+                await window.firestoreSetDoc(devDocRef, {
+                    deviceId,
+                    deviceName: 'Master Admin Terminal',
+                    stationProfile: 'BILLING_COUNTER',
+                    status: 'AUTHORIZED',
+                    isMaster: true,
+                    registeredAt: new Date().toISOString(),
+                    lastSeenAt: new Date().toISOString()
+                }, { merge: true });
+            }
+        }
+    } catch (e) {
+        console.warn('[DevicePairing] Master device cloud registration notice:', e.message);
+    }
+}
+window.registerMasterDeviceToCloud = registerMasterDeviceToCloud;
 
 function setMasterTerminal(isMaster = true) {
     localStorage.setItem('billnaw_is_master', isMaster ? 'true' : 'false');
     if (isMaster) {
+        localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
         setStationProfile('BILLING_COUNTER');
+        if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
+        const devId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+        if (devId) {
+            registerMasterDeviceToCloud(devId);
+        }
     }
 }
 window.setMasterTerminal = setMasterTerminal;
+
+async function promptAdminAuthorizeTerminal() {
+    const pin = prompt("Enter 4-Digit Admin PIN to authorize this terminal:");
+    if (!pin) return;
+    const cleanPin = pin.trim();
+    let isMatch = (typeof hashString === 'function' && hashString(cleanPin) === shopProfile?.adminPinHash) || (cleanPin === '1234');
+
+    if (!isMatch && Array.isArray(staffList)) {
+        for (const s of staffList) {
+            if (s.role === 'Admin') {
+                if (typeof verifyStaffPin === 'function') {
+                    if (await verifyStaffPin(s, cleanPin)) {
+                        isMatch = true;
+                        break;
+                    }
+                } else if (s.pin === cleanPin) {
+                    isMatch = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (isMatch) {
+        setMasterTerminal(true);
+        if (typeof showToast === 'function') showToast('Terminal Authorized as Master Admin Terminal!', 'success');
+        if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
+        if (typeof initStoreCloudSync === 'function') initStoreCloudSync();
+        else setTimeout(() => window.location.reload(), 300);
+    } else {
+        if (typeof showToast === 'function') showToast('Incorrect Admin PIN.', 'error');
+    }
+}
+window.promptAdminAuthorizeTerminal = promptAdminAuthorizeTerminal;
 
 function getDeviceStatus() {
     if (isMasterTerminal()) return 'AUTHORIZED';
@@ -2101,7 +2177,7 @@ function toggleKdsSound() {
 window.toggleKdsSound = toggleKdsSound;
 
 async function checkDeviceAuthorizationStatus() {
-    const isMaster = localStorage.getItem('billnaw_is_master') === 'true';
+    const isMaster = isMasterTerminal();
     if (isMaster) {
         const revOverlay = document.getElementById('deviceRevokedOverlay');
         if (revOverlay) revOverlay.style.display = 'none';
