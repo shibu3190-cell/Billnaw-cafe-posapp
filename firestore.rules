@@ -21,6 +21,13 @@ service cloud.firestore {
              (resource.data.created_at is timestamp && request.time < resource.data.created_at + duration.value(30, 'd'));
     }
 
+    // ROOT HARDWARE DEVICES COLLECTION — STRICT ZERO-CLIENT ACCESS GATE
+    // Only trusted Firebase Admin SDK (Cloud Functions) can read or modify.
+    // Client SDK direct read and write is completely forbidden.
+    match /devices/{deviceId} {
+      allow read, write: if false;
+    }
+
     // Modern Multi-Tenant Root Collection (/cafes/{cafeId})
     match /cafes/{cafeId} {
       allow read: if isTenantStaff(cafeId);

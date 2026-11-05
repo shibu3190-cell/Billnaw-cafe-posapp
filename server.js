@@ -28,6 +28,8 @@ import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateS
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
 import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData, requestAdminPinResetOtp, resetAdminPinWithOtp } from './server/auth-service.js';
+import { executeValidateDeviceAndLogin } from './database/server-functions/device-security.js';
+import { getDbClient } from './src/core/db-client.js';
 import {
   getRawMaterials,
   addRawMaterial,
@@ -801,6 +803,33 @@ app.post('/api/auth/admin-forgot-pin/reset', (req, res) => {
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to reset Admin PIN' });
+  }
+});
+
+// 2D. Hardware Device-Locking & Registration Ceiling Check (Max 2 accounts per physical device)
+app.post(['/api/auth/validate-device', '/api/auth/validate-device-and-login'], async (req, res) => {
+  try {
+    const { email, deviceId } = req.body || {};
+    const db = getDbClient();
+    const result = await executeValidateDeviceAndLogin({
+      db,
+      email,
+      deviceId,
+      metadata: {
+        platform: req.headers['sec-ch-ua-platform'] || req.headers['user-agent'] || 'desktop',
+        ip: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+        userAgent: req.headers['user-agent'] || 'node'
+      }
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    const status = err.httpErrorCode || (err.code === 'permission-denied' ? 403 : (err.code === 'invalid-argument' ? 400 : 500));
+    res.status(status).json({
+      success: false,
+      code: err.code || 'internal',
+      error: err.message || 'Device validation failed',
+      details: err.details
+    });
   }
 });
 

@@ -160,6 +160,13 @@ export {
   runDailyDataRetentionRoutine
 } from './retention-lifecycle.js';
 
+export {
+  validateDeviceAndLoginCallable as validateDeviceAndLogin,
+  executeValidateDeviceAndLogin,
+  HttpsError,
+  MAX_ALLOWED_ACCOUNTS_PER_DEVICE
+} from './device-security.js';
+
 import { runDailyDataRetentionRoutine } from './retention-lifecycle.js';
 
 /**

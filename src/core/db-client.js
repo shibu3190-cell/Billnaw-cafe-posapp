@@ -16,6 +16,7 @@ class UniversalDbClient {
   constructor() {
     this.memoryStore = new Map();
     this.listeners = new Map();
+    this._txnQueue = Promise.resolve();
   }
 
   notifyListeners(changedPath) {
@@ -99,6 +100,10 @@ class UniversalDbClient {
     const self = this;
     return {
       path: colPath,
+      doc(docId) {
+        const fullPath = colPath.endsWith('/') ? `${colPath}${docId}` : `${colPath}/${docId}`;
+        return self.doc(fullPath);
+      },
       async get() {
         const prefix = colPath.endsWith('/') ? colPath : `${colPath}/`;
         const docs = [];
@@ -182,21 +187,31 @@ class UniversalDbClient {
   }
 
   async runTransaction(updateFn) {
-    const txn = {
-      async get(docRef) {
-        return await docRef.get();
-      },
-      set(docRef, data, options = {}) {
-        return docRef.set(data, options);
-      },
-      update(docRef, data) {
-        return docRef.update(data);
-      },
-      delete(docRef) {
-        return docRef.delete ? docRef.delete() : null;
-      }
-    };
-    return await updateFn(txn);
+    let release;
+    const lock = new Promise(r => release = r);
+    const prevQueue = this._txnQueue;
+    this._txnQueue = lock;
+
+    await prevQueue;
+    try {
+      const txn = {
+        async get(docRef) {
+          return await docRef.get();
+        },
+        set(docRef, data, options = {}) {
+          return docRef.set(data, options);
+        },
+        update(docRef, data) {
+          return docRef.update(data);
+        },
+        delete(docRef) {
+          return docRef.delete ? docRef.delete() : null;
+        }
+      };
+      return await updateFn(txn);
+    } finally {
+      release();
+    }
   }
 }
 
