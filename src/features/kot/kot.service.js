@@ -81,6 +81,23 @@ export async function createKOT(kotData) {
     }
 
     await batch.commit();
+
+    // Persist to local storage for instant KDS display & offline resilience
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('billnaw_active_kots');
+        const list = raw ? JSON.parse(raw) : [];
+        list.unshift(kotDoc);
+        localStorage.setItem('billnaw_active_kots', JSON.stringify(list.slice(0, 100)));
+      } catch (e) {}
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('billnaw:kot-created', { detail: { kot: kotDoc } }));
+      if (typeof window.playKdsAudioChime === 'function') {
+        window.playKdsAudioChime();
+      }
+    }
+
     return kotDoc;
   });
 }
@@ -108,6 +125,23 @@ export async function updateKotStatus(kotId, newStatus) {
     };
 
     await kotRef.update(updateData);
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('billnaw_active_kots');
+        const list = raw ? JSON.parse(raw) : [];
+        const item = list.find(k => k.kot_id === kotId);
+        if (item) {
+          item.status = newStatus;
+          item.updated_at = updateData.updated_at;
+          localStorage.setItem('billnaw_active_kots', JSON.stringify(list));
+        }
+      } catch (e) {}
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('billnaw:kot-status-changed', { detail: { kotId, status: newStatus } }));
+    }
+
     return { kot_id: kotId, ...updateData };
   });
 }
@@ -141,6 +175,24 @@ export async function cancelKOT(kotId, reason, staffId) {
     };
 
     await kotRef.update(cancelData);
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('billnaw_active_kots');
+        const list = raw ? JSON.parse(raw) : [];
+        const item = list.find(k => k.kot_id === kotId);
+        if (item) {
+          item.status = 'CANCELLED';
+          item.cancellation_reason = reason.trim();
+          item.cancelled_at = cancelData.cancelled_at;
+          localStorage.setItem('billnaw_active_kots', JSON.stringify(list));
+        }
+      } catch (e) {}
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('billnaw:kot-cancelled', { detail: { kotId, reason } }));
+    }
+
     return { kot_id: kotId, ...cancelData };
   });
 }
@@ -184,4 +236,84 @@ export function generateKotSlipPayload(kot) {
     textContent: txt,
     escPosBytes: encoder.encode(txt)
   };
+}
+
+/**
+ * Retrieve active Kitchen Order Tickets for KDS display.
+ * Gathers tickets from local storage, in-memory table orders, and cloud DB.
+ * @returns {Promise<{ data: Array<Object>, error: string|null }>}
+ */
+export async function getActiveKOTs() {
+  return safeExecute(async () => {
+    let kots = [];
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('billnaw_active_kots');
+        if (stored) {
+          kots = JSON.parse(stored);
+        }
+      } catch (e) {}
+    }
+
+    // Merge active table orders that contain kitchen items
+    if (typeof window !== 'undefined' && window.tablesInfo) {
+      const activeTables = window.tablesInfo;
+      Object.keys(activeTables).forEach(tableKey => {
+        const tInfo = activeTables[tableKey];
+        if (tInfo && Array.isArray(tInfo.items) && tInfo.items.length > 0 && tInfo.status !== 'billed' && tInfo.status !== 'empty') {
+          const tableName = typeof window.getTableName === 'function' ? window.getTableName(tableKey) : `Table ${tableKey}`;
+          const existing = kots.find(k => (k.table_id === tableName || k.table_id === String(tableKey)) && k.status !== 'SERVED' && k.status !== 'CANCELLED');
+          if (!existing) {
+            kots.push({
+              kot_id: `KOT-TBL-${tableKey}`,
+              table_id: tableName,
+              order_type: 'DINE_IN',
+              status: tInfo.status === 'kot' ? 'PENDING' : 'PENDING',
+              items: tInfo.items.map(it => ({
+                name: it.name || 'Dish',
+                quantity: it.qty || it.quantity || 1,
+                notes: it.notes || ''
+              })),
+              server_staff_id: tInfo.server || 'Floor Server',
+              created_at: tInfo.savedTime ? new Date(tInfo.savedTime).toISOString() : new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      });
+    }
+
+    // Attempt cloud database retrieval if online
+    try {
+      const db = getDbClient();
+      const cafeId = getTenantCafeId();
+      if (db && typeof db.collection === 'function') {
+        const col = db.collection(`cafes/${cafeId}/kots`);
+        if (col && typeof col.getDocs === 'function') {
+          const snap = await col.getDocs();
+          if (snap && snap.docs) {
+            snap.docs.forEach(docSnap => {
+              const d = docSnap.data();
+              if (d && ['PENDING', 'PREPARING', 'READY'].includes(d.status)) {
+                const idx = kots.findIndex(k => k.kot_id === d.kot_id || k.id === docSnap.id);
+                if (idx >= 0) {
+                  kots[idx] = { id: docSnap.id, ...d };
+                } else {
+                  kots.unshift({ id: docSnap.id, ...d });
+                }
+              }
+            });
+          }
+        }
+      }
+    } catch (dbErr) {}
+
+    // Return only active preparation tickets (exclude SERVED and CANCELLED)
+    const activeTickets = kots.filter(k => ['PENDING', 'PREPARING', 'READY'].includes(k.status));
+    
+    // Sort oldest first for kitchen workflow priority
+    activeTickets.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+    return activeTickets;
+  });
 }

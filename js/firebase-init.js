@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import { 
     getFirestore, 
+    initializeFirestore,
     doc, 
     collection, 
     onSnapshot, 
@@ -61,11 +62,19 @@ async function initFirebaseFromBackend() {
     const app = initializeApp(firebaseConfig);
     let db;
     try {
-        db = getFirestore(app, firestoreDbId);
-        console.log("Firestore initialized with custom db:", firestoreDbId);
+        db = initializeFirestore(app, {
+            experimentalAutoDetectLongPolling: true,
+            useFetchStreams: false
+        }, firestoreDbId);
+        console.log("Firestore initialized with custom db & auto-detect long-polling:", firestoreDbId);
     } catch (e) {
-        console.warn("Falling back to default firestore database:", e);
-        db = getFirestore(app);
+        try {
+            db = getFirestore(app, firestoreDbId);
+            console.log("Firestore initialized with custom db (fallback):", firestoreDbId);
+        } catch (e2) {
+            console.warn("Falling back to default firestore database:", e2);
+            db = getFirestore(app);
+        }
     }
 
     let auth = null;
@@ -156,6 +165,8 @@ async function initFirebaseFromBackend() {
     window.firestoreLimit = limit;
     window.firestoreStartAfter = startAfter;
     window.firestoreDatabaseId = firestoreDbId;
+    window.initializeFirestore = initializeFirestore;
+    window.getFirestore = getFirestore;
 
     // Legacy compatibility
     window.firebaseDB = db;

@@ -1362,6 +1362,26 @@ async function confirmCheckout() {
         if (typeof deductInventoryForOrder === 'function') deductInventoryForOrder(newOrder);
         tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null }; 
         persistTables(); 
+
+        // Mark any active KOT for this settled table as SERVED
+        try {
+            const currentTName = getTableName(activeTable);
+            const rawKots = localStorage.getItem('billnaw_active_kots');
+            if (rawKots) {
+                const kotList = JSON.parse(rawKots);
+                let changed = false;
+                kotList.forEach(k => {
+                    if ((k.table_id === currentTName || k.table_id === `Table ${activeTable}`) && k.status !== 'CANCELLED') {
+                        k.status = 'SERVED';
+                        changed = true;
+                    }
+                });
+                if (changed) {
+                    localStorage.setItem('billnaw_active_kots', JSON.stringify(kotList));
+                    window.dispatchEvent(new CustomEvent('billnaw:kot-status-changed', { detail: { table: currentTName, status: 'SERVED' } }));
+                }
+            }
+        } catch(kotErr) {} 
         
         if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addOrder', newOrder); 
         syncTableUI(); 
@@ -1785,9 +1805,38 @@ async function printKitchenTicket() {
     const currentTableName = getTableName(activeTable);
     try { 
         await sendKotToPrinter(currentTableName, tInfo.items); 
+        tInfo.status = 'kot';
+        persistTables();
+        syncTableUI();
+
+        // Dispatch to Kitchen Display System (KDS) & persist ticket
+        if (window.kotUIInstance && typeof window.kotUIInstance.handleDispatchKot === 'function') {
+            await window.kotUIInstance.handleDispatchKot(currentTableName, (tInfo.items || []).map(it => ({
+                name: it.name,
+                quantity: it.qty || it.quantity || 1,
+                notes: it.notes || ''
+            })), tInfo.notes || '');
+        } else {
+            const raw = localStorage.getItem('billnaw_active_kots');
+            const list = raw ? JSON.parse(raw) : [];
+            const kotId = `KOT-${Date.now().toString().slice(-6)}`;
+            const newKot = {
+                kot_id: kotId,
+                table_id: currentTableName,
+                items: (tInfo.items || []).map(it => ({ name: it.name, quantity: it.qty || 1, notes: it.notes || '' })),
+                status: 'PENDING',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+            list.unshift(newKot);
+            localStorage.setItem('billnaw_active_kots', JSON.stringify(list.slice(0, 100)));
+            window.dispatchEvent(new CustomEvent('billnaw:kot-created', { detail: { kot: newKot } }));
+            if (typeof playKdsAudioChime === 'function') playKdsAudioChime();
+        }
+
         const kotModal = document.getElementById('kotModal');
         if (kotModal) kotModal.style.display = 'none'; 
-        showToast(`Table ${currentTableName} KOT Processed.`); 
+        showToast(`Table ${currentTableName} KOT sent to Kitchen!`, 'success'); 
     } catch(e) { 
         console.error(e); 
         showToast("Error processing KOT."); 

@@ -1638,10 +1638,14 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
         const tenDaysAgoISO = new Date(Date.now() - (10 * 24 * 60 * 60 * 1000)).toISOString();
         let queryTarget = invoicesColRef;
         if (window.firestoreQuery && window.firestoreWhere) {
-            queryTarget = window.firestoreQuery(invoicesColRef, window.firestoreWhere('created_at', '>=', tenDaysAgoISO));
+            try {
+                queryTarget = window.firestoreQuery(invoicesColRef, window.firestoreWhere('created_at', '>=', tenDaysAgoISO));
+            } catch (qErr) {
+                queryTarget = invoicesColRef;
+            }
         }
 
-        firestoreInvoicesUnsubscribe = window.firestoreOnSnapshot(queryTarget, (snap) => {
+        const handleInvoiceSnap = (snap) => {
             const invoices = [];
             snap.forEach(docSnap => {
                 const data = docSnap.data();
@@ -1650,8 +1654,18 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
                 }
             });
             window.dispatchEvent(new CustomEvent('billnaw:invoices-updated', { detail: { invoices } }));
-        }, (err) => {
-            console.warn('[Firestore] invoices listener warning:', err.message);
+        };
+
+        firestoreInvoicesUnsubscribe = window.firestoreOnSnapshot(queryTarget, handleInvoiceSnap, (err) => {
+            console.warn('[Firestore] invoices listener warning:', err ? err.message : err);
+            // Resilient fallback: if composite query stream has issues, listen to direct collection
+            if (queryTarget !== invoicesColRef) {
+                try {
+                    firestoreInvoicesUnsubscribe = window.firestoreOnSnapshot(invoicesColRef, handleInvoiceSnap, (fallbackErr) => {
+                        console.warn('[Firestore] invoices fallback warning:', fallbackErr ? fallbackErr.message : fallbackErr);
+                    });
+                } catch (fallbackEx) {}
+            }
         });
         return firestoreInvoicesUnsubscribe;
     } catch (err) {
@@ -1736,6 +1750,8 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
 }
 window.syncStaffRecordToCloud = syncStaffRecordToCloud;
 
+let lastSubscribedStoreCode = null;
+
 function attachFirestoreListener(targetStoreCode = null) {
     if (targetStoreCode && typeof targetStoreCode === 'string') {
         if (targetStoreCode.startsWith('SHOP-') || targetStoreCode.startsWith('cafe_')) {
@@ -1745,10 +1761,19 @@ function attachFirestoreListener(targetStoreCode = null) {
         window.myClientID = myClientID;
     }
 
+    const activeStoreCode = targetStoreCode || getActiveStoreIdentifier();
+
+    // Guard against rapid duplicate listener thrashing on the same store code
+    if (lastSubscribedStoreCode === activeStoreCode && firestoreUnsubscribe && firestoreDevicesUnsubscribe) {
+        return;
+    }
+
     if (!window.firestoreDB || !window.firestoreDoc || !window.firestoreOnSnapshot) {
         setCloudSyncStatus('offline', 'Offline (Local)');
         return;
     }
+
+    lastSubscribedStoreCode = activeStoreCode;
 
     if (firestoreUnsubscribe) {
         try { firestoreUnsubscribe(); } catch(e) {}
@@ -1815,6 +1840,7 @@ window.attachFirestoreListener = attachFirestoreListener;
 window.initFirestoreSync = attachFirestoreListener;
 
 function detachFirestoreListener() {
+    lastSubscribedStoreCode = null;
     if (firestoreUnsubscribe) {
         try { firestoreUnsubscribe(); } catch(e) {}
         firestoreUnsubscribe = null;

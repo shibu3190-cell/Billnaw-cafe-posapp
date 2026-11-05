@@ -49,6 +49,11 @@ service cloud.firestore {
         allow delete: if false; // Status transitions only
         allow update: if isTenantStaff(cafeId);
       }
+      match /kots/{kotId} {
+        allow read, create: if isTenantStaff(cafeId);
+        allow delete: if false; // Status transitions only
+        allow update: if isTenantStaff(cafeId);
+      }
 
       // INDIVIDUAL TABLES (Row-level concurrency)
       match /tables/{tableId} {
@@ -110,6 +115,11 @@ service cloud.firestore {
 
       // KITCHEN ORDER TICKETS (KOT)
       match /kot/{kotId} {
+        allow read, create: if isTenantStaff(shopId);
+        allow delete: if false;
+        allow update: if isTenantStaff(shopId);
+      }
+      match /kots/{kotId} {
         allow read, create: if isTenantStaff(shopId);
         allow delete: if false;
         allow update: if isTenantStaff(shopId);

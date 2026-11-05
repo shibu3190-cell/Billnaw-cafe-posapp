@@ -253,22 +253,34 @@ export async function initDatabase() {
 
   firebaseAppInstance = initializeApp(config);
 
-  // Initialize Firestore with robust multi-tab persistent local cache
+  // Initialize Firestore with robust multi-tab persistent local cache & auto-detect long-polling
   try {
     if (initializeFirestore && persistentLocalCache) {
       firestoreInstance = initializeFirestore(firebaseAppInstance, {
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager ? persistentMultipleTabManager() : undefined
-        })
+        }),
+        experimentalAutoDetectLongPolling: true,
+        useFetchStreams: false
       }, config.firestoreDatabaseId || undefined);
-      console.log('[DBClient] Initialized Firestore with multi-tab persistentLocalCache.');
+      console.log('[DBClient] Initialized Firestore with multi-tab persistentLocalCache & auto-detect long-polling.');
+    } else if (initializeFirestore) {
+      firestoreInstance = initializeFirestore(firebaseAppInstance, {
+        experimentalAutoDetectLongPolling: true,
+        useFetchStreams: false
+      }, config.firestoreDatabaseId || undefined);
+      console.log('[DBClient] Initialized Firestore with auto-detect long-polling.');
     } else {
       firestoreInstance = getFirestore(firebaseAppInstance, config.firestoreDatabaseId || undefined);
       console.log('[DBClient] Initialized default Firestore instance.');
     }
   } catch (err) {
     console.warn('[DBClient] Falling back to standard getFirestore:', err.message);
-    firestoreInstance = getFirestore(firebaseAppInstance);
+    try {
+      firestoreInstance = getFirestore(firebaseAppInstance, config.firestoreDatabaseId || undefined);
+    } catch (err2) {
+      firestoreInstance = getFirestore(firebaseAppInstance);
+    }
   }
 
   window.__billnawFirestore = firestoreInstance;

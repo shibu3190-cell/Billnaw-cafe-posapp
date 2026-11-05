@@ -510,9 +510,9 @@ async function runTestSuite() {
     mockLocalStorage.setItem('billnaw_station_profile', 'WAITER_MOBILE');
     sandbox.applyStationProfileRestrictions();
 
-    assert.strictEqual(elements['nav-tables'].style.display, 'flex');
+    assert.strictEqual(elements['nav-tables'].style.display, 'none');
     assert.strictEqual(elements['nav-pos'].style.display, 'flex');
-    recordPass('WTR-04', 'WAITER_MOBILE profile preserves access to #nav-tables and #nav-pos for table-side order entry');
+    recordPass('WTR-04', 'WAITER_MOBILE profile strictly hides #nav-tables from bottom bar and preserves #nav-pos');
   } catch (e) {
     recordFail('WTR-04', 'WAITER_MOBILE accessible tabs check failed', e);
   }

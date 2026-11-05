@@ -9,6 +9,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const kotContainer = document.getElementById('kotCardsContainer');
     if (kotContainer) {
         window.kotUIInstance = new KotUI({ container: kotContainer });
+        window.kotUIInstance.initEventListeners();
     }
     const tablesContainer = document.getElementById('tablesGridContainer');
     if (tablesContainer) {
@@ -23,12 +24,37 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Auto-update KDS when KOT lifecycle events occur
+    window.addEventListener('billnaw:kot-created', () => {
+        const kdsView = document.getElementById('kds');
+        if (kdsView && kdsView.classList.contains('active') && typeof window.renderKdsUI === 'function') {
+            window.renderKdsUI();
+        }
+    });
+    window.addEventListener('billnaw:kot-status-changed', () => {
+        const kdsView = document.getElementById('kds');
+        if (kdsView && kdsView.classList.contains('active') && typeof window.renderKdsUI === 'function') {
+            window.renderKdsUI();
+        }
+    });
+    window.addEventListener('billnaw:kot-cancelled', () => {
+        const kdsView = document.getElementById('kds');
+        if (kdsView && kdsView.classList.contains('active') && typeof window.renderKdsUI === 'function') {
+            window.renderKdsUI();
+        }
+    });
 });
 
-window.renderKdsUI = function() {
+window.renderKdsUI = async function() {
+    const kotContainer = document.getElementById('kotCardsContainer');
+    if (!window.kotUIInstance && kotContainer) {
+        window.kotUIInstance = new KotUI({ container: kotContainer });
+    }
     if (window.kotUIInstance) {
-        window.kotUIInstance.container = document.getElementById('kotCardsContainer');
-        window.kotUIInstance.render();
+        window.kotUIInstance.container = kotContainer;
+        window.kotUIInstance.initEventListeners();
+        await window.kotUIInstance.loadKots();
     }
 };
 
