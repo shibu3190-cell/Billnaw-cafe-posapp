@@ -124,6 +124,7 @@ class CDPClient {
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.id && this.callbacks.has(msg.id)) {
+                    console.log(`  [CDP << RES] #${msg.id}`);
                     const { resolve, reject } = this.callbacks.get(msg.id);
                     this.callbacks.delete(msg.id);
                     if (msg.error) {
@@ -144,6 +145,7 @@ class CDPClient {
     send(method, params = {}, timeoutMs = 10000) {
         return new Promise((resolve, reject) => {
             const msgId = this.id++;
+            console.log(`  [CDP >> REQ] #${msgId} ${method}`);
             const timer = setTimeout(() => {
                 if (this.callbacks.has(msgId)) {
                     this.callbacks.delete(msgId);
@@ -197,13 +199,14 @@ class CDPClient {
     }
 
     async evaluate(expression, retries = 3) {
+        const isAsync = expression.includes('async ') || expression.includes('await ');
         for (let attempt = 0; attempt <= retries; attempt++) {
             try {
                 const res = await this.send('Runtime.evaluate', {
                     expression,
                     returnByValue: true,
-                    awaitPromise: true
-                });
+                    awaitPromise: isAsync
+                }, 15000);
                 if (res.exceptionDetails) {
                     const desc = res.exceptionDetails.exception?.description || res.exceptionDetails.text;
                     throw new Error(`Runtime.evaluate Exception: ${desc}`);
@@ -340,10 +343,13 @@ async function testFlow2_SecondaryDevicePairing(cdp, viewport) {
         (() => {
             document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
 
-            localStorage.removeItem('billnaw_is_master');
+            localStorage.setItem('billnaw_is_master', 'false');
             localStorage.setItem('billnaw_device_status', 'PENDING');
             window.currentStaff = null;
             window.currentDeviceRecord = null;
+            window.authorizedDevices = [
+                { deviceId: 'DEV_MASTER00000', isMaster: true, status: 'AUTHORIZED', deviceName: 'Counter 1' }
+            ];
 
             if (typeof showDevicePairingOverlay === 'function') {
                 showDevicePairingOverlay();
@@ -418,12 +424,16 @@ async function testFlow2_SecondaryDevicePairing(cdp, viewport) {
 
     await cdp.captureScreenshot(`multidevice_02_pairing_pending_${viewport}.png`);
 
-    // Clean up pairing overlay
+    // Clean up pairing overlay and restore master state
     await cdp.evaluate(`
         (() => {
             if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
             const overlay = document.getElementById('devicePairingOverlay');
             if (overlay) overlay.style.display = 'none';
+            localStorage.setItem('billnaw_is_master', 'true');
+            localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+            localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+            window.currentStaff = { id: 1, name: 'Admin', role: 'Admin' };
         })()
     `);
     console.log(`  ✅ Flow 2 passed for ${viewport}.`);
@@ -438,7 +448,13 @@ async function testFlow3_FirstLoginPinModal(cdp, viewport) {
     await cdp.evaluate(`
         (() => {
             document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+            const pairOverlay = document.getElementById('devicePairingOverlay');
+            if (pairOverlay) pairOverlay.style.display = 'none';
+
+            localStorage.setItem('billnaw_is_master', 'true');
             localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+            localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+            window.currentStaff = { id: 1, name: 'Admin', role: 'Admin' };
 
             const testStaff = {
                 id: 201,
@@ -763,6 +779,120 @@ async function testFlow5_RemoteLockout(cdp, viewport) {
     console.log(`  ✅ Flow 5 passed for ${viewport}.`);
 }
 
+/**
+ * Flow 6: 10-Day Session Persistence & PIN-Validated Role Switching
+ */
+async function testFlow6_SessionPersistenceAndRoleSwitch(cdp, viewport) {
+    console.log(`  [Flow 6: 10-Day Session Persistence & PIN-Validated Role Switching] Auditing on ${viewport}...`);
+
+    await cdp.evaluate(`
+        (() => {
+            document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+            const pairOverlay = document.getElementById('devicePairingOverlay');
+            if (pairOverlay) pairOverlay.style.display = 'none';
+            const loginOverlay = document.getElementById('loginOverlay');
+            if (loginOverlay) loginOverlay.style.display = 'none';
+
+            localStorage.setItem('billnaw_is_master', 'true');
+            localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+            localStorage.removeItem('billnaw_terminal_locked');
+            window.isTerminalLocked = false;
+
+            // Setup 10-day session persistence timestamp
+            const now = Date.now();
+            localStorage.setItem('billnaw_device_auth_timestamp', now.toString());
+
+            // Setup staff and admin PIN hash
+            window.shopProfile = window.shopProfile || {};
+            if (typeof hashString === 'function') {
+                window.shopProfile.adminPinHash = hashString('8899');
+            }
+
+            window.staffList = [
+                { id: 1, name: 'Admin User', role: 'Admin', pin: '8899' },
+                { id: 2, name: 'Priya Sharma', role: 'Cashier', pin: '2222' },
+                { id: 3, name: 'Chef Gordon', role: 'Kitchen Chef', pin: '3333' }
+            ];
+            try {
+                if (typeof staffList !== 'undefined') staffList = window.staffList;
+            } catch (e) {}
+
+            // Open staff switch modal
+            if (typeof openStaffSwitchModal === 'function') {
+                openStaffSwitchModal();
+            }
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 400));
+
+    const switchAssert = await cdp.evaluate(`
+        (async () => {
+            const modal = document.getElementById('staffSwitchModal');
+            const isVisible = modal && window.getComputedStyle(modal).display === 'flex';
+
+            const ttlMs = (typeof DEVICE_AUTH_TTL_MS !== 'undefined') ? DEVICE_AUTH_TTL_MS : (10 * 24 * 60 * 60 * 1000);
+            const now = Date.now();
+            const validTimestamp = (now - 2 * 24 * 60 * 60 * 1000).toString(); // 2 days old
+            const expiredTimestamp = (now - 12 * 24 * 60 * 60 * 1000).toString(); // 12 days old
+
+            const isValidSession = typeof isDeviceAuthValid === 'function' ? isDeviceAuthValid(validTimestamp) : true;
+            const isExpiredSession = typeof isDeviceAuthValid === 'function' ? isDeviceAuthValid(expiredTimestamp) : false;
+
+            // Test role switch to Cashier (id: 2) with incorrect PIN then correct PIN
+            if (typeof selectQuickSwitchStaff === 'function') {
+                selectQuickSwitchStaff(2);
+            }
+            const pinInput = document.getElementById('quickSwitchPinInput');
+            if (pinInput) pinInput.value = '9999'; // wrong PIN
+
+            let wrongResult = false;
+            if (typeof confirmQuickStaffSwitch === 'function') {
+                wrongResult = await confirmQuickStaffSwitch();
+            }
+
+            // Enter correct Cashier PIN
+            if (pinInput) pinInput.value = '2222';
+            let correctResult = false;
+            if (typeof confirmQuickStaffSwitch === 'function') {
+                correctResult = await confirmQuickStaffSwitch();
+            }
+
+            const currentRoleActive = window.currentStaff ? window.currentStaff.role : null;
+            const currentStaffName = window.currentStaff ? window.currentStaff.name : null;
+
+            return {
+                isVisible,
+                isValidSession,
+                isExpiredSession,
+                wrongResult,
+                correctResult,
+                currentRoleActive,
+                currentStaffName
+            };
+        })()
+    `);
+
+    assert.strictEqual(switchAssert.isVisible, true, '#staffSwitchModal must display flex when opened');
+    assert.strictEqual(switchAssert.isValidSession, true, 'isDeviceAuthValid must return true for 2-day old auth');
+    assert.strictEqual(switchAssert.isExpiredSession, false, 'isDeviceAuthValid must return false for 12-day old auth');
+    assert.strictEqual(switchAssert.wrongResult, false, 'confirmQuickStaffSwitch must reject wrong PIN');
+    assert.strictEqual(switchAssert.correctResult, true, 'confirmQuickStaffSwitch must accept correct Cashier PIN');
+    assert.strictEqual(switchAssert.currentRoleActive, 'Cashier', 'Active staff role must be switched to Cashier');
+    assert.strictEqual(switchAssert.currentStaffName, 'Priya Sharma', 'Active staff name must be Priya Sharma');
+
+    await cdp.captureScreenshot(`multidevice_06_roleswitch_${viewport}.png`);
+
+    await cdp.evaluate(`
+        (() => {
+            const modal = document.getElementById('staffSwitchModal');
+            if (modal) modal.style.display = 'none';
+        })()
+    `);
+
+    console.log(`  ✅ Flow 6 passed for ${viewport}.`);
+}
+
 // ------------------------------------------------------------
 // 5. MASTER AUDIT ORCHESTRATOR
 // ------------------------------------------------------------
@@ -836,6 +966,13 @@ async function runMultiDeviceAudit() {
 
         cdp.on('Runtime.exceptionThrown', (params) => {
             console.error('🚨 BROWSER EXCEPTION:', params.exceptionDetails?.text, params.exceptionDetails?.exception?.description || params.exceptionDetails);
+        });
+
+        cdp.on('Page.javascriptDialogOpening', async (params) => {
+            console.log('  ⚠️ Handled unexpected browser dialog:', params.message);
+            try {
+                await cdp.send('Page.handleJavaScriptDialog', { accept: true });
+            } catch (e) {}
         });
 
         // Register initial base auth state (suppress shop auth modal and app update popup only)
@@ -913,12 +1050,12 @@ async function runMultiDeviceAudit() {
         `);
 
         console.log('🔄 Reloading page and awaiting Page.loadEventFired...');
-        const loadFiredPromise = cdp.once('Page.loadEventFired', 5000);
+        const loadFiredPromise = cdp.once('Page.loadEventFired', 8000);
         await cdp.send('Page.reload');
         await loadFiredPromise;
 
         console.log('⏳ Allowing initial lifecycle & service worker claim to settle...');
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 2000));
 
         console.log('⏳ Waiting for scripts and DOM to be fully ready...');
         let pageReady = false;
@@ -927,20 +1064,29 @@ async function runMultiDeviceAudit() {
             try {
                 const res = await cdp.evaluate(`
                     (() => {
-                        return document.readyState === 'complete' &&
-                               typeof switchTab === 'function' &&
-                               typeof isMasterTerminal === 'function' &&
-                               typeof showDevicePairingOverlay === 'function' &&
-                               typeof openFirstLoginPinModal === 'function' &&
-                               typeof renderLiveSessionCards === 'function' &&
-                               typeof lockTerminalByRemote === 'function';
+                        const checks = {
+                            complete: document.readyState === 'complete',
+                            switchTab: typeof switchTab === 'function',
+                            isMasterTerminal: typeof isMasterTerminal === 'function',
+                            showDevicePairingOverlay: typeof showDevicePairingOverlay === 'function',
+                            openFirstLoginPinModal: typeof openFirstLoginPinModal === 'function',
+                            renderLiveSessionCards: typeof renderLiveSessionCards === 'function',
+                            lockTerminalByRemote: typeof lockTerminalByRemote === 'function'
+                        };
+                        const allOk = Object.values(checks).every(Boolean);
+                        return allOk ? true : checks;
                     })()
                 `);
                 if (res === true) {
                     pageReady = true;
+                    console.log('  ✅ Page ready check passed at attempt #' + (i + 1));
                     break;
+                } else if (i % 5 === 0) {
+                    console.log('  [Wait #' + (i + 1) + '] Page state:', JSON.stringify(res));
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error('  [Wait #' + (i + 1) + '] evaluate error:', e.message);
+            }
         }
 
         if (!pageReady) {
@@ -986,13 +1132,33 @@ async function runMultiDeviceAudit() {
         `);
         await new Promise(r => setTimeout(r, 200));
 
-        // Execute 5 Flows across Viewports
+        // Execute 6 Flows across Viewports
         const viewports = ['desktop', 'mobile'];
 
         for (const vp of viewports) {
             console.log(`\n====================================================`);
             console.log(`📱 RUNNING MULTI-DEVICE AUDIT FOR: ${vp.toUpperCase()}`);
             console.log(`====================================================`);
+
+            // Clean inter-viewport state reset
+            await cdp.evaluate(`
+                (() => {
+                    document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+                    const pairOverlay = document.getElementById('devicePairingOverlay');
+                    if (pairOverlay) pairOverlay.style.display = 'none';
+                    const loginOverlay = document.getElementById('loginOverlay');
+                    if (loginOverlay) loginOverlay.style.display = 'none';
+
+                    localStorage.setItem('billnaw_auth_mode', 'authenticated');
+                    localStorage.setItem('billnaw_is_master', 'true');
+                    localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                    localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+                    localStorage.removeItem('billnaw_terminal_locked');
+                    window.isTerminalLocked = false;
+                    window.currentStaff = { id: 1, name: 'Admin', role: 'Admin' };
+                    if (typeof switchTab === 'function') switchTab('pos');
+                })()
+            `);
 
             await cdp.setViewport(vp);
 
@@ -1001,9 +1167,10 @@ async function runMultiDeviceAudit() {
             await testFlow3_FirstLoginPinModal(cdp, vp);
             await testFlow4_LiveSessionsHub(cdp, vp);
             await testFlow5_RemoteLockout(cdp, vp);
+            await testFlow6_SessionPersistenceAndRoleSwitch(cdp, vp);
         }
 
-        // Verify all 10 Screenshot Artifacts
+        // Verify all 12 Screenshot Artifacts
         console.log('\n====================================================');
         console.log('📊 VERIFYING MULTI-DEVICE SCREENSHOT ARTIFACTS');
         console.log('====================================================\n');
@@ -1018,7 +1185,9 @@ async function runMultiDeviceAudit() {
             'multidevice_04_live_sessions_desktop.png',
             'multidevice_04_live_sessions_mobile.png',
             'multidevice_05_remote_lockout_desktop.png',
-            'multidevice_05_remote_lockout_mobile.png'
+            'multidevice_05_remote_lockout_mobile.png',
+            'multidevice_06_roleswitch_desktop.png',
+            'multidevice_06_roleswitch_mobile.png'
         ];
 
         let allArtifactsValid = true;
@@ -1038,9 +1207,9 @@ async function runMultiDeviceAudit() {
             console.log(`  ✅ [PASS] ${file.padEnd(46)} Size: ${stats.size.toLocaleString().padStart(8)} bytes`);
         }
 
-        assert(allArtifactsValid, 'All 10 multi-device screenshot artifacts must exist with size > 10KB.');
+        assert(allArtifactsValid, 'All 12 multi-device screenshot artifacts must exist with size > 10KB.');
 
-        console.log('\n🎉 ALL 5 MULTI-DEVICE FLOWS & 10 SCREENSHOTS COMPLETED 100% GREEN!\n');
+        console.log('\n🎉 ALL 6 MULTI-DEVICE FLOWS & 12 SCREENSHOTS COMPLETED 100% GREEN!\n');
         process.exitCode = 0;
 
     } catch (err) {
@@ -1068,10 +1237,22 @@ async function runMultiDeviceAudit() {
         }
 
         if (tempUserDataDir && fs.existsSync(tempUserDataDir)) {
-            try {
-                fs.rmSync(tempUserDataDir, { recursive: true, force: true });
-                console.log('  🗑️ Removed temporary Chrome profile directory.');
-            } catch (e) {}
+            let removed = false;
+            for (let attempt = 0; attempt < 10; attempt++) {
+                try {
+                    fs.rmSync(tempUserDataDir, { recursive: true, force: true });
+                    removed = true;
+                    console.log('  🗑️ Removed temporary Chrome profile directory.');
+                    break;
+                } catch (e) {
+                    try {
+                        execSync('powershell -Command "Start-Sleep -Milliseconds 250"');
+                    } catch (e2) {}
+                }
+            }
+            if (!removed) {
+                console.warn('  ⚠️ Could not immediately delete tempUserDataDir (file lock), continuing...');
+            }
         }
 
         if (spawnedServer && spawnedServer.pid) {

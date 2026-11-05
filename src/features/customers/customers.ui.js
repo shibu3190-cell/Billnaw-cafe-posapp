@@ -74,7 +74,7 @@ export class CustomersUI {
         align: 'right',
         render: (val) => {
           const p = Number(val || 0);
-          return p > 0 ? `<span class="text-danger font-bold">${formatRupees(p)}</span>` : `<span class="text-muted">₹0.00</span>`;
+          return p > 0 ? `<span class="text-danger font-bold">${formatRupees(p)}</span>` : `<span class="text-muted">₹ 0.00</span>`;
         }
       }
     ];

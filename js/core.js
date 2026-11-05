@@ -1405,6 +1405,7 @@ function subscribeDevicesCloudListener(targetStoreCode = null) {
                 // Status transition: PENDING -> AUTHORIZED
                 if (myRecord.status === 'AUTHORIZED' && localStorage.getItem('billnaw_device_status') !== 'AUTHORIZED') {
                     localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                    localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                     if (myRecord.stationProfile) localStorage.setItem('billnaw_station_profile', myRecord.stationProfile);
                     if (myRecord.deviceName) localStorage.setItem('billnaw_station_name', myRecord.deviceName);
 
@@ -1413,6 +1414,16 @@ function subscribeDevicesCloudListener(targetStoreCode = null) {
 
                     if (typeof applyStationProfileRestrictions === 'function') {
                         applyStationProfileRestrictions();
+                    }
+                    const targetView = (typeof resolveInitialViewForStation === 'function')
+                        ? resolveInitialViewForStation(myRecord.stationProfile)
+                        : 'pos';
+                    if (typeof switchView === 'function') {
+                        switchView(targetView);
+                    } else if (typeof switchTabDirect === 'function') {
+                        switchTabDirect(targetView);
+                    } else if (typeof switchTab === 'function') {
+                        switchTab(targetView);
                     }
                     if (typeof attachFirestoreListener === 'function') {
                         attachFirestoreListener();
@@ -1429,6 +1440,21 @@ function subscribeDevicesCloudListener(targetStoreCode = null) {
                 window.dispatchEvent(new CustomEvent('billnaw:device-status-changed', { detail: { device: myRecord, allDevices: devices } }));
             }
             window.dispatchEvent(new CustomEvent('billnaw:devices-updated', { detail: { devices } }));
+            // Live Admin Pairing Notification Banner update
+            try {
+                const banner = document.getElementById('adminPairingNotificationBanner');
+                const bannerText = document.getElementById('adminPairingBannerText');
+                if (banner && bannerText) {
+                    const isMaster = (typeof isMasterTerminal === 'function') ? isMasterTerminal() : (localStorage.getItem('billnaw_is_master') === 'true');
+                    const pendingList = Array.isArray(devices) ? devices.filter(d => d.status === 'PENDING') : [];
+                    if (isMaster && pendingList.length > 0) {
+                        banner.style.display = 'flex';
+                        bannerText.innerText = `${pendingList.length} device${pendingList.length === 1 ? '' : 's'} requesting pairing authorization`;
+                    } else {
+                        banner.style.display = 'none';
+                    }
+                }
+            } catch (bannerErr) {}
             if (typeof renderAuthorizedDevicesHub === 'function') renderAuthorizedDevicesHub();
             if (typeof checkDeviceAuthorizationStatus === 'function') checkDeviceAuthorizationStatus();
         }, (err) => {
@@ -1905,13 +1931,13 @@ function isMasterTerminal() {
     if (isMasterStored === 'true') return true;
     if (isMasterStored === 'false') return false;
 
-    // Smart First Signup / Primary Terminal Recognition:
-    // If not explicitly declared false, check if another master terminal exists in Firestore
+    // Do NOT auto-promote to master if not explicitly declared true.
+    // Check if this device is explicitly registered as Master in cloud records
     const devices = window.authorizedDevices || [];
     const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (typeof localStorage !== 'undefined' ? localStorage.getItem('bongbhoj_device_id') : null);
-    const otherMasterExists = Array.isArray(devices) && devices.some(d => d.isMaster === true && d.deviceId && d.deviceId !== myDevId);
+    const isConfirmedMaster = Array.isArray(devices) && devices.some(d => (d.deviceId === myDevId || d.id === myDevId) && d.isMaster === true);
 
-    if (!otherMasterExists) {
+    if (isConfirmedMaster) {
         setMasterTerminal(true);
         return true;
     }
@@ -1945,6 +1971,7 @@ function setMasterTerminal(isMaster = true) {
     localStorage.setItem('billnaw_is_master', isMaster ? 'true' : 'false');
     if (isMaster) {
         localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+        localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
         setStationProfile('BILLING_COUNTER');
         if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
         const devId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
@@ -1995,8 +2022,65 @@ function getDeviceStatus() {
 }
 window.getDeviceStatus = getDeviceStatus;
 
+const DEVICE_AUTH_TTL_MS = 10 * 24 * 60 * 60 * 1000; // 864,000,000 ms (10 days)
+window.DEVICE_AUTH_TTL_MS = DEVICE_AUTH_TTL_MS;
+
+function isDeviceAuthValid(customTimestamp) {
+    if (customTimestamp) {
+        const t = parseInt(customTimestamp, 10);
+        return !isNaN(t) && (Date.now() - t) >= 0 && (Date.now() - t) < DEVICE_AUTH_TTL_MS;
+    }
+    const authStatus = localStorage.getItem('billnaw_device_status');
+    if (authStatus !== 'AUTHORIZED') return false;
+    const authTimestampStr = localStorage.getItem('billnaw_device_auth_timestamp');
+    if (!authTimestampStr) {
+        if (localStorage.getItem('billnaw_is_master') === 'true') {
+            try { localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString()); } catch (e) {}
+            return true;
+        }
+        return false;
+    }
+    const authTime = parseInt(authTimestampStr, 10);
+    if (isNaN(authTime)) return false;
+    return (Date.now() - authTime) >= 0 && (Date.now() - authTime) < DEVICE_AUTH_TTL_MS;
+}
+window.isDeviceAuthValid = isDeviceAuthValid;
+
+function checkDeviceAuthExpiration() {
+    const authStatus = localStorage.getItem('billnaw_device_status');
+    const isMaster = localStorage.getItem('billnaw_is_master') === 'true';
+    if (authStatus === 'AUTHORIZED') {
+        const authTimestampStr = localStorage.getItem('billnaw_device_auth_timestamp');
+        if (!authTimestampStr) {
+            try { localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString()); } catch (e) {}
+            return false;
+        }
+        const authTime = parseInt(authTimestampStr, 10);
+        const isExpired = isNaN(authTime) || (Date.now() - authTime) >= DEVICE_AUTH_TTL_MS;
+        if (isExpired) {
+            if (isMaster) {
+                if (typeof lockTerminal === 'function') {
+                    lockTerminal(true);
+                }
+            } else {
+                localStorage.removeItem('billnaw_device_status');
+                localStorage.removeItem('billnaw_device_auth_timestamp');
+                if (typeof initDevicePairingFlow === 'function') {
+                    initDevicePairingFlow();
+                } else if (typeof showDevicePairingOverlay === 'function') {
+                    showDevicePairingOverlay();
+                }
+            }
+            return true;
+        }
+    }
+    return false;
+}
+window.checkDeviceAuthExpiration = checkDeviceAuthExpiration;
+
 function canAccessStoreData() {
     if (isMasterTerminal()) return true;
+    if (checkDeviceAuthExpiration()) return false;
     const status = localStorage.getItem('billnaw_device_status');
     if (status === 'REVOKED') return false;
     if (status === 'PENDING') return false;
@@ -2208,6 +2292,9 @@ async function checkDeviceAuthorizationStatus() {
     if (myRecord.status === 'AUTHORIZED') {
         const wasPending = localStorage.getItem('billnaw_device_status') === 'PENDING';
         localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+        if (!localStorage.getItem('billnaw_device_auth_timestamp') || wasPending) {
+            localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+        }
         if (myRecord.stationProfile) localStorage.setItem('billnaw_station_profile', myRecord.stationProfile);
         if (myRecord.deviceName) localStorage.setItem('billnaw_station_name', myRecord.deviceName);
 
@@ -2220,6 +2307,16 @@ async function checkDeviceAuthorizationStatus() {
             if (typeof showToast === 'function') showToast(`Terminal Authorized: ${myRecord.deviceName || 'Ready'}`);
             if (typeof applyStationProfileRestrictions === 'function') {
                 applyStationProfileRestrictions();
+            }
+            const targetView = (typeof resolveInitialViewForStation === 'function')
+                ? resolveInitialViewForStation(myRecord.stationProfile)
+                : 'pos';
+            if (typeof switchView === 'function') {
+                switchView(targetView);
+            } else if (typeof switchTabDirect === 'function') {
+                switchTabDirect(targetView);
+            } else if (typeof switchTab === 'function') {
+                switchTab(targetView);
             }
             if (typeof attachFirestoreListener === 'function') {
                 attachFirestoreListener();
@@ -2285,6 +2382,9 @@ function initDevicePairingFlow() {
         hideDevicePairingOverlay();
         return;
     }
+    const isExpired = checkDeviceAuthExpiration();
+    if (isExpired) return;
+
     const status = getDeviceStatus();
     if (status === 'AUTHORIZED') {
         hideDevicePairingOverlay();
@@ -2688,10 +2788,18 @@ function initStaffSystem() {
     if (typeof enforcePermissions === 'function') enforcePermissions();
     if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
 
-    // Check terminal lock persistence
+    // Check terminal lock persistence & 10-day persistence
     try {
         const isLocked = localStorage.getItem('billnaw_terminal_locked') === 'true';
-        if (isLocked && typeof lockTerminal === 'function') {
+        const isAuthorized = localStorage.getItem('billnaw_device_status') === 'AUTHORIZED';
+        const isExpired = (typeof checkDeviceAuthExpiration === 'function') ? checkDeviceAuthExpiration() : false;
+
+        if (!isExpired && isAuthorized) {
+            // Within 10-day window: prompt staff for 4-digit PIN on app launch without re-pairing
+            if (typeof lockTerminal === 'function' && typeof document !== 'undefined' && document.getElementById('loginOverlay')) {
+                lockTerminal(false);
+            }
+        } else if (isLocked && typeof lockTerminal === 'function') {
             lockTerminal(false);
         }
     } catch(e) {}

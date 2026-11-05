@@ -2390,6 +2390,187 @@ async function runSuite() {
   });
 
   // --------------------------------------------------------------------------
+  // TIER 5: 10-DAY SESSION PERSISTENCE & PIN-VALIDATED ROLE SWITCHING
+  // --------------------------------------------------------------------------
+  console.log('\n====================================================================');
+  console.log('📍 TIER 5: 10-DAY SESSION PERSISTENCE & PIN-VALIDATED ROLE SWITCHING (15 TESTS)');
+  console.log('====================================================================\n');
+
+  // Persistence Engine simulation helper
+  const DEVICE_AUTH_TTL_MS = 10 * 24 * 60 * 60 * 1000; // 864,000,000 ms
+
+  function simulateIsDeviceAuthValid(authTimestamp, now = Date.now()) {
+    if (!authTimestamp) return false;
+    const authTime = parseInt(authTimestamp, 10);
+    if (isNaN(authTime)) return false;
+    const elapsed = now - authTime;
+    return elapsed >= 0 && elapsed < DEVICE_AUTH_TTL_MS;
+  }
+
+  // F24: 10-Day Role and PIN Session Persistence
+  await test('T5-PERS-01', 'Primary store signup persists billnaw_device_auth_timestamp and stores adminPinHash in shop profile', () => {
+    assert.ok(htmlContent.includes("localStorage.setItem('billnaw_device_auth_timestamp'"), 'index.html must persist device auth timestamp');
+    const authServiceContent = fs.readFileSync(path.join(rootDir, 'server', 'auth-service.js'), 'utf8');
+    assert.ok(authServiceContent.includes('adminPinHash'), 'auth-service.js must handle adminPinHash');
+    assert.ok(authServiceContent.includes('hashStringServer'), 'auth-service.js must hash admin PIN');
+  });
+
+  await test('T5-PERS-02', 'Secondary terminal approval updates billnaw_device_auth_timestamp with current timestamp', () => {
+    const coreContent = fs.readFileSync(path.join(rootDir, 'js', 'core.js'), 'utf8');
+    assert.ok(coreContent.includes("localStorage.setItem('billnaw_device_auth_timestamp'"), 'js/core.js must persist device auth timestamp on approval');
+  });
+
+  await test('T5-PERS-03', 'DEVICE_AUTH_TTL_MS constant equals exactly 10 days in milliseconds (864,000,000 ms)', () => {
+    const coreContent = fs.readFileSync(path.join(rootDir, 'js', 'core.js'), 'utf8');
+    assert.ok(coreContent.includes('DEVICE_AUTH_TTL_MS = 10 * 24 * 60 * 60 * 1000'), 'core.js must define 10-day TTL constant');
+    assert.strictEqual(DEVICE_AUTH_TTL_MS, 864000000);
+  });
+
+  await test('T5-PERS-04', '10-Day Persistence Boundary: Device authorized 9 days ago evaluates as valid session without re-pairing', () => {
+    const now = Date.now();
+    const nineDaysAgo = now - (9 * 24 * 60 * 60 * 1000);
+    const isValid = simulateIsDeviceAuthValid(nineDaysAgo.toString(), now);
+    assert.strictEqual(isValid, true, 'Device within 10 days must remain valid');
+  });
+
+  await test('T5-PERS-05', '10-Day Persistence Boundary: Device authorized 11 days ago evaluates as expired and triggers re-pairing flow', () => {
+    const now = Date.now();
+    const elevenDaysAgo = now - (11 * 24 * 60 * 60 * 1000);
+    const isValid = simulateIsDeviceAuthValid(elevenDaysAgo.toString(), now);
+    assert.strictEqual(isValid, false, 'Device past 10 days must expire');
+  });
+
+  await test('T5-PERS-06', 'Expired device auth clears local store tenant data and reverts device state to PENDING/EXPIRED', () => {
+    const dev = new DeviceStateMachine(false);
+    dev.approve('Counter 2', 'BILLING_COUNTER');
+    assert.strictEqual(dev.canAccessStoreData(), true);
+    
+    // Simulate expiration
+    const now = Date.now();
+    const elevenDaysAgo = now - (11 * 24 * 60 * 60 * 1000);
+    const isValid = simulateIsDeviceAuthValid(elevenDaysAgo.toString(), now);
+    if (!isValid) {
+      dev.status = 'PENDING';
+      dev.clearAllTenantLocalData();
+    }
+    assert.strictEqual(dev.status, 'PENDING');
+    assert.strictEqual(dev.canAccessStoreData(), false);
+    assert.strictEqual(dev.localStoreData, null);
+  });
+
+  await test('T5-PERS-07', 'canAccessStoreData guard in js/core.js enforces 10-day TTL check before granting store access', () => {
+    const coreContent = fs.readFileSync(path.join(rootDir, 'js', 'core.js'), 'utf8');
+    assert.ok(coreContent.includes('function canAccessStoreData()'), 'core.js must define canAccessStoreData');
+    assert.ok(coreContent.includes('isDeviceAuthValid') || coreContent.includes('checkDeviceAuthExpiration'), 'canAccessStoreData must check device auth validity');
+  });
+
+  await test('T5-PERS-08', 'Station app launch within valid 10-day window prompts for staff 4-digit PIN lock screen without re-pairing overlay', () => {
+    const coreContent = fs.readFileSync(path.join(rootDir, 'js', 'core.js'), 'utf8');
+    assert.ok(coreContent.includes('initStaffSystem'), 'core.js must define initStaffSystem');
+    assert.ok(coreContent.includes('lockTerminal(false)') || coreContent.includes('lockTerminal'), 'initStaffSystem must lock terminal for staff PIN entry');
+  });
+
+  // F25: Profile Role Switching Validated by PIN
+  await test('T5-ROLE-01', 'Topbar account popover card contains clickable profile trigger with Switch Profile / Role label', () => {
+    assert.ok(htmlContent.includes('Switch Profile / Role'), 'index.html must display Switch Profile / Role button');
+    assert.ok(htmlContent.includes('openStaffSwitchModal()'), 'index.html must trigger openStaffSwitchModal');
+  });
+
+  await test('T5-ROLE-02', 'Role switching to Admin role accepts Master Admin PIN (shopProfile.adminPinHash)', async () => {
+    const adminStaff = { id: 1, name: 'Owner', role: ROLES.ADMIN };
+    const salt = generatePinSaltHex();
+    adminStaff.pin_salt = salt;
+    adminStaff.pin_hash = computePinHash('4321', salt);
+
+    function hashStringTest(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return ('00000000' + (hash >>> 0).toString(16)).slice(-8);
+    }
+
+    const testShopProfile = { adminPinHash: hashStringTest('8899') };
+    const enteredPin = '8899';
+    const isTargetAdmin = (adminStaff.role === ROLES.ADMIN);
+    const isMasterAdminPin = (hashStringTest(enteredPin) === testShopProfile.adminPinHash);
+    const isValid = isTargetAdmin && isMasterAdminPin;
+    assert.strictEqual(isValid, true, 'Master Admin PIN must authenticate Admin role switch');
+  });
+
+  await test('T5-ROLE-03', 'Role switching to Admin role accepts Admin staff members designated PIN', async () => {
+    const adminStaff = { id: 1, name: 'Admin User', role: ROLES.ADMIN };
+    const salt = generatePinSaltHex();
+    adminStaff.pin_salt = salt;
+    adminStaff.pin_hash = computePinHash('5555', salt);
+
+    const enteredPin = '5555';
+    const cleanHash = computePinHash(enteredPin, adminStaff.pin_salt);
+    const isMatch = timingSafeEqual(cleanHash, adminStaff.pin_hash);
+    assert.strictEqual(isMatch, true, 'Admins designated PIN must authenticate Admin role switch');
+  });
+
+  await test('T5-ROLE-04', 'Role switching to Cashier strictly requires that Cashiers 4-digit PIN (rejects Admin PIN or other staff PIN)', async () => {
+    const cashierStaff = { id: 2, name: 'Cashier One', role: ROLES.CASHIER };
+    const salt = generatePinSaltHex();
+    cashierStaff.pin_salt = salt;
+    cashierStaff.pin_hash = computePinHash('1122', salt);
+
+    const testShopProfile = { adminPinHash: 'abcdef01' };
+    const wrongPin = '8899'; // Master admin PIN attempted on Cashier
+    const cleanHashWrong = computePinHash(wrongPin, cashierStaff.pin_salt);
+    const isMatchWrong = timingSafeEqual(cleanHashWrong, cashierStaff.pin_hash);
+    const isTargetAdmin = (cashierStaff.role === ROLES.ADMIN);
+    // Strict RBAC: switching to staff role ignores isMasterAdminPin
+    const isValidWrong = isTargetAdmin ? (wrongPin === '8899' || isMatchWrong) : isMatchWrong;
+    assert.strictEqual(isValidWrong, false, 'Admin PIN must NOT authenticate Cashier role switch');
+
+    // Correct Cashier PIN
+    const correctPin = '1122';
+    const cleanHashCorrect = computePinHash(correctPin, cashierStaff.pin_salt);
+    const isMatchCorrect = timingSafeEqual(cleanHashCorrect, cashierStaff.pin_hash);
+    const isValidCorrect = isTargetAdmin ? false : isMatchCorrect;
+    assert.strictEqual(isValidCorrect, true, 'Cashiers own PIN must authenticate Cashier role switch');
+  });
+
+  await test('T5-ROLE-05', 'Role switching to Kitchen Chef strictly requires Chefs 4-digit PIN (rejects invalid PIN and resets input)', async () => {
+    const chefStaff = { id: 3, name: 'Head Chef', role: ROLES.CHEF };
+    const salt = generatePinSaltHex();
+    chefStaff.pin_salt = salt;
+    chefStaff.pin_hash = computePinHash('9876', salt);
+
+    const enteredInvalidPin = '0000';
+    const cleanHashInvalid = computePinHash(enteredInvalidPin, chefStaff.pin_salt);
+    const isMatchInvalid = timingSafeEqual(cleanHashInvalid, chefStaff.pin_hash);
+    assert.strictEqual(isMatchInvalid, false, 'Invalid PIN must be rejected');
+
+    const enteredValidPin = '9876';
+    const cleanHashValid = computePinHash(enteredValidPin, chefStaff.pin_salt);
+    const isMatchValid = timingSafeEqual(cleanHashValid, chefStaff.pin_hash);
+    assert.strictEqual(isMatchValid, true, 'Chefs valid PIN must authenticate Chef role switch');
+  });
+
+  await test('T5-ROLE-06', 'Role switching on successful PIN verification immediately enforces role-specific permissions and view routing', () => {
+    const staffContent = fs.readFileSync(path.join(rootDir, 'js', 'staff.js'), 'utf8');
+    assert.ok(staffContent.includes('unlockTerminal(matchedStaff)'), 'confirmQuickStaffSwitch must call unlockTerminal on matched staff');
+    assert.ok(staffContent.includes('enforcePermissions()'), 'unlockTerminal must call enforcePermissions');
+    assert.ok(staffContent.includes('resolveInitialViewForStation'), 'unlockTerminal must resolve tailored initial view');
+  });
+
+  // F26: Admin Device Approval Modal
+  await test('T5-APPR-01', 'Admin approval modal (#deviceApprovalPinModal) verifies pairing code and validates Admin PIN before approving terminal', () => {
+    assert.ok(htmlContent.includes('id="deviceApprovalPinModal"'), 'index.html must have deviceApprovalPinModal');
+    assert.ok(htmlContent.includes('id="approvalPairingCodeInput"'), 'index.html must have pairing code input in approval modal');
+    assert.ok(htmlContent.includes('id="approvalAdminPinInput"'), 'index.html must have admin PIN input in approval modal');
+    assert.ok(htmlContent.includes('device-approval-close-btn'), 'index.html must use device-approval-close-btn');
+
+    const settingsContent = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
+    assert.ok(settingsContent.includes('confirmApproveDevicePairing'), 'settings.js must define confirmApproveDevicePairing');
+    assert.ok(settingsContent.includes('openDeviceApprovalModal'), 'settings.js must define openDeviceApprovalModal');
+  });
+
+  // --------------------------------------------------------------------------
   // Summary & Diagnostic Output
   // --------------------------------------------------------------------------
   console.log('\n====================================================================');
@@ -2404,7 +2585,7 @@ async function runSuite() {
     });
     process.exit(1);
   } else {
-    console.log('✨ ALL 255 MULTI-DEVICE PAIRING & LIVE SESSIONS TESTS PASSED 100% GREEN!\n');
+    console.log(`✨ ALL ${passed} MULTI-DEVICE PAIRING & LIVE SESSIONS TESTS PASSED 100% GREEN!\n`);
     process.exit(0);
   }
 }

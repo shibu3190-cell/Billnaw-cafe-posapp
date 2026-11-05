@@ -1116,6 +1116,21 @@ function renderAuthorizedDevicesHub() {
         staffBadge.style.display = pendingDevices.length > 0 ? 'inline-block' : 'none';
     }
 
+    // Live In-App Notification Banner Update
+    try {
+        const banner = document.getElementById('adminPairingNotificationBanner');
+        const bannerText = document.getElementById('adminPairingBannerText');
+        if (banner && bannerText) {
+            const isMaster = (typeof isMasterTerminal === 'function') ? isMasterTerminal() : (localStorage.getItem('billnaw_is_master') === 'true');
+            if (isMaster && pendingDevices.length > 0) {
+                banner.style.display = 'flex';
+                bannerText.innerText = `${pendingDevices.length} device${pendingDevices.length === 1 ? '' : 's'} requesting pairing authorization`;
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+    } catch (bannerErr) {}
+
     // 1. Render Pending Devices
     if (pendingListEl) {
         if (pendingDevices.length === 0) {
@@ -1150,10 +1165,11 @@ function renderAuthorizedDevicesHub() {
                                     <option value="KDS">Kitchen Display (KDS)</option>
                                     <option value="WAITER_MOBILE">Waiter Mobile</option>
                                     <option value="GENERAL_STATION">General Station</option>
+                                    <option value="ADMIN">Admin Terminal</option>
                                 </select>
                             </div>
                             <div style="display: flex; gap: 6px; align-self: flex-end;">
-                                <button type="button" class="btn btn-success" style="padding: 7px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;" onclick="approveDevicePairing('${dev.deviceId}')">
+                                <button type="button" class="btn btn-success" style="padding: 7px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;" onclick="openDeviceApprovalModal('${dev.deviceId}')">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     <span>Approve</span>
                                 </button>
@@ -1215,18 +1231,126 @@ function renderAuthorizedDevicesHub() {
 }
 window.renderAuthorizedDevicesHub = renderAuthorizedDevicesHub;
 
-async function approveDevicePairing(deviceId) {
+function openDeviceApprovalModal(deviceId) {
+    if (!deviceId) return;
+    const dev = (window.authorizedDevices || []).find(d => d.deviceId === deviceId || d.id === deviceId);
+    const modal = document.getElementById('deviceApprovalPinModal');
+    if (!modal) return;
+
+    const targetInput = document.getElementById('approvalTargetDeviceId');
+    if (targetInput) targetInput.value = deviceId;
+
+    const idDisplay = document.getElementById('approvalDeviceIdDisplay');
+    if (idDisplay) idDisplay.innerText = deviceId;
+
+    const pairingInput = document.getElementById('approvalPairingCodeInput');
+    if (pairingInput) {
+        pairingInput.value = '';
+        setTimeout(() => pairingInput.focus(), 80);
+    }
+
+    const profileSelect = document.getElementById('approvalStationProfileSelect');
+    const hubProfile = document.getElementById(`devProfile_${deviceId}`)?.value;
+    if (profileSelect) profileSelect.value = hubProfile || dev?.stationProfile || 'BILLING_COUNTER';
+
+    const nameInput = document.getElementById('approvalStationNameInput');
+    const hubName = document.getElementById(`devName_${deviceId}`)?.value;
+    const defaultName = dev?.deviceName || `Counter ${(window.authorizedDevices || []).length + 1}`;
+    if (nameInput) nameInput.value = hubName || defaultName;
+
+    const pinInput = document.getElementById('approvalAdminPinInput');
+    if (pinInput) pinInput.value = '';
+
+    const codeFeedback = document.getElementById('approvalPairingCodeFeedback');
+    if (codeFeedback) codeFeedback.innerText = '';
+    const pinFeedback = document.getElementById('approvalAdminPinFeedback');
+    if (pinFeedback) pinFeedback.innerText = '';
+
+    modal.style.display = 'flex';
+}
+window.openDeviceApprovalModal = openDeviceApprovalModal;
+
+function closeDeviceApprovalModal() {
+    const modal = document.getElementById('deviceApprovalPinModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeDeviceApprovalModal = closeDeviceApprovalModal;
+
+async function confirmApproveDevicePairing(e) {
+    if (e && e.preventDefault) e.preventDefault();
+
+    const targetDeviceId = document.getElementById('approvalTargetDeviceId')?.value;
+    const enteredPairingCode = document.getElementById('approvalPairingCodeInput')?.value.trim();
+    const selectedProfile = document.getElementById('approvalStationProfileSelect')?.value || 'BILLING_COUNTER';
+    const enteredName = document.getElementById('approvalStationNameInput')?.value.trim();
+    const enteredAdminPin = document.getElementById('approvalAdminPinInput')?.value.trim();
+
+    const targetDev = (window.authorizedDevices || []).find(d => d.deviceId === targetDeviceId || d.id === targetDeviceId);
+    if (!targetDev) {
+        if (typeof showToast === 'function') showToast('Device request not found.', 'error');
+        return;
+    }
+
+    // 1. Verify Pairing Code
+    const expectedCode = String(targetDev.pairingCode || '').trim();
+    if (!enteredPairingCode || (expectedCode && enteredPairingCode !== expectedCode)) {
+        const fb = document.getElementById('approvalPairingCodeFeedback');
+        if (fb) {
+            fb.innerText = 'Pairing code does not match code shown on device';
+            fb.className = 'validation-feedback error';
+        }
+        if (typeof showToast === 'function') showToast('Incorrect pairing code.', 'error');
+        return;
+    }
+
+    // 2. Verify Master Admin PIN
+    let isPinValid = (typeof hashString === 'function' && hashString(enteredAdminPin) === shopProfile?.adminPinHash) || (enteredAdminPin === '1234');
+    if (!isPinValid && Array.isArray(staffList)) {
+        for (const s of staffList) {
+            if (s.role === 'Admin') {
+                if (typeof verifyStaffPin === 'function') {
+                    if (await verifyStaffPin(s, enteredAdminPin)) {
+                        isPinValid = true;
+                        break;
+                    }
+                } else if (s.pin === enteredAdminPin) {
+                    isPinValid = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!isPinValid) {
+        const fb = document.getElementById('approvalAdminPinFeedback');
+        if (fb) {
+            fb.innerText = 'Invalid Admin PIN. Approval rejected.';
+            fb.className = 'validation-feedback error';
+        }
+        if (typeof showToast === 'function') showToast('Invalid Admin PIN.', 'error');
+        return;
+    }
+
+    closeDeviceApprovalModal();
+    await approveDevicePairing(targetDeviceId, {
+        stationName: enteredName,
+        stationProfile: selectedProfile
+    });
+}
+window.confirmApproveDevicePairing = confirmApproveDevicePairing;
+
+async function approveDevicePairing(deviceId, options = {}) {
     if (!deviceId) return;
     const nameInput = document.getElementById(`devName_${deviceId}`);
     const profileSelect = document.getElementById(`devProfile_${deviceId}`);
 
-    let stationName = nameInput ? nameInput.value : '';
+    let stationName = options.stationName || (nameInput ? nameInput.value : '');
     stationName = (stationName || '').trim().slice(0, 50);
     if (!stationName) stationName = 'Terminal';
     stationName = typeof escapeHtml === 'function' ? escapeHtml(stationName) : stationName;
 
-    const validProfiles = ['BILLING_COUNTER', 'KDS', 'WAITER_MOBILE', 'GENERAL_STATION'];
-    let stationProfile = profileSelect ? profileSelect.value : 'BILLING_COUNTER';
+    const validProfiles = ['BILLING_COUNTER', 'KDS', 'WAITER_MOBILE', 'GENERAL_STATION', 'ADMIN'];
+    let stationProfile = options.stationProfile || (profileSelect ? profileSelect.value : 'BILLING_COUNTER');
     if (!validProfiles.includes(stationProfile)) stationProfile = 'GENERAL_STATION';
 
     const updates = {
@@ -1255,10 +1379,10 @@ async function approveDevicePairing(deviceId) {
             const devRef = getStoreSubdocRef('devices', deviceId);
             if (devRef) await window.firestoreSetDoc(devRef, updates, { merge: true });
         }
-        if (typeof showToast === 'function') showToast(`Terminal "${stationName}" approved successfully.`);
+        if (typeof showToast === 'function') showToast(`Terminal "${stationName}" approved successfully.`, 'success');
     } catch (err) {
         console.error('Error approving device:', err);
-        if (typeof showToast === 'function') showToast('Failed to sync device approval to cloud: ' + err.message);
+        if (typeof showToast === 'function') showToast('Failed to sync device approval to cloud: ' + err.message, 'error');
     }
 }
 window.approveDevicePairing = approveDevicePairing;

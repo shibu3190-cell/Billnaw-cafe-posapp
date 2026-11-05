@@ -127,11 +127,24 @@ export function createCustomAuthToken(payload) {
   return `${header}.${body}.${signature}`;
 }
 
+export function hashStringServer(str) {
+  if (!str) return '';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    let char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(16);
+}
+
 /**
  * Creates default shop schema compatible with firebase-blueprint and js/core.js
  */
-export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid) {
+export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid, adminPin) {
   const shopTitle = name || 'Billnaw Cafe';
+  const effectivePin = (adminPin && /^\d{4}$/.test(String(adminPin).trim())) ? String(adminPin).trim() : '1234';
+  const pinHash = hashStringServer(effectivePin);
   return {
     storeCode,
     name: shopTitle,
@@ -149,7 +162,7 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid)
       floors: ['Ground Floor', '1st Floor', 'Outdoor'],
       tableNamingPrefix: 'Table ',
       startInvoiceNo: 1001,
-      adminPinHash: crypto.createHash('md5').update('1234').digest('hex'),
+      adminPinHash: pinHash,
       upiId: 'billnaw@upi',
       showQr: true,
       gstMode: 'inclusive',
@@ -157,7 +170,7 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid)
       discountsEnabled: true
     },
     staff: [
-      { id: 1, name: 'Store Owner', role: 'Admin', pin: '1234', phone: '+91 98765 43210', status: 'Active' }
+      { id: 1, name: 'Store Owner', role: 'Admin', pin: effectivePin, phone: '+91 98765 43210', status: 'Active' }
     ],
     categories: ['All', 'Snacks', 'Beverages', 'Main Course'],
     menu: [
@@ -203,19 +216,35 @@ async function syncShopToFirestore(storeCode, shopData) {
 /**
  * Resolves or initializes shop tenant profile mapped to shops/{storeCode}.
  */
-export function resolveShopTenant(storeCode, shopName, ownerEmail, ownerUid) {
+export function resolveShopTenant(storeCode, shopName, ownerEmail, ownerUid, adminPin) {
   const code = storeCode || 'SHOP-BILLNAW-01';
   let shop = shopStore.get(code);
 
   if (!shop) {
-    shop = createDefaultShopDocument(code, shopName, ownerEmail, ownerUid);
+    shop = createDefaultShopDocument(code, shopName, ownerEmail, ownerUid, adminPin);
     shopStore.set(code, shop);
     // Asynchronously replicate to cloud Firestore
     syncShopToFirestore(code, shop);
-  } else if (shopName && shopName.trim() && shop.name !== shopName.trim()) {
-    shop.name = shopName.trim();
-    if (shop.profile) shop.profile.name = shopName.trim();
-    shop.updatedAt = new Date().toISOString();
+  } else {
+    let updated = false;
+    if (shopName && shopName.trim() && shop.name !== shopName.trim()) {
+      shop.name = shopName.trim();
+      if (shop.profile) shop.profile.name = shopName.trim();
+      updated = true;
+    }
+    if (adminPin && /^\d{4}$/.test(String(adminPin).trim())) {
+      const cleanPin = String(adminPin).trim();
+      if (shop.profile) shop.profile.adminPinHash = hashStringServer(cleanPin);
+      if (Array.isArray(shop.staff)) {
+        const adminStaff = shop.staff.find(s => s.role === 'Admin');
+        if (adminStaff) adminStaff.pin = cleanPin;
+      }
+      updated = true;
+    }
+    if (updated) {
+      shop.updatedAt = new Date().toISOString();
+      syncShopToFirestore(code, shop);
+    }
   }
 
   return shop;
@@ -616,7 +645,7 @@ export function verifyOtp(email, otp, shopName) {
 /**
  * Email + Password account registration.
  */
-export function registerUser({ firstName, lastName, shopName, email, password, confirmPassword, otp, phone }) {
+export function registerUser({ firstName, lastName, shopName, email, password, confirmPassword, otp, phone, adminPin }) {
   const normalizedEmail = normalizeEmail(email);
   if (!isValidEmail(normalizedEmail)) {
     return { status: 400, data: { success: false, error: 'Invalid email address' } };
@@ -632,6 +661,15 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
   }
   if (confirmPassword !== undefined && confirmPassword !== password) {
     return { status: 400, data: { success: false, error: 'Passwords do not match' } };
+  }
+  if (adminPin !== undefined && adminPin !== null && String(adminPin).trim() !== '') {
+    const cleanAdminPin = String(adminPin).trim();
+    if (!/^\d{4}$/.test(cleanAdminPin)) {
+      return { status: 400, data: { success: false, error: 'Admin PIN must be exactly 4 digits' } };
+    }
+    if (cleanAdminPin === '0000' || cleanAdminPin === '1234') {
+      return { status: 400, data: { success: false, error: 'Admin PIN cannot be trivial (0000, 1234)' } };
+    }
   }
   // Mobile phone number validation when provided (mandatory for frontend registrations)
   let cleanPhone = (phone || '').toString().replace(/\D/g, '');
@@ -688,7 +726,7 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
   };
   userStore.set(normalizedEmail, user);
 
-  const shop = resolveShopTenant(storeCode, shopName.trim(), normalizedEmail, uid);
+  const shop = resolveShopTenant(storeCode, shopName.trim(), normalizedEmail, uid, adminPin);
   if (shop && shop.profile) {
     shop.profile.phone = cleanPhone;
     shop.profile.ownerPhone = cleanPhone;

@@ -884,15 +884,39 @@ function backspaceTerminalPin() {
 window.backspaceTerminalPin = backspaceTerminalPin;
 
 // 🔄 Quick Staff Switch Modal Handlers
-function openStaffSwitchModal() {
+function selectQuickSwitchStaff(staffId) {
+    selectedLoginStaffId = staffId;
+    if (typeof window !== 'undefined') window.selectedLoginStaffId = staffId;
     const list = document.getElementById('quickSwitchStaffList');
     if (list) {
-        list.innerHTML = staffList.map(staff => {
+        list.querySelectorAll('.staff-card').forEach(card => card.classList.remove('selected'));
+        const selectedCard = list.querySelector(`[data-staff-id="${staffId}"]`);
+        if (selectedCard) selectedCard.classList.add('selected');
+    }
+    const pinInput = document.getElementById('quickSwitchPinInput');
+    if (pinInput) {
+        pinInput.value = '';
+        pinInput.focus();
+    }
+}
+window.selectQuickSwitchStaff = selectQuickSwitchStaff;
+
+function openStaffSwitchModal() {
+    const list = document.getElementById('quickSwitchStaffList');
+    const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList) && window.staffList.length > 0)
+        ? window.staffList
+        : (typeof staffList !== 'undefined' && Array.isArray(staffList) ? staffList : []);
+
+    if (!selectedLoginStaffId && staffSource.length > 0) {
+        selectedLoginStaffId = (currentStaff && currentStaff.id) ? currentStaff.id : staffSource[0].id;
+    }
+    if (list && staffSource.length > 0) {
+        list.innerHTML = staffSource.map(staff => {
             const initials = staff.name ? staff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
             const roleCls = staff.role ? `role-${staff.role.toLowerCase()}` : 'role-cashier';
             const isSelected = (staff.id === selectedLoginStaffId);
             return `
-                <div class="staff-card ${isSelected ? 'selected' : ''}" onclick="selectLoginStaff(${staff.id}); document.getElementById('quickSwitchPinInput').focus();">
+                <div class="staff-card ${isSelected ? 'selected' : ''}" data-staff-id="${staff.id}" onclick="selectQuickSwitchStaff(${staff.id}); document.getElementById('quickSwitchPinInput').focus();">
                     <div class="staff-avatar" style="margin: 0 auto 6px auto;">${initials}</div>
                     <div class="staff-name">${staff.name}</div>
                     <div style="margin-top: 4px;"><span class="staff-badge ${roleCls}">${staff.role}</span></div>
@@ -910,29 +934,47 @@ window.openStaffSwitchModal = openStaffSwitchModal;
 async function confirmQuickStaffSwitch() {
     const pinInput = document.getElementById('quickSwitchPinInput');
     const enteredPin = pinInput ? pinInput.value.trim() : '';
-    const matchedStaff = staffList.find(s => s.id === selectedLoginStaffId);
-    if (!matchedStaff) return showToast("Select a staff member.");
+    const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList) && window.staffList.length > 0)
+        ? window.staffList
+        : (typeof staffList !== 'undefined' && Array.isArray(staffList) ? staffList : []);
+    const matchedStaff = staffSource.find(s => s.id === selectedLoginStaffId) || (staffSource.length > 0 ? staffSource[0] : null);
+    if (!matchedStaff) {
+        showToast("Select a staff member.");
+        return false;
+    }
 
+    if (!enteredPin) {
+        showToast("Please enter 4-digit PIN.");
+        return false;
+    }
+
+    const isTargetAdmin = (matchedStaff.role === 'Admin');
     const isMatch = await verifyStaffPin(matchedStaff, enteredPin);
-    const isAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
+    const isMasterAdminPin = (typeof hashString === 'function' && shopProfile?.adminPinHash && hashString(enteredPin) === shopProfile.adminPinHash) || (!shopProfile?.adminPinHash && enteredPin === '1234');
 
-    if (enteredPin && (isMatch || isAdminPin)) {
+    // Switching to Admin requires Master Admin PIN (or Admin's own PIN if designated).
+    // Switching to staff roles requires entering that staff member's 4-digit PIN.
+    const isValid = isTargetAdmin ? (isMasterAdminPin || isMatch) : isMatch;
+
+    if (isValid) {
         if (matchedStaff.mustChangePin === true) {
             const modal = document.getElementById('staffSwitchModal');
             if (modal) modal.style.display = 'none';
             openFirstLoginPinModal(matchedStaff);
-            return;
+            return true;
         }
         unlockTerminal(matchedStaff);
         const modal = document.getElementById('staffSwitchModal');
         if (modal) modal.style.display = 'none';
         showToast(`Switched active staff to ${currentStaff.name}`);
+        return true;
     } else {
         if (pinInput) {
             pinInput.value = '';
             pinInput.focus();
         }
-        showToast("Incorrect PIN for " + matchedStaff.name);
+        showToast("Incorrect PIN for " + matchedStaff.name, "error");
+        return false;
     }
 }
 window.confirmQuickStaffSwitch = confirmQuickStaffSwitch;
