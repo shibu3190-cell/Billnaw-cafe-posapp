@@ -120,26 +120,86 @@ function checkPermission(roleOrUser, permission) {
 }
 window.checkPermission = checkPermission;
 
+async function verifyAdminPin(enteredPin) {
+    if (!enteredPin) return false;
+    const cleanPin = String(enteredPin).trim();
+    if (!cleanPin) return false;
+
+    // 1. Direct check against in-memory shopProfile.adminPinHash
+    if (typeof shopProfile !== 'undefined' && shopProfile && shopProfile.adminPinHash) {
+        if (typeof hashString === 'function' && hashString(cleanPin) === shopProfile.adminPinHash) {
+            return true;
+        }
+    }
+
+    // 2. Redundant LocalStorage backup adminPinHash
+    const backupPinHash = (typeof localStorage !== 'undefined') ? localStorage.getItem('billnaw_admin_pin_hash') : null;
+    if (backupPinHash && typeof hashString === 'function' && hashString(cleanPin) === backupPinHash) {
+        return true;
+    }
+
+    // 3. Admin staff in staffList (both salted SHA-256 and legacy representations)
+    const list = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList : (window.staffList || []);
+    const adminStaff = list.find(s => s && (s.role === 'Admin' || s.role === 'Owner'));
+    if (adminStaff) {
+        const hash = adminStaff.pin_hash || adminStaff.pinHash;
+        const salt = adminStaff.pin_salt || adminStaff.pinSalt || '';
+        if (hash && salt && typeof verifyPin === 'function') {
+            const isMatch = await verifyPin(cleanPin, salt, hash);
+            if (isMatch) return true;
+        }
+        if (adminStaff.pin && String(adminStaff.pin).trim() === cleanPin) {
+            return true;
+        }
+        if (hash && !salt && typeof hashString === 'function' && hashString(cleanPin) === hash) {
+            return true;
+        }
+    }
+
+    // 4. Default fallback admin PIN '1234' only if no custom admin pin set
+    const hasCustomAdminPin = (shopProfile && shopProfile.adminPinHash) || backupPinHash || (adminStaff && (adminStaff.pin_hash || adminStaff.pin));
+    if (!hasCustomAdminPin && cleanPin === '1234') {
+        return true;
+    }
+
+    return false;
+}
+window.verifyAdminPin = verifyAdminPin;
+
 async function verifyStaffPin(staff, enteredPin) {
     if (!staff || !enteredPin) return false;
     const cleanPin = String(enteredPin).trim();
+    if (!cleanPin) return false;
+
+    // If staff is Admin or Owner, also allow valid Master Admin PIN
+    if (staff.role === 'Admin' || staff.role === 'Owner') {
+        const isAdminMatch = await verifyAdminPin(cleanPin);
+        if (isAdminMatch) return true;
+    }
+
     // Legacy on-the-fly migration: if staff has plaintext pin, migrate to salted SHA-256
     if (staff.pin) {
-        const salt = staff.pin_salt || staff.pinSalt || generatePinSalt();
-        const hash = await hashPin(String(staff.pin).trim(), salt);
-        staff.pin_salt = salt;
-        staff.pin_hash = hash;
-        staff.pinSalt = salt;
-        staff.pinHash = hash;
-        delete staff.pin;
-        if (typeof saveToLocal === 'function') saveToLocal();
-        if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_staff', staffList).catch(() => {});
-        if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore(staff);
+        if (String(staff.pin).trim() === cleanPin) {
+            const salt = staff.pin_salt || staff.pinSalt || generatePinSalt();
+            const hash = await hashPin(cleanPin, salt);
+            staff.pin_salt = salt;
+            staff.pin_hash = hash;
+            staff.pinSalt = salt;
+            staff.pinHash = hash;
+            delete staff.pin;
+            if (typeof saveToLocal === 'function') saveToLocal();
+            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_staff', staffList).catch(() => {});
+            if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore(staff);
+            return true;
+        }
     }
     const hash = staff.pin_hash || staff.hash || staff.pinHash;
     const salt = staff.pin_salt || staff.salt || staff.pinSalt || '';
     if (hash && salt) {
         return verifyPin(cleanPin, salt, hash);
+    }
+    if (hash && !salt && typeof hashString === 'function' && hashString(cleanPin) === hash) {
+        return true;
     }
     return false;
 }
@@ -149,6 +209,8 @@ window.verifyStaffPin = verifyStaffPin;
 let isTerminalLocked = false;
 window.isTerminalLocked = isTerminalLocked;
 window.STRICT_RBAC_MODE = true;
+let selectedLoginStaffId = null;
+window.selectedLoginStaffId = selectedLoginStaffId;
 let failedPinAttempts = 0;
 let pinLockoutUntil = null;
 
@@ -370,7 +432,9 @@ async function confirmStaffLogin() {
     }
 
     // 3. Admin PIN Fallback
-    const isValidAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
+    const isValidAdminPin = (typeof verifyAdminPin === 'function')
+        ? await verifyAdminPin(enteredPin)
+        : ((typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234'));
     if (!staffToLogin && isValidAdminPin) {
         staffToLogin = (staffList || []).find(s => s.role === 'Admin') || { id: 1, name: "Admin", role: "Admin" };
         selectedLoginStaffId = staffToLogin.id;
@@ -407,6 +471,7 @@ async function confirmStaffLogin() {
     }
 }
 window.confirmStaffLogin = confirmStaffLogin;
+window.submitStaffPinLogin = confirmStaffLogin;
 
 function unlockTerminal(staff) {
     isTerminalLocked = false;
@@ -1008,7 +1073,9 @@ async function confirmQuickStaffSwitch() {
 
     const isTargetAdmin = (matchedStaff.role === 'Admin');
     const isMatch = await verifyStaffPin(matchedStaff, enteredPin);
-    const isMasterAdminPin = (typeof hashString === 'function' && shopProfile?.adminPinHash && hashString(enteredPin) === shopProfile.adminPinHash) || (!shopProfile?.adminPinHash && enteredPin === '1234');
+    const isMasterAdminPin = (typeof verifyAdminPin === 'function')
+        ? await verifyAdminPin(enteredPin)
+        : ((typeof hashString === 'function' && shopProfile?.adminPinHash && hashString(enteredPin) === shopProfile.adminPinHash) || (!shopProfile?.adminPinHash && enteredPin === '1234'));
 
     // Switching to Admin requires Master Admin PIN (or Admin's own PIN if designated).
     // Switching to staff roles requires entering that staff member's 4-digit PIN.
@@ -1132,7 +1199,9 @@ async function confirmSpotManagerOverride() {
     }
 
     if (!authorized) {
-        const isAdminPin = (typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234');
+        const isAdminPin = (typeof verifyAdminPin === 'function')
+            ? await verifyAdminPin(enteredPin)
+            : ((typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234'));
         if (isAdminPin) {
             authorized = true;
             authorizingManager = { name: 'Admin', role: 'Admin' };
@@ -1346,6 +1415,22 @@ async function saveStaffMember(data = null) {
 
     closeStaffModal();
     saveToLocal();
+    try {
+        localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList));
+    } catch(e) {}
+    if (role === 'Admin' && pin) {
+        if (typeof shopProfile !== 'undefined' && shopProfile) {
+            if (typeof hashString === 'function') {
+                shopProfile.adminPinHash = hashString(pin);
+            }
+        }
+        try {
+            if (typeof hashString === 'function') {
+                localStorage.setItem('billnaw_admin_pin_hash', hashString(pin));
+            }
+        } catch(e) {}
+        if (typeof persistProfile === 'function') persistProfile();
+    }
     if (typeof idb !== 'undefined' && idb.set) {
         idb.set('cafe_staff', staffList).catch(() => {});
     }
@@ -1387,8 +1472,12 @@ function loginAsStaff() {
 }
 window.loginAsStaff = loginAsStaff;
 
-function loginAsAdmin() { 
-    if ((typeof hashString === 'function' && hashString(document.getElementById('adminPinInput')?.value || '') === shopProfile?.adminPinHash) || document.getElementById('adminPinInput')?.value === '1234') { 
+async function loginAsAdmin() { 
+    const inputVal = document.getElementById('adminPinInput')?.value || '';
+    const isValid = (typeof verifyAdminPin === 'function')
+        ? await verifyAdminPin(inputVal)
+        : ((typeof hashString === 'function' && hashString(inputVal) === shopProfile?.adminPinHash) || inputVal === '1234');
+    if (isValid) { 
         currentRole = 'admin'; 
         document.getElementById('loginOverlay').style.display = 'none'; 
         if(document.getElementById('adminPinInput')) document.getElementById('adminPinInput').value = ''; 
@@ -1517,10 +1606,11 @@ function enforcePermissions() {
         if (navTables) navTables.classList.remove('locked');
     }
 
-    // Dynamic KDS Role Presentation: present solely for Chef, hide for Cashier, Server, Manager, Admin
+    // Dynamic KDS Role Presentation: present solely for Chef or for Supervisor on KDS-assigned terminal
     const navKds = document.getElementById('nav-kds');
     if (navKds) {
-        if (normRole === ROLES.CHEF) {
+        const isKdsStation = (typeof getStationProfile === 'function' ? getStationProfile() : (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_station_profile') : null)) === 'KDS';
+        if (normRole === ROLES.CHEF || (isKdsStation && (normRole === ROLES.ADMIN || normRole === ROLES.MANAGER))) {
             navKds.style.display = 'flex';
         } else {
             navKds.style.display = 'none';
@@ -1683,6 +1773,22 @@ async function submitFirstLoginPin() {
 
     // Persist multi-tier
     saveToLocal();
+    try {
+        localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList));
+    } catch(e) {}
+    if (targetStaff.role === 'Admin') {
+        if (typeof shopProfile !== 'undefined' && shopProfile) {
+            if (typeof hashString === 'function') {
+                shopProfile.adminPinHash = hashString(newPin);
+            }
+        }
+        try {
+            if (typeof hashString === 'function') {
+                localStorage.setItem('billnaw_admin_pin_hash', hashString(newPin));
+            }
+        } catch(e) {}
+        if (typeof persistProfile === 'function') persistProfile();
+    }
     if (typeof idb !== 'undefined' && idb.set) {
         idb.set('cafe_staff', staffList).catch(() => {});
     }
@@ -1914,20 +2020,35 @@ async function submitAdminForgotPinReset() {
                 if (!shopProfile) shopProfile = {};
                 shopProfile.adminPinHash = data.adminPinHash;
             }
+            try {
+                localStorage.setItem('billnaw_admin_pin_hash', data.adminPinHash);
+            } catch(e) {}
 
             // Update Admin staff member in staffList
             const sList = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList : (window.staffList || []);
             const adminStaff = sList.find(s => s.role === 'Admin');
             if (adminStaff) {
-                adminStaff.pin = newPin;
                 if (typeof generatePinSalt === 'function' && typeof hashPin === 'function') {
                     const salt = generatePinSalt();
                     adminStaff.pin_salt = salt;
                     adminStaff.pin_hash = await hashPin(newPin, salt);
+                    adminStaff.pinSalt = salt;
+                    adminStaff.pinHash = adminStaff.pin_hash;
                 }
                 adminStaff.mustChangePin = false;
+                delete adminStaff.pin;
             }
             if (typeof saveToLocal === 'function') saveToLocal();
+            if (typeof idb !== 'undefined' && idb.set) {
+                idb.set('cafe_staff', sList).catch(() => {});
+            }
+            try {
+                localStorage.setItem('billnaw_store_staff', JSON.stringify(sList));
+            } catch(e) {}
+
+            // Multi-device real-time sync: persist profile and staff to Cloud Firestore
+            if (typeof persistProfile === 'function') persistProfile();
+            if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore(adminStaff);
 
             // Unlock and close modals
             closeAdminForgotPinModal();

@@ -228,8 +228,32 @@ function saveSettings() {
     
     const adminPinSetup = document.getElementById('adminPinSetup');
     if (adminPinSetup && adminPinSetup.value.length >= 4) {
-        shopProfile.adminPinHash = hashString(adminPinSetup.value);
+        const enteredPinVal = adminPinSetup.value.trim();
+        shopProfile.adminPinHash = hashString(enteredPinVal);
+        try {
+            localStorage.setItem('billnaw_admin_pin_hash', shopProfile.adminPinHash);
+        } catch(e) {}
         adminPinSetup.value = '';
+
+        // Synchronize Admin in staffList as well
+        const sList = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList : (window.staffList || []);
+        const adminStaff = sList.find(s => s.role === 'Admin');
+        if (adminStaff) {
+            if (typeof generatePinSalt === 'function' && typeof hashPin === 'function') {
+                const salt = generatePinSalt();
+                adminStaff.pin_salt = salt;
+                adminStaff.pinSalt = salt;
+                hashPin(enteredPinVal, salt).then(h => {
+                    adminStaff.pin_hash = h;
+                    adminStaff.pinHash = h;
+                    delete adminStaff.pin;
+                    if (typeof saveToLocal === 'function') saveToLocal();
+                    if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_staff', sList).catch(() => {});
+                    try { localStorage.setItem('billnaw_store_staff', JSON.stringify(sList)); } catch(e) {}
+                    if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore(adminStaff);
+                }).catch(() => {});
+            }
+        }
     }
     
     const shopUpiIdInput = document.getElementById('shopUpiIdInput');
@@ -1417,7 +1441,9 @@ async function confirmApproveDevicePairing(e) {
     }
 
     // 2. Verify Master Admin PIN
-    let isPinValid = (typeof hashString === 'function' && hashString(enteredAdminPin) === shopProfile?.adminPinHash) || (enteredAdminPin === '1234');
+    let isPinValid = (typeof verifyAdminPin === 'function')
+        ? await verifyAdminPin(enteredAdminPin)
+        : ((typeof hashString === 'function' && hashString(enteredAdminPin) === shopProfile?.adminPinHash) || (enteredAdminPin === '1234'));
     if (!isPinValid && Array.isArray(staffList)) {
         for (const s of staffList) {
             if (s.role === 'Admin') {
