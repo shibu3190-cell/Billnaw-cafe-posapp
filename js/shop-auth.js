@@ -291,9 +291,15 @@
 
                     try {
                         localStorage.setItem('billnaw_auth_mode', 'authenticated');
-                        if (localStorage.getItem('billnaw_is_master') !== 'true') {
+                        const isOwner = Boolean(data && (data.isOwner || (data.user && (data.user.role === 'owner' || data.user.isOwner))));
+                        if (isOwner) {
+                            localStorage.setItem('billnaw_is_master', 'true');
+                            localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                        } else if (localStorage.getItem('billnaw_is_master') !== 'true') {
                             localStorage.setItem('billnaw_is_master', 'false');
-                            localStorage.setItem('billnaw_device_status', 'PENDING');
+                            if (localStorage.getItem('billnaw_device_status') !== 'AUTHORIZED') {
+                                localStorage.setItem('billnaw_device_status', 'PENDING');
+                            }
                         }
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
                         if (email) localStorage.setItem('billnaw_auth_email', email);
@@ -377,9 +383,15 @@
                 if (data && data.success) {
                     try {
                         localStorage.setItem('billnaw_auth_mode', 'authenticated');
-                        if (localStorage.getItem('billnaw_is_master') !== 'true') {
+                        const isOwner = Boolean(data && (data.isOwner || (data.user && (data.user.role === 'owner' || data.user.isOwner))));
+                        if (isOwner) {
+                            localStorage.setItem('billnaw_is_master', 'true');
+                            localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                        } else if (localStorage.getItem('billnaw_is_master') !== 'true') {
                             localStorage.setItem('billnaw_is_master', 'false');
-                            localStorage.setItem('billnaw_device_status', 'PENDING');
+                            if (localStorage.getItem('billnaw_device_status') !== 'AUTHORIZED') {
+                                localStorage.setItem('billnaw_device_status', 'PENDING');
+                            }
                         }
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
                         if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);

@@ -1522,15 +1522,26 @@ function subscribeDevicesCloudListener(targetStoreCode = null) {
             try {
                 const banner = document.getElementById('adminPairingNotificationBanner');
                 const bannerText = document.getElementById('adminPairingBannerText');
-                if (banner && bannerText) {
-                    const isMaster = (typeof isMasterTerminal === 'function') ? isMasterTerminal() : (localStorage.getItem('billnaw_is_master') === 'true');
-                    const pendingList = Array.isArray(devices) ? devices.filter(d => d.status === 'PENDING') : [];
-                    if (isMaster && pendingList.length > 0) {
+                const isMaster = (typeof isMasterTerminal === 'function') ? isMasterTerminal() : (localStorage.getItem('billnaw_is_master') === 'true');
+                const pendingList = Array.isArray(devices) ? devices.filter(d => d.status === 'PENDING') : [];
+                if (isMaster && pendingList.length > 0) {
+                    if (banner && bannerText) {
                         banner.style.display = 'flex';
                         bannerText.innerText = `${pendingList.length} device${pendingList.length === 1 ? '' : 's'} requesting pairing authorization`;
-                    } else {
-                        banner.style.display = 'none';
                     }
+                    if (typeof playKdsAudioChime === 'function') {
+                        try { playKdsAudioChime(); } catch(chimeErr) {}
+                    }
+                    if (typeof showToast === 'function') {
+                        showToast(`New pairing request from ${pendingList[0].deviceName || pendingList[0].deviceId}`, 'info');
+                    }
+                    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+                        window.dispatchEvent(new CustomEvent('billnaw:device-pairing-requested', {
+                            detail: { device: pendingList[0], allPending: pendingList }
+                        }));
+                    }
+                } else if (banner) {
+                    banner.style.display = 'none';
                 }
             } catch (bannerErr) {}
             if (typeof renderAuthorizedDevicesHub === 'function') renderAuthorizedDevicesHub();
@@ -1869,6 +1880,14 @@ window.unsubscribeFirestoreListeners = detachFirestoreListener;
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     window.addEventListener('firebaseLoaded', () => {
         attachFirestoreListener();
+        const status = typeof getDeviceStatus === 'function' ? getDeviceStatus() : localStorage.getItem('billnaw_device_status');
+        if (status === 'PENDING') {
+            const devId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+            const code = localStorage.getItem('billnaw_pairing_code');
+            if (devId && code && typeof registerPendingDeviceToCloud === 'function') {
+                registerPendingDeviceToCloud(devId, code);
+            }
+        }
     });
 }
 
@@ -2157,11 +2176,22 @@ async function promptAdminAuthorizeTerminal() {
     }
 
     if (isMatch) {
-        setMasterTerminal(true);
-        if (typeof showToast === 'function') showToast('Terminal Authorized as Master Admin Terminal!', 'success');
+        const storedProfile = localStorage.getItem('billnaw_station_profile') || 'BILLING_COUNTER';
+        const assignedProfile = (typeof STATION_PROFILES !== 'undefined' && STATION_PROFILES[storedProfile]) ? storedProfile : 'BILLING_COUNTER';
+        localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+        localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+        localStorage.setItem('billnaw_station_profile', assignedProfile);
+        if (localStorage.getItem('billnaw_is_master') !== 'true') {
+            localStorage.setItem('billnaw_is_master', 'false');
+        }
         if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
+        if (typeof applyStationProfileRestrictions === 'function') applyStationProfileRestrictions();
+        const targetView = (typeof resolveInitialViewForStation === 'function')
+            ? resolveInitialViewForStation(assignedProfile)
+            : 'pos';
+        if (typeof switchView === 'function') switchView(targetView);
+        if (typeof showToast === 'function') showToast(`Terminal authorized as ${assignedProfile}!`, 'success');
         if (typeof initStoreCloudSync === 'function') initStoreCloudSync();
-        else setTimeout(() => window.location.reload(), 300);
     } else {
         if (typeof showToast === 'function') showToast('Incorrect Admin PIN.', 'error');
     }
@@ -2551,6 +2581,12 @@ function initDevicePairingFlow() {
 window.initDevicePairingFlow = initDevicePairingFlow;
 
 function showDevicePairingOverlay() {
+    if ((typeof getDeviceStatus === 'function' && getDeviceStatus() === 'AUTHORIZED') || localStorage.getItem('billnaw_device_status') === 'AUTHORIZED') {
+        if (typeof checkDeviceAuthExpiration !== 'function' || !checkDeviceAuthExpiration()) {
+            hideDevicePairingOverlay();
+            return;
+        }
+    }
     const overlay = document.getElementById('devicePairingOverlay');
     if (!overlay) return;
     overlay.style.display = 'flex';
@@ -2605,20 +2641,28 @@ window.showDeviceRevokedOverlay = showDeviceRevokedOverlay;
 
 async function registerPendingDeviceToCloud(deviceId, pairingCode) {
     try {
-        if (typeof window.firestoreDB !== 'undefined' && typeof window.firestoreDoc !== 'undefined') {
-            const devDocRef = getStoreSubdocRef('devices', deviceId);
-            if (devDocRef && window.firestoreSetDoc) {
-                await window.firestoreSetDoc(devDocRef, {
-                    deviceId,
-                    pairingCode,
-                    deviceName: 'Secondary Terminal',
-                    stationProfile: 'GENERAL_STATION',
-                    status: 'PENDING',
-                    isMaster: false,
-                    registeredAt: new Date().toISOString(),
-                    lastSeenAt: new Date().toISOString()
-                }, { merge: true });
+        if (typeof window.firestoreDB === 'undefined' || typeof window.firestoreDoc === 'undefined') {
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+                const onLoaded = async () => {
+                    window.removeEventListener('firebaseLoaded', onLoaded);
+                    await registerPendingDeviceToCloud(deviceId, pairingCode);
+                };
+                window.addEventListener('firebaseLoaded', onLoaded);
             }
+            return;
+        }
+        const devDocRef = getStoreSubdocRef('devices', deviceId);
+        if (devDocRef && window.firestoreSetDoc) {
+            await window.firestoreSetDoc(devDocRef, {
+                deviceId,
+                pairingCode,
+                deviceName: 'Secondary Terminal',
+                stationProfile: 'GENERAL_STATION',
+                status: 'PENDING',
+                isMaster: false,
+                registeredAt: new Date().toISOString(),
+                lastSeenAt: new Date().toISOString()
+            }, { merge: true });
         }
     } catch (e) {
         console.warn('[DevicePairing] Pending device cloud registration notice:', e.message);
@@ -2991,11 +3035,45 @@ window.initFirestoreSync = initFirestoreSync;
 
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     document.addEventListener('DOMContentLoaded', () => {
-        if (typeof initDevicePairingFlow === 'function') {
-            initDevicePairingFlow();
-        }
-        if (typeof applyStationProfileRestrictions === 'function') {
-            applyStationProfileRestrictions();
+        try {
+            const cachedDevicesStr = localStorage.getItem('billnaw_authorized_devices');
+            if (cachedDevicesStr) {
+                const cachedDevices = JSON.parse(cachedDevicesStr);
+                if (Array.isArray(cachedDevices)) {
+                    window.authorizedDevices = cachedDevices;
+                    const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+                    const myRecord = cachedDevices.find(d => d.deviceId === myDevId || d.id === myDevId);
+                    if (myRecord) {
+                        window.currentDeviceRecord = myRecord;
+                    }
+                }
+            }
+        } catch (e) {}
+
+        const status = typeof getDeviceStatus === 'function' ? getDeviceStatus() : localStorage.getItem('billnaw_device_status');
+        const isAuth = status === 'AUTHORIZED' && (typeof checkDeviceAuthExpiration !== 'function' || !checkDeviceAuthExpiration());
+
+        if (isAuth) {
+            if (typeof hideDevicePairingOverlay === 'function') {
+                hideDevicePairingOverlay();
+            }
+            if (typeof applyStationProfileRestrictions === 'function') {
+                applyStationProfileRestrictions();
+            }
+            const profile = typeof getStationProfile === 'function' ? getStationProfile() : (localStorage.getItem('billnaw_station_profile') || 'BILLING_COUNTER');
+            const targetView = (typeof resolveInitialViewForStation === 'function')
+                ? resolveInitialViewForStation(profile)
+                : 'pos';
+            if (typeof switchView === 'function') {
+                switchView(targetView);
+            }
+        } else {
+            if (typeof initDevicePairingFlow === 'function') {
+                initDevicePairingFlow();
+            }
+            if (typeof applyStationProfileRestrictions === 'function') {
+                applyStationProfileRestrictions();
+            }
         }
     });
 }

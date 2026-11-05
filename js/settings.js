@@ -784,7 +784,10 @@ window.handleRestoreShopBackup = handleRestoreShopBackup;
 function switchTab(tabId) { 
     if (typeof canAccessStoreData === 'function' && !canAccessStoreData()) {
         console.warn('[ZeroStoreDataGate] Blocked tab navigation to ' + tabId + ' while device is pending or revoked.');
-        if (typeof showDevicePairingOverlay === 'function') showDevicePairingOverlay();
+        const isAuth = (typeof getDeviceStatus === 'function' ? getDeviceStatus() : localStorage.getItem('billnaw_device_status')) === 'AUTHORIZED' && (typeof checkDeviceAuthExpiration !== 'function' || !checkDeviceAuthExpiration());
+        if (!isAuth && typeof showDevicePairingOverlay === 'function') {
+            showDevicePairingOverlay();
+        }
         return;
     }
 
@@ -1068,12 +1071,22 @@ window.skipOnboardingWizard = skipOnboardingWizard;
 // 📱 AUTHORIZED DEVICES HUB & 1-CLICK APPROVAL / REVOCATION (F7 & F8)
 // ============================================================
 
-function openAuthorizedDevicesModal() {
+function openAuthorizedDevicesModal(targetDeviceId = null) {
     if (typeof hasPermission === 'function' && typeof currentStaff !== 'undefined' && currentStaff) {
         if (!hasPermission(currentStaff, 'can_manage_devices') && (!currentStaff.role || currentStaff.role.toLowerCase() !== 'admin')) {
             showToast('Permission denied: Admin access required to manage devices.');
             return;
         }
+    }
+    const devices = window.authorizedDevices || [];
+    const pendingDevices = devices.filter(d => d.status === 'PENDING');
+    if (targetDeviceId && typeof openDeviceApprovalModal === 'function') {
+        openDeviceApprovalModal(targetDeviceId);
+        return;
+    }
+    if (pendingDevices.length === 1 && typeof openDeviceApprovalModal === 'function') {
+        openDeviceApprovalModal(pendingDevices[0].deviceId || pendingDevices[0].id);
+        return;
     }
     const modal = document.getElementById('authorizedDevicesModal');
     if (modal) {
