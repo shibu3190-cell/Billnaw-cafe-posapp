@@ -343,6 +343,28 @@ function onDashboardMonthChanged() {
 }
 window.onDashboardMonthChanged = onDashboardMonthChanged;
 
+let historyLedgerCurrentPage = 0;
+const historyLedgerPageSize = 25;
+
+function historyLedgerNextPage() {
+    historyLedgerCurrentPage++;
+    renderDashboardAnalytics();
+}
+window.historyLedgerNextPage = historyLedgerNextPage;
+
+function historyLedgerPrevPage() {
+    if (historyLedgerCurrentPage > 0) {
+        historyLedgerCurrentPage--;
+        renderDashboardAnalytics();
+    }
+}
+window.historyLedgerPrevPage = historyLedgerPrevPage;
+
+function resetHistoryPagination() {
+    historyLedgerCurrentPage = 0;
+}
+window.resetHistoryPagination = resetHistoryPagination;
+
 async function renderDashboardAnalytics() {
     const todayISO = getLocalISODate();
     const d = new Date();
@@ -448,16 +470,30 @@ async function renderDashboardAnalytics() {
         return true;
     });
 
+    const totalMatching = displayOrders.length;
+    const totalPages = Math.ceil(totalMatching / historyLedgerPageSize) || 1;
+    if (historyLedgerCurrentPage >= totalPages) historyLedgerCurrentPage = Math.max(0, totalPages - 1);
+
+    const startIdx = historyLedgerCurrentPage * historyLedgerPageSize;
+    const pagedOrders = displayOrders.slice(startIdx, startIdx + historyLedgerPageSize);
+
     const subtitleEl = document.getElementById('dashLogCountSubtitle');
-    if (subtitleEl) subtitleEl.innerText = `Showing ${displayOrders.length} of ${orderCount} recorded sales`;
+    if (subtitleEl) subtitleEl.innerText = `Showing ${pagedOrders.length} of ${totalMatching} recorded sales`;
+
+    const prevBtn = document.getElementById('historyPrevPageBtn');
+    const nextBtn = document.getElementById('historyNextPageBtn');
+    const indicator = document.getElementById('historyPageIndicator');
+    if (prevBtn) prevBtn.disabled = historyLedgerCurrentPage <= 0;
+    if (nextBtn) nextBtn.disabled = historyLedgerCurrentPage >= totalPages - 1;
+    if (indicator) indicator.innerText = `Page ${historyLedgerCurrentPage + 1} of ${totalPages} (${totalMatching} bills)`;
 
     // 5. Render History Table Body
     const tbody = document.getElementById('historyTableBody');
     if (tbody) {
-        if (displayOrders.length === 0) {
+        if (pagedOrders.length === 0) {
             tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px; font-weight: 500;">No transactions found matching the selected range and filters.</td></tr>`;
         } else {
-            tbody.innerHTML = displayOrders.map(order => {
+            tbody.innerHTML = pagedOrders.map(order => {
                 let tableStr = String(order.table || 'Takeaway');
                 let badgeClass = tableStr === 'Takeaway' ? 'table-pill-takeaway' : 'table-pill-dinein';
                 let isTakeaway = tableStr === 'Takeaway';

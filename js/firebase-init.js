@@ -9,6 +9,11 @@ import {
     deleteDoc, 
     getDoc, 
     getDocs, 
+    query,
+    where,
+    orderBy,
+    limit,
+    startAfter,
     writeBatch, 
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
@@ -145,6 +150,11 @@ async function initFirebaseFromBackend() {
     window.firestoreGetDocs = getDocs;
     window.firestoreWriteBatch = writeBatch;
     window.firestoreServerTimestamp = serverTimestamp;
+    window.firestoreQuery = query;
+    window.firestoreWhere = where;
+    window.firestoreOrderBy = orderBy;
+    window.firestoreLimit = limit;
+    window.firestoreStartAfter = startAfter;
     window.firestoreDatabaseId = firestoreDbId;
 
     // Legacy compatibility

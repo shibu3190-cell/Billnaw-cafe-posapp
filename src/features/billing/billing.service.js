@@ -13,7 +13,7 @@
  */
 
 import { safeExecute, successResult, errorResult } from '../../core/error-handler.js';
-import { getDbClient } from '../../core/db-client.js';
+import { getDbClient, runTransaction } from '../../core/db-client.js';
 import { getTenantCafeId, getTerminalId } from '../../core/config.js';
 import { generateDeterministicInvoiceId } from '../../shared/utils/invoice-id.js';
 import {
@@ -267,8 +267,56 @@ export async function settleBill(billData) {
       }
     }
 
+    await pruneClientTransactionalCache(10);
+
     return invoiceDoc;
   });
+}
+
+/**
+ * Evicts transactional documents older than retentionDays (default 10) from client cache.
+ * @param {number} [retentionDays=10]
+ * @returns {Promise<{ evictedOrders: number, evictedExpenses: number, remainingOrders: number }>}
+ */
+export async function pruneClientTransactionalCache(retentionDays = 10) {
+  const cutoffMs = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
+  let evictedOrders = 0;
+  let remainingOrders = 0;
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('pos_order_history');
+      if (raw) {
+        const history = JSON.parse(raw);
+        if (Array.isArray(history)) {
+          const initialLen = history.length;
+          const filtered = history.filter(inv => {
+            const t = new Date(inv.created_at || inv.settled_at || inv.date || inv.id).getTime();
+            return !isNaN(t) && t >= cutoffMs;
+          });
+          evictedOrders = initialLen - filtered.length;
+          remainingOrders = filtered.length;
+          localStorage.setItem('pos_order_history', JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  let evictedExpenses = 0;
+  if (typeof window !== 'undefined' && typeof window.pruneClientTransactionalCache === 'function') {
+    try {
+      const res = await window.pruneClientTransactionalCache(retentionDays);
+      if (res) {
+        evictedOrders = Math.max(evictedOrders, res.evictedOrders || 0);
+        evictedExpenses = res.evictedExpenses || 0;
+        remainingOrders = res.remainingOrders || remainingOrders;
+      }
+    } catch (e) {}
+  }
+
+  return { evictedOrders, evictedExpenses, remainingOrders };
 }
 
 /**
@@ -343,6 +391,131 @@ export async function voidBill(invoiceId, voidReason, voidedByStaffId) {
     }
 
     return { ...existingData, ...voidUpdate };
+  });
+}
+
+/**
+ * Balanced Atomic Adjustment of a settled bill within the editable 30-day window.
+ * Executes modifications inside an atomic database Transaction updating the receipt
+ * document and adjusting the corresponding historical day's aggregated report (/reports/{YYYY-MM-DD})
+ * with full rollback safety.
+ * 
+ * @param {string} invoiceId
+ * @param {Object} modifications - { items, discountPercent, discountAmountPaise, payment_mode }
+ * @param {string|number} staffId
+ * @param {string} editReason - min 3 chars
+ * @returns {Promise<{ data: Object|null, error: string|null, offlineQueued: boolean }>}
+ */
+export async function adjustSettledBill(invoiceId, modifications = {}, staffId, editReason) {
+  return safeExecute(async () => {
+    if (!invoiceId) throw new Error("Invoice ID is strictly mandatory.");
+    if (!staffId) throw new Error("Staff ID authorizing the adjustment is mandatory.");
+    if (!editReason || typeof editReason !== 'string' || editReason.trim().length < 3) {
+      throw new Error("A valid edit reason (min 3 characters) is strictly mandatory.");
+    }
+
+    const cafeId = getTenantCafeId();
+    const db = getDbClient();
+
+    let adjustedInvoice = null;
+
+    await runTransaction(async (txn) => {
+      const invRef = db.doc(`cafes/${cafeId}/invoices/${invoiceId}`);
+      const invSnap = await txn.get(invRef);
+
+      if (!invSnap || !invSnap.exists) {
+        throw new Error(`Invoice #${invoiceId} not found.`);
+      }
+
+      const invData = invSnap.data();
+
+      // Check anti-tampering: VOID bills cannot be adjusted
+      if (invData.status === 'VOID') {
+        throw new Error(`Invoice #${invoiceId} is marked as VOID and cannot be modified.`);
+      }
+
+      // Enforce 30-day edit window
+      const createdMs = new Date(invData.createdAt || invData.created_at || invData.settled_at || Date.now()).getTime();
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+      if (Date.now() - createdMs > THIRTY_DAYS_MS) {
+        throw new Error("30-day edit window has expired. Historical invoice is completely view-only.");
+      }
+
+      // Compute new financials if items or discounts are modified
+      const newItems = modifications.items || invData.items || [];
+      const newDiscountPercent = modifications.discountPercent !== undefined ? modifications.discountPercent : (invData.discount_percent || 0);
+      const newDiscountAmountPaise = modifications.discountAmountPaise !== undefined ? modifications.discountAmountPaise : (invData.discount_amount_paise || 0);
+
+      const financials = calculateBillFinancials(newItems, {
+        discountPercent: newDiscountPercent,
+        discountAmountPaise: newDiscountAmountPaise,
+        isTaxInclusive: modifications.isTaxInclusive !== undefined ? modifications.isTaxInclusive : true,
+        isInterState: modifications.isInterState !== undefined ? modifications.isInterState : false
+      });
+
+      const deltaGrossPaise = financials.gross_subtotal_paise - (invData.gross_subtotal_paise || 0);
+      const deltaNetPaise = financials.final_payable_paise - (invData.final_payable_paise || 0);
+      const deltaTaxPaise = financials.total_tax_paise - (invData.total_tax_paise || 0);
+
+      const now = new Date();
+      const reportDateStr = (invData.created_at || invData.createdAt || now.toISOString()).slice(0, 10);
+      const reportKey = reportDateStr.replace(/-/g, '');
+      const reportRef = db.doc(`cafes/${cafeId}/reports/${reportDateStr}`);
+      const summaryRef = db.doc(`cafes/${cafeId}/daily_summaries/${reportKey}`);
+
+      adjustedInvoice = {
+        ...invData,
+        items: newItems,
+        gross_subtotal_paise: financials.gross_subtotal_paise,
+        gross_subtotal_rupees: financials.gross_subtotal_rupees,
+        taxable_subtotal_paise: financials.taxable_subtotal_paise,
+        discount_amount_paise: financials.discount_amount_paise,
+        discount_amount_rupees: financials.discount_amount_rupees,
+        cgst_paise: financials.cgst_paise,
+        sgst_paise: financials.sgst_paise,
+        igst_paise: financials.igst_paise,
+        total_tax_paise: financials.total_tax_paise,
+        roundoff_paise: financials.roundoff_paise,
+        final_payable_paise: financials.final_payable_paise,
+        final_payable_rupees: financials.final_payable_rupees,
+        payment_mode: modifications.payment_mode || invData.payment_mode,
+        edit_audit: {
+          edited_at: now.toISOString(),
+          edited_by_staff_id: String(staffId),
+          edit_reason: editReason.trim(),
+          previous_totals: {
+            gross_paise: invData.gross_subtotal_paise,
+            net_paise: invData.final_payable_paise,
+            tax_paise: invData.total_tax_paise
+          }
+        },
+        updated_at: now.toISOString()
+      };
+
+      // 1. Update invoice
+      await txn.update(invRef, adjustedInvoice);
+
+      // 2. Adjust historical day's aggregated report (/reports/{YYYY-MM-DD})
+      await txn.set(reportRef, {
+        date: reportDateStr,
+        gross_sales_paise: db.increment(deltaGrossPaise),
+        net_sales_paise: db.increment(deltaNetPaise),
+        gst_collected_paise: db.increment(deltaTaxPaise),
+        updated_at: now.toISOString()
+      }, { merge: true });
+
+      // 3. Keep daily summary in sync as well
+      await txn.set(summaryRef, {
+        gross_sales_paise: db.increment(deltaGrossPaise),
+        net_sales_paise: db.increment(deltaNetPaise),
+        cgst_collected_paise: db.increment(financials.cgst_paise - (invData.cgst_paise || 0)),
+        sgst_collected_paise: db.increment(financials.sgst_paise - (invData.sgst_paise || 0)),
+        igst_collected_paise: db.increment(financials.igst_paise - (invData.igst_paise || 0)),
+        updated_at: now.toISOString()
+      }, { merge: true });
+    });
+
+    return adjustedInvoice;
   });
 }
 

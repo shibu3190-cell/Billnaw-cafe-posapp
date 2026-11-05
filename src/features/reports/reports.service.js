@@ -139,3 +139,175 @@ export function aggregateGstReport(invoices = []) {
     total_gst_rupees: paiseToRupees(totalGstPaise)
   };
 }
+
+/**
+ * Executes bounded server-side query for historical invoices using getDocs.
+ * Employs document cursor (startAfter) pagination with strict 500-day retention ceiling.
+ * 
+ * @param {string|Object} [cafeIdOrOptions] - Cafe ID string or options object
+ * @param {Object} [options] - Options if first param is cafeId
+ * @param {string} [options.startDate] - ISO timestamp or YYYY-MM-DD
+ * @param {string} [options.endDate] - ISO timestamp or YYYY-MM-DD
+ * @param {number} [options.limit=25] - Items per page
+ * @param {any} [options.startAfterDoc=null] - DocumentSnapshot or ID cursor
+ * @param {string} [options.paymentMode='all'] - Optional payment filter
+ * @returns {Promise<{ items: Array<Object>, nextCursor: any, hasMore: boolean, totalFetched: number, data: Object }>}
+ */
+export async function getHistoricalInvoicesPaginated(cafeIdOrOptions, maybeOptions = {}) {
+  let cafeId;
+  let opts;
+
+  if (typeof cafeIdOrOptions === 'string') {
+    cafeId = cafeIdOrOptions;
+    opts = maybeOptions || {};
+  } else {
+    opts = cafeIdOrOptions || {};
+    cafeId = opts.cafeId || getTenantCafeId();
+  }
+
+  const {
+    startDate = null,
+    endDate = null,
+    limit: pageSize = opts.pageSize || 25,
+    startAfterDoc = opts.cursorDoc || null,
+    paymentMode = 'all'
+  } = opts;
+
+  const db = getDbClient();
+
+  // 1. Enforce strict 500-day hard retention ceiling
+  const MAX_HISTORY_MS = 500 * 24 * 60 * 60 * 1000;
+  const earliestAllowed = new Date(Date.now() - MAX_HISTORY_MS).toISOString();
+  let effectiveStart = earliestAllowed;
+  if (startDate) {
+    const reqStart = new Date(startDate).toISOString();
+    effectiveStart = reqStart > earliestAllowed ? reqStart : earliestAllowed;
+  }
+  const effectiveEnd = endDate ? new Date(endDate).toISOString() : new Date().toISOString();
+
+  // 2. Headless / Node / UniversalDbClient Environment
+  if (typeof window === 'undefined' || (!window.firebaseFirestoreModule && !window.firestoreGetDocs)) {
+    const snap = await db.collection(`cafes/${cafeId}/invoices`).get();
+    let invoices = [];
+
+    if (!snap.empty) {
+      snap.forEach(doc => {
+        const inv = doc.data();
+        const created = inv.created_at || inv.createdAt || inv.settled_at || new Date().toISOString();
+        if (created >= effectiveStart && created <= effectiveEnd) {
+          if (paymentMode === 'all' || (inv.payment_mode || inv.paymentMode || '').toLowerCase() === paymentMode.toLowerCase()) {
+            invoices.push({
+              id: doc.id,
+              ...inv,
+              final_payable_rupees: paiseToRupees(inv.final_payable_paise || (inv.amount ? inv.amount * 100 : 0)),
+              gross_subtotal_rupees: paiseToRupees(inv.gross_subtotal_paise || 0)
+            });
+          }
+        }
+      });
+    } else if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('pos_order_history');
+        if (raw) {
+          const stored = JSON.parse(raw);
+          stored.forEach(inv => {
+            const created = inv.created_at || inv.createdAt || inv.date || new Date().toISOString();
+            if (created >= effectiveStart && created <= effectiveEnd) {
+              if (paymentMode === 'all' || (inv.payment_mode || inv.paymentMode || '').toLowerCase() === paymentMode.toLowerCase()) {
+                invoices.push({
+                  id: inv.id || inv.billNo,
+                  ...inv,
+                  final_payable_rupees: paiseToRupees(inv.final_payable_paise || (inv.amount ? inv.amount * 100 : 0)),
+                  gross_subtotal_rupees: paiseToRupees(inv.gross_subtotal_paise || 0)
+                });
+              }
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    invoices.sort((a, b) => new Date(b.created_at || b.createdAt || 0).getTime() - new Date(a.created_at || a.createdAt || 0).getTime());
+
+    let startIndex = 0;
+    if (startAfterDoc) {
+      const cursorId = typeof startAfterDoc === 'string' ? startAfterDoc : (startAfterDoc.id || null);
+      if (cursorId) {
+        const idx = invoices.findIndex(i => String(i.id) === String(cursorId));
+        if (idx !== -1) {
+          startIndex = idx + 1;
+        }
+      }
+    }
+
+    const sliced = invoices.slice(startIndex, startIndex + pageSize);
+    const hasMore = invoices.length > startIndex + pageSize;
+    const nextCursor = sliced.length > 0 ? sliced[sliced.length - 1].id : null;
+
+    const result = {
+      items: sliced,
+      nextCursor,
+      hasMore,
+      totalFetched: sliced.length
+    };
+    return { ...result, data: result };
+  }
+
+  // 3. Browser Firebase Modular SDK
+  const fsMod = window.firebaseFirestoreModule || {
+    collection: window.firestoreCollection,
+    query: window.firestoreQuery,
+    where: window.firestoreWhere,
+    orderBy: window.firestoreOrderBy,
+    limit: window.firestoreLimit,
+    startAfter: window.firestoreStartAfter,
+    getDocs: window.firestoreGetDocs
+  };
+
+  const { collection, query, where, orderBy, limit, startAfter, getDocs } = fsMod;
+  const colRef = collection(window.firestoreDB, `cafes/${cafeId}/invoices`);
+
+  const constraints = [
+    where('created_at', '>=', effectiveStart),
+    where('created_at', '<=', effectiveEnd),
+    orderBy('created_at', 'desc')
+  ];
+
+  if (paymentMode && paymentMode !== 'all') {
+    constraints.push(where('payment_mode', '==', paymentMode));
+  }
+
+  if (startAfterDoc && startAfter) {
+    constraints.push(startAfter(startAfterDoc));
+  }
+
+  constraints.push(limit(pageSize + 1));
+
+  const q = query(colRef, ...constraints);
+  const snapshot = await getDocs(q);
+
+  const docs = snapshot.docs || [];
+  const hasMore = docs.length > pageSize;
+  const resultDocs = hasMore ? docs.slice(0, pageSize) : docs;
+
+  const items = [];
+  resultDocs.forEach(d => {
+    const inv = d.data();
+    items.push({
+      id: d.id,
+      ...inv,
+      final_payable_rupees: paiseToRupees(inv.final_payable_paise || (inv.amount ? inv.amount * 100 : 0)),
+      gross_subtotal_rupees: paiseToRupees(inv.gross_subtotal_paise || 0)
+    });
+  });
+
+  const nextCursor = resultDocs.length > 0 ? resultDocs[resultDocs.length - 1] : null;
+
+  const res = {
+    items,
+    nextCursor,
+    hasMore,
+    totalFetched: items.length
+  };
+  return { ...res, data: res };
+}

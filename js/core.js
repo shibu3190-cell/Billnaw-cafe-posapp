@@ -1224,6 +1224,80 @@ const idb = {
 };
 window.idb = idb;
 
+// Strict 10-Day Rolling Cache Eviction
+async function pruneClientTransactionalCache(retentionDays = 10) {
+    const cutoffMs = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
+    const cutoffISO = new Date(cutoffMs).toISOString().slice(0, 10);
+
+    // 1. Prune in-memory and IDB orderHistory
+    let initialCount = Array.isArray(window.orderHistory) ? window.orderHistory.length : 0;
+    if (initialCount > 0) {
+        window.orderHistory = window.orderHistory.filter(order => {
+            const rawDate = order.filterDate || order.created_at || (order.date ? order.date.split(',')[0].trim() : null) || order.id;
+            const itemTime = typeof rawDate === 'number' ? rawDate : new Date(rawDate).getTime();
+            return !isNaN(itemTime) && itemTime >= cutoffMs;
+        });
+        orderHistory = window.orderHistory;
+        if (typeof idb !== 'undefined' && idb.set) {
+            await idb.set('cafe_history', window.orderHistory);
+        }
+    }
+    const remainingOrders = window.orderHistory ? window.orderHistory.length : 0;
+    const evictedOrders = initialCount - remainingOrders;
+
+    // 2. Prune dailyExpenses
+    let initialExpCount = Array.isArray(window.dailyExpenses) ? window.dailyExpenses.length : 0;
+    if (initialExpCount > 0) {
+        window.dailyExpenses = window.dailyExpenses.filter(exp => {
+            const expDate = exp.filterDate || exp.date || exp.id;
+            const expTime = typeof expDate === 'number' ? expDate : new Date(expDate).getTime();
+            return !isNaN(expTime) && expTime >= cutoffMs;
+        });
+        dailyExpenses = window.dailyExpenses;
+        if (typeof idb !== 'undefined' && idb.set) {
+            await idb.set('cafe_expenses', window.dailyExpenses);
+        }
+    }
+    const evictedExpenses = initialExpCount - (window.dailyExpenses ? window.dailyExpenses.length : 0);
+
+    // 3. Prune localStorage pos_order_history
+    if (typeof localStorage !== 'undefined') {
+        try {
+            const rawLocal = localStorage.getItem('pos_order_history');
+            if (rawLocal) {
+                const localHist = JSON.parse(rawLocal);
+                if (Array.isArray(localHist)) {
+                    const filteredLocal = localHist.filter(inv => {
+                        const t = new Date(inv.created_at || inv.settled_at || inv.date || inv.id).getTime();
+                        return !isNaN(t) && t >= cutoffMs;
+                    });
+                    localStorage.setItem('pos_order_history', JSON.stringify(filteredLocal));
+                }
+            }
+        } catch (e) {
+            console.warn('[CacheEviction] localStorage pruning note:', e.message);
+        }
+    }
+
+    if (evictedOrders > 0 || evictedExpenses > 0) {
+        console.info(`[CacheEviction] Enforced ${retentionDays}-day retention ceiling: evicted ${evictedOrders} orders and ${evictedExpenses} expenses older than ${cutoffISO}.`);
+    }
+
+    return {
+        evictedOrders,
+        evictedExpenses,
+        remainingOrders
+    };
+}
+window.pruneClientTransactionalCache = pruneClientTransactionalCache;
+
+// Hourly Background Timer for Rolling Cache Eviction
+if (typeof setInterval === 'function') {
+    setInterval(() => {
+        pruneClientTransactionalCache(10).catch(() => {});
+    }, 60 * 60 * 1000);
+}
+
 // Cloud Sync Status UI
 function setCloudSyncStatus(status, text) {
     const topBadge = document.getElementById('cloudSyncBadge');
@@ -1315,6 +1389,10 @@ function handleRemoteFirestoreUpdate(data) {
                 if (!tablesInfo[i]) tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null }; 
             }
         }
+    }
+
+    if (typeof pruneClientTransactionalCache === 'function') {
+        pruneClientTransactionalCache(10).catch(() => {});
     }
 
     saveToLocal();
@@ -1545,6 +1623,44 @@ function subscribeStaffCloudListener(targetStoreCode = null) {
 }
 window.subscribeStaffCloudListener = subscribeStaffCloudListener;
 
+let firestoreInvoicesUnsubscribe = null;
+
+function subscribeInvoicesCloudListener(targetStoreCode = null) {
+    if (!window.firestoreDB || !window.firestoreCollection || !window.firestoreOnSnapshot) return null;
+    if (firestoreInvoicesUnsubscribe) {
+        try { firestoreInvoicesUnsubscribe(); } catch (e) {}
+        firestoreInvoicesUnsubscribe = null;
+    }
+    try {
+        const invoicesColRef = getStoreSubcollectionRef('invoices', targetStoreCode);
+        if (!invoicesColRef) return null;
+
+        const tenDaysAgoISO = new Date(Date.now() - (10 * 24 * 60 * 60 * 1000)).toISOString();
+        let queryTarget = invoicesColRef;
+        if (window.firestoreQuery && window.firestoreWhere) {
+            queryTarget = window.firestoreQuery(invoicesColRef, window.firestoreWhere('created_at', '>=', tenDaysAgoISO));
+        }
+
+        firestoreInvoicesUnsubscribe = window.firestoreOnSnapshot(queryTarget, (snap) => {
+            const invoices = [];
+            snap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (!data.created_at || data.created_at >= tenDaysAgoISO) {
+                    invoices.push({ id: docSnap.id, ...data });
+                }
+            });
+            window.dispatchEvent(new CustomEvent('billnaw:invoices-updated', { detail: { invoices } }));
+        }, (err) => {
+            console.warn('[Firestore] invoices listener warning:', err.message);
+        });
+        return firestoreInvoicesUnsubscribe;
+    } catch (err) {
+        console.warn('Error attaching invoices listener:', err);
+        return null;
+    }
+}
+window.subscribeInvoicesCloudListener = subscribeInvoicesCloudListener;
+
 async function syncDeviceRecordToCloud(deviceRecord, targetStoreCode = null) {
     if (!deviceRecord || !deviceRecord.deviceId) return;
     try {
@@ -1662,10 +1778,11 @@ function attachFirestoreListener(targetStoreCode = null) {
             return;
         }
 
-        // Attach subcollection listeners for devices, sessions, and staff
+        // Attach subcollection listeners for devices, sessions, staff, and decoupled 10-day invoices
         subscribeDevicesCloudListener(targetStoreCode);
         subscribeSessionsCloudListener(targetStoreCode);
         subscribeStaffCloudListener(targetStoreCode);
+        subscribeInvoicesCloudListener(targetStoreCode);
 
         firestoreUnsubscribe = window.firestoreOnSnapshot(storeDocRef, (snap) => {
             if (snap.exists()) {
@@ -1714,6 +1831,10 @@ function detachFirestoreListener() {
         try { firestoreStaffUnsubscribe(); } catch(e) {}
         firestoreStaffUnsubscribe = null;
     }
+    if (firestoreInvoicesUnsubscribe) {
+        try { firestoreInvoicesUnsubscribe(); } catch(e) {}
+        firestoreInvoicesUnsubscribe = null;
+    }
     setCloudSyncStatus('offline', 'Disconnected');
 }
 window.detachFirestoreListener = detachFirestoreListener;
@@ -1753,6 +1874,8 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports.syncDeviceRecordToCloud = syncDeviceRecordToCloud;
     module.exports.syncSessionRecordToCloud = syncSessionRecordToCloud;
     module.exports.syncStaffRecordToCloud = syncStaffRecordToCloud;
+    module.exports.pruneClientTransactionalCache = pruneClientTransactionalCache;
+    module.exports.subscribeInvoicesCloudListener = subscribeInvoicesCloudListener;
 }
 
 async function persistAllToFirestore() {
@@ -1846,6 +1969,9 @@ function persistCustomersFirebase(newCust = null) {
 window.persistCustomersFirebase = persistCustomersFirebase;
 
 function persistHistoryFirebase(newOrder = null) { 
+    if (typeof pruneClientTransactionalCache === 'function') {
+        pruneClientTransactionalCache(10).catch(() => {});
+    }
     idb.set('cafe_history', orderHistory); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
@@ -2651,6 +2777,7 @@ async function initDatabase() {
         window.dailyExpenses = dailyExpenses;
         await idb.set('cafe_expenses', dailyExpenses);
     }
+    await pruneClientTransactionalCache(10);
     const storedTables = await idb.get('cafe_tables');
     if (storedTables && typeof storedTables === 'object') {
         tablesInfo = storedTables;

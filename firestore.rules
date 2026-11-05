@@ -15,12 +15,18 @@ service cloud.firestore {
       return isValidTenant(tenantId);
     }
 
+    function isWithin30DayEditWindow() {
+      return !('createdAt' in resource.data) || 
+             (resource.data.createdAt is timestamp && request.time < resource.data.createdAt + duration.value(30, 'd')) ||
+             (resource.data.created_at is timestamp && request.time < resource.data.created_at + duration.value(30, 'd'));
+    }
+
     // Modern Multi-Tenant Root Collection (/cafes/{cafeId})
     match /cafes/{cafeId} {
       allow read: if isTenantStaff(cafeId);
       allow write: if isTenantAdmin(cafeId);
 
-      // INVOICE LEDGER — STRICT ANTI-TAMPERING INVARIANT
+      // INVOICE LEDGER — STRICT ANTI-TAMPERING INVARIANT & 30-DAY EDIT LOCK
       match /invoices/{invoiceId} {
         allow read, create: if isTenantStaff(cafeId);
         
@@ -29,6 +35,7 @@ service cloud.firestore {
         
         // CANCEL / VOID MUTATION AUDIT
         allow update: if isTenantStaff(cafeId) &&
+          isWithin30DayEditWindow() &&
           resource.data.status == 'PAID' &&
           request.resource.data.status == 'VOID' &&
           request.resource.data.void_audit.void_reason is string &&
@@ -78,6 +85,9 @@ service cloud.firestore {
       match /history/{historyId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /raw_materials/{matId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /sub_recipes/{recId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
+      match /reports/{reportId} { allow read, write: if isTenantStaff(cafeId); }
+      match /daily_summaries/{summaryId} { allow read, write: if isTenantStaff(cafeId); }
+      match /marketing_logs/{logId} { allow read, write: if isTenantStaff(cafeId); }
     }
 
     // Aligned Dual-Path Backward-Compatibility Paths (/shops/{shopId})
@@ -85,11 +95,12 @@ service cloud.firestore {
       allow read: if isTenantStaff(shopId);
       allow write: if isTenantAdmin(shopId);
 
-      // INVOICE LEDGER — STRICT ANTI-TAMPERING INVARIANT
+      // INVOICE LEDGER — STRICT ANTI-TAMPERING INVARIANT & 30-DAY EDIT LOCK
       match /invoices/{invoiceId} {
         allow read, create: if isTenantStaff(shopId);
         allow delete: if false;
         allow update: if isTenantStaff(shopId) &&
+          isWithin30DayEditWindow() &&
           resource.data.status == 'PAID' &&
           request.resource.data.status == 'VOID' &&
           request.resource.data.void_audit.void_reason is string &&
@@ -138,6 +149,9 @@ service cloud.firestore {
       match /history/{historyId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /raw_materials/{matId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /sub_recipes/{recId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
+      match /reports/{reportId} { allow read, write: if isTenantStaff(shopId); }
+      match /daily_summaries/{summaryId} { allow read, write: if isTenantStaff(shopId); }
+      match /marketing_logs/{logId} { allow read, write: if isTenantStaff(shopId); }
     }
 
     // Legacy Client Collection (/clients/{clientId})

@@ -180,6 +180,24 @@ class UniversalDbClient {
   arrayUnion(...items) {
     return { __type: 'ARRAY_UNION', values: items };
   }
+
+  async runTransaction(updateFn) {
+    const txn = {
+      async get(docRef) {
+        return await docRef.get();
+      },
+      set(docRef, data, options = {}) {
+        return docRef.set(data, options);
+      },
+      update(docRef, data) {
+        return docRef.update(data);
+      },
+      delete(docRef) {
+        return docRef.delete ? docRef.delete() : null;
+      }
+    };
+    return await updateFn(txn);
+  }
 }
 
 const universalClient = new UniversalDbClient();
@@ -338,12 +356,17 @@ export function getCafePath(subcollection, cafeId) {
  */
 export async function subscribeTenantCollection(subcollection, onData, onError, cafeId, forcedRoot) {
   const path = getTenantPath(subcollection, cafeId, forcedRoot);
+  const isTransactional = subcollection === 'invoices';
+  const tenDaysAgoISO = new Date(Date.now() - (10 * 24 * 60 * 60 * 1000)).toISOString();
 
   if (typeof window === 'undefined') {
     return universalClient.collection(path).onSnapshot((snapshot) => {
       const docs = [];
       snapshot.forEach(docSnap => {
-        docs.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (!isTransactional || !data.created_at || data.created_at >= tenDaysAgoISO) {
+          docs.push({ id: docSnap.id, ...data });
+        }
       });
       if (typeof onData === 'function') {
         onData(docs, true);
@@ -357,20 +380,31 @@ export async function subscribeTenantCollection(subcollection, onData, onError, 
     return universalClient.collection(path).onSnapshot((snapshot) => {
       const docs = [];
       snapshot.forEach(docSnap => {
-        docs.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (!isTransactional || !data.created_at || data.created_at >= tenDaysAgoISO) {
+          docs.push({ id: docSnap.id, ...data });
+        }
       });
       if (typeof onData === 'function') onData(docs, true);
     }, onError);
   }
 
-  const { collection, onSnapshot, query } = firestoreModule;
+  const { collection, onSnapshot, query, where } = firestoreModule;
   const colRef = collection(db, path);
-  const q = query(colRef);
+  let q;
+  if (isTransactional && typeof where === 'function') {
+    q = query(colRef, where('created_at', '>=', tenDaysAgoISO));
+  } else {
+    q = query(colRef);
+  }
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const docs = [];
     snapshot.forEach(docSnap => {
-      docs.push({ id: docSnap.id, ...docSnap.data() });
+      const data = docSnap.data();
+      if (!isTransactional || !data.created_at || data.created_at >= tenDaysAgoISO) {
+        docs.push({ id: docSnap.id, ...data });
+      }
     });
     if (typeof onData === 'function') {
       onData(docs, snapshot.metadata ? snapshot.metadata.fromCache : false);
@@ -381,6 +415,13 @@ export async function subscribeTenantCollection(subcollection, onData, onError, 
   });
 
   return unsubscribe;
+}
+
+/**
+ * Subscribes specifically to live transactions with strict 10-day filter boundary.
+ */
+export async function subscribeLiveTransactions(subcollection, onData, onError, cafeId) {
+  return subscribeTenantCollection(subcollection || 'invoices', onData, onError, cafeId);
 }
 
 /**
@@ -503,3 +544,21 @@ export async function createBatch() {
   const { writeBatch } = firestoreModule;
   return writeBatch(db);
 }
+
+/**
+ * Runs an atomic database transaction.
+ * @param {Function} updateFunction - Transaction execution callback
+ * @returns {Promise<any>}
+ */
+export async function runTransaction(updateFunction) {
+  if (typeof window !== 'undefined' && window.firebaseFirestoreModule && typeof window.firebaseFirestoreModule.runTransaction === 'function') {
+    const db = await getDb();
+    return await window.firebaseFirestoreModule.runTransaction(db, updateFunction);
+  }
+  const db = await getDb();
+  if (db && typeof db.runTransaction === 'function') {
+    return await db.runTransaction(updateFunction);
+  }
+  return await universalClient.runTransaction(updateFunction);
+}
+

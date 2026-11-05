@@ -1516,6 +1516,16 @@ function enforcePermissions() {
         if (navCustomers) navCustomers.classList.add('locked');
         if (navTables) navTables.classList.remove('locked');
     }
+
+    // Dynamic KDS Role Presentation: present solely for Chef, hide for Cashier, Server, Manager, Admin
+    const navKds = document.getElementById('nav-kds');
+    if (navKds) {
+        if (normRole === ROLES.CHEF) {
+            navKds.style.display = 'flex';
+        } else {
+            navKds.style.display = 'none';
+        }
+    }
 }
 window.enforcePermissions = enforcePermissions;
 
@@ -1656,6 +1666,14 @@ async function submitFirstLoginPin() {
     const idx = staffList.findIndex(s => String(s.id) === String(targetStaff.id));
     if (idx !== -1) {
         staffList[idx] = { ...targetStaff };
+    }
+    if (typeof window !== 'undefined' && Array.isArray(window.staffList)) {
+        const wIdx = window.staffList.findIndex(s => String(s.id) === String(targetStaff.id));
+        if (wIdx !== -1) {
+            window.staffList[wIdx] = { ...targetStaff };
+        } else {
+            window.staffList.push({ ...targetStaff });
+        }
     }
 
     // Persist multi-tier

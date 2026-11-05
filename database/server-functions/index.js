@@ -152,3 +152,25 @@ export async function handleSheetsRelay(invoiceData, webhookUrl) {
     return { success: false, error: e.message };
   }
 }
+
+export {
+  executeHardPurge500Days,
+  anonymizeInactiveCustomers730Days,
+  scrubWhatsAppLogs90Days,
+  runDailyDataRetentionRoutine
+} from './retention-lifecycle.js';
+
+import { runDailyDataRetentionRoutine } from './retention-lifecycle.js';
+
+/**
+ * Scheduled Cloud Function triggered daily (e.g. via Cloud Scheduler cron '0 3 * * *')
+ * to execute automated data tiering and purge routines.
+ * 
+ * @param {Object} [context] - Cloud Functions event context
+ * @param {Object} [env] - Environment configuration
+ * @returns {Promise<Object>} Execution report
+ */
+export async function scheduledDailyPurge(context, env = {}) {
+  return await runDailyDataRetentionRoutine({ now: Date.now(), dryRun: false });
+}
+
