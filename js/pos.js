@@ -1119,9 +1119,22 @@ function executeHtmlPrint(divId) {
         }
         
         let qrScript = '';
-        const qrCanvas = document.querySelector('#printQrCode canvas');
-        if (qrCanvas && shopProfile.showQr && shopProfile.upiId) {
-            qrScript = `<div style="text-align:center; margin-top:15px;"><div style="font-weight:bold;font-size:14px;margin-bottom:5px;">SCAN TO PAY</div><img src="${qrCanvas.toDataURL('image/png')}" style="margin:0 auto; display:block; width:180px; height:180px; image-rendering: pixelated;"></div>`;
+        if (shopProfile.showQr && shopProfile.upiId) {
+            const qrCanvas = document.querySelector('#printQrCode canvas');
+            const qrImg = document.querySelector('#printQrCode img');
+            let qrSrc = '';
+            if (qrCanvas && typeof qrCanvas.toDataURL === 'function') {
+                qrSrc = qrCanvas.toDataURL('image/png');
+            } else if (qrImg && qrImg.src) {
+                qrSrc = qrImg.src;
+            }
+            if (qrSrc) {
+                qrScript = `<div style="text-align:center; margin-top:14px; padding-top:8px; border-top:1px dashed #000;">
+                    <div style="font-weight:bold; font-size:12px; margin-bottom:4px; letter-spacing:0.5px;">SCAN TO PAY VIA UPI</div>
+                    <img src="${qrSrc}" style="margin:0 auto; display:block; width:160px; height:160px; image-rendering:pixelated;">
+                    <div style="font-size:10px; margin-top:4px; font-weight:bold;">UPI: ${escapeHtml(shopProfile.upiId)}</div>
+                </div>`;
+            }
         }
         
         const printElem = document.getElementById(divId);
@@ -1527,8 +1540,10 @@ window.connectBluetoothPrinter = connectBluetoothPrinter;
  * Food photography is completely omitted from thermal transmission to guarantee 0ms print queue delay.
  */
 async function sendEscPosToPrinter(order) {
+    if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
     let gstSummary = {}; 
     const gstMode = order.gstMode || getStoreGstConfig().mode;
+    const isGstActive = gstMode !== 'none';
     const { defaultRate } = getStoreGstConfig();
     let rawSubtotal = 0;
     let totalTax = 0;
@@ -1540,13 +1555,44 @@ async function sendEscPosToPrinter(order) {
     if (qrCodeDiv) {
         qrCodeDiv.innerHTML = '';
         if (shopProfile.showQr && shopProfile.upiId && window.QRCode) {
-            const upiString = `upi://pay?pa=${shopProfile.upiId}&pn=${encodeURIComponent(shopProfile.name)}&am=${order.amount.toFixed(2)}&cu=INR`;
+            const upiString = `upi://pay?pa=${shopProfile.upiId}&pn=${encodeURIComponent(shopProfile.name || 'billnaw')}&am=${order.amount.toFixed(2)}&cu=INR`;
             new QRCode(qrCodeDiv, { text: upiString, width: 256, height: 256, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
             await new Promise(r => setTimeout(r, 50)); 
         }
     }
 
     if (!printCharacteristic) {
+        // Document & Business Headers
+        const pInvoiceTitle = document.getElementById('printInvoiceTitle');
+        if (pInvoiceTitle) pInvoiceTitle.innerText = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
+
+        const pShopName = document.getElementById('printShopName');
+        if (pShopName) pShopName.innerText = shopProfile.name || 'billnaw';
+
+        const pShopAddr = document.getElementById('printShopAddress');
+        if (pShopAddr) {
+            pShopAddr.innerText = shopProfile.address || '';
+            pShopAddr.style.display = shopProfile.address ? 'block' : 'none';
+        }
+
+        const pShopPhone = document.getElementById('printShopPhone');
+        if (pShopPhone) {
+            pShopPhone.innerText = shopProfile.phone ? `Tel: ${shopProfile.phone}` : '';
+            pShopPhone.style.display = shopProfile.phone ? 'block' : 'none';
+        }
+
+        const pFssai = document.getElementById('printFssai');
+        if (pFssai) {
+            pFssai.innerText = shopProfile.fssai ? `FSSAI Lic. No.: ${shopProfile.fssai}` : '';
+            pFssai.style.display = shopProfile.fssai ? 'block' : 'none';
+        }
+
+        const pGstin = document.getElementById('printGstin');
+        if (pGstin) {
+            pGstin.innerText = (isGstActive && shopProfile.gstin) ? `GSTIN: ${shopProfile.gstin}` : '';
+            pGstin.style.display = (isGstActive && shopProfile.gstin) ? 'block' : 'none';
+        }
+
         const pBillNo = document.getElementById('printBillNo'); if (pBillNo) pBillNo.innerText = order.billNo;
         const pDate = document.getElementById('printDate'); if (pDate) pDate.innerText = order.date;
         const pTableNoRow = document.getElementById('printTableNoRow');
@@ -1570,7 +1616,7 @@ async function sendEscPosToPrinter(order) {
             order.rawItems.forEach(item => { 
                 let itemTotal = item.price * item.qty; 
                 let gst = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : defaultRate;
-                if (gstMode === 'none') gst = 0;
+                if (!isGstActive) gst = 0;
 
                 printItemsEl.innerHTML += `<div class="print-row"><span>${escapeHtml(item.name)} x${item.qty}</span><span>₹ ${itemTotal.toFixed(2)}</span></div>`; 
             });
@@ -1581,24 +1627,32 @@ async function sendEscPosToPrinter(order) {
             totalTax = totals.totalTax;
             gstSummary = totals.gstSummary || {};
 
-            if (hasDiscount || gstMode === 'exclusive') {
+            if (hasDiscount || (isGstActive && gstMode === 'exclusive')) {
                 printItemsEl.innerHTML += `<div class="print-line"></div>`;
                 if (hasDiscount) {
                     printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Gross Subtotal</span><span>₹ ${grossSubtotal.toFixed(2)}</span></div>`;
                     const dLabel = order.discount && order.discount.type === 'percent' ? `Discount (${order.discount.value}%)` : 'Discount (Flat)';
                     printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600; color:#c00;"><span>${dLabel}</span><span>-₹ ${discountAmount.toFixed(2)}</span></div>`;
                 }
-                if (gstMode === 'exclusive' && totalTax > 0) {
+                if (isGstActive && gstMode === 'exclusive' && totalTax > 0) {
                     printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Net Taxable Subtotal</span><span>₹ ${rawSubtotal.toFixed(2)}</span></div>`;
                     printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Total GST</span><span>₹ ${totalTax.toFixed(2)}</span></div>`;
                 }
             }
 
-            if(Object.keys(gstSummary).length > 0 && gstMode !== 'none') {
-                let htmlGstContent = '<div class="print-line"></div><div style="font-weight:600; font-size:12px; margin-bottom:5px;">--- GST Breakdown ---</div>';
+            if(Object.keys(gstSummary).length > 0 && isGstActive) {
+                let htmlGstContent = '<div class="print-line"></div><div style="font-weight:700; font-size:11px; margin-bottom:5px; text-align:center;">--- GST BREAKDOWN ---</div>';
                 for(let rate in gstSummary) {
-                    let base = gstSummary[rate].base.toFixed(2); let half = (gstSummary[rate].tax / 2).toFixed(2);
-                    htmlGstContent += `<div style="font-size:11px; color:#444; margin-bottom:6px;"><div style="display:flex; justify-content:space-between;"><span>Taxable Value (${rate}%)</span><span>₹ ${base}</span></div><div style="display:flex; justify-content:space-between;"><span>CGST @ ${rate/2}%</span><span>₹ ${half}</span></div><div style="display:flex; justify-content:space-between;"><span>SGST @ ${rate/2}%</span><span>₹ ${half}</span></div></div>`;
+                    let slab = gstSummary[rate];
+                    let base = Number(slab.base || 0).toFixed(2);
+                    let cgst = Number(slab.cgst || (slab.tax / 2)).toFixed(2);
+                    let sgst = Number(slab.sgst || (slab.tax / 2)).toFixed(2);
+                    let halfRate = Number(rate) / 2;
+                    htmlGstContent += `<div style="font-size:11px; color:#333; margin-bottom:4px;">
+                        <div style="display:flex; justify-content:space-between;"><span>Taxable Value (${rate}%)</span><span>₹ ${base}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>CGST @ ${halfRate}%</span><span>₹ ${cgst}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>SGST @ ${halfRate}%</span><span>₹ ${sgst}</span></div>
+                    </div>`;
                 }
                 printItemsEl.innerHTML += htmlGstContent;
             }
@@ -1622,10 +1676,13 @@ async function sendEscPosToPrinter(order) {
     const ALIGN_CENTER = ESC + 'a\x01'; const ALIGN_LEFT = ESC + 'a\x00'; const BOLD_ON = ESC + 'E\x01'; const BOLD_OFF = ESC + 'E\x00'; const DOUBLE_SIZE = GS + '!\x11'; const NORMAL_SIZE = GS + '!\x00';
 
     let receiptText = INIT;
-    receiptText += ALIGN_CENTER + DOUBLE_SIZE + BOLD_ON + shopProfile.name + '\n' + NORMAL_SIZE + BOLD_OFF;
+    receiptText += ALIGN_CENTER + DOUBLE_SIZE + BOLD_ON + (shopProfile.name || 'billnaw') + '\n' + NORMAL_SIZE + BOLD_OFF;
     if(shopProfile.address) receiptText += shopProfile.address + '\n';
-    if(shopProfile.fssai) receiptText += 'FSSAI: ' + shopProfile.fssai + '\n';
-    if(shopProfile.gstin) receiptText += 'GSTIN: ' + shopProfile.gstin + '\n';
+    if(shopProfile.phone) receiptText += 'Tel: ' + shopProfile.phone + '\n';
+    if(shopProfile.fssai) receiptText += 'FSSAI Lic. No.: ' + shopProfile.fssai + '\n';
+    if(isGstActive && shopProfile.gstin) receiptText += 'GSTIN: ' + shopProfile.gstin + '\n';
+    receiptText += '--------------------------------\n'; 
+    receiptText += ALIGN_CENTER + BOLD_ON + (isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE') + '\n' + BOLD_OFF;
     receiptText += '--------------------------------\n'; 
     receiptText += ALIGN_LEFT;
     receiptText += BOLD_ON + 'Invoice: #' + (order.billNo || 'TEST') + '\n' + BOLD_OFF;
@@ -1869,17 +1926,33 @@ function viewOrderInvoiceModal(orderId) {
     const modal = document.getElementById('billInvoiceModal');
     if (!modal) return;
 
+    const isGstActive = (order.gstMode || getStoreGstConfig().mode) !== 'none';
+    const invTitle = document.getElementById('invModalTitle');
+    if (invTitle) invTitle.innerText = isGstActive ? 'Tax Invoice' : 'Retail Invoice';
+
+    const invDocBadge = document.getElementById('invModalDocTypeBadge');
+    if (invDocBadge) invDocBadge.innerText = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
+
     // Set business headers
     const invShopName = document.getElementById('invModalShopName');
     if (invShopName) invShopName.innerText = shopProfile.name || "billnaw";
 
     const invShopAddr = document.getElementById('invModalShopAddress');
-    if (invShopAddr) invShopAddr.innerText = shopProfile.address || "";
+    if (invShopAddr) {
+        invShopAddr.innerText = shopProfile.address || "";
+        invShopAddr.style.display = shopProfile.address ? 'block' : 'none';
+    }
+
+    const invShopPhone = document.getElementById('invModalShopPhone');
+    if (invShopPhone) {
+        invShopPhone.innerText = shopProfile.phone ? `Tel: ${shopProfile.phone}` : "";
+        invShopPhone.style.display = shopProfile.phone ? 'block' : 'none';
+    }
 
     const invShopFssai = document.getElementById('invModalShopFssai');
     if (invShopFssai) {
         if (shopProfile.fssai) {
-            invShopFssai.style.display = 'block';
+            invShopFssai.style.display = 'inline-block';
             invShopFssai.innerText = `FSSAI: ${shopProfile.fssai}`;
         } else {
             invShopFssai.style.display = 'none';
@@ -1888,8 +1961,8 @@ function viewOrderInvoiceModal(orderId) {
 
     const invShopGstin = document.getElementById('invModalShopGstin');
     if (invShopGstin) {
-        if (shopProfile.gstin) {
-            invShopGstin.style.display = 'block';
+        if (isGstActive && shopProfile.gstin) {
+            invShopGstin.style.display = 'inline-block';
             invShopGstin.innerText = `GSTIN: ${shopProfile.gstin}`;
         } else {
             invShopGstin.style.display = 'none';
@@ -1984,7 +2057,7 @@ function viewOrderInvoiceModal(orderId) {
     const taxRow = document.getElementById('invModalTaxRow');
     const taxAmtEl = document.getElementById('invModalTaxAmt');
     if (taxRow && taxAmtEl) {
-        if ((order.tax || 0) > 0) {
+        if (isGstActive && (order.tax || 0) > 0) {
             taxRow.style.display = 'flex';
             taxAmtEl.innerText = `₹ ${Number(order.tax).toFixed(2)}`;
         } else {
@@ -1992,8 +2065,64 @@ function viewOrderInvoiceModal(orderId) {
         }
     }
 
+    // Itemized GST breakdown in invoice modal
+    const invGstBreakdown = document.getElementById('invModalGstBreakdown');
+    if (invGstBreakdown) {
+        const modalTotals = calculateOrderTotals(order.rawItems, order.discount || (hasDiscount ? { type: 'fixed', value: discountAmount } : null));
+        if (isGstActive && modalTotals.gstSummary && Object.keys(modalTotals.gstSummary).length > 0) {
+            let breakdownHtml = '<div style="font-weight:700; font-size:10px; text-transform:uppercase; color:var(--text-muted); margin-bottom:2px; letter-spacing:0.5px;">Tax Breakdown</div>';
+            for (let r in modalTotals.gstSummary) {
+                let slab = modalTotals.gstSummary[r];
+                let base = Number(slab.base || 0).toFixed(2);
+                let half = Number(slab.cgst || (slab.tax / 2)).toFixed(2);
+                let halfRate = Number(r) / 2;
+                breakdownHtml += `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                        <span>Taxable (${r}%):</span>
+                        <span style="font-family:monospace; font-weight:600;">₹ ${base}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                        <span>CGST @ ${halfRate}%:</span>
+                        <span style="font-family:monospace;">₹ ${half}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                        <span>SGST @ ${halfRate}%:</span>
+                        <span style="font-family:monospace;">₹ ${half}</span>
+                    </div>
+                `;
+            }
+            invGstBreakdown.innerHTML = breakdownHtml;
+            invGstBreakdown.style.display = 'flex';
+        } else {
+            invGstBreakdown.style.display = 'none';
+        }
+    }
+
     const grandTotalEl = document.getElementById('invModalGrandTotal');
     if (grandTotalEl) grandTotalEl.innerText = `₹ ${Number(order.amount).toFixed(2)}`;
+
+    // Dynamic QR Preview inside modal
+    const invQrWrap = document.getElementById('invModalQrWrap');
+    const invQrCode = document.getElementById('invModalQrCode');
+    const invQrCaption = document.getElementById('invModalQrCaption');
+    if (invQrWrap && invQrCode) {
+        if (shopProfile.showQr && shopProfile.upiId && window.QRCode) {
+            invQrCode.innerHTML = '';
+            const upiString = `upi://pay?pa=${encodeURIComponent(shopProfile.upiId)}&pn=${encodeURIComponent(shopProfile.name || 'billnaw')}&am=${order.amount.toFixed(2)}&cu=INR`;
+            new QRCode(invQrCode, {
+                text: upiString,
+                width: 130,
+                height: 130,
+                colorDark: "#2B1C15",
+                colorLight: "#FFFFFF",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+            if (invQrCaption) invQrCaption.innerText = `Scan to Pay ₹ ${order.amount.toFixed(2)} via UPI (${shopProfile.upiId})`;
+            invQrWrap.style.display = 'block';
+        } else {
+            invQrWrap.style.display = 'none';
+        }
+    }
 
     // Set action buttons
     const printBtn = document.getElementById('invModalPrintBtn');

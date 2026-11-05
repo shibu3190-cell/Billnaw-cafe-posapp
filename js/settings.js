@@ -4,6 +4,8 @@
 
 function updateProfileVisuals() {
     const currentName = shopProfile.name || "billnaw";
+    const isGstActive = shopProfile.gstMode !== 'none';
+    const docTitle = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
     
     const topShopName = document.getElementById('topbarShopName');
     if (topShopName) topShopName.innerText = currentName;
@@ -28,15 +30,95 @@ function updateProfileVisuals() {
 
     const waPreviewStoreName = document.getElementById('waPreviewStoreName');
     if (waPreviewStoreName) waPreviewStoreName.innerText = currentName;
+
+    // Document Statutory Titles
+    const printTitle = document.getElementById('printInvoiceTitle');
+    if (printTitle) printTitle.innerText = docTitle;
+
+    const invDocBadge = document.getElementById('invModalDocTypeBadge');
+    if (invDocBadge) invDocBadge.innerText = docTitle;
+
+    const invTitle = document.getElementById('invModalTitle');
+    if (invTitle) invTitle.innerText = isGstActive ? 'Tax Invoice' : 'Retail Invoice';
     
+    // Store Address
     const printAddress = document.getElementById('printAddress');
     if (printAddress) printAddress.innerText = shopProfile.address || "";
+
+    const printShopAddress = document.getElementById('printShopAddress');
+    if (printShopAddress) {
+        printShopAddress.innerText = shopProfile.address || "";
+        printShopAddress.style.display = shopProfile.address ? 'block' : 'none';
+    }
+
+    const invShopAddress = document.getElementById('invModalShopAddress');
+    if (invShopAddress) {
+        invShopAddress.innerText = shopProfile.address || "";
+        invShopAddress.style.display = shopProfile.address ? 'block' : 'none';
+    }
+
+    // Store Phone
+    const printShopPhone = document.getElementById('printShopPhone');
+    if (printShopPhone) {
+        if (shopProfile.phone) {
+            printShopPhone.style.display = 'block';
+            printShopPhone.innerText = `Tel: ${shopProfile.phone}`;
+        } else {
+            printShopPhone.style.display = 'none';
+        }
+    }
+
+    const invShopPhone = document.getElementById('invModalShopPhone');
+    if (invShopPhone) {
+        if (shopProfile.phone) {
+            invShopPhone.style.display = 'block';
+            invShopPhone.innerText = `Tel: ${shopProfile.phone}`;
+        } else {
+            invShopPhone.style.display = 'none';
+        }
+    }
     
+    // FSSAI License
     const printFssai = document.getElementById('printFssai');
-    if (printFssai) printFssai.innerText = shopProfile.fssai ? `FSSAI: ${shopProfile.fssai}` : "";
+    if (printFssai) {
+        if (shopProfile.fssai) {
+            printFssai.style.display = 'block';
+            printFssai.innerText = `FSSAI Lic. No.: ${shopProfile.fssai}`;
+        } else {
+            printFssai.style.display = 'none';
+        }
+    }
+
+    const invFssai = document.getElementById('invModalShopFssai');
+    if (invFssai) {
+        if (shopProfile.fssai) {
+            invFssai.style.display = 'inline-block';
+            invFssai.innerText = `FSSAI: ${shopProfile.fssai}`;
+        } else {
+            invFssai.style.display = 'none';
+        }
+    }
     
+    // GSTIN (Suppressed when GST mode is none or blank)
     const printGstin = document.getElementById('printGstin');
-    if (printGstin) printGstin.innerText = shopProfile.gstin ? `GSTIN: ${shopProfile.gstin}` : "";
+    if (printGstin) {
+        if (isGstActive && shopProfile.gstin) {
+            printGstin.style.display = 'block';
+            printGstin.innerText = `GSTIN: ${shopProfile.gstin}`;
+        } else {
+            printGstin.style.display = 'none';
+        }
+    }
+
+    const invGstin = document.getElementById('invModalShopGstin');
+    if (invGstin) {
+        if (isGstActive && shopProfile.gstin) {
+            invGstin.style.display = 'inline-block';
+            invGstin.innerText = `GSTIN: ${shopProfile.gstin}`;
+        } else {
+            invGstin.style.display = 'none';
+        }
+    }
     
     if (shopProfile.logo) {
         const sidebarLogo = document.getElementById('sidebarLogo');
@@ -116,21 +198,21 @@ function saveSettings() {
     }
     
     const shopAddressInput = document.getElementById('shopAddressInput');
-    if (shopAddressInput) shopProfile.address = shopAddressInput.value;
+    if (shopAddressInput) shopProfile.address = shopAddressInput.value.trim();
     
     const shopPhoneInput = document.getElementById('shopPhoneInput');
     if (shopPhoneInput) {
-        const cleanPhone = shopPhoneInput.value.replace(/\D/g, '');
+        const cleanPhone = shopPhoneInput.value.replace(/[^\d+]/g, '').trim();
         shopProfile.phone = cleanPhone || shopPhoneInput.value.trim();
         shopProfile.ownerPhone = shopProfile.phone;
         try { localStorage.setItem('billnaw_auth_phone', shopProfile.phone); } catch(e) {}
     }
 
     const fssaiInput = document.getElementById('fssaiInput');
-    if (fssaiInput) shopProfile.fssai = fssaiInput.value;
+    if (fssaiInput) shopProfile.fssai = fssaiInput.value.trim();
     
     const gstinInput = document.getElementById('gstinInput');
-    if (gstinInput) shopProfile.gstin = gstinInput.value;
+    if (gstinInput) shopProfile.gstin = gstinInput.value.trim().toUpperCase();
     
     const tableCountInput = document.getElementById('tableCountInput');
     if (tableCountInput) {
@@ -150,11 +232,25 @@ function saveSettings() {
         adminPinSetup.value = '';
     }
     
+    const shopUpiIdInput = document.getElementById('shopUpiIdInput');
     const upiIdInput = document.getElementById('upiIdInput');
-    if (upiIdInput) shopProfile.upiId = upiIdInput.value.trim();
+    if (shopUpiIdInput && shopUpiIdInput.value !== undefined && shopUpiIdInput.value.trim() !== '') {
+        shopProfile.upiId = shopUpiIdInput.value.trim();
+        if (upiIdInput) upiIdInput.value = shopProfile.upiId;
+    } else if (upiIdInput && upiIdInput.value !== undefined) {
+        shopProfile.upiId = upiIdInput.value.trim();
+        if (shopUpiIdInput) shopUpiIdInput.value = shopProfile.upiId;
+    }
     
+    const shopShowQrInput = document.getElementById('shopShowQrInput');
     const enableQrCodeInput = document.getElementById('enableQrCodeInput');
-    if (enableQrCodeInput) shopProfile.showQr = enableQrCodeInput.checked;
+    if (shopShowQrInput && shopShowQrInput.offsetParent !== null) {
+        shopProfile.showQr = Boolean(shopShowQrInput.checked);
+        if (enableQrCodeInput) enableQrCodeInput.checked = shopProfile.showQr;
+    } else if (enableQrCodeInput) {
+        shopProfile.showQr = Boolean(enableQrCodeInput.checked);
+        if (shopShowQrInput) shopShowQrInput.checked = shopProfile.showQr;
+    }
     
     const gstPricingModeInput = document.getElementById('gstPricingModeInput');
     if (gstPricingModeInput) shopProfile.gstMode = gstPricingModeInput.value || 'inclusive';
@@ -304,6 +400,10 @@ function openStoreProfileModal() {
         if (fssaiInput) fssaiInput.value = shopProfile.fssai || '';
         const gstinInput = document.getElementById('gstinInput');
         if (gstinInput) gstinInput.value = shopProfile.gstin || '';
+        const shopUpiInput = document.getElementById('shopUpiIdInput');
+        if (shopUpiInput) shopUpiInput.value = shopProfile.upiId || '';
+        const shopQrToggle = document.getElementById('shopShowQrInput');
+        if (shopQrToggle) shopQrToggle.checked = Boolean(shopProfile.showQr);
         el.style.display = 'flex';
     }
 }

@@ -1812,6 +1812,19 @@
                 <div class="form-group"><label>FSSAI License No.</label><input type="text" id="fssaiInput" placeholder="e.g. 12822013000123"></div>
                 <div class="form-group"><label>GSTIN No.</label><input type="text" id="gstinInput" placeholder="e.g. 19ABCDE1234F1Z5"></div>
                 <div class="form-group"><label>Full Address</label><input type="text" id="shopAddressInput" placeholder="Street, City, Pin Code"></div>
+
+                <div class="form-row-dual" style="margin-bottom: 0;">
+                    <div class="form-group">
+                        <label>Shop UPI ID (For Dynamic QR)</label>
+                        <input type="text" id="shopUpiIdInput" placeholder="merchant@upi" style="font-weight: 600;">
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: flex-end; padding-bottom: 4px;">
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin: 0;">
+                            <input type="checkbox" id="shopShowQrInput" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                            <span>Print Dynamic UPI QR</span>
+                        </label>
+                    </div>
+                </div>
             </div>
             <div class="modal-actions">
                 <button class="btn btn-outline" onclick="closeStoreProfileModal()">Cancel</button>
@@ -3017,7 +3030,7 @@
                 <div>
                     <h2 style="display: inline-flex; align-items: center; gap: 8px;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-                        <span>Bill Invoice</span>
+                        <span id="invModalTitle">Tax Invoice</span>
                     </h2>
                     <p id="invModalBillNo" style="font-family: monospace; font-size: 14px; font-weight: 800; color: var(--primary);">#1001</p>
                 </div>
@@ -3026,8 +3039,10 @@
 
             <div style="overflow-y: auto; flex: 1; padding: 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px;">
                 <div style="text-align: center; border-bottom: 1px dashed var(--border); padding-bottom: 12px; margin-bottom: 12px;">
+                    <div id="invModalDocTypeBadge" style="display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--primary); background: var(--accent-soft); padding: 2px 10px; border-radius: 12px; margin-bottom: 6px;">TAX INVOICE</div>
                     <h3 id="invModalShopName" style="font-size: 16px; font-weight: 800; color: var(--primary); margin: 0;">billnaw</h3>
                     <p id="invModalShopAddress" style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0;"></p>
+                    <p id="invModalShopPhone" style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;"></p>
                     <div style="display: flex; justify-content: center; gap: 12px; font-size: 10px; color: var(--text-muted); margin-top: 4px;">
                         <span id="invModalShopFssai"></span>
                         <span id="invModalShopGstin"></span>
@@ -3079,9 +3094,18 @@
                         <span id="invModalTaxAmt" style="font-family: monospace;">₹ 0.00</span>
                     </div>
 
+                    <div id="invModalGstBreakdown" style="display: none; background: #FAF7F4; border-radius: 6px; padding: 6px 8px; margin-top: 2px; font-size: 11px; color: #444; flex-direction: column; gap: 3px;">
+                    </div>
+
                     <div style="border-top: 2px solid var(--border); padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
                         <strong style="font-size: 15px; color: var(--primary);">Grand Total</strong>
                         <strong id="invModalGrandTotal" style="font-size: 18px; color: var(--success); font-family: monospace;">₹ 0.00</strong>
+                    </div>
+
+                    <div id="invModalQrWrap" style="display: none; text-align: center; margin-top: 10px; padding: 10px; background: #FAF7F4; border-radius: 10px; border: 1px dashed var(--border);">
+                        <div style="font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Scan to Pay via UPI</div>
+                        <div id="invModalQrCode" style="display: flex; justify-content: center; margin-bottom: 6px;"></div>
+                        <div id="invModalQrCaption" style="font-size: 11px; color: var(--text-dark); font-weight: 700;"></div>
                     </div>
                 </div>
             </div>
@@ -5491,9 +5515,11 @@
             <img id="printLogo" src="" alt="Logo">
             <h2 id="printShopName" style="margin: 0;"></h2>
             <p id="printShopAddress" style="margin: 5px 0; font-size: 12px;"></p>
+            <p id="printShopPhone" style="margin: 2px 0; font-size: 11px; color: #444;"></p>
             <p id="printFssai" style="margin: 0; font-size: 11px; color: #444;"></p>
             <p id="printGstin" style="margin: 0; font-size: 11px; color: #444;"></p>
             <div class="print-line"></div>
+            <p id="printInvoiceTitle" style="font-size: 13px; font-weight: bold; margin: 3px 0; letter-spacing: 0.5px; text-transform: uppercase;">TAX INVOICE</p>
             <p style="font-size: 16px; font-weight: bold; margin: 5px 0;">Invoice: #<span id="printBillNo"></span></p>
             <p style="font-size: 14px; margin: 2px 0;" id="printTableNoRow">Table: <span id="printTableNo"></span></p>
             <p id="printDate" class="print-meta"></p>

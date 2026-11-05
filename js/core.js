@@ -123,6 +123,8 @@ const defaultPinHash = hashString("1234");
 let shopProfile = { 
     name: "billnaw", 
     address: "", 
+    phone: "",
+    ownerPhone: "",
     fssai: "", 
     gstin: "", 
     tableCount: 5,
@@ -1086,6 +1088,7 @@ function calculateOrderTotals(items, discountObj = null) {
     let discountType = discountObj?.type || 'percent';
     let discountVal = Number(discountObj?.value) || 0;
     let discountReason = discountObj?.reason || '';
+    let gstSummary = {};
 
     if (!items || !items.length) {
         return { 
@@ -1098,7 +1101,8 @@ function calculateOrderTotals(items, discountObj = null) {
             totalTax: 0, 
             finalTotal: 0, 
             gstMode: mode, 
-            defaultRate 
+            defaultRate,
+            gstSummary: {}
         };
     }
 
@@ -1135,12 +1139,22 @@ function calculateOrderTotals(items, discountObj = null) {
             const itemTax = (itemDiscounted * itemGstRate) / 100;
             computedTaxableSubtotal += itemDiscounted;
             totalTax += itemTax;
+
+            if (itemGstRate > 0) {
+                const rKey = String(itemGstRate);
+                if (!gstSummary[rKey]) gstSummary[rKey] = { rate: itemGstRate, base: 0, tax: 0, cgst: 0, sgst: 0 };
+                gstSummary[rKey].base += itemDiscounted;
+                gstSummary[rKey].tax += itemTax;
+                gstSummary[rKey].cgst += itemTax / 2;
+                gstSummary[rKey].sgst += itemTax / 2;
+            }
         });
         finalTotal = computedTaxableSubtotal + totalTax;
     } else if (mode === 'none') {
         computedTaxableSubtotal = discountedGross;
         totalTax = 0;
         finalTotal = discountedGross;
+        gstSummary = {};
     } else {
         // inclusive mode
         items.forEach(item => {
@@ -1155,6 +1169,15 @@ function calculateOrderTotals(items, discountObj = null) {
             const itemTax = itemDiscounted - basePrice;
             computedTaxableSubtotal += basePrice;
             totalTax += itemTax;
+
+            if (itemGstRate > 0) {
+                const rKey = String(itemGstRate);
+                if (!gstSummary[rKey]) gstSummary[rKey] = { rate: itemGstRate, base: 0, tax: 0, cgst: 0, sgst: 0 };
+                gstSummary[rKey].base += basePrice;
+                gstSummary[rKey].tax += itemTax;
+                gstSummary[rKey].cgst += itemTax / 2;
+                gstSummary[rKey].sgst += itemTax / 2;
+            }
         });
         finalTotal = discountedGross;
     }
@@ -1169,7 +1192,8 @@ function calculateOrderTotals(items, discountObj = null) {
         totalTax: Math.round(totalTax * 100) / 100,
         finalTotal: Math.round(finalTotal * 100) / 100,
         gstMode: mode,
-        defaultRate
+        defaultRate,
+        gstSummary
     };
 }
 window.calculateOrderTotals = calculateOrderTotals;
@@ -1329,6 +1353,21 @@ function handleRemoteFirestoreUpdate(data) {
     if (data.profile) {
         shopProfile = { ...shopProfile, ...data.profile };
         if (!shopProfile.startInvoiceNo) shopProfile.startInvoiceNo = 1001;
+        window.shopProfile = shopProfile;
+        try {
+            idb.set('cafe_profile', shopProfile);
+            localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
+            if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
+            if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone);
+            if (shopProfile.address) localStorage.setItem('billnaw_shop_address', shopProfile.address);
+            if (shopProfile.fssai) localStorage.setItem('billnaw_shop_fssai', shopProfile.fssai);
+            if (shopProfile.gstin) localStorage.setItem('billnaw_shop_gstin', shopProfile.gstin);
+            if (shopProfile.upiId) localStorage.setItem('billnaw_shop_upi_id', shopProfile.upiId);
+            localStorage.setItem('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false');
+            localStorage.setItem('billnaw_gst_mode', shopProfile.gstMode || 'inclusive');
+            localStorage.setItem('billnaw_default_gst_rate', String(shopProfile.defaultGstRate || 5));
+        } catch(e) {}
+        if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
     }
     if (Array.isArray(data.staff) && data.staff.length > 0) {
         staffList = data.staff;
@@ -1992,11 +2031,30 @@ function persistCategories() {
 window.persistCategories = persistCategories;
 
 function persistProfile() { 
+    window.shopProfile = shopProfile;
     idb.set('cafe_profile', shopProfile); 
+
+    // Quad-Tier Local Persistence: Save JSON + discrete keys to prevent wipe on cache clear
+    try {
+        localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
+        if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
+        if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone);
+        if (shopProfile.address) localStorage.setItem('billnaw_shop_address', shopProfile.address);
+        if (shopProfile.fssai) localStorage.setItem('billnaw_shop_fssai', shopProfile.fssai);
+        if (shopProfile.gstin) localStorage.setItem('billnaw_shop_gstin', shopProfile.gstin);
+        if (shopProfile.upiId) localStorage.setItem('billnaw_shop_upi_id', shopProfile.upiId);
+        localStorage.setItem('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false');
+        localStorage.setItem('billnaw_gst_mode', shopProfile.gstMode || 'inclusive');
+        localStorage.setItem('billnaw_default_gst_rate', String(shopProfile.defaultGstRate || 5));
+    } catch(e) {}
+
+    // Cloud Master Persistence
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { profile: shopProfile, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, { profile: shopProfile, updatedAt: new Date().toISOString() }, { merge: true }).catch(err => {
+                console.warn('[FIRESTORE] Error saving profile to cloud:', err);
+            });
         }
     }
 }
@@ -2756,15 +2814,56 @@ window.updateAllUI = updateAllUI;
 
 async function initDatabase() {
     await idb.init();
+
+    // 1. Recover from LocalStorage Redundant Snapshot (survives IDB reset/cache clear)
+    try {
+        const rawLocalProfile = localStorage.getItem('billnaw_store_profile');
+        if (rawLocalProfile) {
+            const parsed = JSON.parse(rawLocalProfile);
+            if (parsed && typeof parsed === 'object') {
+                shopProfile = { ...shopProfile, ...parsed };
+            }
+        }
+    } catch(e) {}
+
+    // 2. Recover from Discrete Backup Keys (survives partial storage eviction)
+    try {
+        const savedName = localStorage.getItem('billnaw_shop_name');
+        if (savedName && (!shopProfile.name || shopProfile.name === 'billnaw')) shopProfile.name = savedName;
+        const savedPhone = localStorage.getItem('billnaw_shop_phone') || localStorage.getItem('billnaw_auth_phone');
+        if (savedPhone) { shopProfile.phone = savedPhone; shopProfile.ownerPhone = savedPhone; }
+        const savedAddr = localStorage.getItem('billnaw_shop_address');
+        if (savedAddr) shopProfile.address = savedAddr;
+        const savedFssai = localStorage.getItem('billnaw_shop_fssai');
+        if (savedFssai) shopProfile.fssai = savedFssai;
+        const savedGstin = localStorage.getItem('billnaw_shop_gstin');
+        if (savedGstin) shopProfile.gstin = savedGstin;
+        const savedUpi = localStorage.getItem('billnaw_shop_upi_id');
+        if (savedUpi) shopProfile.upiId = savedUpi;
+        const savedQr = localStorage.getItem('billnaw_shop_show_qr');
+        if (savedQr !== null) shopProfile.showQr = (savedQr === 'true');
+        const savedGstMode = localStorage.getItem('billnaw_gst_mode');
+        if (savedGstMode) shopProfile.gstMode = savedGstMode;
+        const savedGstRate = localStorage.getItem('billnaw_default_gst_rate');
+        if (savedGstRate) shopProfile.defaultGstRate = parseFloat(savedGstRate) || 5;
+    } catch(e) {}
+
+    // 3. Load from IndexedDB
     const storedProfile = await idb.get('cafe_profile');
     if (storedProfile && typeof storedProfile === 'object') {
         if (storedProfile.name === 'The Bong Bhoj Terminal' || storedProfile.name === 'The Bong Bhoj' || storedProfile.name === 'Billnaw Cafe' || !storedProfile.name) {
             storedProfile.name = 'billnaw';
         }
         shopProfile = { ...shopProfile, ...storedProfile };
-        if (!shopProfile.startInvoiceNo) shopProfile.startInvoiceNo = 1001;
-        window.shopProfile = shopProfile;
     }
+    if (!shopProfile.startInvoiceNo) shopProfile.startInvoiceNo = 1001;
+    window.shopProfile = shopProfile;
+
+    // Self-heal storage layers
+    try {
+        idb.set('cafe_profile', shopProfile);
+        localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
+    } catch(e) {}
     // Multi-Account Device Isolation: Clear device cache when a different email logs in
     try {
         const currentEmail = localStorage.getItem('billnaw_auth_email') || '';
@@ -2801,6 +2900,27 @@ async function initDatabase() {
             if (session && session.storeCode) {
                 myClientID = session.storeCode;
                 window.myClientID = myClientID;
+            }
+        }
+    } catch(e) {}
+
+    // 4. Proactive Cloud Rehydration: Reconcile latest store identity from Firestore
+    try {
+        if (window.firestoreDB && window.firestoreDoc && window.firestoreGetDoc && typeof getStoreDocRef === 'function') {
+            const storeDocRef = getStoreDocRef();
+            if (storeDocRef) {
+                window.firestoreGetDoc(storeDocRef).then(snap => {
+                    if (snap && snap.exists && snap.exists()) {
+                        const rData = snap.data();
+                        if (rData && rData.profile) {
+                            shopProfile = { ...shopProfile, ...rData.profile };
+                            window.shopProfile = shopProfile;
+                            idb.set('cafe_profile', shopProfile);
+                            try { localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile)); } catch(e) {}
+                            if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
+                        }
+                    }
+                }).catch(() => {});
             }
         }
     } catch(e) {}
