@@ -893,6 +893,132 @@ async function testFlow6_SessionPersistenceAndRoleSwitch(cdp, viewport) {
     console.log(`  ✅ Flow 6 passed for ${viewport}.`);
 }
 
+/**
+ * Flow 7: Admin Forgot PIN Modal, Email OTP Reset & Merged Staff Table
+ */
+async function testFlow7_AdminForgotPinAndMergedStaffTable(cdp, viewport) {
+    console.log(`  [Flow 7: Admin Forgot PIN & Merged Staff Table] Auditing on ${viewport}...`);
+
+    await cdp.evaluate(`
+        (() => {
+            document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+            const loginOverlay = document.getElementById('loginOverlay');
+            if (loginOverlay) loginOverlay.style.display = 'flex';
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 300));
+
+    // Verify Forgot Admin PIN link in loginOverlay and open modal
+    const modalAssert = await cdp.evaluate(`
+        (() => {
+            const loginOverlay = document.getElementById('loginOverlay');
+            const forgotLink = loginOverlay ? loginOverlay.querySelector('button[onclick*="openAdminForgotPinModal"]') : null;
+
+            if (typeof openAdminForgotPinModal === 'function') {
+                openAdminForgotPinModal();
+            }
+
+            const modal = document.getElementById('adminForgotPinModal');
+            const isVisible = modal && window.getComputedStyle(modal).display === 'flex';
+            const closeBtns = modal ? modal.querySelectorAll('.modal-close-btn') : [];
+            const forgotCloseBtns = modal ? modal.querySelectorAll('.forgot-pin-close-btn') : [];
+
+            const emailInput = document.getElementById('forgotPinEmailInput');
+            if (emailInput) emailInput.value = 'audit_owner_${viewport}@billnawcafe.com';
+
+            return {
+                hasForgotLink: !!forgotLink,
+                isVisible,
+                modalCloseBtnCount: closeBtns.length,
+                forgotCloseBtnCount: forgotCloseBtns.length,
+                hasEmailInput: !!emailInput
+            };
+        })()
+    `);
+
+    assert.strictEqual(modalAssert.hasForgotLink, true, '#loginOverlay must contain "Forgot Admin PIN?" link');
+    assert.strictEqual(modalAssert.isVisible, true, '#adminForgotPinModal must display flex when opened');
+    assert.strictEqual(modalAssert.modalCloseBtnCount, 0, '#adminForgotPinModal must strictly contain 0 .modal-close-btn elements (invariant 26)');
+    assert.strictEqual(modalAssert.forgotCloseBtnCount, 1, '#adminForgotPinModal must contain .forgot-pin-close-btn');
+
+    // Simulate OTP Send & Step 2 display
+    const stepAssert = await cdp.evaluate(`
+        (async () => {
+            if (typeof submitAdminForgotPinOtpRequest === 'function') {
+                await submitAdminForgotPinOtpRequest();
+            }
+            const s1 = document.getElementById('forgotPinStep1');
+            const s2 = document.getElementById('forgotPinStep2');
+            const otpInput = document.getElementById('forgotPinOtpInput');
+            const newPinInput = document.getElementById('forgotPinNewPinInput');
+            const confirmPinInput = document.getElementById('forgotPinConfirmPinInput');
+
+            return {
+                step1Hidden: s1 && s1.style.display === 'none',
+                step2Visible: s2 && s2.style.display === 'block',
+                hasOtpInput: !!otpInput,
+                hasNewPinInput: !!newPinInput,
+                hasConfirmPinInput: !!confirmPinInput
+            };
+        })()
+    `);
+
+    assert.strictEqual(stepAssert.step1Hidden, true, 'Forgot PIN Step 1 must be hidden after dispatch');
+    assert.strictEqual(stepAssert.step2Visible, true, 'Forgot PIN Step 2 must be visible with inputs');
+
+    // Close forgot pin modal and open Staff Management to audit merged table
+    await cdp.evaluate(`
+        (() => {
+            if (typeof closeAdminForgotPinModal === 'function') closeAdminForgotPinModal();
+            document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+            if (typeof openStaffManagementModal === 'function') {
+                openStaffManagementModal();
+            } else {
+                const modal = document.getElementById('staffManagementDetailModal');
+                if (modal) modal.style.display = 'flex';
+                if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
+            }
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 400));
+
+    const mergedTableAssert = await cdp.evaluate(`
+        (() => {
+            const table = document.querySelector('#staffManagementDetailModal .data-table') || document.querySelector('#staffTableBody')?.closest('table');
+            const headers = Array.from(table ? table.querySelectorAll('th') : []).map(th => (th.textContent || '').trim());
+            const rows = Array.from(document.querySelectorAll('#staffTableBody tr'));
+
+            const hasTerminalHeader = headers.some(h => h.includes('Terminal'));
+            const hasRoleStationHeader = headers.some(h => h.includes('Role') || h.includes('Station'));
+
+            return {
+                hasTable: !!table,
+                headers,
+                hasTerminalHeader,
+                hasRoleStationHeader,
+                rowCount: rows.length
+            };
+        })()
+    `);
+
+    assert.strictEqual(mergedTableAssert.hasTable, true, 'Staff management table must exist');
+    assert.strictEqual(mergedTableAssert.hasTerminalHeader, true, 'Merged table must contain "Assigned Terminal" column');
+    assert.strictEqual(mergedTableAssert.hasRoleStationHeader, true, 'Merged table must contain "Role & Station" column');
+
+    await cdp.captureScreenshot(`multidevice_07_forgotpin_mergedstaff_${viewport}.png`);
+
+    await cdp.evaluate(`
+        (() => {
+            const modal = document.getElementById('staffManagementDetailModal');
+            if (modal) modal.style.display = 'none';
+        })()
+    `);
+
+    console.log(`  ✅ Flow 7 passed for ${viewport}.`);
+}
+
 // ------------------------------------------------------------
 // 5. MASTER AUDIT ORCHESTRATOR
 // ------------------------------------------------------------
@@ -1168,9 +1294,10 @@ async function runMultiDeviceAudit() {
             await testFlow4_LiveSessionsHub(cdp, vp);
             await testFlow5_RemoteLockout(cdp, vp);
             await testFlow6_SessionPersistenceAndRoleSwitch(cdp, vp);
+            await testFlow7_AdminForgotPinAndMergedStaffTable(cdp, vp);
         }
 
-        // Verify all 12 Screenshot Artifacts
+        // Verify all 14 Screenshot Artifacts
         console.log('\n====================================================');
         console.log('📊 VERIFYING MULTI-DEVICE SCREENSHOT ARTIFACTS');
         console.log('====================================================\n');
@@ -1187,7 +1314,9 @@ async function runMultiDeviceAudit() {
             'multidevice_05_remote_lockout_desktop.png',
             'multidevice_05_remote_lockout_mobile.png',
             'multidevice_06_roleswitch_desktop.png',
-            'multidevice_06_roleswitch_mobile.png'
+            'multidevice_06_roleswitch_mobile.png',
+            'multidevice_07_forgotpin_mergedstaff_desktop.png',
+            'multidevice_07_forgotpin_mergedstaff_mobile.png'
         ];
 
         let allArtifactsValid = true;

@@ -26,7 +26,7 @@ import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
-import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData } from './server/auth-service.js';
+import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData, requestAdminPinResetOtp, resetAdminPinWithOtp } from './server/auth-service.js';
 import {
   getRawMaterials,
   addRawMaterial,
@@ -774,6 +774,28 @@ app.post('/api/auth/verify-otp', (req, res) => {
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to verify verification code' });
+  }
+});
+
+// 2B. Admin Forgot PIN: Send OTP to store owner email
+app.post('/api/auth/admin-forgot-pin/send-otp', (req, res) => {
+  try {
+    const { email, storeCode } = req.body || {};
+    const result = requestAdminPinResetOtp(email, storeCode);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to dispatch reset code' });
+  }
+});
+
+// 2C. Admin Forgot PIN: Verify OTP & Reset Master Admin PIN
+app.post('/api/auth/admin-forgot-pin/reset', (req, res) => {
+  try {
+    const { email, otp, newPin, storeCode } = req.body || {};
+    const result = resetAdminPinWithOtp(email, otp, newPin, storeCode);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to reset Admin PIN' });
   }
 });
 

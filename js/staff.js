@@ -162,6 +162,9 @@ function renderStaffManagementUI() {
     }
 
     const sessions = (typeof window !== 'undefined' && window.activeStaffSessions) || [];
+    const devices = (typeof window !== 'undefined' && Array.isArray(window.authorizedDevices)) ? window.authorizedDevices : (function() {
+        try { return JSON.parse(localStorage.getItem('billnaw_authorized_devices') || '[]'); } catch(e) { return []; }
+    })();
     const esc = typeof escapeHtml === 'function' ? escapeHtml : (str => String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 
     tbody.innerHTML = staffList.map(staff => {
@@ -169,6 +172,55 @@ function renderStaffManagementUI() {
         const roleCls = staff.role ? `role-${staff.role.toLowerCase()}` : 'role-cashier';
         const isActive = staff.status !== 'Inactive' && staff.status !== 'Suspended';
         const liveSess = sessions.find(s => String(s.staffId) === String(staff.id) || (s.staffName && s.staffName.toLowerCase() === staff.name.toLowerCase()));
+
+        // Resolve Assigned Terminal / Station Profile
+        const staffDevId = staff.deviceId || staff.assignedDeviceId;
+        let assignedDev = devices.find(d => d.deviceId === staffDevId || d.id === staffDevId);
+        if (!assignedDev && liveSess && liveSess.deviceId) {
+            assignedDev = devices.find(d => d.deviceId === liveSess.deviceId || d.id === liveSess.deviceId);
+        }
+        if (!assignedDev && staff.role === 'Admin') {
+            assignedDev = devices.find(d => d.isMaster === true);
+        }
+        if (!assignedDev) {
+            if (staff.role === 'Kitchen Chef' || staff.role === 'Chef') assignedDev = devices.find(d => d.stationProfile === 'KDS');
+            else if (staff.role === 'Floor Server' || staff.role === 'Server') assignedDev = devices.find(d => d.stationProfile === 'WAITER_MOBILE');
+            else if (staff.role === 'Cashier') assignedDev = devices.find(d => d.stationProfile === 'BILLING_COUNTER' && !d.isMaster);
+        }
+
+        const stationProfile = (assignedDev && assignedDev.stationProfile) || staff.stationProfile || (
+            staff.role === 'Kitchen Chef' ? 'KDS' :
+            (staff.role === 'Floor Server' ? 'WAITER_MOBILE' :
+            (staff.role === 'Admin' ? 'ADMIN_MASTER' : 'BILLING_COUNTER'))
+        );
+        const stationLabel = stationProfile === 'KDS' ? 'Kitchen KDS' :
+            (stationProfile === 'WAITER_MOBILE' ? 'Waiter Mobile' :
+            (stationProfile === 'ADMIN_MASTER' || stationProfile === 'ADMIN' ? 'Master Terminal' : 'Billing Register'));
+
+        let terminalDisplay = '';
+        if (assignedDev) {
+            const isAuth = assignedDev.status === 'AUTHORIZED';
+            terminalDisplay = `
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-dark);">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                        <strong>${esc(assignedDev.deviceName || 'Terminal')}</strong>
+                    </span>
+                    <span style="font-size: 10px; color: ${isAuth ? '#059669' : '#D97706'}; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                        <span style="width: 5px; height: 5px; border-radius: 50%; background: ${isAuth ? '#059669' : '#D97706'};"></span>
+                        ${esc(assignedDev.status || 'AUTHORIZED')}
+                    </span>
+                </div>
+            `;
+        } else {
+            terminalDisplay = `
+                <span style="font-size: 11px; color: var(--text-muted); font-style: italic; display: inline-flex; align-items: center; gap: 4px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    Dynamic / Any
+                </span>
+            `;
+        }
+
         let presenceBadge = '';
         if (liveSess) {
             const isLocked = liveSess.status === 'LOCKED' || liveSess.isLocked === true;
@@ -192,9 +244,15 @@ function renderStaffManagementUI() {
                         </div>
                     </div>
                 </td>
-                <td><span class="staff-badge ${roleCls}">${staff.role}</span></td>
-                <td style="font-size: 13px;">${staff.phone || '-'}</td>
-                <td style="font-family: monospace; letter-spacing: 2px; font-size: 13px;">••••</td>
+                <td>
+                    <span class="staff-badge ${roleCls}">${staff.role}</span>
+                    <span style="display: block; font-size: 10px; color: var(--text-muted); font-weight: 600; margin-top: 3px;">Station: ${esc(stationLabel)}</span>
+                </td>
+                <td>${terminalDisplay}</td>
+                <td style="font-size: 13px;">
+                    <div>${staff.phone || '-'}</div>
+                    <span style="font-family: monospace; letter-spacing: 2px; font-size: 11px; color: var(--text-muted);">••••</span>
+                </td>
                 <td>
                     <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: ${isActive ? 'var(--success)' : 'var(--danger)'};">
                         <span style="width: 7px; height: 7px; border-radius: 50%; background: ${isActive ? 'var(--success)' : 'var(--danger)'};"></span>
@@ -1627,4 +1685,249 @@ async function submitFirstLoginPin() {
 window.submitFirstLoginPin = submitFirstLoginPin;
 window.submitFirstLoginPinChange = submitFirstLoginPin;
 window.confirmFirstLoginPin = submitFirstLoginPin;
+
+// ========================================================
+// 🔐 MASTER ADMIN FORGOT PIN & EMAIL OTP RESET CONTROLLERS
+// ========================================================
+
+let forgotPinCooldownTimer = null;
+let forgotPinCooldownSeconds = 0;
+
+function openAdminForgotPinModal() {
+    const modal = document.getElementById('adminForgotPinModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    const emailInput = document.getElementById('forgotPinEmailInput');
+    const ownerEmail = (typeof shopProfile !== 'undefined' && (shopProfile?.ownerEmail || shopProfile?.email)) ||
+        localStorage.getItem('billnaw_owner_email') || '';
+    if (emailInput) {
+        emailInput.value = ownerEmail;
+        setTimeout(() => emailInput.focus(), 60);
+    }
+
+    const s1 = document.getElementById('forgotPinStep1');
+    const s2 = document.getElementById('forgotPinStep2');
+    if (s1) s1.style.display = 'block';
+    if (s2) s2.style.display = 'none';
+
+    const fb1 = document.getElementById('forgotPinStep1Feedback');
+    const fb2 = document.getElementById('forgotPinFeedback');
+    if (fb1) fb1.innerHTML = '';
+    if (fb2) fb2.innerHTML = '';
+}
+window.openAdminForgotPinModal = openAdminForgotPinModal;
+
+function closeAdminForgotPinModal() {
+    const modal = document.getElementById('adminForgotPinModal');
+    if (modal) modal.style.display = 'none';
+    if (forgotPinCooldownTimer) {
+        clearInterval(forgotPinCooldownTimer);
+        forgotPinCooldownTimer = null;
+    }
+}
+window.closeAdminForgotPinModal = closeAdminForgotPinModal;
+
+async function submitAdminForgotPinOtpRequest() {
+    const emailInput = document.getElementById('forgotPinEmailInput');
+    const email = (emailInput?.value || '').trim();
+    const fb = document.getElementById('forgotPinStep1Feedback');
+    const btn = document.getElementById('btnForgotPinSendOtp');
+
+    if (!email || !email.includes('@')) {
+        if (fb) fb.innerHTML = '<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Please enter a valid store owner email address.</span>';
+        if (emailInput) emailInput.focus();
+        return;
+    }
+
+    if (fb) fb.innerHTML = '<span style="color: var(--primary); font-size: 12px;">Sending verification code...</span>';
+    if (btn) btn.disabled = true;
+
+    try {
+        const storeCode = (typeof shopProfile !== 'undefined' && shopProfile?.storeCode) || localStorage.getItem('billnaw_store_code') || '';
+        const res = await fetch('/api/auth/admin-forgot-pin/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, storeCode })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            const s1 = document.getElementById('forgotPinStep1');
+            const s2 = document.getElementById('forgotPinStep2');
+            const displayEl = document.getElementById('forgotPinTargetEmailDisplay');
+            if (s1) s1.style.display = 'none';
+            if (s2) s2.style.display = 'block';
+            if (displayEl) displayEl.textContent = data.email || email;
+
+            startForgotPinCooldown(data.cooldownSeconds || 60);
+
+            if (data.devOtp) {
+                showToast(`[DEV/TEST] Verification code: ${data.devOtp}`, "info");
+            } else {
+                showToast("Verification code dispatched to your email!", "success");
+            }
+
+            const otpInput = document.getElementById('forgotPinOtpInput');
+            if (otpInput) {
+                otpInput.value = data.devOtp || '';
+                setTimeout(() => otpInput.focus(), 80);
+            }
+        } else {
+            if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">${data.error || 'Failed to dispatch verification code.'}</span>`;
+        }
+    } catch (err) {
+        if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Network error: ${err.message}</span>`;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+window.submitAdminForgotPinOtpRequest = submitAdminForgotPinOtpRequest;
+
+function startForgotPinCooldown(seconds) {
+    if (forgotPinCooldownTimer) clearInterval(forgotPinCooldownTimer);
+    forgotPinCooldownSeconds = seconds;
+    const cooldownEl = document.getElementById('forgotPinCooldownText');
+
+    function update() {
+        if (!cooldownEl) return;
+        if (forgotPinCooldownSeconds > 0) {
+            cooldownEl.textContent = `Resend in ${forgotPinCooldownSeconds}s`;
+            forgotPinCooldownSeconds--;
+        } else {
+            cooldownEl.textContent = '';
+            clearInterval(forgotPinCooldownTimer);
+            forgotPinCooldownTimer = null;
+        }
+    }
+    update();
+    forgotPinCooldownTimer = setInterval(update, 1000);
+}
+
+async function resendAdminForgotPinOtp() {
+    if (forgotPinCooldownSeconds > 0) {
+        showToast(`Please wait ${forgotPinCooldownSeconds}s before requesting a new code.`, "warning");
+        return;
+    }
+    const emailInput = document.getElementById('forgotPinEmailInput');
+    const email = (emailInput?.value || '').trim();
+    if (!email) return;
+
+    try {
+        const storeCode = (typeof shopProfile !== 'undefined' && shopProfile?.storeCode) || localStorage.getItem('billnaw_store_code') || '';
+        const res = await fetch('/api/auth/admin-forgot-pin/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, storeCode })
+        });
+        const data = await res.json();
+        if (data.success) {
+            startForgotPinCooldown(data.cooldownSeconds || 60);
+            if (data.devOtp) {
+                showToast(`[DEV/TEST] Fresh code: ${data.devOtp}`, "info");
+                const otpInput = document.getElementById('forgotPinOtpInput');
+                if (otpInput) otpInput.value = data.devOtp;
+            } else {
+                showToast("A fresh verification code has been dispatched.", "success");
+            }
+        } else {
+            showToast(data.error || "Failed to resend code.", "error");
+        }
+    } catch (e) {
+        showToast("Error requesting code: " + e.message, "error");
+    }
+}
+window.resendAdminForgotPinOtp = resendAdminForgotPinOtp;
+
+async function submitAdminForgotPinReset() {
+    const emailInput = document.getElementById('forgotPinEmailInput');
+    const otpInput = document.getElementById('forgotPinOtpInput');
+    const newPinInput = document.getElementById('forgotPinNewPinInput');
+    const confirmPinInput = document.getElementById('forgotPinConfirmPinInput');
+    const fb = document.getElementById('forgotPinFeedback');
+    const btn = document.getElementById('btnForgotPinSubmitReset');
+
+    const email = (emailInput?.value || '').trim();
+    const otp = (otpInput?.value || '').trim();
+    const newPin = (newPinInput?.value || '').trim();
+    const confirmPin = (confirmPinInput?.value || '').trim();
+
+    if (!/^\d{6}$/.test(otp)) {
+        if (fb) fb.innerHTML = '<span style="color: #DC2626; font-size: 12px; font-weight: 600;">OTP must be exactly 6 numeric digits.</span>';
+        if (otpInput) otpInput.focus();
+        return;
+    }
+    if (!/^\d{4}$/.test(newPin)) {
+        if (fb) fb.innerHTML = '<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Admin PIN must be exactly 4 numeric digits.</span>';
+        if (newPinInput) newPinInput.focus();
+        return;
+    }
+    if (/^(\d)\1{3}$/.test(newPin) || newPin === '1234' || newPin === '4321' || newPin === '1111' || newPin === '0000') {
+        if (fb) fb.innerHTML = '<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Please choose a stronger, non-trivial PIN (avoid 0000, 1111, 1234, etc.).</span>';
+        if (newPinInput) newPinInput.focus();
+        return;
+    }
+    if (newPin !== confirmPin) {
+        if (fb) fb.innerHTML = '<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Confirmation PIN does not match.</span>';
+        if (confirmPinInput) confirmPinInput.focus();
+        return;
+    }
+
+    if (fb) fb.innerHTML = '<span style="color: var(--primary); font-size: 12px;">Verifying &amp; resetting Admin PIN...</span>';
+    if (btn) btn.disabled = true;
+
+    try {
+        const storeCode = (typeof shopProfile !== 'undefined' && shopProfile?.storeCode) || localStorage.getItem('billnaw_store_code') || '';
+        const res = await fetch('/api/auth/admin-forgot-pin/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otp, newPin, storeCode })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            // Update local shopProfile adminPinHash
+            if (typeof shopProfile !== 'undefined') {
+                if (!shopProfile) shopProfile = {};
+                shopProfile.adminPinHash = data.adminPinHash;
+            }
+
+            // Update Admin staff member in staffList
+            const sList = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList : (window.staffList || []);
+            const adminStaff = sList.find(s => s.role === 'Admin');
+            if (adminStaff) {
+                adminStaff.pin = newPin;
+                if (typeof generatePinSalt === 'function' && typeof hashPin === 'function') {
+                    const salt = generatePinSalt();
+                    adminStaff.pin_salt = salt;
+                    adminStaff.pin_hash = await hashPin(newPin, salt);
+                }
+                adminStaff.mustChangePin = false;
+            }
+            if (typeof saveToLocal === 'function') saveToLocal();
+
+            // Unlock and close modals
+            closeAdminForgotPinModal();
+            const pairModal = document.getElementById('deviceApprovalPinModal');
+            if (pairModal) pairModal.style.display = 'none';
+
+            if (adminStaff && typeof unlockTerminal === 'function') {
+                unlockTerminal(adminStaff);
+            } else {
+                const overlay = document.getElementById('loginOverlay');
+                if (overlay) overlay.style.display = 'none';
+            }
+
+            showToast("Master Admin PIN updated successfully! Welcome back.", "success");
+        } else {
+            if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">${data.error || 'Failed to reset PIN.'}</span>`;
+        }
+    } catch (err) {
+        if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Network error: ${err.message}</span>`;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+window.submitAdminForgotPinReset = submitAdminForgotPinReset;
+
 

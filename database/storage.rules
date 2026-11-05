@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// Firebase Cloud Storage Security Rules — Billnaw Cafe POS
+// Enforces multi-tenant isolation under both /shops/{shopId} and /cafes/{cafeId}
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isTenantOwner(tenantId) {
+      return isAuthenticated() && (
+        request.auth.token.shopId == tenantId ||
+        request.auth.token.cafeId == tenantId ||
+        request.auth.token.storeCode == tenantId ||
+        request.auth.uid == tenantId
+      );
+    }
+
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size <= 5 * 1024 * 1024; // 5MB limit
+    }
+
+    function isValidDocument() {
+      return (request.resource.contentType.matches('image/.*') ||
+              request.resource.contentType == 'application/pdf' ||
+              request.resource.contentType == 'text/plain' ||
+              request.resource.contentType == 'application/json') &&
+             request.resource.size <= 10 * 1024 * 1024; // 10MB limit
+    }
+
+    // --- Dual-Path Tenant Storage: /shops/{shopId}/... ---
+    match /shops/{shopId}/{allPaths=**} {
+      // Store staff and customers can read store assets (logos, dish images)
+      allow read: if isAuthenticated();
+
+      // Only tenant members can upload store media, subject to size & MIME checks
+      allow write: if isTenantOwner(shopId) && (isValidImage() || isValidDocument());
+    }
+
+    // --- Dual-Path Tenant Storage: /cafes/{cafeId}/... ---
+    match /cafes/{cafeId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantOwner(cafeId) && (isValidImage() || isValidDocument());
+    }
+
+    // Default deny for unmapped paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -5,6 +5,9 @@
       "rules": "firestore.rules"
     }
   ],
+  "storage": {
+    "rules": "storage.rules"
+  },
   "functions": [
     {
       "source": "database/server-functions",

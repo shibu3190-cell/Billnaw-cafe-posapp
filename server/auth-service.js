@@ -1060,6 +1060,67 @@ export function revokeSessionsForUser(email, exceptToken) {
 }
 
 /**
+ * Dispatches a 6-digit OTP to the store owner's email for Master Admin PIN reset.
+ */
+export function requestAdminPinResetOtp(ownerEmail, storeCode) {
+  const normEmail = normalizeEmail(ownerEmail);
+  if (!isValidEmail(normEmail)) {
+    return { status: 400, data: { success: false, error: 'Please enter a valid store owner email address' } };
+  }
+  return sendOtp(normEmail, 'admin-pin-reset');
+}
+
+/**
+ * Verifies email OTP and securely updates the Master Admin PIN in store profile and Firestore.
+ */
+export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode) {
+  const normEmail = normalizeEmail(ownerEmail);
+  const verifyRes = verifyOtp(normEmail, otp);
+  if (verifyRes.status !== 200 || !verifyRes.data.success) {
+    return { status: 400, data: { success: false, error: verifyRes.data.error || 'Invalid or expired OTP code' } };
+  }
+
+  const cleanPin = String(newPin || '').trim();
+  if (!/^\d{4}$/.test(cleanPin)) {
+    return { status: 400, data: { success: false, error: 'Admin PIN must be exactly 4 numeric digits.' } };
+  }
+  if (/^(\d)\1{3}$/.test(cleanPin) || cleanPin === '1234' || cleanPin === '4321' || cleanPin === '1111' || cleanPin === '0000') {
+    return { status: 400, data: { success: false, error: 'Please choose a non-trivial PIN (cannot be repetitive like 0000, 1111 or sequential like 1234, 4321).' } };
+  }
+
+  const pinHash = hashStringServer(cleanPin);
+  const code = storeCode || generateStoreCode('Default', normEmail);
+  let shop = shopStore.get(code);
+  if (!shop) {
+    shop = createDefaultShopDocument(code, 'Billnaw Cafe', normEmail, 'user_' + normEmail, cleanPin);
+    shopStore.set(code, shop);
+  } else {
+    if (!shop.profile) shop.profile = {};
+    shop.profile.adminPinHash = pinHash;
+    if (Array.isArray(shop.staff)) {
+      const adminStaff = shop.staff.find(s => s.role === 'Admin');
+      if (adminStaff) {
+        adminStaff.pin = cleanPin;
+        adminStaff.pin_hash = pinHash;
+        adminStaff.mustChangePin = false;
+      }
+    }
+    shop.updatedAt = new Date().toISOString();
+  }
+  syncShopToFirestore(code, shop);
+
+  return {
+    status: 200,
+    data: {
+      success: true,
+      message: 'Admin PIN reset successfully!',
+      adminPinHash: pinHash,
+      storeCode: code
+    }
+  };
+}
+
+/**
  * Resets all in-memory stores for clean testing isolation.
  */
 export function resetAuthStore() {

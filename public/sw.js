@@ -9,7 +9,7 @@
  * 4. All API mutations (/api/*) and Firebase/Firestore requests bypass CacheStorage completely.
  */
 
-const CACHE_VERSION = 'billnaw-pos-shell-v3.1.0';
+const CACHE_VERSION = 'billnaw-pos-shell-v3.2.0';
 
 const STATIC_SHELL_ASSETS = [
   './',

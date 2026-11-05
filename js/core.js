@@ -2726,6 +2726,18 @@ async function migrateLegacyStaffPinStorage() {
 }
 window.migrateLegacyStaffPinStorage = migrateLegacyStaffPinStorage;
 
+function getStoreActiveDeviceCount() {
+    try {
+        if (Array.isArray(window.authorizedDevices) && window.authorizedDevices.length > 0) {
+            return window.authorizedDevices.length;
+        }
+        const cached = JSON.parse(localStorage.getItem('billnaw_authorized_devices') || '[]');
+        if (Array.isArray(cached) && cached.length > 0) return cached.length;
+    } catch (e) {}
+    return 1;
+}
+window.getStoreActiveDeviceCount = getStoreActiveDeviceCount;
+
 function initStaffSystem() {
     if (!staffList || staffList.length === 0) {
         staffList = [
@@ -2795,9 +2807,19 @@ function initStaffSystem() {
         const isExpired = (typeof checkDeviceAuthExpiration === 'function') ? checkDeviceAuthExpiration() : false;
 
         if (!isExpired && isAuthorized) {
-            // Within 10-day window: prompt staff for 4-digit PIN on app launch without re-pairing
-            if (typeof lockTerminal === 'function' && typeof document !== 'undefined' && document.getElementById('loginOverlay')) {
-                lockTerminal(false);
+            const devCount = (typeof getStoreActiveDeviceCount === 'function') ? getStoreActiveDeviceCount() : 1;
+            const isSingleDevice = devCount <= 1;
+
+            if (isLocked || !isSingleDevice) {
+                // Multi-device setup OR explicit manual lock: enforce PIN lock on launch
+                if (typeof lockTerminal === 'function' && typeof document !== 'undefined' && document.getElementById('loginOverlay')) {
+                    lockTerminal(false);
+                }
+            } else {
+                // Single-device solo merchant: 10-day persistence auto-login without PIN prompt
+                if (typeof unlockTerminal === 'function' && currentStaff) {
+                    unlockTerminal(currentStaff);
+                }
             }
         } else if (isLocked && typeof lockTerminal === 'function') {
             lockTerminal(false);
