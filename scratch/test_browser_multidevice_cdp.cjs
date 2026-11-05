@@ -925,7 +925,7 @@ async function testFlow7_AdminForgotPinAndMergedStaffTable(cdp, viewport) {
             const forgotCloseBtns = modal ? modal.querySelectorAll('.forgot-pin-close-btn') : [];
 
             const emailInput = document.getElementById('forgotPinEmailInput');
-            if (emailInput) emailInput.value = 'audit_owner_${viewport}@billnawcafe.com';
+            if (emailInput) emailInput.value = 'audit_owner_${viewport}_' + Date.now() + '@billnawcafe.com';
 
             return {
                 hasForgotLink: !!forgotLink,
@@ -946,8 +946,8 @@ async function testFlow7_AdminForgotPinAndMergedStaffTable(cdp, viewport) {
     const stepAssert = await cdp.evaluate(`
         (async () => {
             const emailInput = document.getElementById('forgotPinEmailInput');
-            if (emailInput && (!emailInput.value || !emailInput.value.includes('@'))) {
-                emailInput.value = 'audit_owner_${viewport}@billnawcafe.com';
+            if (emailInput) {
+                emailInput.value = 'audit_owner_${viewport}_' + Date.now() + '@billnawcafe.com';
             }
             if (typeof submitAdminForgotPinOtpRequest === 'function') {
                 await submitAdminForgotPinOtpRequest();
@@ -1029,6 +1029,227 @@ async function testFlow7_AdminForgotPinAndMergedStaffTable(cdp, viewport) {
     `);
 
     console.log(`  ✅ Flow 7 passed for ${viewport}.`);
+}
+
+// ------------------------------------------------------------
+
+async function testFlow8_KdsAndKitchenWorkflow(cdp, viewport) {
+    console.log(`  [Flow 8: Kitchen Display System (KDS) & Real-Time Queue] Auditing on ${viewport}...`);
+
+    // 1. Switch active staff to Kitchen Chef
+    await cdp.evaluate(`
+        (() => {
+            const chefObj = { id: 4, name: 'Chef Mario', role: 'Kitchen Chef' };
+            localStorage.setItem('billnaw_current_staff', JSON.stringify(chefObj));
+            localStorage.setItem('billnaw_station_profile', 'KDS');
+            if (typeof unlockTerminal === 'function') {
+                unlockTerminal(chefObj);
+            } else {
+                currentStaff = chefObj;
+                window.currentStaff = chefObj;
+                if (typeof enforcePermissions === 'function') enforcePermissions();
+            }
+            if (typeof switchTab === 'function') switchTab('kds');
+            if (typeof renderKdsUI === 'function') renderKdsUI();
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 400));
+
+    // 2. Audit KDS view visibility and dynamic bottom bar appearance
+    const kdsAssert = await cdp.evaluate(`
+        (() => {
+            const navKds = document.getElementById('nav-kds');
+            const kdsView = document.getElementById('kds');
+            const checkoutBtn = document.getElementById('checkoutBtn');
+            const styleKds = navKds ? window.getComputedStyle(navKds) : null;
+            const styleCheckout = checkoutBtn ? window.getComputedStyle(checkoutBtn) : null;
+
+            return {
+                navKdsExists: !!navKds,
+                navKdsDisplay: styleKds ? styleKds.display : null,
+                kdsViewActive: kdsView ? kdsView.classList.contains('active') : false,
+                checkoutHidden: styleCheckout ? styleCheckout.display === 'none' : true
+            };
+        })()
+    `);
+
+    assert.strictEqual(kdsAssert.navKdsExists, true, '#nav-kds button must exist in DOM');
+    assert.strictEqual(kdsAssert.navKdsDisplay, 'flex', '#nav-kds must dynamically appear as "flex" for Kitchen Chef');
+    assert.strictEqual(kdsAssert.kdsViewActive, true, '#kds view must be active');
+    assert.strictEqual(kdsAssert.checkoutHidden, true, 'Checkout button must be strictly hidden in KDS station profile');
+
+    // 3. Dispatch a sample kitchen order ticket to KDS
+    await cdp.evaluate(`
+        (async () => {
+            const sampleTicket = {
+                kot_id: 'KOT-CDP-' + Date.now().toString().slice(-4),
+                table_id: 'Table 4',
+                items: [
+                    { name: 'Veg Club Sandwich', quantity: 2, notes: 'extra cheese' },
+                    { name: 'Espresso', quantity: 1, notes: 'double shot' }
+                ],
+                special_instructions: 'Serve coffee piping hot',
+                status: 'PENDING',
+                created_at: new Date(Date.now() - 180000).toISOString(),
+                updated_at: new Date().toISOString()
+            };
+
+            const raw = localStorage.getItem('billnaw_active_kots');
+            const list = raw ? JSON.parse(raw) : [];
+            list.unshift(sampleTicket);
+            localStorage.setItem('billnaw_active_kots', JSON.stringify(list));
+
+            if (window.kotUIInstance) {
+                await window.kotUIInstance.loadKots();
+            } else if (typeof renderKdsUI === 'function') {
+                await renderKdsUI();
+            }
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 400));
+
+    // 4. Verify ticket rendering with action buttons and elapsed timer indicator
+    const cardAssert = await cdp.evaluate(`
+        (() => {
+            const container = document.getElementById('kotCardsContainer');
+            const cards = container ? Array.from(container.querySelectorAll('.kot-card')) : [];
+            const hasPending = cards.some(c => c.classList.contains('kot-status-pending'));
+            const hasPrepBtn = container ? !!container.querySelector('.btn-prep') : false;
+            const hasTimerPill = container ? !!container.querySelector('.kot-timer-pill') : false;
+
+            return {
+                cardCount: cards.length,
+                hasPending,
+                hasPrepBtn,
+                hasTimerPill
+            };
+        })()
+    `);
+
+    assert.ok(cardAssert.cardCount > 0, 'KDS must render at least one kitchen ticket card');
+    assert.strictEqual(cardAssert.hasPending, true, 'KDS must display ticket in PENDING status');
+    assert.strictEqual(cardAssert.hasPrepBtn, true, 'KDS card must display "Prep" action button');
+    assert.strictEqual(cardAssert.hasTimerPill, true, 'KDS card must display wait-time elapsed timer pill');
+
+    await cdp.captureScreenshot(`multidevice_08_kds_kitchen_${viewport}.png`);
+
+    // 5. Test Chef clicking "Prep" -> advance to PREPARING
+    await cdp.evaluate(`
+        (() => {
+            const prepBtn = document.querySelector('.kot-card.kot-status-pending .btn-prep');
+            if (prepBtn) prepBtn.click();
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 400));
+
+    const prepAssert = await cdp.evaluate(`
+        (() => {
+            const container = document.getElementById('kotCardsContainer');
+            const hasPreparing = container ? !!container.querySelector('.kot-status-preparing') : false;
+            const hasReadyBtn = container ? !!container.querySelector('.btn-ready') : false;
+            return { hasPreparing, hasReadyBtn };
+        })()
+    `);
+
+    assert.strictEqual(prepAssert.hasPreparing, true, 'Ticket must advance to PREPARING status');
+    assert.strictEqual(prepAssert.hasReadyBtn, true, 'Ticket must now show "Ready" action button');
+
+    console.log(`  ✅ Flow 8 passed for ${viewport}.`);
+}
+
+async function testFlow9_TablesViaMoreHub(cdp, viewport) {
+    console.log(`  [Flow 9: Tables Floor View via More Hub & Clean Bottom Bar] Auditing on ${viewport}...`);
+
+    // 1. Switch to Floor Server role (Waiter Mobile)
+    await cdp.evaluate(`
+        (() => {
+            const serverObj = { id: 3, name: 'Rahul Verma', role: 'Floor Server' };
+            localStorage.setItem('billnaw_current_staff', JSON.stringify(serverObj));
+            localStorage.setItem('billnaw_station_profile', 'WAITER_MOBILE');
+            if (typeof unlockTerminal === 'function') {
+                unlockTerminal(serverObj);
+            } else {
+                currentStaff = serverObj;
+                window.currentStaff = serverObj;
+                if (typeof enforcePermissions === 'function') enforcePermissions();
+            }
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 300));
+
+    // 2. Assert #nav-tables is completely absent / hidden from bottom bar
+    const navTablesAssert = await cdp.evaluate(`
+        (() => {
+            const navTables = document.getElementById('nav-tables');
+            const style = navTables ? window.getComputedStyle(navTables) : null;
+            return {
+                exists: !!navTables,
+                display: style ? style.display : 'none'
+            };
+        })()
+    `);
+
+    assert.strictEqual(navTablesAssert.display, 'none', '#nav-tables must be totally removed/hidden from bottom bar');
+
+    // 3. Open More Hub modal and verify Dine-In Tables launcher card
+    await cdp.evaluate(`
+        (() => {
+            if (typeof openMoreHub === 'function') openMoreHub();
+            else {
+                const hub = document.getElementById('moreHubModal');
+                if (hub) hub.style.display = 'flex';
+            }
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 300));
+
+    const moreHubAssert = await cdp.evaluate(`
+        (() => {
+            const hub = document.getElementById('moreHubModal');
+            const tablesCard = hub ? Array.from(hub.querySelectorAll('.more-hub-card')).find(c => c.textContent.includes('Dine-In Tables')) : null;
+            return {
+                isHubVisible: hub ? hub.style.display === 'flex' : false,
+                hasTablesCard: !!tablesCard
+            };
+        })()
+    `);
+
+    assert.strictEqual(moreHubAssert.isHubVisible, true, '#moreHubModal must open cleanly');
+    assert.strictEqual(moreHubAssert.hasTablesCard, true, '#moreHubModal must contain "Dine-In Tables" launcher card');
+
+    await cdp.captureScreenshot(`multidevice_09_tables_morehub_${viewport}.png`);
+
+    // 4. Click Dine-In Tables card -> transitions to tables view
+    await cdp.evaluate(`
+        (() => {
+            if (typeof closeMoreHub === 'function') closeMoreHub();
+            if (typeof switchTabDirect === 'function') switchTabDirect('tables');
+            else if (typeof switchTab === 'function') switchTab('tables');
+            if (typeof renderTablesFloorUI === 'function') renderTablesFloorUI();
+        })()
+    `);
+
+    await new Promise(r => setTimeout(r, 400));
+
+    const tablesViewAssert = await cdp.evaluate(`
+        (() => {
+            const tablesView = document.getElementById('tables');
+            const tablesGrid = document.getElementById('tablesGridContainer');
+            return {
+                isTablesActive: tablesView ? tablesView.classList.contains('active') : false,
+                hasGrid: !!tablesGrid
+            };
+        })()
+    `);
+
+    assert.strictEqual(tablesViewAssert.isTablesActive, true, '#tables view must be active after launching from More Hub');
+
+    console.log(`  ✅ Flow 9 passed for ${viewport}.`);
 }
 
 // ------------------------------------------------------------
@@ -1315,6 +1536,8 @@ async function runMultiDeviceAudit() {
             await testFlow5_RemoteLockout(cdp, vp);
             await testFlow6_SessionPersistenceAndRoleSwitch(cdp, vp);
             await testFlow7_AdminForgotPinAndMergedStaffTable(cdp, vp);
+            await testFlow8_KdsAndKitchenWorkflow(cdp, vp);
+            await testFlow9_TablesViaMoreHub(cdp, vp);
         }
 
         // Verify all 14 Screenshot Artifacts
@@ -1336,7 +1559,11 @@ async function runMultiDeviceAudit() {
             'multidevice_06_roleswitch_desktop.png',
             'multidevice_06_roleswitch_mobile.png',
             'multidevice_07_forgotpin_mergedstaff_desktop.png',
-            'multidevice_07_forgotpin_mergedstaff_mobile.png'
+            'multidevice_07_forgotpin_mergedstaff_mobile.png',
+            'multidevice_08_kds_kitchen_desktop.png',
+            'multidevice_08_kds_kitchen_mobile.png',
+            'multidevice_09_tables_morehub_desktop.png',
+            'multidevice_09_tables_morehub_mobile.png'
         ];
 
         let allArtifactsValid = true;
