@@ -453,16 +453,16 @@ async function runEmpiricalNavigationChallenge() {
                     }
                     const navKds = document.getElementById('nav-kds');
                     const navTables = document.getElementById('nav-tables');
-                    const styleKds = window.getComputedStyle(navKds);
-                    const rectKds = navKds.getBoundingClientRect();
-                    const styleTables = window.getComputedStyle(navTables);
+                    const styleKds = navKds ? window.getComputedStyle(navKds) : { display: 'none', visibility: 'hidden' };
+                    const rectKds = navKds ? navKds.getBoundingClientRect() : { height: 0 };
+                    const styleTables = navTables ? window.getComputedStyle(navTables) : { display: 'none', visibility: 'hidden' };
 
                     return {
                         kdsDisplay: styleKds.display,
-                        kdsInlineDisplay: navKds.style.display,
+                        kdsInlineDisplay: navKds ? navKds.style.display : 'none',
                         kdsIsRendered: styleKds.display !== 'none' && styleKds.visibility !== 'hidden' && rectKds.height > 0,
                         tablesDisplay: styleTables.display,
-                        tablesInlineDisplay: navTables.style.display,
+                        tablesInlineDisplay: navTables ? navTables.style.display : 'none',
                         tablesIsRendered: styleTables.display !== 'none' && styleTables.visibility !== 'hidden'
                     };
                 })()

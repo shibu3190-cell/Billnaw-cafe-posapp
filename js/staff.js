@@ -1526,6 +1526,11 @@ function enforcePermissions() {
             navKds.style.display = 'none';
         }
     }
+
+    // Tables is totally removed from the bottom bar (accessible via More Hub)
+    if (navTables) {
+        navTables.style.display = 'none';
+    }
 }
 window.enforcePermissions = enforcePermissions;
 

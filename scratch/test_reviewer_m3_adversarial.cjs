@@ -125,14 +125,13 @@ check("F20-02: Zero raw Unicode emojis in navigation <tab> and segmented pills i
     assert.strictEqual(offenders.length, 0, `Found ${offenders.length} tabs/pills with raw emojis: ${JSON.stringify(offenders)}`);
 });
 
-check("F20-03: #nav-kds and #nav-tables use clean Lucide SVG icons", () => {
+check("F20-03: #nav-kds uses clean Lucide SVG icons and tables is totally removed from bottom bar", () => {
     const navKds = html.match(/<button\b[^>]*id="nav-kds"[^>]*>([\s\S]*?)<\/button>/);
     assert.ok(navKds, "#nav-kds exists");
     assert.ok(navKds[1].includes('<svg'), "#nav-kds contains an SVG");
     
     const navTables = html.match(/<button\b[^>]*id="nav-tables"[^>]*>([\s\S]*?)<\/button>/);
-    assert.ok(navTables, "#nav-tables exists");
-    assert.ok(navTables[1].includes('<svg'), "#nav-tables contains an SVG");
+    assert.strictEqual(navTables, null, "#nav-tables is totally removed from bottom bar");
 });
 
 // ==========================================

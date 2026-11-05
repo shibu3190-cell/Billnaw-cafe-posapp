@@ -2299,7 +2299,7 @@ function applyStationProfileRestrictions() {
         if (checkoutBtn) checkoutBtn.style.display = 'none';
     } else if (profile === STATION_PROFILES.WAITER_MOBILE) {
         if (navPos) navPos.style.display = 'flex';
-        if (navTables) navTables.style.display = 'flex';
+        if (navTables) navTables.style.display = 'none';
         if (navKds) navKds.style.display = 'none';
         if (navReports) navReports.style.display = 'none';
         if (navInventory) navInventory.style.display = 'none';
@@ -2308,8 +2308,8 @@ function applyStationProfileRestrictions() {
         if (cartDiscountWrap) cartDiscountWrap.style.display = 'none';
     } else {
         if (navPos) navPos.style.display = 'flex';
-        if (navKds) navKds.style.display = 'flex';
-        if (navTables) navTables.style.display = 'flex';
+        if (navKds) navKds.style.display = 'none';
+        if (navTables) navTables.style.display = 'none';
         if (navMenu) navMenu.style.display = 'flex';
         if (navInventory) navInventory.style.display = 'flex';
         if (navKhata) navKhata.style.display = 'flex';

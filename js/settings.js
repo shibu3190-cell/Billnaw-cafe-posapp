@@ -826,7 +826,7 @@ function switchTabDirect(tabId) {
     document.querySelectorAll('.view, .tab-content').forEach(c => c.classList.remove('active')); 
     
     const targetNavBtn = document.getElementById(`nav-${tabId}`) || document.getElementById(`tab-${tabId}`);
-    if (['customers', 'settings', 'whatsapp'].includes(tabId)) {
+    if (['customers', 'settings', 'whatsapp', 'tables'].includes(tabId)) {
         const moreNavBtn = document.getElementById('nav-more');
         if (moreNavBtn) moreNavBtn.classList.add('active');
     }
