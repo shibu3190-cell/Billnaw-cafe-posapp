@@ -33,6 +33,7 @@ const kotUiPath = path.join(rootDir, 'src', 'features', 'kot', 'kot.ui.js');
 const kotServicePath = path.join(rootDir, 'src', 'features', 'kot', 'kot.service.js');
 const tablesUiPath = path.join(rootDir, 'src', 'features', 'tables', 'tables.ui.js');
 const tablesServicePath = path.join(rootDir, 'src', 'features', 'tables', 'tables.service.js');
+const featureControllersPath = path.join(rootDir, 'js', 'feature-controllers.js');
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 const core = fs.readFileSync(corePath, 'utf8');
@@ -43,6 +44,7 @@ const cssPos = fs.readFileSync(cssPosPath, 'utf8');
 const styleCss = fs.readFileSync(styleCssPath, 'utf8');
 const kotUi = fs.readFileSync(kotUiPath, 'utf8');
 const kotService = fs.readFileSync(kotServicePath, 'utf8');
+const featureControllers = fs.existsSync(featureControllersPath) ? fs.readFileSync(featureControllersPath, 'utf8') : '';
 const tablesUi = fs.readFileSync(tablesUiPath, 'utf8');
 const tablesService = fs.readFileSync(tablesServicePath, 'utf8');
 
@@ -235,7 +237,7 @@ check("F9-06: WAITER_MOBILE integrates TablesUI for table-side ordering and bloc
     assert.ok(html.includes('id="tables"'), "#tables view container exists in index.html");
     assert.ok(html.includes('id="tablesGridContainer"'), "#tablesGridContainer exists in index.html");
     assert.ok(tablesUi.includes('onTableSelect'), "tables.ui.js supports table selection callback");
-    assert.ok(html.includes("if (table && typeof selectTable === 'function')"), "Table select triggers selectTable and pos navigation");
+    assert.ok(html.includes("if (table && typeof selectTable === 'function')") || featureControllers.includes("if (table && typeof selectTable === 'function')"), "Table select triggers selectTable and pos navigation");
     assert.ok(core.includes("if (checkoutBtn) checkoutBtn.style.display = 'none';"), "checkoutBtn hidden on Waiter Mobile");
     assert.ok(core.includes("if (cartDiscountWrap) cartDiscountWrap.style.display = 'none';"), "cartDiscountWrap hidden on Waiter Mobile");
     assert.ok(pos.includes("can_settle_bills"), "pos.js enforces can_settle_bills permission check");

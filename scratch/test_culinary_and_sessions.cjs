@@ -39,6 +39,7 @@ const htmlPath = path.join(rootDir, 'index.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 const cssPath = path.join(rootDir, 'style.css');
 const css = fs.readFileSync(cssPath, 'utf8');
+const shopAuthJs = fs.existsSync(path.join(rootDir, 'js', 'shop-auth.js')) ? fs.readFileSync(path.join(rootDir, 'js', 'shop-auth.js'), 'utf8') : '';
 
 (async () => {
   // ----------------------------------------------------
@@ -88,7 +89,7 @@ const css = fs.readFileSync(cssPath, 'utf8');
   test("AUTH-1: index.html contains #settingTileLogoutShop calling logoutShopCloudAccount()", () => {
     assert.ok(html.includes('id="settingTileLogoutShop"'), "Missing #settingTileLogoutShop");
     assert.ok(html.includes('onclick="logoutShopCloudAccount()"'), "Must call logoutShopCloudAccount()");
-    assert.ok(html.includes('window.logoutShopCloudAccount = logoutShop;'), "Must export logoutShopCloudAccount");
+    assert.ok(html.includes('window.logoutShopCloudAccount = logoutShop;') || shopAuthJs.includes('window.logoutShopCloudAccount = logoutShop;'), "Must export logoutShopCloudAccount");
   });
 
   test("AUTH-2: index.html contains #settingTileActiveSessions calling openActiveSessionsModal()", () => {
@@ -98,11 +99,11 @@ const css = fs.readFileSync(cssPath, 'utf8');
   });
 
   test("AUTH-3: logoutShop() sends /api/auth/logout with Bearer token & clears credentials", () => {
-    assert.ok(html.includes("fetch('/api/auth/logout'"), "Must call /api/auth/logout");
-    assert.ok(html.includes("localStorage.removeItem('billnaw_auth_token')"), "Must clear auth token");
-    assert.ok(html.includes("localStorage.removeItem('billnaw_auth_email')"), "Must clear auth email");
-    assert.ok(html.includes("localStorage.removeItem('billnaw_shop_session')"), "Must clear shop session");
-    assert.ok(html.includes("openShopAuthModal();"), "Must immediately open shopAuthModal for re-login");
+    assert.ok(html.includes("fetch('/api/auth/logout'") || shopAuthJs.includes("fetch('/api/auth/logout'"), "Must call /api/auth/logout");
+    assert.ok(html.includes("localStorage.removeItem('billnaw_auth_token')") || shopAuthJs.includes("localStorage.removeItem('billnaw_auth_token')"), "Must clear auth token");
+    assert.ok(html.includes("localStorage.removeItem('billnaw_auth_email')") || shopAuthJs.includes("localStorage.removeItem('billnaw_auth_email')"), "Must clear auth email");
+    assert.ok(html.includes("localStorage.removeItem('billnaw_shop_session')") || shopAuthJs.includes("localStorage.removeItem('billnaw_shop_session')"), "Must clear shop session");
+    assert.ok(html.includes("openShopAuthModal();") || shopAuthJs.includes("openShopAuthModal();"), "Must immediately open shopAuthModal for re-login");
   });
 
   test("AUTH-4: Backend listActiveSessions, revokeSession & revokeSessionsForStore operate accurately", () => {
@@ -192,7 +193,7 @@ const css = fs.readFileSync(cssPath, 'utf8');
   });
 
   test("AUTH-7: index.html implements revokeCurrentSessionAndLogout and app.js calls /api/auth/logout", () => {
-    assert.ok(html.includes('revokeCurrentSessionAndLogout'), "index.html must implement revokeCurrentSessionAndLogout");
+    assert.ok(html.includes('revokeCurrentSessionAndLogout') || shopAuthJs.includes('revokeCurrentSessionAndLogout'), "index.html must implement revokeCurrentSessionAndLogout");
     const appJsContent = fs.readFileSync(path.join(rootDir, 'app.js'), 'utf8');
     assert.ok(appJsContent.includes('/api/auth/logout'), "app.js logoutShop must call /api/auth/logout");
   });

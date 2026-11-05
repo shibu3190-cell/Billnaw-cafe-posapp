@@ -9,7 +9,7 @@
  * 4. All API mutations (/api/*) and Firebase/Firestore requests bypass CacheStorage completely.
  */
 
-const CACHE_VERSION = 'billnaw-pos-shell-v3.2.0';
+const CACHE_VERSION = 'billnaw-pos-shell-v3.3.0';
 
 const STATIC_SHELL_ASSETS = [
   './',
@@ -41,16 +41,25 @@ const STATIC_SHELL_ASSETS = [
   './src/shared/components/data-table.js',
   './src/shared/components/skeleton.js',
 
-  // Feature Services
+  // Feature Services & Modular UI
   './src/features/billing/billing.service.js',
   './src/features/tables/tables.service.js',
+  './src/features/tables/tables.ui.js',
   './src/features/kot/kot.service.js',
+  './src/features/kot/kot.ui.js',
   './src/features/menu/menu.service.js',
   './src/features/inventory/inventory.service.js',
   './src/features/customers/customers.service.js',
   './src/features/reports/reports.service.js',
   './src/features/settings/settings.service.js',
   './src/features/auth/auth.service.js',
+
+  // Extracted Modular Application Controllers
+  './js/defensive-stubs.js',
+  './js/firebase-init.js',
+  './js/sw-register.js',
+  './js/shop-auth.js',
+  './js/feature-controllers.js',
 
   // Legacy Modules for Backward Compatibility
   './js/core.js',

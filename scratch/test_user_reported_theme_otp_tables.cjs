@@ -25,6 +25,7 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
 const posJs = fs.readFileSync(path.join(__dirname, '..', 'js', 'pos.js'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'js', 'settings.js'), 'utf8');
+const shopAuthJs = fs.existsSync(path.join(__dirname, '..', 'js', 'shop-auth.js')) ? fs.readFileSync(path.join(__dirname, '..', 'js', 'shop-auth.js'), 'utf8') : '';
 const authService = require('../server/auth-service.js');
 
 // 1. POS Login Theme & Security Hardening
@@ -66,9 +67,9 @@ test("sendOtp immediately purges any previous OTP for the same email", () => {
 });
 
 test("index.html implements resetLoginOtpView and resetSignupOtpView clearing OTP boxes", () => {
-    assert.ok(html.includes('function resetLoginOtpView()'), "Must define resetLoginOtpView");
-    assert.ok(html.includes('function resetSignupOtpView()'), "Must define resetSignupOtpView");
-    assert.ok(html.includes("fetch('/api/auth/logout'"), "logoutShop must invoke /api/auth/logout");
+    assert.ok(html.includes('function resetLoginOtpView()') || shopAuthJs.includes('function resetLoginOtpView()'), "Must define resetLoginOtpView");
+    assert.ok(html.includes('function resetSignupOtpView()') || shopAuthJs.includes('function resetSignupOtpView()'), "Must define resetSignupOtpView");
+    assert.ok(html.includes("fetch('/api/auth/logout'") || shopAuthJs.includes("fetch('/api/auth/logout'"), "logoutShop must invoke /api/auth/logout");
 });
 
 // 3. Mandatory Phone Number Validation on Signup

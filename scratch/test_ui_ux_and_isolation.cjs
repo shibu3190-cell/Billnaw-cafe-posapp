@@ -32,6 +32,7 @@ async function runAudit() {
   const menuJs = fs.readFileSync(path.join(rootDir, 'js', 'menu.js'), 'utf8');
   const settingsJs = fs.readFileSync(path.join(rootDir, 'js', 'settings.js'), 'utf8');
   const appJs = fs.readFileSync(path.join(rootDir, 'app.js'), 'utf8');
+  const shopAuthJs = fs.existsSync(path.join(rootDir, 'js', 'shop-auth.js')) ? fs.readFileSync(path.join(rootDir, 'js', 'shop-auth.js'), 'utf8') : '';
   const serverJs = fs.readFileSync(path.join(rootDir, 'server.js'), 'utf8');
   const authService = require(path.join(rootDir, 'server', 'auth-service.js'));
   const { pathToFileURL } = require('url');
@@ -145,14 +146,14 @@ async function runAudit() {
   // ----------------------------------------------------
   console.log("\n📍 SECTION 4: LOGOUT, RE-LOGIN & DEVICE ISOLATION");
   test("AUTH-ISO-1: logoutShop schedules clean reload returning to ?auth=login", () => {
-    assert.ok(html.includes('auth=login'), "index.html logoutShop must target auth=login");
+    assert.ok(html.includes('auth=login') || shopAuthJs.includes('auth=login'), "index.html logoutShop must target auth=login");
     assert.ok(appJs.includes('auth=login'), "app.js logoutShop must target auth=login");
-    assert.ok(html.includes("localStorage.removeItem('billnaw_auth_token')"), "Must clear token");
-    assert.ok(html.includes("openShopAuthModal();"), "Must trigger openShopAuthModal");
+    assert.ok(html.includes("localStorage.removeItem('billnaw_auth_token')") || shopAuthJs.includes("localStorage.removeItem('billnaw_auth_token')"), "Must clear token");
+    assert.ok(html.includes("openShopAuthModal();") || shopAuthJs.includes("openShopAuthModal();"), "Must trigger openShopAuthModal");
   });
 
   test("AUTH-ISO-2: Cold load with ?auth=login automatically presents #shopAuthModal", () => {
-    assert.ok(html.includes("window.location.search.includes('auth=login')"), "index.html must check for auth=login");
+    assert.ok(html.includes("window.location.search.includes('auth=login')") || shopAuthJs.includes("window.location.search.includes('auth=login')"), "index.html must check for auth=login");
     assert.ok(appJs.includes("window.location.search.includes('auth=login')"), "app.js must check for auth=login");
   });
 

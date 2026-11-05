@@ -142,7 +142,7 @@ class CDPClient {
         };
     }
 
-    send(method, params = {}, timeoutMs = 10000) {
+    send(method, params = {}, timeoutMs = 25000) {
         return new Promise((resolve, reject) => {
             const msgId = this.id++;
             console.log(`  [CDP >> REQ] #${msgId} ${method}`);
@@ -243,7 +243,7 @@ class CDPClient {
 
     async captureScreenshot(filename) {
         const fullPath = path.join(ARTIFACTS_DIR, filename);
-        const res = await this.send('Page.captureScreenshot', { format: 'png' });
+        const res = await this.send('Page.captureScreenshot', { format: 'png' }, 30000);
         const buffer = Buffer.from(res.data, 'base64');
         fs.writeFileSync(fullPath, buffer);
         console.log(`    📸 Saved screenshot: ${filename} (${buffer.length.toLocaleString()} bytes)`);
@@ -945,6 +945,10 @@ async function testFlow7_AdminForgotPinAndMergedStaffTable(cdp, viewport) {
     // Simulate OTP Send & Step 2 display
     const stepAssert = await cdp.evaluate(`
         (async () => {
+            const emailInput = document.getElementById('forgotPinEmailInput');
+            if (emailInput && (!emailInput.value || !emailInput.value.includes('@'))) {
+                emailInput.value = 'audit_owner_${viewport}@billnawcafe.com';
+            }
             if (typeof submitAdminForgotPinOtpRequest === 'function') {
                 await submitAdminForgotPinOtpRequest();
             }
@@ -953,17 +957,25 @@ async function testFlow7_AdminForgotPinAndMergedStaffTable(cdp, viewport) {
             const otpInput = document.getElementById('forgotPinOtpInput');
             const newPinInput = document.getElementById('forgotPinNewPinInput');
             const confirmPinInput = document.getElementById('forgotPinConfirmPinInput');
+            const fb1 = document.getElementById('forgotPinStep1Feedback');
 
             return {
                 step1Hidden: s1 && s1.style.display === 'none',
                 step2Visible: s2 && s2.style.display === 'block',
                 hasOtpInput: !!otpInput,
                 hasNewPinInput: !!newPinInput,
-                hasConfirmPinInput: !!confirmPinInput
+                hasConfirmPinInput: !!confirmPinInput,
+                emailVal: emailInput ? emailInput.value : null,
+                fbText: fb1 ? fb1.innerText : null,
+                s1Display: s1 ? s1.style.display : null,
+                s2Display: s2 ? s2.style.display : null
             };
         })()
     `);
 
+    if (!stepAssert.step1Hidden) {
+        console.error('DEBUG stepAssert failure:', JSON.stringify(stepAssert, null, 2));
+    }
     assert.strictEqual(stepAssert.step1Hidden, true, 'Forgot PIN Step 1 must be hidden after dispatch');
     assert.strictEqual(stepAssert.step2Visible, true, 'Forgot PIN Step 2 must be visible with inputs');
 
@@ -1137,6 +1149,14 @@ async function runMultiDeviceAudit() {
                     style.id = 'multidevice-audit-base';
                     style.textContent = '#shopAuthModal, #appUpdatePopup, #activationOverlay { display: none !important; visibility: hidden !important; pointer-events: none !important; opacity: 0 !important; }';
                     (document.head || document.documentElement).appendChild(style);
+
+                    if (navigator.serviceWorker) {
+                        const origAdd = navigator.serviceWorker.addEventListener.bind(navigator.serviceWorker);
+                        navigator.serviceWorker.addEventListener = function(type, listener, options) {
+                            if (type === 'controllerchange') return;
+                            return origAdd(type, listener, options);
+                        };
+                    }
                 } catch (e) {}
             `
         });

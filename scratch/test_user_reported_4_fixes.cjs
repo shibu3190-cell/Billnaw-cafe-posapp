@@ -27,6 +27,7 @@ const posJs = fs.readFileSync(path.join(__dirname, '..', 'js', 'pos.js'), 'utf8'
 const menuJs = fs.readFileSync(path.join(__dirname, '..', 'js', 'menu.js'), 'utf8');
 const configJs = fs.readFileSync(path.join(__dirname, '..', 'server', 'config.js'), 'utf8');
 const envExample = fs.readFileSync(path.join(__dirname, '..', '.env.example'), 'utf8');
+const shopAuthJs = fs.existsSync(path.join(__dirname, '..', 'js', 'shop-auth.js')) ? fs.readFileSync(path.join(__dirname, '..', 'js', 'shop-auth.js'), 'utf8') : '';
 const authService = require('../server/auth-service.js');
 
 // 1. Table Option Removed From Top Header & POS Section Shows Tables Numberwise
@@ -115,7 +116,7 @@ console.log("\n📍 REQUIREMENT 5: SETTINGS LOGOUT & SIGNUP EMAIL OTP VERIFICATI
 test("index.html contains #settingTileLogoutShop calling logoutShopCloudAccount()", () => {
     assert.ok(html.includes('id="settingTileLogoutShop"'), "Missing #settingTileLogoutShop");
     assert.ok(html.includes('onclick="logoutShopCloudAccount()"'), "Must call logoutShopCloudAccount()");
-    assert.ok(html.includes('window.logoutShopCloudAccount = logoutShop;'), "Must export logoutShopCloudAccount");
+    assert.ok(html.includes('window.logoutShopCloudAccount = logoutShop;') || shopAuthJs.includes('window.logoutShopCloudAccount = logoutShop;'), "Must export logoutShopCloudAccount");
 });
 
 test("index.html contains #signupOtpSection with 6-digit inputs and resend controls", () => {

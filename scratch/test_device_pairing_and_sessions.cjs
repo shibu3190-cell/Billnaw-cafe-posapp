@@ -216,6 +216,7 @@ async function runSuite() {
   const databaseRulesContent = fs.readFileSync(databaseRulesPath, 'utf8');
   const swContent = fs.readFileSync(swPath, 'utf8');
   const serviceWorkerContent = fs.readFileSync(serviceWorkerPath, 'utf8');
+  const shopAuthContent = fs.existsSync(path.join(rootDir, 'js', 'shop-auth.js')) ? fs.readFileSync(path.join(rootDir, 'js', 'shop-auth.js'), 'utf8') : '';
 
   // Dynamic ES Module Imports
   const { rupeesToPaise, paiseToRupees, formatRupees, addPaise } = await import('../src/shared/utils/currency.js');
@@ -2409,7 +2410,7 @@ async function runSuite() {
 
   // F24: 10-Day Role and PIN Session Persistence
   await test('T5-PERS-01', 'Primary store signup persists billnaw_device_auth_timestamp and stores adminPinHash in shop profile', () => {
-    assert.ok(htmlContent.includes("localStorage.setItem('billnaw_device_auth_timestamp'"), 'index.html must persist device auth timestamp');
+    assert.ok(htmlContent.includes("localStorage.setItem('billnaw_device_auth_timestamp'") || shopAuthContent.includes("localStorage.setItem('billnaw_device_auth_timestamp'"), 'index.html or js/shop-auth.js must persist device auth timestamp');
     const authServiceContent = fs.readFileSync(path.join(rootDir, 'server', 'auth-service.js'), 'utf8');
     assert.ok(authServiceContent.includes('adminPinHash'), 'auth-service.js must handle adminPinHash');
     assert.ok(authServiceContent.includes('hashStringServer'), 'auth-service.js must hash admin PIN');
