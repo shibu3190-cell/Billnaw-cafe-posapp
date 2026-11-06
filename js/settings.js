@@ -1388,8 +1388,14 @@ function openDeviceApprovalModal(deviceId) {
 
     const pairingInput = document.getElementById('approvalPairingCodeInput');
     if (pairingInput) {
-        pairingInput.value = '';
-        setTimeout(() => pairingInput.focus(), 80);
+        pairingInput.value = dev?.pairingCode || '';
+        setTimeout(() => {
+            if (pairingInput.value) {
+                document.getElementById('approvalAdminPinInput')?.focus();
+            } else {
+                pairingInput.focus();
+            }
+        }, 80);
     }
 
     const profileSelect = document.getElementById('approvalStationProfileSelect');
