@@ -70,7 +70,8 @@ const STATIC_SHELL_ASSETS = [
   './js/staff.js',
   './js/settings.js',
   './js/marketing_inventory.js',
-  './js/culinary_inventory.js'
+  './js/culinary_inventory.js',
+  './js/cloud-sync.js'
 ];
 
 // Install Phase: Pre-cache static shell without premature activation

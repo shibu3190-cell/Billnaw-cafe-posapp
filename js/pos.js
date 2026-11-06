@@ -206,7 +206,20 @@ function selectTable(num) {
 window.selectTable = selectTable;
 
 function bookTable() { 
-    let tInfo = tablesInfo[activeTable]; 
+        let tInfo = tablesInfo[activeTable];
+    const currentTableName = getTableName(activeTable);
+
+    const delta = computeKotDelta(activeTable);
+    if (!delta.hasNewItems) {
+        showToast("KOT already sent for all items.", "info");
+        const kotModal = document.getElementById('kotModal');
+        if (kotModal) kotModal.style.display = 'none';
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg><span class="btn-text">KOT Sent &#10003;</span>';
+        }
+        return;
+    } 
     if(tInfo && tInfo.items.length > 0) return showToast("Cannot reserve active table!"); 
     if (tInfo) { 
         tInfo.status = tInfo.status === 'booked' ? 'empty' : 'booked'; 
@@ -780,14 +793,119 @@ setInterval(() => {
     } 
 }, 5000);
 
+
+// ============================================================================
+// 3. DELTA-KOT ENGINE (Smart Incremental KOT Printing)
+// ============================================================================
+
+function computeKotDelta(tableId) {
+    const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[tableId] : null;
+    if (!tInfo || !Array.isArray(tInfo.items) || tInfo.items.length === 0) {
+        return { deltaItems: [], totalDeltaCount: 0, hasNewItems: false, isAddon: false };
+    }
+
+    const deltaItems = [];
+    let totalDeltaCount = 0;
+    let anyPrintedBefore = false;
+
+    tInfo.items.forEach(item => {
+        const ordered = Number(item.qty || item.quantity || 0);
+        const printed = Number(item.qtyKotPrinted || 0);
+        if (printed > 0) anyPrintedBefore = true;
+
+        if (ordered > printed) {
+            const deltaQty = ordered - printed;
+            totalDeltaCount += deltaQty;
+            deltaItems.push({
+                ...item,
+                qty: deltaQty,
+                quantity: deltaQty,
+                _deltaQty: deltaQty
+            });
+        }
+    });
+
+    return {
+        deltaItems,
+        totalDeltaCount,
+        hasNewItems: deltaItems.length > 0,
+        isAddon: anyPrintedBefore
+    };
+}
+window.computeKotDelta = computeKotDelta;
+
+let _pendingKotRelayPayload = null;
+
+function promptKotRelayFallback(kotPayload) {
+    _pendingKotRelayPayload = kotPayload;
+    const modal = document.getElementById('kotRelayFallbackModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+async function confirmKotRelayFallback() {
+    const modal = document.getElementById('kotRelayFallbackModal');
+    if (modal) modal.style.display = 'none';
+
+    if (!_pendingKotRelayPayload) return;
+    const payload = _pendingKotRelayPayload;
+    _pendingKotRelayPayload = null;
+
+    const cloudEnqueue = window.enqueueCloudKotPrintJob || (window.ThermalPrinterBridge && window.ThermalPrinterBridge.enqueueCloudKotPrintJob);
+    if (typeof cloudEnqueue === 'function') {
+        try {
+            const shopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (window.shopProfile && window.shopProfile.id) || 'default_shop';
+            await cloudEnqueue(payload, { shopId });
+            if (typeof showToast === 'function') {
+                showToast("KOT queued to Cashier device!", 'success');
+            }
+        } catch (err) {
+            console.error("Cloud print relay enqueue failed:", err);
+            if (typeof showToast === 'function') showToast("Failed to queue KOT to Cashier.", 'error');
+        }
+    }
+}
+
+function cancelKotRelayFallback() {
+    _pendingKotRelayPayload = null;
+    const modal = document.getElementById('kotRelayFallbackModal');
+    if (modal) modal.style.display = 'none';
+}
+
+window.promptKotRelayFallback = promptKotRelayFallback;
+window.confirmKotRelayFallback = confirmKotRelayFallback;
+window.cancelKotRelayFallback = cancelKotRelayFallback;
+
 function sendToKitchen() { 
     let tInfo = tablesInfo[activeTable]; 
-    if(!tInfo || tInfo.items.length === 0) return showToast("Nothing to send!"); 
+    if(!tInfo || !Array.isArray(tInfo.items) || tInfo.items.length === 0) return showToast("Nothing to send!"); 
+    
+    const delta = computeKotDelta(activeTable);
+    if (!delta.hasNewItems) {
+        showToast("KOT already sent for all items.", "info");
+        return;
+    }
+
     tInfo.status = 'saved'; 
     persistTables(); 
     syncTableUI(); 
+
     const kTable = document.getElementById('kotTableNoDisplay');
-    if (kTable) kTable.innerText = activeTable; 
+    if (kTable) {
+        kTable.innerText = String(activeTable) + (delta.isAddon ? ` (Add-on: +${delta.totalDeltaCount} items)` : '');
+    }
+
+    const btnSubmit = document.getElementById('btnKotPrintSubmit') || document.querySelector('#kotModal .btn-warning');
+    if (btnSubmit) {
+        const spanText = btnSubmit.querySelector('.btn-text') || btnSubmit.querySelector('span') || btnSubmit;
+        if (delta.isAddon) {
+            spanText.innerText = `Print New KOT (+${delta.totalDeltaCount} items)`;
+        } else {
+            spanText.innerText = 'Print KOT';
+        }
+    }
+
     document.getElementById('cartDrawer')?.classList.remove('open'); 
     document.getElementById('cartDrawerOverlay')?.classList.remove('show'); 
     const kotModal = document.getElementById('kotModal');
@@ -1673,6 +1791,11 @@ function openPrinterSettingsModal() {
     // Routing
     const dr = document.getElementById('cfgDefaultReceiptPrinter'); if (dr && routing.defaultReceiptPrinter) dr.value = routing.defaultReceiptPrinter;
     const dk = document.getElementById('cfgDefaultKotPrinter'); if (dk && routing.defaultKotPrinter) dk.value = routing.defaultKotPrinter;
+
+    const hubEl = document.getElementById('cfgMasterPrintHub');
+    if (hubEl) hubEl.checked = localStorage.getItem('billnaw_master_print_hub') === 'true';
+    const relayEl = document.getElementById('cfgKotRelayMode');
+    if (relayEl) relayEl.value = localStorage.getItem('billnaw_kot_relay_mode') || 'ASK_ON_FAILURE';
     const ap = document.getElementById('cfgAlwaysPromptPrinters'); if (ap) ap.checked = Boolean(routing.alwaysPrompt);
 
     handlePrinterTransportChange('printer1');
@@ -1847,6 +1970,16 @@ function savePrinterSettingsFromUi() {
         printer2: { transport: t2, paperWidth: w2, host: h2, port: prt2 },
         routing: { defaultReceiptPrinter: dr, defaultKotPrinter: dk, alwaysPrompt: ap }
     };
+
+    const isMasterHub = Boolean(document.getElementById('cfgMasterPrintHub')?.checked);
+    const kotRelayMode = document.getElementById('cfgKotRelayMode')?.value || 'ASK_ON_FAILURE';
+    localStorage.setItem('billnaw_master_print_hub', isMasterHub ? 'true' : 'false');
+    localStorage.setItem('billnaw_kot_relay_mode', kotRelayMode);
+
+    if (isMasterHub && typeof startCloudKotQueueConsumer === 'function') {
+        const shopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (window.shopProfile && window.shopProfile.id);
+        if (shopId) startCloudKotQueueConsumer(shopId);
+    }
 
     if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.savePrinterSettings === 'function') {
         window.ThermalPrinterBridge.savePrinterSettings(config);
@@ -2194,10 +2327,12 @@ window.sendEscPosToPrinter = sendEscPosToPrinter;
  * When local kitchen printer is disconnected or out of range, seamlessly falls back
  * to Distributed Cloud Print Relay via enqueueCloudKotPrintJob.
  */
-async function sendKotToPrinter(tableNo, items) {
+async function sendKotToPrinter(tableNo, items, options = {}) {
     const billerName = (currentStaff && currentStaff.name) ? currentStaff.name : 'Admin';
     const billerRole = (currentStaff && currentStaff.role) ? currentStaff.role : 'Server';
     const kotId = `KOT-${Date.now()}`;
+    const isAddon = Boolean(options.isAddon);
+    const kotHeader = options.kotHeader || (isAddon ? `ADD-ON / RUNNING ORDER - TABLE ${tableNo}` : `KITCHEN ORDER TICKET - TABLE ${tableNo}`);
 
     const kotJobPayload = {
         jobType: 'KOT',
@@ -2210,6 +2345,8 @@ async function sendKotToPrinter(tableNo, items) {
         server_staff_id: billerName,
         billerName: billerName,
         billerRole: billerRole,
+        isAddon: isAddon,
+        kotHeader: kotHeader,
         date: new Date().toLocaleTimeString(),
         created_at: new Date().toISOString()
     };
@@ -2236,6 +2373,12 @@ async function sendKotToPrinter(tableNo, items) {
 
             // If routeResult indicates failure to print (e.g. printer disconnected or out of range)
             if (routeResult && !routeResult.success) {
+                const relayMode = localStorage.getItem('billnaw_kot_relay_mode') || 'ASK_ON_FAILURE';
+                if (relayMode === 'ASK_ON_FAILURE' && typeof promptKotRelayFallback === 'function') {
+                    promptKotRelayFallback(kotJobPayload);
+                    return { success: true, queuedToCloud: false, prompted: true };
+                }
+
                 const cloudEnqueue = window.enqueueCloudKotPrintJob || (window.ThermalPrinterBridge && window.ThermalPrinterBridge.enqueueCloudKotPrintJob);
                 if (typeof cloudEnqueue === 'function') {
                     try {
@@ -2257,6 +2400,12 @@ async function sendKotToPrinter(tableNo, items) {
 
     const targetKotChar = window.posPrinters?.printer2?.characteristic || window.posPrinters?.printer1?.characteristic || printCharacteristic;
     if (!targetKotChar) {
+        const relayMode = localStorage.getItem('billnaw_kot_relay_mode') || 'ASK_ON_FAILURE';
+        if (relayMode === 'ASK_ON_FAILURE' && typeof promptKotRelayFallback === 'function') {
+            promptKotRelayFallback(kotJobPayload);
+            return { success: true, queuedToCloud: false, prompted: true };
+        }
+
         // No local printer connection: Attempt Distributed Cloud Print Relay fallback
         const cloudEnqueue = window.enqueueCloudKotPrintJob || (window.ThermalPrinterBridge && window.ThermalPrinterBridge.enqueueCloudKotPrintJob);
         if (typeof cloudEnqueue === 'function') {
@@ -2431,6 +2580,9 @@ async function processCloudKotJob(job, shopId, options = {}) {
     }
 
     console.info(`[CloudKotConsumer] Claimed job ${jobId} for table ${claimedRecord.tableNo || job.tableNo}`);
+    if (typeof showToast === 'function') {
+        showToast(`Auto-Printing KOT for Table ${claimedRecord.tableNo || job.tableNo || '1'} (from Floor Server)...`, 'info');
+    }
 
     // Resolve target kitchen printer slot and paper width
     const kotSlot = bridge?.routing?.defaultKotPrinter || 'printer2';
@@ -2639,7 +2791,13 @@ async function printKitchenTicket() {
     let tInfo = tablesInfo[activeTable];
     const currentTableName = getTableName(activeTable);
     try { 
-        await sendKotToPrinter(currentTableName, tInfo.items); 
+        const kotHeader = delta.isAddon ? `ADD-ON / RUNNING ORDER - TABLE ${currentTableName}` : `KITCHEN ORDER TICKET - TABLE ${currentTableName}`;
+        await sendKotToPrinter(currentTableName, delta.deltaItems, { isAddon: delta.isAddon, kotHeader });
+
+        // Update qtyKotPrinted for each line item on the table
+        tInfo.items.forEach(item => {
+            item.qtyKotPrinted = Number(item.qty || item.quantity || 0);
+        }); 
         tInfo.status = 'kot';
         persistTables();
         syncTableUI();

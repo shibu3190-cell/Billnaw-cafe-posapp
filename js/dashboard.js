@@ -1140,6 +1140,13 @@ function renderEditOrderItems() {
 }
 
 function openEditOrderModal(id) {
+    const activeStaff = (typeof window !== 'undefined' && window.currentStaff) ? window.currentStaff : (typeof currentStaff !== 'undefined' ? currentStaff : null);
+    const normRole = activeStaff && activeStaff.role ? (typeof normalizeRole === 'function' ? normalizeRole(activeStaff.role) : activeStaff.role) : null;
+    const isSupervisor = (normRole === 'Admin' || normRole === 'Manager' || !normRole);
+    if (!isSupervisor) {
+        if (typeof showToast === 'function') showToast("Editing settled bills is locked to Admin only.", "error");
+        return;
+    }
     const order = orderHistory.find(o => o.id === id); if(!order) return;
     document.getElementById('editOrderId').value = id; 
     document.getElementById('editBillNoDisplay').innerText = order.billNo || 'N/A';

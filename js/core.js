@@ -2594,7 +2594,7 @@ function applyStationProfileRestrictions() {
     const normRole = activeStaff && activeStaff.role ? (typeof normalizeRole === 'function' ? normalizeRole(activeStaff.role) : activeStaff.role) : null;
     const isSupervisor = (normRole === 'Admin' || normRole === 'Manager');
 
-    // 🛡️ SUPERVISOR UNRESTRICTED ACCESS: Never hide core POS, menu, inventory or reports from Admin/Manager
+    // Admin & Supervisor Unrestricted Access: Full POS, KDS, Menu, Reports, Inventory & Settings
     if (isSupervisor) {
         if (navPos) navPos.style.display = 'flex';
         if (navKds) navKds.style.display = 'flex';
@@ -2606,6 +2606,12 @@ function applyStationProfileRestrictions() {
         if (navMore) navMore.style.display = 'flex';
         if (checkoutBtn) checkoutBtn.style.display = '';
         if (cartDiscountWrap) cartDiscountWrap.style.display = '';
+
+        const dBtn = document.getElementById('desktopCheckoutBtn');
+        if (dBtn) {
+            dBtn.innerHTML = '<span>CHECKOUT</span><span id="desktopCheckoutBtnSub" style="display: inline-flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>';
+            dBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(); };
+        }
         if (typeof enforcePermissions === 'function') enforcePermissions();
         return;
     }
@@ -2630,9 +2636,24 @@ function applyStationProfileRestrictions() {
         if (navReports) navReports.style.display = 'none';
         if (navInventory) navInventory.style.display = 'none';
         if (navKhata) navKhata.style.display = 'none';
-        if (checkoutBtn) checkoutBtn.style.display = 'none';
         if (cartDiscountWrap) cartDiscountWrap.style.display = 'none';
+        
+        // Floor Server: replace Checkout button with "Ready for Billing - Notify Cashier"
+        const dBtn = document.getElementById('desktopCheckoutBtn');
+        if (dBtn) {
+            dBtn.innerHTML = '<span>Ready for Billing - Notify Cashier</span>';
+            dBtn.onclick = () => {
+                const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
+                if (typeof showToast === 'function') showToast('Table ' + curT + ' marked ready for billing! Cashier notified.', 'info');
+                if (typeof tablesInfo !== 'undefined' && tablesInfo[curT]) {
+                    tablesInfo[curT].status = 'ready_for_billing';
+                    if (typeof persistTables === 'function') persistTables();
+                    if (typeof syncTableUI === 'function') syncTableUI();
+                }
+            };
+        }
     } else {
+        // Cashier Profile: Can create/edit active orders, checkout, view menu and reports.
         if (navPos) navPos.style.display = 'flex';
         if (navKds) navKds.style.display = 'none';
         if (navTables) navTables.style.display = 'none';
@@ -2642,10 +2663,76 @@ function applyStationProfileRestrictions() {
         if (navMore) navMore.style.display = 'flex';
         if (checkoutBtn) checkoutBtn.style.display = '';
         if (cartDiscountWrap) cartDiscountWrap.style.display = '';
+
+        const dBtn = document.getElementById('desktopCheckoutBtn');
+        if (dBtn) {
+            dBtn.innerHTML = '<span>CHECKOUT</span><span id="desktopCheckoutBtnSub" style="display: inline-flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>';
+            dBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(); };
+        }
         if (typeof enforcePermissions === 'function') enforcePermissions();
     }
 }
 window.applyStationProfileRestrictions = applyStationProfileRestrictions;
+
+// ============================================================================
+// 5. REAL-TIME BACKGROUND REFRESH & 30-SECOND HEALTH CHECK (Interval + Visibility)
+// ============================================================================
+
+let _bgSyncTimer = null;
+let _isBgSyncRunning = false;
+
+async function runBackgroundHealthCheck(silent = true) {
+    if (_isBgSyncRunning) return;
+    _isBgSyncRunning = true;
+    try {
+        const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (window.shopProfile && window.shopProfile.id);
+        if (!storeCode || !window.firestoreDB || !window.firestoreDoc || !window.firestoreGetDoc) return;
+
+        const collectionName = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
+        const docRef = window.firestoreDoc(window.firestoreDB, collectionName, storeCode);
+        const snap = await window.firestoreGetDoc(docRef);
+
+        if (snap && snap.exists()) {
+            const data = snap.data();
+            if (data && typeof handleRemoteFirestoreUpdate === 'function') {
+                handleRemoteFirestoreUpdate(data);
+                if (!silent) console.info("[BackgroundSync] Store data silently reconciled from cloud.");
+            }
+        }
+    } catch (err) {
+        if (!silent) console.warn("[BackgroundSync] Health check defer:", err.message);
+    } finally {
+        _isBgSyncRunning = false;
+    }
+}
+
+function startBackgroundSync() {
+    if (_bgSyncTimer) return;
+    runBackgroundHealthCheck(true);
+    _bgSyncTimer = setInterval(() => {
+        runBackgroundHealthCheck(true);
+    }, 30000);
+
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                runBackgroundHealthCheck(true);
+            }
+        });
+    }
+    console.info("[BackgroundSync] 30s background sync & health check initialized.");
+}
+
+function stopBackgroundSync() {
+    if (_bgSyncTimer) {
+        clearInterval(_bgSyncTimer);
+        _bgSyncTimer = null;
+    }
+}
+
+window.runBackgroundHealthCheck = runBackgroundHealthCheck;
+window.startBackgroundSync = startBackgroundSync;
+window.stopBackgroundSync = stopBackgroundSync;
 
 function clearAllTenantLocalData() {
     try {
@@ -3289,6 +3376,10 @@ async function initDatabase() {
             await idb.set('cafe_staff', staffList);
             try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
         }
+    }
+
+    if (typeof startBackgroundSync === 'function') {
+        startBackgroundSync();
     }
 }
 window.initDatabase = initDatabase;

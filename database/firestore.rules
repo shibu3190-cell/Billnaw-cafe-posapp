@@ -100,11 +100,36 @@ service cloud.firestore {
         allow read: if isTenantStaff(cafeId);
         allow write: if isTenantStaff(cafeId);
       }
+      match /staffSessions/{staffId} {
+        allow read: if isTenantStaff(cafeId);
+        allow write: if isTenantStaff(cafeId);
+      }
+
+      // DISTRIBUTED CLOUD PRINT RELAY (CamelCase alias)
+      match /printQueue/{jobId} {
+        allow read: if isTenantStaff(cafeId);
+        allow create: if isTenantStaff(cafeId) &&
+          request.resource.data.jobType == 'KOT' &&
+          !('invoice' in request.resource.data) &&
+          !('billNo' in request.resource.data) &&
+          !('amount' in request.resource.data) &&
+          !('final_payable_paise' in request.resource.data) &&
+          request.resource.data.status in ['queued', 'pending'];
+        allow update: if isTenantStaff(cafeId) &&
+          resource.data.jobType == 'KOT' &&
+          request.resource.data.jobType == 'KOT' &&
+          !('invoice' in request.resource.data) &&
+          !('billNo' in request.resource.data) &&
+          !('amount' in request.resource.data) &&
+          !('final_payable_paise' in request.resource.data) &&
+          request.resource.data.status in ['queued', 'pending', 'processing', 'printed', 'failed'];
+        allow delete: if isTenantAdmin(cafeId);
+      }
 
       // STAFF DIRECTORY & PIN AUTH
       match /staff/{staffId} {
         allow read: if isTenantStaff(cafeId);
-        allow write: if isTenantStaff(cafeId);
+        allow write: if isTenantAdmin(cafeId);
       }
 
       // OPERATIONAL SUBCOLLECTIONS
@@ -112,7 +137,7 @@ service cloud.firestore {
       match /inventory/{itemId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /customers/{customerId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /expenses/{expenseId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
-      match /settings/{settingId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
+      match /settings/{settingId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
       match /counters/{counterId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /khata/{khataId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /history/{historyId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
@@ -190,11 +215,36 @@ service cloud.firestore {
         allow read: if isTenantStaff(shopId);
         allow write: if isTenantStaff(shopId);
       }
+      match /staffSessions/{staffId} {
+        allow read: if isTenantStaff(shopId);
+        allow write: if isTenantStaff(shopId);
+      }
+
+      // DISTRIBUTED CLOUD PRINT RELAY (CamelCase alias)
+      match /printQueue/{jobId} {
+        allow read: if isTenantStaff(shopId);
+        allow create: if isTenantStaff(shopId) &&
+          request.resource.data.jobType == 'KOT' &&
+          !('invoice' in request.resource.data) &&
+          !('billNo' in request.resource.data) &&
+          !('amount' in request.resource.data) &&
+          !('final_payable_paise' in request.resource.data) &&
+          request.resource.data.status in ['queued', 'pending'];
+        allow update: if isTenantStaff(shopId) &&
+          resource.data.jobType == 'KOT' &&
+          request.resource.data.jobType == 'KOT' &&
+          !('invoice' in request.resource.data) &&
+          !('billNo' in request.resource.data) &&
+          !('amount' in request.resource.data) &&
+          !('final_payable_paise' in request.resource.data) &&
+          request.resource.data.status in ['queued', 'pending', 'processing', 'printed', 'failed'];
+        allow delete: if isTenantAdmin(shopId);
+      }
 
       // STAFF DIRECTORY & PIN AUTH
       match /staff/{staffId} {
         allow read: if isTenantStaff(shopId);
-        allow write: if isTenantStaff(shopId);
+        allow write: if isTenantAdmin(shopId);
       }
 
       // OPERATIONAL SUBCOLLECTIONS
@@ -202,7 +252,7 @@ service cloud.firestore {
       match /inventory/{itemId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /customers/{customerId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /expenses/{expenseId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
-      match /settings/{settingId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
+      match /settings/{settingId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
       match /counters/{counterId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /khata/{khataId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /history/{historyId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }

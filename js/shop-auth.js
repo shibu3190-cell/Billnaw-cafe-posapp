@@ -363,6 +363,26 @@
                     if (typeof verifyDeviceAuthorizationOnLogin === 'function') {
                         verifyDeviceAuthorizationOnLogin(data.storeCode);
                     }
+
+                    // Initial Cloud Hydrate & Loading Overlay + Staff Profile Gateway
+                    if (typeof showCloudSyncOverlay === 'function') {
+                        showCloudSyncOverlay('Syncing Shop Profile, Menu & Active Tables...');
+                        if (typeof setCloudSyncProgress === 'function') setCloudSyncProgress(35, 'Connecting to BillNaw Cloud...');
+                    }
+                    if (typeof initDatabase === 'function') {
+                        try {
+                            await initDatabase();
+                            if (typeof setCloudSyncProgress === 'function') setCloudSyncProgress(80, 'Menu, Tables & Staff Roster Synced');
+                        } catch (initErr) {
+                            console.warn("initDatabase hydrate error:", initErr);
+                        }
+                    }
+                    setTimeout(() => {
+                        if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay();
+                        if (typeof showStaffProfileSelector === 'function') {
+                            showStaffProfileSelector(data.shop?.name || email);
+                        }
+                    }, 500);
                 } else {
                     const errMsg = (data && data.error) ? data.error : (res.status === 401 ? 'Incorrect or expired verification code. Use the auto-filled code or click Resend.' : 'Invalid verification code');
                     showValidationMsg('loginEmailValidationFeedback', errMsg, 'error');
@@ -453,6 +473,26 @@
                     if (typeof verifyDeviceAuthorizationOnLogin === 'function') {
                         verifyDeviceAuthorizationOnLogin(data.storeCode);
                     }
+
+                    // Initial Cloud Hydrate & Loading Overlay + Staff Profile Gateway
+                    if (typeof showCloudSyncOverlay === 'function') {
+                        showCloudSyncOverlay('Syncing Shop Profile, Menu & Active Tables...');
+                        if (typeof setCloudSyncProgress === 'function') setCloudSyncProgress(35, 'Connecting to BillNaw Cloud...');
+                    }
+                    if (typeof initDatabase === 'function') {
+                        try {
+                            await initDatabase();
+                            if (typeof setCloudSyncProgress === 'function') setCloudSyncProgress(80, 'Menu, Tables & Staff Roster Synced');
+                        } catch (initErr) {
+                            console.warn("initDatabase hydrate error:", initErr);
+                        }
+                    }
+                    setTimeout(() => {
+                        if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay();
+                        if (typeof showStaffProfileSelector === 'function') {
+                            showStaffProfileSelector(data.shop?.name || email);
+                        }
+                    }, 500);
                 } else {
                     const errMsg = (data && data.error) ? data.error : 'Invalid email or password';
                     alert(errMsg + '\n\nIf you have not registered your shop account yet, click "Sign Up" above to create your profile.');

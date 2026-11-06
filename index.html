@@ -5672,6 +5672,22 @@
                             <input type="checkbox" id="cfgAlwaysPromptPrinters" style="width: 16px; height: 16px; cursor: pointer;">
                             <label for="cfgAlwaysPromptPrinters" style="margin: 0; font-size: 12px; font-weight: 600; color: var(--text-dark); cursor: pointer;">Always show interactive printer selection dialog before dispatching</label>
                         </div>
+
+                        <!-- Master Cashier Print Hub & Floor Server BLE Relay Options -->
+                        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="cfgMasterPrintHub" style="width: 16px; height: 16px; cursor: pointer;">
+                                <label for="cfgMasterPrintHub" style="margin: 0; font-size: 12px; font-weight: 600; color: var(--text-dark); cursor: pointer;">Set this device as Master Cashier Print Hub (Auto-Print Remote KOTs)</label>
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label for="cfgKotRelayMode" style="font-size: 12px; font-weight: 700; color: var(--text-dark); display: block; margin-bottom: 4px;">Default Floor Server KOT Mode</label>
+                                <select id="cfgKotRelayMode" class="form-input" style="height: 38px; font-size: 12px; font-weight: 600;">
+                                    <option value="DIRECT">Direct Bluetooth (Device to Printer)</option>
+                                    <option value="RELAY">Relay via Cashier Device (Cloud Print Queue)</option>
+                                    <option value="ASK_ON_FAILURE" selected>Ask on Failure (Fallback Modal)</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="modal-actions" style="margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px;">
@@ -5911,6 +5927,96 @@
             </div>
         </div>
     </div>
+    <!-- Cloud Sync Loading Overlay -->
+    <div id="cloudSyncOverlay" style="display: none; position: fixed; inset: 0; z-index: 999999; background: linear-gradient(135deg, #143832 0%, #0D2622 100%); flex-direction: column; align-items: center; justify-content: center; color: #FFFFFF; padding: 24px; box-sizing: border-box; text-align: center;">
+        <div style="width: 72px; height: 72px; border-radius: 20px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 12px 30px rgba(0,0,0,0.3);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#E05A38" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+            </svg>
+        </div>
+        <h2 style="font-size: 22px; font-weight: 800; margin: 0 0 8px 0; letter-spacing: 0.5px;">BillNaw Cafe Cloud Sync</h2>
+        <p id="cloudSyncStatus" style="font-size: 14px; color: rgba(255,255,255,0.78); margin: 0 0 24px 0; max-width: 320px; line-height: 1.4;">Syncing Shop Profile, Menu &amp; Active Tables...</p>
+        <div style="width: 240px; height: 6px; background: rgba(255,255,255,0.12); border-radius: 99px; overflow: hidden; position: relative;">
+            <div id="cloudSyncBar" style="height: 100%; width: 15%; background: linear-gradient(90deg, #E05A38, #FF7A59); border-radius: 99px; transition: width 0.35s ease;"></div>
+        </div>
+        <span id="cloudSyncPct" style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.55); margin-top: 10px;">15%</span>
+    </div>
+
+    <!-- Staff Profile Selector Gateway ("Who's Working?") -->
+    <div id="staffProfileSelector" style="display: none; position: fixed; inset: 0; z-index: 999998; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 16px;">
+        <div style="background: #FFFFFF; border-radius: 24px; max-width: 480px; width: 100%; padding: 28px 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.25); text-align: center; max-height: 90vh; overflow-y: auto;">
+            <div style="width: 48px; height: 48px; border-radius: 14px; background: rgba(20, 56, 50, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px auto;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+            </div>
+            <h2 id="staffSelectorShopName" style="font-size: 20px; font-weight: 800; color: #1E293B; margin: 0 0 4px 0;">BillNaw Cafe</h2>
+            <p style="font-size: 13px; color: #64748B; margin: 0 0 20px 0;">Who is working right now? Select your active profile.</p>
+
+            <div id="staffProfileGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px;"></div>
+
+            <!-- PIN entry form for selected profile -->
+            <div id="staffPinEntryWrap" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px dashed #E2E8F0;">
+                <p style="font-size: 13px; font-weight: 700; color: #1E293B; margin: 0 0 10px 0;">Enter 4-Digit PIN for <span id="staffPinName" style="color: var(--primary);">Staff</span></p>
+                <div style="display: flex; justify-content: center; margin-bottom: 12px;">
+                    <input type="password" id="staffGatewayPinInput" placeholder="&#8226;&#8226;&#8226;&#8226;" maxlength="4" inputmode="numeric" style="width: 140px; height: 44px; text-align: center; font-size: 24px; letter-spacing: 6px; font-weight: 800; border: 2px solid #CBD5E1; border-radius: 12px; outline: none; background: #F8FAFC;">
+                </div>
+                <div class="pin-numpad" style="max-width: 260px; margin: 0 auto 12px auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('1')">1</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('2')">2</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('3')">3</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('4')">4</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('5')">5</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('6')">6</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('7')">7</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('8')">8</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('9')">9</button>
+                    <button type="button" class="pin-numpad-btn action-btn" onclick="clearGatewayPin()">Clear</button>
+                    <button type="button" class="pin-numpad-btn" onclick="appendGatewayPin('0')">0</button>
+                    <button type="button" class="pin-numpad-btn action-btn" onclick="backspaceGatewayPin()">Delete</button>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-outline" style="flex: 1; border-radius: 10px; font-size: 13px;" onclick="_cancelStaffPinEntry()">Cancel</button>
+                    <button type="button" class="btn btn-primary" style="flex: 2; border-radius: 10px; font-size: 13px; font-weight: 700; background: var(--primary);" onclick="confirmStaffProfilePin()">Unlock Profile</button>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <button type="button" style="background: none; border: none; font-size: 12px; color: #94A3B8; font-weight: 600; cursor: pointer; text-decoration: underline;" onclick="hideStaffProfileSelector()">Skip &amp; Use Current Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bluetooth KOT Print Relay Fallback Prompt Modal -->
+    <div id="kotRelayFallbackModal" class="modal-overlay" style="display: none; z-index: 1000040;">
+        <div class="modal-box" style="max-width: 400px; text-align: center; padding: 24px;">
+            <div style="width: 52px; height: 52px; border-radius: 16px; background: rgba(224, 90, 56, 0.12); color: #E05A38; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px auto;">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+                    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+                    <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+                    <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+                    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                    <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                </svg>
+            </div>
+            <h3 style="font-size: 17px; font-weight: 800; color: #1E293B; margin: 0 0 6px 0;">Bluetooth Printer Out of Range</h3>
+            <p style="font-size: 13px; color: #64748B; margin: 0 0 20px 0; line-height: 1.4;">The kitchen thermal printer is unreachable from this mobile device. Print via Cashier Device?</p>
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn btn-outline" style="flex: 1; border-radius: 10px; font-size: 13px;" onclick="cancelKotRelayFallback()">Cancel</button>
+                <button type="button" id="btnConfirmKotRelay" class="btn btn-primary" style="flex: 2; border-radius: 10px; font-size: 13px; font-weight: 700; background: #E05A38; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="confirmKotRelayFallback()">
+                    <svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg>
+                    <span>Print via Cashier</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/cloud-sync.js?v=2800"></script>
     <script type="module" src="js/feature-controllers.js?v=2800"></script>
     <script type="module">
         import { ThermalPrinterBridge } from './src/core/platform-bridge.js';
