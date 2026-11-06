@@ -344,6 +344,9 @@
                     }
                     if (typeof showToast === 'function') showToast('Verified! Welcome to Billnaw POS', 'success');
                     closeShopAuthModal();
+                    if (typeof verifyDeviceAuthorizationOnLogin === 'function') {
+                        verifyDeviceAuthorizationOnLogin(data.storeCode);
+                    }
                 } else {
                     const errMsg = (data && data.error) ? data.error : (res.status === 401 ? 'Incorrect or expired verification code. Use the auto-filled code or click Resend.' : 'Invalid verification code');
                     showValidationMsg('loginEmailValidationFeedback', errMsg, 'error');
@@ -431,6 +434,9 @@
                     }
                     if (typeof showToast === 'function') showToast('Signed in successfully', 'success');
                     closeShopAuthModal();
+                    if (typeof verifyDeviceAuthorizationOnLogin === 'function') {
+                        verifyDeviceAuthorizationOnLogin(data.storeCode);
+                    }
                 } else {
                     const errMsg = (data && data.error) ? data.error : 'Invalid email or password';
                     alert(errMsg + '\n\nIf you have not registered your shop account yet, click "Sign Up" above to create your profile.');
@@ -1015,11 +1021,12 @@
         if (typeof toggleLoginAuthMode === 'function') toggleLoginAuthMode('otp');
 
         // Close settings or other open modals
-        const otherModals = ['activeSessionsModal', 'storeProfileModal', 'staffManagementModal', 'subscriptionModal', 'expensesDetailModal', 'loginOverlay', 'staffSwitchModal', 'spotManagerOverrideModal'];
+        const otherModals = ['activeSessionsModal', 'storeProfileModal', 'staffManagementModal', 'subscriptionModal', 'expensesDetailModal', 'loginOverlay', 'staffSwitchModal', 'spotManagerOverrideModal', 'devicePairingOverlay'];
         otherModals.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
         });
+        if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
 
         updateShopAuthUI();
         if (typeof updateCloudStoreTopbar === 'function') {
