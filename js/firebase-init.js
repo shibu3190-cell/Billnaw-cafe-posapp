@@ -16,7 +16,8 @@ import {
     limit,
     startAfter,
     writeBatch, 
-    serverTimestamp 
+    serverTimestamp,
+    runTransaction
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { 
     getAuth, 
@@ -188,6 +189,7 @@ async function initFirebaseFromBackend() {
     window.firestoreGetDoc = getDoc;
     window.firestoreGetDocs = getDocs;
     window.firestoreWriteBatch = writeBatch;
+    window.firestoreRunTransaction = runTransaction;
     window.firestoreServerTimestamp = serverTimestamp;
     window.firestoreQuery = query;
     window.firestoreWhere = where;

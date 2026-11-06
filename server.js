@@ -7,6 +7,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import crypto from 'crypto';
+import net from 'net';
 import { fileURLToPath } from 'url';
 import { CONFIG } from './server/config.js';
 import {
@@ -219,6 +220,98 @@ app.post('/api/admin/clear-cache', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ============================================================================
+// UNIVERSAL THERMAL PRINTER NETWORK TCP PROXY (Port 9100 RAW Stream)
+// ============================================================================
+app.post('/api/print/network', (req, res) => {
+  const { host, port, data } = req.body || {};
+
+  // 1. Validate Target Host
+  if (!host || typeof host !== 'string' || host.trim().length === 0) {
+    return res.status(400).json({ success: false, error: 'Target printer host (IP address or hostname) is required.' });
+  }
+  const targetHost = host.trim();
+
+  // 2. Validate Target Port (Standard RAW/JetDirect is 9100)
+  let targetPort = 9100;
+  if (port !== undefined && port !== null && String(port).trim() !== '') {
+    const parsed = Number(port);
+    if (isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+      return res.status(400).json({ success: false, error: 'Target port must be a valid port number between 1 and 65535.' });
+    }
+    targetPort = parsed;
+  }
+
+  // 3. Validate and Parse Byte Payload
+  let byteBuffer;
+  if (Buffer.isBuffer(data)) {
+    byteBuffer = data;
+  } else if (Array.isArray(data)) {
+    byteBuffer = Buffer.from(data);
+  } else if (typeof data === 'string') {
+    try {
+      byteBuffer = Buffer.from(data, 'base64');
+    } catch {
+      byteBuffer = Buffer.from(data, 'utf-8');
+    }
+  }
+
+  if (!byteBuffer || byteBuffer.length === 0) {
+    return res.status(400).json({ success: false, error: 'Print data buffer is required and cannot be empty.' });
+  }
+
+  // 4. Open Non-blocking TCP Socket to Printer
+  const socket = new net.Socket();
+  const SOCKET_TIMEOUT_MS = 5000;
+  let responded = false;
+
+  const cleanupAndRespond = (statusCode, responseObj) => {
+    if (responded) return;
+    responded = true;
+    try {
+      socket.removeAllListeners();
+      socket.destroy();
+    } catch (_) {}
+    res.status(statusCode).json(responseObj);
+  };
+
+  socket.setTimeout(SOCKET_TIMEOUT_MS);
+
+  socket.on('timeout', () => {
+    cleanupAndRespond(504, {
+      success: false,
+      error: `Connection to thermal printer at ${targetHost}:${targetPort} timed out (${SOCKET_TIMEOUT_MS}ms).`
+    });
+  });
+
+  socket.on('error', (err) => {
+    cleanupAndRespond(500, {
+      success: false,
+      error: `Network print socket error: ${err.message}`
+    });
+  });
+
+  socket.connect(targetPort, targetHost, () => {
+    socket.write(byteBuffer, (writeErr) => {
+      if (writeErr) {
+        return cleanupAndRespond(500, {
+          success: false,
+          error: `Socket write error: ${writeErr.message}`
+        });
+      }
+      // Gracefully close connection after flushing bytes to trigger printer cut/spool
+      socket.end(() => {
+        cleanupAndRespond(200, {
+          success: true,
+          bytesWritten: byteBuffer.length,
+          host: targetHost,
+          port: targetPort
+        });
+      });
+    });
+  });
 });
 
 // Check Gemini AI Operational Status for the active client

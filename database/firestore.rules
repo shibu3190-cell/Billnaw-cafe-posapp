@@ -62,6 +62,27 @@ service cloud.firestore {
         allow update: if isTenantStaff(cafeId);
       }
 
+      // DISTRIBUTED CLOUD PRINT RELAY — EXCLUSIVELY FOR REMOTE KOT PRINTING
+      match /print_queue/{jobId} {
+        allow read: if isTenantStaff(cafeId);
+        allow create: if isTenantStaff(cafeId) &&
+          request.resource.data.jobType == 'KOT' &&
+          !('invoice' in request.resource.data) &&
+          !('billNo' in request.resource.data) &&
+          !('amount' in request.resource.data) &&
+          !('final_payable_paise' in request.resource.data) &&
+          request.resource.data.status == 'queued';
+        allow update: if isTenantStaff(cafeId) &&
+          resource.data.jobType == 'KOT' &&
+          request.resource.data.jobType == 'KOT' &&
+          !('invoice' in request.resource.data) &&
+          !('billNo' in request.resource.data) &&
+          !('amount' in request.resource.data) &&
+          !('final_payable_paise' in request.resource.data) &&
+          request.resource.data.status in ['queued', 'processing', 'printed', 'failed'];
+        allow delete: if isTenantAdmin(cafeId);
+      }
+
       // INDIVIDUAL TABLES (Row-level concurrency)
       match /tables/{tableId} {
         allow read: if isTenantStaff(cafeId);
@@ -130,6 +151,27 @@ service cloud.firestore {
         allow read, create: if isTenantStaff(shopId);
         allow delete: if false;
         allow update: if isTenantStaff(shopId);
+      }
+
+      // DISTRIBUTED CLOUD PRINT RELAY — EXCLUSIVELY FOR REMOTE KOT PRINTING
+      match /print_queue/{jobId} {
+        allow read: if isTenantStaff(shopId);
+        allow create: if isTenantStaff(shopId) &&
+          request.resource.data.jobType == 'KOT' &&
+          !('invoice' in request.resource.data) &&
+          !('billNo' in request.resource.data) &&
+          !('amount' in request.resource.data) &&
+          !('final_payable_paise' in request.resource.data) &&
+          request.resource.data.status == 'queued';
+        allow update: if isTenantStaff(shopId) &&
+          resource.data.jobType == 'KOT' &&
+          request.resource.data.jobType == 'KOT' &&
+          !('invoice' in request.resource.data) &&
+          !('billNo' in request.resource.data) &&
+          !('amount' in request.resource.data) &&
+          !('final_payable_paise' in request.resource.data) &&
+          request.resource.data.status in ['queued', 'processing', 'printed', 'failed'];
+        allow delete: if isTenantAdmin(shopId);
       }
 
       match /tables/{tableId} {

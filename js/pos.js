@@ -1423,6 +1423,12 @@ let bleDevice = null;
 let bleServer = null; 
 let printCharacteristic = null;
 
+// Multi-slot printer map in window
+window.posPrinters = window.posPrinters || {
+    printer1: { id: 'printer1', name: null, device: null, server: null, characteristic: null, status: 'DISCONNECTED' },
+    printer2: { id: 'printer2', name: null, device: null, server: null, characteristic: null, status: 'DISCONNECTED' }
+};
+
 async function getLogoBytes(base64Image) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -1471,8 +1477,9 @@ async function getLogoBytes(base64Image) {
 }
 window.getLogoBytes = getLogoBytes;
 
-async function connectBluetoothPrinter() {
-    const btn = document.getElementById('btnBleStatus');
+async function connectBluetoothPrinter(printerSlot = 'printer1') {
+    const slotKey = (printerSlot === 'printer2') ? 'printer2' : 'printer1';
+    const btn = document.getElementById(slotKey === 'printer2' ? 'btnBleStatus2' : 'btnBleStatus');
     const originalText = btn ? btn.innerHTML : 'Search & Pair Printer';
     try {
         if (!navigator.bluetooth) { 
@@ -1480,49 +1487,147 @@ async function connectBluetoothPrinter() {
             return; 
         }
         if (!window.isSecureContext) { 
-            alert("❌ INSECURE CONNECTION!\n\nWeb Bluetooth ONLY works on 'https://' websites."); 
+            alert("❌ INSECURE CONNECTION!\n\nWeb Bluetooth ONLY works on 'https://' websites or localhost."); 
             return; 
         }
         if (btn) btn.innerHTML = "Searching...";
-        showToast("Looking for printers...");
-        bleDevice = await navigator.bluetooth.requestDevice({ 
+        showToast(`Looking for ${slotKey === 'printer2' ? 'Kitchen (Printer 2)' : 'Receipt (Printer 1)'} BLE printer...`);
+
+        // Universal thermal printer service UUIDs including Ezo BLE (0000ff00)
+        const BLE_PRINTER_UUIDS = [
+            '000018f0-0000-1000-8000-00805f9b34fb', // Rongta / POS-58
+            'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Zijiang / Milestone
+            '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC Transparent UART
+            '0000ff00-0000-1000-8000-00805f9b34fb', // Ezo BLE / Telink / Bekene
+            '0000fee7-0000-1000-8000-00805f9b34fb'  // Tencent / WeChat AirSync
+        ];
+
+        const device = await navigator.bluetooth.requestDevice({ 
             acceptAllDevices: true, 
-            optionalServices: [ 
-                '000018f0-0000-1000-8000-00805f9b34fb', 
-                'e7810a71-73ae-499d-8c15-faa9aef0c3f2', 
-                '49535343-fe7d-4ae5-8fa9-9fafd205e455', 
-                '0000fee7-0000-1000-8000-00805f9b34fb' 
-            ] 
+            optionalServices: BLE_PRINTER_UUIDS
         });
-        bleDevice.addEventListener('gattserverdisconnected', () => {
-            alert("⚠️ Printer Disconnected!");
-            printCharacteristic = null;
+
+        device.addEventListener('gattserverdisconnected', () => {
+            console.warn(`[BLE] Printer in slot ${slotKey} (${device.name || 'Printer'}) disconnected.`);
+            if (window.posPrinters && window.posPrinters[slotKey]) {
+                window.posPrinters[slotKey].status = 'DISCONNECTED';
+                window.posPrinters[slotKey].device = null;
+                window.posPrinters[slotKey].server = null;
+                window.posPrinters[slotKey].characteristic = null;
+            }
+            if (slotKey === 'printer1' || (!window.posPrinters?.printer1?.characteristic && bleDevice === device)) {
+                bleDevice = null;
+                bleServer = null;
+                printCharacteristic = null;
+            }
             if (btn) {
                 btn.innerHTML = "Search & Pair Printer";
                 btn.style.background = "transparent";
                 btn.style.color = "var(--accent)";
             }
+            showToast(`⚠️ ${device.name || 'Printer'} (${slotKey}) Disconnected!`);
+            if (typeof evaluateKitchenStationConsumer === 'function') {
+                evaluateKitchenStationConsumer();
+            }
         });
-        bleServer = await bleDevice.gatt.connect();
-        const services = await bleServer.getPrimaryServices();
-        for (let service of services) {
-            const characteristics = await service.getCharacteristics();
-            for (let characteristic of characteristics) {
-                if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
-                    printCharacteristic = characteristic;
-                    showToast("🖨️ Printer Connected Successfully!");
-                    if (btn) {
-                        btn.innerHTML = "Connected";
-                        btn.style.background = "var(--success)";
-                        btn.style.color = "#fff";
+
+        const server = await device.gatt.connect();
+
+        // Dynamic GATT Traversal across getPrimaryServices()
+        let foundChar = null;
+        let foundService = null;
+
+        try {
+            const services = await server.getPrimaryServices();
+            for (const service of services) {
+                try {
+                    const characteristics = await service.getCharacteristics();
+                    for (const char of characteristics) {
+                        if (char.properties && (char.properties.write || char.properties.writeWithoutResponse)) {
+                            foundChar = char;
+                            foundService = service;
+                            break;
+                        }
                     }
-                    return;
+                } catch (e) {
+                    console.warn(`[BLE] Failed reading characteristics on service ${service.uuid}:`, e);
                 }
+                if (foundChar) break;
+            }
+        } catch (enumErr) {
+            console.warn("[BLE] getPrimaryServices() dynamic enumeration failed, trying direct UUID fallback:", enumErr);
+        }
+
+        // Fallback: Targeted lookup across all known printer service UUIDs
+        if (!foundChar) {
+            for (const uuid of BLE_PRINTER_UUIDS) {
+                try {
+                    const service = await server.getPrimaryService(uuid);
+                    const characteristics = await service.getCharacteristics();
+                    for (const char of characteristics) {
+                        if (char.properties && (char.properties.write || char.properties.writeWithoutResponse)) {
+                            foundChar = char;
+                            foundService = service;
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    // Service not found on this peripheral
+                }
+                if (foundChar) break;
             }
         }
-        alert("❌ Printer paired, but it does not support standard text printing.");
-        if (btn) btn.innerHTML = originalText;
-        bleDevice.gatt.disconnect();
+
+        if (!foundChar) {
+            try { device.gatt.disconnect(); } catch (_) {}
+            alert("❌ Printer paired, but it does not support standard text printing.");
+            if (btn) btn.innerHTML = originalText;
+            return;
+        }
+
+        // Store in multi-slot map
+        window.posPrinters[slotKey] = {
+            id: slotKey,
+            name: device.name || 'Bluetooth Thermal Printer',
+            device: device,
+            server: server,
+            characteristic: foundChar,
+            serviceUuid: foundService?.uuid || null,
+            charUuid: foundChar.uuid,
+            status: 'CONNECTED',
+            transport: 'BLUETOOTH'
+        };
+
+        // Mirror to legacy globals if printer1 or if primary was null
+        if (slotKey === 'printer1' || !printCharacteristic) {
+            bleDevice = device;
+            bleServer = server;
+            printCharacteristic = foundChar;
+        }
+
+        // Mirror to ThermalPrinterBridge if loaded
+        if (typeof ThermalPrinterBridge !== 'undefined' && ThermalPrinterBridge.printers) {
+            ThermalPrinterBridge.printers[slotKey].device = device;
+            ThermalPrinterBridge.printers[slotKey].server = server;
+            ThermalPrinterBridge.printers[slotKey].characteristic = foundChar;
+            ThermalPrinterBridge.printers[slotKey].status = 'CONNECTED';
+            ThermalPrinterBridge.printers[slotKey].name = device.name || 'Bluetooth Printer';
+            ThermalPrinterBridge.printers[slotKey].transport = 'BLUETOOTH';
+            if (slotKey === 'printer1') {
+                ThermalPrinterBridge.activeBluetoothDevice = device;
+                ThermalPrinterBridge.activeCharacteristic = foundChar;
+            }
+        }
+
+        showToast(`🖨️ ${device.name || 'Printer'} Connected to ${slotKey === 'printer2' ? 'Kitchen (Printer 2)' : 'Receipt (Printer 1)'}!`);
+        if (typeof evaluateKitchenStationConsumer === 'function') {
+            evaluateKitchenStationConsumer();
+        }
+        if (btn) {
+            btn.innerHTML = "Connected";
+            btn.style.background = "var(--success)";
+            btn.style.color = "#fff";
+        }
     } catch (error) { 
         console.error(error);
         if (btn) btn.innerHTML = originalText;
@@ -1534,10 +1639,277 @@ async function connectBluetoothPrinter() {
 }
 window.connectBluetoothPrinter = connectBluetoothPrinter;
 
+// --- DUAL THERMAL PRINTER SETTINGS & INTERACTIVE ROUTING (M2 R2) ---
+function openPrinterSettingsModal() {
+    const modal = document.getElementById('printerSettingsModal');
+    if (!modal) return;
+
+    let config = null;
+    if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.loadPrinterSettings === 'function') {
+        config = window.ThermalPrinterBridge.loadPrinterSettings();
+    } else {
+        try {
+            const raw = localStorage.getItem('billnaw_printers_config') || localStorage.getItem('pos_dual_printers');
+            if (raw) config = JSON.parse(raw);
+        } catch (_) {}
+    }
+
+    const p1 = config?.printer1 || window.ThermalPrinterBridge?.printers?.printer1 || window.posPrinters?.printer1 || {};
+    const p2 = config?.printer2 || window.ThermalPrinterBridge?.printers?.printer2 || window.posPrinters?.printer2 || {};
+    const routing = config?.routing || window.ThermalPrinterBridge?.routing || {};
+
+    // Printer 1
+    const t1 = document.getElementById('printer1Transport'); if (t1 && p1.transport) t1.value = p1.transport;
+    const w1 = document.getElementById('printer1PaperWidth'); if (w1 && p1.paperWidth) w1.value = p1.paperWidth;
+    const h1 = document.getElementById('printer1Host'); if (h1 && p1.host) h1.value = p1.host;
+    const prt1 = document.getElementById('printer1Port'); if (prt1 && p1.port) prt1.value = p1.port;
+
+    // Printer 2
+    const t2 = document.getElementById('printer2Transport'); if (t2 && p2.transport) t2.value = p2.transport;
+    const w2 = document.getElementById('printer2PaperWidth'); if (w2 && p2.paperWidth) w2.value = p2.paperWidth;
+    const h2 = document.getElementById('printer2Host'); if (h2 && p2.host) h2.value = p2.host;
+    const prt2 = document.getElementById('printer2Port'); if (prt2 && p2.port) prt2.value = p2.port;
+
+    // Routing
+    const dr = document.getElementById('cfgDefaultReceiptPrinter'); if (dr && routing.defaultReceiptPrinter) dr.value = routing.defaultReceiptPrinter;
+    const dk = document.getElementById('cfgDefaultKotPrinter'); if (dk && routing.defaultKotPrinter) dk.value = routing.defaultKotPrinter;
+    const ap = document.getElementById('cfgAlwaysPromptPrinters'); if (ap) ap.checked = Boolean(routing.alwaysPrompt);
+
+    handlePrinterTransportChange('printer1');
+    handlePrinterTransportChange('printer2');
+    updatePrinterSlotBadges();
+
+    modal.style.display = 'flex';
+}
+window.openPrinterSettingsModal = openPrinterSettingsModal;
+
+function closePrinterSettingsModal() {
+    const modal = document.getElementById('printerSettingsModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closePrinterSettingsModal = closePrinterSettingsModal;
+
+function handlePrinterTransportChange(slotKey) {
+    const transportEl = document.getElementById(slotKey === 'printer2' ? 'printer2Transport' : 'printer1Transport');
+    const netDiv = document.getElementById(slotKey === 'printer2' ? 'printer2NetworkSettings' : 'printer1NetworkSettings');
+    const pairBtnText = document.getElementById(slotKey === 'printer2' ? 'btnPairPrinter2Text' : 'btnPairPrinter1Text');
+    const val = transportEl ? transportEl.value : 'BLUETOOTH';
+
+    if (netDiv) {
+        netDiv.style.display = (val === 'NETWORK') ? 'block' : 'none';
+    }
+    if (pairBtnText) {
+        if (val === 'BLUETOOTH') pairBtnText.innerText = 'Pair Bluetooth';
+        else if (val === 'USB') pairBtnText.innerText = 'Connect USB OTG';
+        else if (val === 'NETWORK') pairBtnText.innerText = 'Save Network IP';
+        else if (val === 'SYSTEM_DIALOG') pairBtnText.innerText = 'System Dialog Active';
+    }
+    if (typeof evaluateKitchenStationConsumer === 'function') {
+        evaluateKitchenStationConsumer();
+    }
+}
+window.handlePrinterTransportChange = handlePrinterTransportChange;
+
+function updatePrinterSlotBadges() {
+    const b1 = document.getElementById('printer1StatusBadge');
+    const b2 = document.getElementById('printer2StatusBadge');
+    const name1 = document.getElementById('printer1DeviceNameDisplay');
+    const name2 = document.getElementById('printer2DeviceNameDisplay');
+
+    const p1 = window.ThermalPrinterBridge?.printers?.printer1 || window.posPrinters?.printer1 || {};
+    const p2 = window.ThermalPrinterBridge?.printers?.printer2 || window.posPrinters?.printer2 || {};
+
+    if (b1) {
+        const isReady = p1.status === 'CONNECTED' || p1.transport === 'SYSTEM_DIALOG' || Boolean(p1.characteristic || p1.device || p1.host);
+        b1.innerText = isReady ? (p1.transport === 'SYSTEM_DIALOG' ? 'SYSTEM DIALOG' : 'CONNECTED') : 'DISCONNECTED';
+        b1.style.background = isReady ? '#DCFCE7' : '#F1F5F9';
+        b1.style.color = isReady ? '#166534' : '#64748B';
+    }
+    if (name1 && p1.name) name1.innerText = p1.name;
+
+    if (b2) {
+        const isReady = p2.status === 'CONNECTED' || p2.transport === 'SYSTEM_DIALOG' || Boolean(p2.characteristic || p2.device || p2.host);
+        b2.innerText = isReady ? (p2.transport === 'SYSTEM_DIALOG' ? 'SYSTEM DIALOG' : 'CONNECTED') : 'DISCONNECTED';
+        b2.style.background = isReady ? '#DCFCE7' : '#F1F5F9';
+        b2.style.color = isReady ? '#166534' : '#64748B';
+    }
+    if (name2 && p2.name) name2.innerText = p2.name;
+}
+window.updatePrinterSlotBadges = updatePrinterSlotBadges;
+
+async function pairPrinterSlot(slotKey = 'printer1') {
+    const transportEl = document.getElementById(slotKey === 'printer2' ? 'printer2Transport' : 'printer1Transport');
+    const transport = transportEl ? transportEl.value : 'BLUETOOTH';
+
+    if (transport === 'BLUETOOTH') {
+        if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.connectBluetoothPrinter === 'function') {
+            await window.ThermalPrinterBridge.connectBluetoothPrinter(slotKey);
+            updatePrinterSlotBadges();
+        } else {
+            await connectBluetoothPrinter(slotKey);
+        }
+    } else if (transport === 'USB') {
+        if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.connectUsbPrinter === 'function') {
+            const res = await window.ThermalPrinterBridge.connectUsbPrinter(slotKey);
+            if (res.success) {
+                if (typeof showToast === 'function') showToast(`USB Printer connected on ${slotKey}!`, 'success');
+            } else {
+                if (typeof showToast === 'function') showToast(`USB connection failed: ${res.error?.message}`);
+            }
+            updatePrinterSlotBadges();
+        }
+    } else if (transport === 'NETWORK') {
+        const hostInput = document.getElementById(slotKey === 'printer2' ? 'printer2Host' : 'printer1Host');
+        const portInput = document.getElementById(slotKey === 'printer2' ? 'printer2Port' : 'printer1Port');
+        const host = hostInput?.value?.trim();
+        const port = Number(portInput?.value) || 9100;
+        if (!host) {
+            alert("Please enter a valid IP address or hostname for the Network Printer.");
+            return;
+        }
+        if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.connectNetworkPrinter === 'function') {
+            await window.ThermalPrinterBridge.connectNetworkPrinter(slotKey, host, port);
+            if (typeof showToast === 'function') showToast(`Network Printer ${host}:${port} configured on ${slotKey}!`, 'success');
+            updatePrinterSlotBadges();
+        }
+    } else if (transport === 'SYSTEM_DIALOG') {
+        if (window.ThermalPrinterBridge && window.ThermalPrinterBridge.printers[slotKey]) {
+            window.ThermalPrinterBridge.printers[slotKey].transport = 'SYSTEM_DIALOG';
+            window.ThermalPrinterBridge.printers[slotKey].status = 'CONNECTED';
+            window.ThermalPrinterBridge.persistPrinterConfig();
+            updatePrinterSlotBadges();
+            if (typeof showToast === 'function') showToast(`System Print Dialog selected for ${slotKey}`, 'success');
+        }
+    }
+    if (typeof evaluateKitchenStationConsumer === 'function') {
+        evaluateKitchenStationConsumer();
+    }
+}
+window.pairPrinterSlot = pairPrinterSlot;
+
+async function testPrinterSlot(slotKey = 'printer1') {
+    const isKot = slotKey === 'printer2';
+    const dummyPayload = isKot ? {
+        table: 'T1',
+        tableNo: 'T1',
+        items: [
+            { name: "Standard Espresso", qty: 2, notes: "Extra hot" },
+            { name: "Club Sandwich", qty: 1, notes: "No onions" }
+        ],
+        biller: 'Counter Test',
+        created_at: new Date().toISOString()
+    } : {
+        billNo: 'TEST-999',
+        date: new Date().toLocaleString(),
+        orderType: 'Dine-In',
+        paymentMode: 'Cash',
+        amount: 270,
+        rawItems: [
+            { name: "Standard Espresso", qty: 1, price: 80, gstRate: 5 },
+            { name: "Water Bottle", qty: 2, price: 20, gstRate: 0 }
+        ]
+    };
+
+    if (window.ThermalPrinterBridge) {
+        if (typeof showToast === 'function') showToast(`Dispatching test print to ${slotKey}...`);
+        const slotConfig = window.ThermalPrinterBridge.printers[slotKey] || {};
+        const width = slotConfig.paperWidth || (isKot ? '58mm' : '80mm');
+        const bytes = window.ThermalPrinterBridge.generateEscPosCommands(dummyPayload, width, { isKot });
+        const res = await window.ThermalPrinterBridge.dispatchToPrinterSlot(slotKey, bytes);
+        if (res && res.success) {
+            if (typeof showToast === 'function') showToast(`Test print dispatched to ${slotKey}!`, 'success');
+        } else {
+            if (typeof showToast === 'function') showToast(`Test print to ${slotKey} failed: ${res?.error?.message || 'Disconnected'}`);
+        }
+    } else {
+        testThermalPrinter();
+    }
+}
+window.testPrinterSlot = testPrinterSlot;
+
+function savePrinterSettingsFromUi() {
+    const t1 = document.getElementById('printer1Transport')?.value || 'BLUETOOTH';
+    const w1 = document.getElementById('printer1PaperWidth')?.value || '80mm';
+    const h1 = document.getElementById('printer1Host')?.value?.trim() || '';
+    const prt1 = Number(document.getElementById('printer1Port')?.value) || 9100;
+
+    const t2 = document.getElementById('printer2Transport')?.value || 'BLUETOOTH';
+    const w2 = document.getElementById('printer2PaperWidth')?.value || '58mm';
+    const h2 = document.getElementById('printer2Host')?.value?.trim() || '';
+    const prt2 = Number(document.getElementById('printer2Port')?.value) || 9100;
+
+    const dr = document.getElementById('cfgDefaultReceiptPrinter')?.value || 'printer1';
+    const dk = document.getElementById('cfgDefaultKotPrinter')?.value || 'printer2';
+    const ap = Boolean(document.getElementById('cfgAlwaysPromptPrinters')?.checked);
+
+    const config = {
+        printer1: { transport: t1, paperWidth: w1, host: h1, port: prt1 },
+        printer2: { transport: t2, paperWidth: w2, host: h2, port: prt2 },
+        routing: { defaultReceiptPrinter: dr, defaultKotPrinter: dk, alwaysPrompt: ap }
+    };
+
+    if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.savePrinterSettings === 'function') {
+        window.ThermalPrinterBridge.savePrinterSettings(config);
+    } else {
+        localStorage.setItem('billnaw_printers_config', JSON.stringify(config));
+        localStorage.setItem('pos_dual_printers', JSON.stringify(config));
+    }
+
+    if (typeof showToast === 'function') showToast("Dual printer configuration saved successfully!", 'success');
+    closePrinterSettingsModal();
+    if (typeof evaluateKitchenStationConsumer === 'function') {
+        evaluateKitchenStationConsumer();
+    }
+}
+window.savePrinterSettingsFromUi = savePrinterSettingsFromUi;
+
+let _printerSelectCallback = null;
+function openPrinterSelectModal(role, onSelect) {
+    _printerSelectCallback = onSelect;
+    const modal = document.getElementById('printerSelectModal');
+    if (!modal) return;
+
+    const label = document.getElementById('printerSelectRoleLabel');
+    if (label) label.innerText = (role === 'KOT') ? 'Kitchen KOT Ticket' : 'Customer Receipt';
+
+    const p1 = window.ThermalPrinterBridge?.printers?.printer1 || window.posPrinters?.printer1 || {};
+    const p2 = window.ThermalPrinterBridge?.printers?.printer2 || window.posPrinters?.printer2 || {};
+
+    const p1Details = document.getElementById('printer1SelectDetails');
+    if (p1Details) p1Details.innerText = `${p1.paperWidth || '80mm'} • ${p1.transport || 'Bluetooth'}`;
+    const p2Details = document.getElementById('printer2SelectDetails');
+    if (p2Details) p2Details.innerText = `${p2.paperWidth || '58mm'} • ${p2.transport || 'Bluetooth'}`;
+
+    modal.style.display = 'flex';
+}
+window.openPrinterSelectModal = openPrinterSelectModal;
+
+function closePrinterSelectModal(selectedSlot = null) {
+    const modal = document.getElementById('printerSelectModal');
+    if (modal) modal.style.display = 'none';
+    if (typeof _printerSelectCallback === 'function') {
+        const cb = _printerSelectCallback;
+        _printerSelectCallback = null;
+        cb(selectedSlot);
+    }
+}
+window.closePrinterSelectModal = closePrinterSelectModal;
+
+function handleInteractivePrinterSelect(selectedSlot) {
+    closePrinterSelectModal(selectedSlot);
+}
+window.handleInteractivePrinterSelect = handleInteractivePrinterSelect;
+
+
 /**
  * Non-Blocking ESC/POS Thermal Receipt Generator
  * Strictly transmits text-only ESC/POS commands with zero raster graphics overhead for food images.
  * Food photography is completely omitted from thermal transmission to guarantee 0ms print queue delay.
+ * 
+ * STATUTORY COMPLIANCE & SECURITY INVARIANT:
+ * Customer bills, receipts, and settled invoices must strictly and exclusively print locally
+ * (via local physical thermal printer or local browser print dialog).
+ * Customer receipts NEVER queue to Distributed Cloud Print Relay.
  */
 async function sendEscPosToPrinter(order) {
     if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
@@ -1668,6 +2040,17 @@ async function sendEscPosToPrinter(order) {
         }
         const pTot = document.getElementById('printTotal'); if (pTot) pTot.innerText = `₹ ${order.amount.toFixed(2)}`;
         
+        // Route print job through ThermalPrinterBridge if available
+        if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
+            const routeResult = await window.ThermalPrinterBridge.routePrintJob(order, { role: 'RECEIPT' });
+            if (routeResult && (routeResult.data?.printed || routeResult.data?.cancelled)) {
+                if (routeResult.data?.method === 'BROWSER_DIALOG') {
+                    await executeHtmlPrint('print-receipt');
+                }
+                return routeResult;
+            }
+        }
+
         await executeHtmlPrint('print-receipt');
         return;
     }
@@ -1784,12 +2167,19 @@ async function sendEscPosToPrinter(order) {
         offset += p.length; 
     }
 
+    const targetChar = window.posPrinters?.printer1?.characteristic || printCharacteristic;
     const CHUNK_SIZE = 100; 
     try { 
         for (let i = 0; i < finalPayload.length; i += CHUNK_SIZE) { 
             const chunk = finalPayload.slice(i, i + CHUNK_SIZE); 
-            await printCharacteristic.writeValue(chunk); 
-            await new Promise(resolve => setTimeout(resolve, 40)); 
+            if (targetChar) {
+                if (typeof targetChar.writeValueWithoutResponse === 'function' && targetChar.properties && targetChar.properties.writeWithoutResponse) {
+                    await targetChar.writeValueWithoutResponse(chunk);
+                } else if (typeof targetChar.writeValue === 'function') {
+                    await targetChar.writeValue(chunk);
+                }
+            }
+            await new Promise(resolve => setTimeout(resolve, 25)); 
         } 
     } catch(e) { 
         console.error(e); 
@@ -1801,12 +2191,88 @@ window.sendEscPosToPrinter = sendEscPosToPrinter;
 /**
  * Non-Blocking Kitchen Order Ticket (KOT) Generator
  * Strictly text-only ESC/POS command stream with zero raster graphics overhead.
+ * When local kitchen printer is disconnected or out of range, seamlessly falls back
+ * to Distributed Cloud Print Relay via enqueueCloudKotPrintJob.
  */
 async function sendKotToPrinter(tableNo, items) {
     const billerName = (currentStaff && currentStaff.name) ? currentStaff.name : 'Admin';
     const billerRole = (currentStaff && currentStaff.role) ? currentStaff.role : 'Server';
+    const kotId = `KOT-${Date.now()}`;
 
-    if (!printCharacteristic) {
+    const kotJobPayload = {
+        jobType: 'KOT',
+        kotId: kotId,
+        table: tableNo,
+        tableNo: tableNo,
+        items: items,
+        rawItems: items,
+        biller: billerName,
+        server_staff_id: billerName,
+        billerName: billerName,
+        billerRole: billerRole,
+        date: new Date().toLocaleTimeString(),
+        created_at: new Date().toISOString()
+    };
+
+    // 1. Route KOT print job through ThermalPrinterBridge if available
+    if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
+        try {
+            const routeResult = await window.ThermalPrinterBridge.routePrintJob(kotJobPayload, { role: 'KOT' });
+            if (routeResult && (routeResult.data?.printed || routeResult.data?.cancelled)) {
+                if (routeResult.data?.method === 'BROWSER_DIALOG') {
+                    const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
+                    const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
+                    const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
+                    let itemsHtml = '';
+                    items.forEach(item => {
+                        itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${item.name}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
+                    });
+                    const kotItems = document.getElementById('printKotItems');
+                    if (kotItems) kotItems.innerHTML = itemsHtml;
+                    await executeHtmlPrint('print-kot');
+                }
+                return routeResult;
+            }
+
+            // If routeResult indicates failure to print (e.g. printer disconnected or out of range)
+            if (routeResult && !routeResult.success) {
+                const cloudEnqueue = window.enqueueCloudKotPrintJob || (window.ThermalPrinterBridge && window.ThermalPrinterBridge.enqueueCloudKotPrintJob);
+                if (typeof cloudEnqueue === 'function') {
+                    try {
+                        const shopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || shopProfile?.id || 'default_shop';
+                        const enqueueRes = await cloudEnqueue(kotJobPayload, { shopId });
+                        if (typeof showToast === 'function') {
+                            showToast("Kitchen printer out of range. KOT queued to Cloud Print Relay!", 'success');
+                        }
+                        return { success: true, queuedToCloud: true, jobId: enqueueRes.jobId };
+                    } catch (cloudErr) {
+                        console.error("Cloud print relay enqueue fallback failed:", cloudErr);
+                    }
+                }
+            }
+        } catch (routeErr) {
+            console.warn("routePrintJob failed or threw, falling back to direct / cloud relay:", routeErr);
+        }
+    }
+
+    const targetKotChar = window.posPrinters?.printer2?.characteristic || window.posPrinters?.printer1?.characteristic || printCharacteristic;
+    if (!targetKotChar) {
+        // No local printer connection: Attempt Distributed Cloud Print Relay fallback
+        const cloudEnqueue = window.enqueueCloudKotPrintJob || (window.ThermalPrinterBridge && window.ThermalPrinterBridge.enqueueCloudKotPrintJob);
+        if (typeof cloudEnqueue === 'function') {
+            try {
+                const shopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || shopProfile?.id || 'default_shop';
+                const enqueueRes = await cloudEnqueue(kotJobPayload, { shopId });
+                if (typeof showToast === 'function') {
+                    showToast("Kitchen printer out of range. KOT queued to Cloud Print Relay!", 'success');
+                }
+                return { success: true, queuedToCloud: true, jobId: enqueueRes.jobId };
+            } catch (cloudErr) {
+                console.error("Cloud print relay enqueue failed:", cloudErr);
+            }
+        }
+
+        // Secondary fallback to browser HTML print dialog if cloud relay unavailable
         const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
         const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
         const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
@@ -1840,21 +2306,333 @@ async function sendKotToPrinter(tableNo, items) {
     try { 
         for (let i = 0; i < payload.length; i += CHUNK_SIZE) { 
             const chunk = payload.slice(i, i + CHUNK_SIZE); 
-            await printCharacteristic.writeValue(chunk); 
-            await new Promise(resolve => setTimeout(resolve, 40)); 
+            if (targetKotChar) {
+                if (typeof targetKotChar.writeValueWithoutResponse === 'function' && targetKotChar.properties && targetKotChar.properties.writeWithoutResponse) {
+                    await targetKotChar.writeValueWithoutResponse(chunk);
+                } else if (typeof targetKotChar.writeValue === 'function') {
+                    await targetKotChar.writeValue(chunk);
+                }
+            }
+            await new Promise(resolve => setTimeout(resolve, 25)); 
         } 
     } catch(e) { 
-        console.error(e); 
+        console.error("KOT direct print error:", e); 
+        // Fallback to Cloud Print Relay if direct Bluetooth transmission fails
+        const cloudEnqueue = window.enqueueCloudKotPrintJob || (window.ThermalPrinterBridge && window.ThermalPrinterBridge.enqueueCloudKotPrintJob);
+        if (typeof cloudEnqueue === 'function') {
+            try {
+                const shopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || shopProfile?.id || 'default_shop';
+                const enqueueRes = await cloudEnqueue(kotJobPayload, { shopId });
+                if (typeof showToast === 'function') {
+                    showToast("Kitchen printer out of range. KOT queued to Cloud Print Relay!", 'success');
+                }
+                return { success: true, queuedToCloud: true, jobId: enqueueRes.jobId };
+            } catch (cloudErr) {
+                console.error("Cloud print relay enqueue fallback failed:", cloudErr);
+            }
+        }
         showToast("❌ KOT Print Failed."); 
     }
 }
 window.sendKotToPrinter = sendKotToPrinter;
 
+// ============================================================================
+// 🛰️ DISTRIBUTED CLOUD PRINT RELAY: OPERATIONAL KITCHEN QUEUE CONSUMER (M3 R3)
+// ============================================================================
+let _kotQueueUnsubscribe = null;
+let _currentKotConsumerShopId = null;
+let _isProcessingKotQueue = false;
+const _kotJobProcessingSet = new Set(); // Local in-flight & cooldown job cache
+
+/**
+ * Checks whether this station has an active, ready kitchen printer.
+ * Evaluates defaultKotPrinter slot (printer2 by default).
+ * @returns {boolean}
+ */
+function isKitchenPrinterConnected() {
+    const bridge = window.ThermalPrinterBridge;
+    const kotSlot = bridge?.routing?.defaultKotPrinter || 'printer2';
+    const slot = bridge?.printers?.[kotSlot] || window.posPrinters?.[kotSlot];
+    if (!slot) return false;
+
+    if (bridge && typeof bridge.isPrinterReady === 'function') {
+        return bridge.isPrinterReady(kotSlot);
+    }
+
+    return slot.status === 'CONNECTED' ||
+           Boolean(slot.characteristic) ||
+           Boolean(slot.device) ||
+           (slot.transport === 'NETWORK' && Boolean(slot.host)) ||
+           slot.transport === 'SYSTEM_DIALOG';
+}
+window.isKitchenPrinterConnected = isKitchenPrinterConnected;
+
+/**
+ * Processes a single KOT print job: claim -> format -> dispatch -> complete.
+ * @param {Object} job - Queued job payload (with id / jobId)
+ * @param {string} [shopId] - Shop tenant ID
+ * @param {Object} [options={}] - Options (e.g. { db, workerDeviceId, dispatchFn, ignoreConnectionCheck, force })
+ * @returns {Promise<{ success: boolean, jobId: string, status: string, error?: string }>}
+ */
+async function processCloudKotJob(job, shopId, options = {}) {
+    if (!job || (!job.id && !job.jobId)) return { success: false, error: 'Invalid job' };
+    const jobId = job.id || job.jobId;
+    if (_kotJobProcessingSet.has(jobId) && !options.force) {
+        return { success: false, jobId, error: 'Job already in processing cache' };
+    }
+
+    // Guard: Verify kitchen printer is still physically connected (unless bypassed in tests)
+    if (!options.ignoreConnectionCheck && !isKitchenPrinterConnected()) {
+        console.warn(`[CloudKotConsumer] Kitchen printer not connected. Aborting claim for job ${jobId}`);
+        return { success: false, jobId, error: 'Kitchen printer not connected' };
+    }
+
+    _kotJobProcessingSet.add(jobId);
+
+    const resolvedShopId = shopId || _currentKotConsumerShopId ||
+                           (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+                           (typeof shopProfile !== 'undefined' && shopProfile?.id) ||
+                           (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_store_code') || localStorage.getItem('storeId')) : null) ||
+                           'default_shop';
+
+    const bridge = window.ThermalPrinterBridge;
+    const claimFn = (bridge && typeof bridge.claimPrintJob === 'function')
+        ? bridge.claimPrintJob.bind(bridge)
+        : (typeof window.claimPrintJob === 'function' ? window.claimPrintJob : null);
+    const completeFn = (bridge && typeof bridge.completePrintJob === 'function')
+        ? bridge.completePrintJob.bind(bridge)
+        : (typeof window.completePrintJob === 'function' ? window.completePrintJob : null);
+
+    if (!claimFn || !completeFn) {
+        console.error("[CloudKotConsumer] claimPrintJob or completePrintJob API missing.");
+        _kotJobProcessingSet.delete(jobId);
+        return { success: false, jobId, error: 'Platform bridge API missing' };
+    }
+
+    const targetDb = options.db || (typeof window !== 'undefined' ? (window.firestoreDB || window.firebaseDB) : null);
+    const workerDeviceId = options.workerDeviceId ||
+                           (typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : null) ||
+                           (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id')) : null) ||
+                           `kitchen_station_${Math.random().toString(36).substring(2, 8)}`;
+
+    let claimedRecord = null;
+    try {
+        claimedRecord = await claimFn(targetDb, resolvedShopId, jobId, workerDeviceId, options);
+    } catch (claimErr) {
+        // Natural outcome in multi-station race: another station claimed this job
+        console.debug(`[CloudKotConsumer] Job ${jobId} claim bypassed:`, claimErr.message);
+        setTimeout(() => _kotJobProcessingSet.delete(jobId), 10000);
+        return { success: false, jobId, error: claimErr.message };
+    }
+
+    if (!claimedRecord) {
+        _kotJobProcessingSet.delete(jobId);
+        return { success: false, jobId, error: 'Claim returned null record' };
+    }
+
+    console.info(`[CloudKotConsumer] Claimed job ${jobId} for table ${claimedRecord.tableNo || job.tableNo}`);
+
+    // Resolve target kitchen printer slot and paper width
+    const kotSlot = bridge?.routing?.defaultKotPrinter || 'printer2';
+    const slotConfig = bridge?.printers?.[kotSlot] || window.posPrinters?.[kotSlot] || {};
+    const paperWidth = slotConfig.paperWidth || '58mm';
+
+    let printSuccess = false;
+    let printError = null;
+
+    try {
+        let bytes = null;
+        if (bridge && typeof bridge.generateEscPosCommands === 'function') {
+            bytes = bridge.generateEscPosCommands(claimedRecord, paperWidth, { isKot: true });
+        }
+
+        if (options.dispatchFn && typeof options.dispatchFn === 'function') {
+            const customRes = await options.dispatchFn(kotSlot, bytes, claimedRecord);
+            printSuccess = Boolean(customRes && (customRes.success !== false));
+            if (!printSuccess) printError = customRes?.error || 'Custom dispatch failed';
+        } else if (bridge && typeof bridge.dispatchToPrinterSlot === 'function') {
+            const dispatchRes = await bridge.dispatchToPrinterSlot(kotSlot, bytes);
+            printSuccess = Boolean(dispatchRes && dispatchRes.success && dispatchRes.data?.printed);
+            if (!printSuccess) {
+                printError = dispatchRes?.error?.message || dispatchRes?.error || 'Dispatch returned failure';
+            }
+        } else {
+            // Direct write fallback using characteristic
+            const targetChar = window.posPrinters?.[kotSlot]?.characteristic ||
+                               window.posPrinters?.printer2?.characteristic ||
+                               window.printCharacteristic;
+            if (targetChar) {
+                const payloadBytes = bytes || new TextEncoder().encode(`KOT: Table ${claimedRecord.tableNo || 'T1'}\n\n`);
+                const CHUNK_SIZE = 100;
+                for (let i = 0; i < payloadBytes.length; i += CHUNK_SIZE) {
+                    const chunk = payloadBytes.slice(i, i + CHUNK_SIZE);
+                    if (typeof targetChar.writeValueWithoutResponse === 'function' && targetChar.properties?.writeWithoutResponse) {
+                        await targetChar.writeValueWithoutResponse(chunk);
+                    } else if (typeof targetChar.writeValue === 'function') {
+                        await targetChar.writeValue(chunk);
+                    }
+                    await new Promise(r => setTimeout(r, 25));
+                }
+                printSuccess = true;
+            } else {
+                printError = "No writable printer characteristic available";
+            }
+        }
+    } catch (err) {
+        printSuccess = false;
+        printError = err.message || String(err);
+        console.error(`[CloudKotConsumer] Physical printing error for job ${jobId}:`, err);
+    }
+
+    // Complete job status in Firestore
+    let completeRes = null;
+    try {
+        completeRes = await completeFn(targetDb, resolvedShopId, jobId, printSuccess, printError, options);
+        if (printSuccess) {
+            if (typeof showToast === 'function') {
+                showToast(`🖨️ Remote KOT (Table ${claimedRecord.tableNo || ''}) printed at kitchen!`, 'success');
+            }
+        } else {
+            if (typeof showToast === 'function') {
+                showToast(`⚠️ Remote KOT print failed: ${printError}`);
+            }
+        }
+    } catch (completeErr) {
+        console.error(`[CloudKotConsumer] Failed to update job status for ${jobId}:`, completeErr);
+    } finally {
+        // Cooldown in cache to prevent immediate re-trigger on local snapshot echo
+        setTimeout(() => _kotJobProcessingSet.delete(jobId), 15000);
+    }
+
+    return {
+        success: printSuccess,
+        jobId,
+        status: completeRes?.status || (printSuccess ? 'printed' : 'failed'),
+        error: printError
+    };
+}
+window.processCloudKotJob = processCloudKotJob;
+
+/**
+ * Starts listening to the Firestore print queue for the specified shopId.
+ * Idempotent: If already listening to this shopId, no-op.
+ * @param {string} shopId
+ * @returns {boolean}
+ */
+function startCloudKotQueueConsumer(shopId) {
+    if (!shopId || typeof shopId !== 'string') return false;
+
+    // Idempotency check: Already listening to this shop
+    if (_kotQueueUnsubscribe && _currentKotConsumerShopId === shopId) {
+        return true;
+    }
+
+    // If switching stores, teardown previous listener
+    if (_kotQueueUnsubscribe) {
+        stopCloudKotQueueConsumer();
+    }
+
+    const bridge = window.ThermalPrinterBridge;
+    const listenFn = (bridge && typeof bridge.listenPrintQueue === 'function')
+        ? bridge.listenPrintQueue.bind(bridge)
+        : (typeof window.listenPrintQueue === 'function' ? window.listenPrintQueue : null);
+
+    if (!listenFn) {
+        console.warn("[CloudKotConsumer] listenPrintQueue API unavailable.");
+        return false;
+    }
+
+    const db = (typeof window !== 'undefined' ? (window.firestoreDB || window.firebaseDB) : null) || null;
+    _currentKotConsumerShopId = shopId;
+
+    try {
+        _kotQueueUnsubscribe = listenFn(db, shopId, async (incomingJobs) => {
+            if (_isProcessingKotQueue) return;
+            _isProcessingKotQueue = true;
+            try {
+                const jobs = Array.isArray(incomingJobs) ? incomingJobs : (incomingJobs ? [incomingJobs] : []);
+                const queuedJobs = jobs.filter(j => j && j.status === 'queued' && !_kotJobProcessingSet.has(j.id));
+                if (queuedJobs.length === 0) return;
+
+                // Process jobs sequentially (FIFO) to prevent hardware write collisions
+                for (const job of queuedJobs) {
+                    await processCloudKotJob(job, shopId);
+                }
+            } finally {
+                _isProcessingKotQueue = false;
+            }
+        });
+
+        console.info(`[CloudKotConsumer] Active kitchen queue consumer listening for shop: ${shopId}`);
+        return true;
+    } catch (err) {
+        console.error("[CloudKotConsumer] Failed to start queue consumer:", err);
+        _kotQueueUnsubscribe = null;
+        _currentKotConsumerShopId = null;
+        return false;
+    }
+}
+window.startCloudKotQueueConsumer = startCloudKotQueueConsumer;
+
+/**
+ * Stops the active print queue consumer and releases the Firestore snapshot subscription.
+ */
+function stopCloudKotQueueConsumer() {
+    if (_kotQueueUnsubscribe) {
+        try {
+            _kotQueueUnsubscribe();
+            console.info(`[CloudKotConsumer] Stopped queue consumer for shop: ${_currentKotConsumerShopId}`);
+        } catch (e) {
+            console.warn("[CloudKotConsumer] Error unsubscribing from queue:", e);
+        }
+        _kotQueueUnsubscribe = null;
+    }
+    _currentKotConsumerShopId = null;
+    _kotJobProcessingSet.clear();
+}
+window.stopCloudKotQueueConsumer = stopCloudKotQueueConsumer;
+
+/**
+ * Re-evaluates station printer readiness and manages consumer lifecycle.
+ */
+function evaluateKitchenStationConsumer() {
+    const shopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+                   (typeof shopProfile !== 'undefined' && shopProfile?.id) ||
+                   (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_store_code') || localStorage.getItem('storeId')) : null) ||
+                   'default_shop';
+
+    if (isKitchenPrinterConnected()) {
+        startCloudKotQueueConsumer(shopId);
+    } else {
+        stopCloudKotQueueConsumer();
+    }
+}
+window.evaluateKitchenStationConsumer = evaluateKitchenStationConsumer;
+
+// Auto-evaluate station consumer on initial load or Firebase authentication
+if (typeof window !== 'undefined') {
+    window.addEventListener('firebaseLoaded', () => {
+        if (typeof evaluateKitchenStationConsumer === 'function') {
+            evaluateKitchenStationConsumer();
+        }
+    });
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            setTimeout(() => { if (typeof evaluateKitchenStationConsumer === 'function') evaluateKitchenStationConsumer(); }, 500);
+        } else {
+            window.addEventListener('DOMContentLoaded', () => {
+                setTimeout(() => { if (typeof evaluateKitchenStationConsumer === 'function') evaluateKitchenStationConsumer(); }, 500);
+            });
+        }
+    }
+}
+
+
 async function printKitchenTicket() {
     const btn = document.querySelector('#kotModal .btn-warning'); 
     if (btn) {
         btn.disabled = true; 
-        btn.innerHTML = printCharacteristic 
+        btn.innerHTML = (window.posPrinters?.printer2?.characteristic || window.posPrinters?.printer1?.characteristic || printCharacteristic)
             ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Printing KOT...</span>' 
             : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Generating KOT...</span>';
     }
