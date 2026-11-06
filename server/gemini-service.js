@@ -69,39 +69,26 @@ export async function isGeminiKeyOperational(apiKey = null) {
     }
   }
 
-  const testModels = [
-    CONFIG.gemini.model,
-    'gemini-3.5-flash-lite',
-    'gemini-3.5-flash',
-    'gemini-flash-latest'
-  ].filter(Boolean);
-  for (const model of testModels) {
-    try {
-      const ai = getGeminiClient(key);
-      const response = await ai.models.generateContent({
-        model,
-        contents: [{ role: 'user', parts: [{ text: 'ping' }] }]
-      });
-
-      const operational = Boolean(response && response.text !== undefined);
-      if (operational) {
-        keyVerificationCache.set(key, { operational: true, timestamp: Date.now() });
-        return true;
-      }
-    } catch (err) {
-      const errMsg = String(err?.message || err);
-      const isAuthError = err.status === 401 || err.status === 403 || errMsg.includes('UNAUTHENTICATED') || errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || errMsg.includes('API_KEY_INVALID');
-      if (isAuthError) {
-        keyVerificationCache.set(key, { operational: false, timestamp: Date.now() });
-        return false;
-      }
-      // If error is model not found or transient, try next model in loop
-      continue;
+  // Fast, non-quota-consuming API key check via models endpoint with 3s timeout
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=1`, {
+      signal: AbortSignal.timeout(3000)
+    });
+    if (res.ok) {
+      keyVerificationCache.set(key, { operational: true, timestamp: Date.now() });
+      return true;
     }
+    if (res.status === 401 || res.status === 403) {
+      keyVerificationCache.set(key, { operational: false, timestamp: Date.now() });
+      return false;
+    }
+  } catch (netErr) {
+    // On transient network timeout, fallback to structure check
   }
 
-  keyVerificationCache.set(key, { operational: false, timestamp: Date.now() });
-  return false;
+  const looksValid = Boolean(key && key.length >= 20);
+  keyVerificationCache.set(key, { operational: looksValid, timestamp: Date.now() });
+  return looksValid;
 }
 
 /**
@@ -160,9 +147,11 @@ Output the final result ONLY as a valid JSON object adhering strictly to this sc
 
   const candidateModels = [...new Set([
     CONFIG.gemini.model,
+    'gemini-3.8-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-flash-latest',
     'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-flash-latest'
+    'gemini-3.5-flash-lite'
   ].filter(Boolean))];
   
   let response = null;
@@ -785,12 +774,14 @@ Given the dish name "${cleanItemName}" and category "${cleanCat}", classify it i
 
 Output strictly a JSON object: {"matched_type": "one_item_from_list"}`;
 
-      const candidateModels = [
+      const candidateModels = [...new Set([
         CONFIG.gemini.model,
+        'gemini-3.8-flash',
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest',
         'gemini-3.5-flash-lite',
-        'gemini-3.5-flash',
-        'gemini-flash-latest'
-      ].filter(Boolean);
+        'gemini-3.5-flash'
+      ].filter(Boolean))];
 
       for (const modelName of candidateModels) {
         try {
@@ -876,12 +867,14 @@ Guidelines:
   if (effectiveKey) {
     try {
       const ai = getGeminiClient(effectiveKey);
-      const candidateModels = [
+      const candidateModels = [...new Set([
         CONFIG.gemini.model,
+        'gemini-3.8-flash',
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest',
         'gemini-3.5-flash-lite',
-        'gemini-3.5-flash',
-        'gemini-flash-latest'
-      ].filter(Boolean);
+        'gemini-3.5-flash'
+      ].filter(Boolean))];
 
       for (const modelName of candidateModels) {
         try {

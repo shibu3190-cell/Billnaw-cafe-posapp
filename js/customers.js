@@ -1097,8 +1097,9 @@ async function generateAiCampaignCopy() {
 
         if (response.ok) {
             const data = await response.json();
-            if (data.campaignText) {
-                waCampaignTemplateText = data.campaignText;
+            const campaignText = data.campaignText || data.text;
+            if (campaignText) {
+                waCampaignTemplateText = campaignText;
                 const txtArea = document.getElementById('waCampaignEditableText');
                 if (txtArea) txtArea.value = waCampaignTemplateText;
                 updateWaSimulatedBubble();
