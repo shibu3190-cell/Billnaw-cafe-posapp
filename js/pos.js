@@ -1237,7 +1237,8 @@ function executeHtmlPrint(divId) {
         }
         
         let qrScript = '';
-        if (shopProfile.showQr && shopProfile.upiId) {
+        // Invariant: UPI payment QR must ONLY appear on customer bills/receipts, NEVER on KOT kitchen tickets
+        if (divId === 'print-receipt' && shopProfile.showQr && shopProfile.upiId) {
             const qrCanvas = document.querySelector('#printQrCode canvas');
             const qrImg = document.querySelector('#printQrCode img');
             let qrSrc = '';
@@ -2209,10 +2210,49 @@ async function sendEscPosToPrinter(order) {
     }
     const pTot = document.getElementById('printTotal'); if (pTot) pTot.innerText = `₹ ${order.amount.toFixed(2)}`;
     
+    // Ensure printLogo img element is properly synchronized for print preview
+    const printLogo = document.getElementById('printLogo');
+    if (printLogo) {
+        if (shopProfile.logo) {
+            printLogo.src = shopProfile.logo;
+            printLogo.style.display = 'block';
+        } else {
+            printLogo.src = '';
+            printLogo.style.display = 'none';
+        }
+    }
+
+    // Convert Logo and Dynamic UPI QR Code into ESC/POS monochrome bitmap bytes
+    let logoBytes = null;
+    if (shopProfile.logo && typeof getLogoBytes === 'function') {
+        try {
+            logoBytes = await getLogoBytes(shopProfile.logo);
+        } catch (e) {
+            console.warn('[Print] Logo conversion failed:', e);
+        }
+    }
+
+    let qrBytes = null;
+    if (shopProfile.showQr && shopProfile.upiId) {
+        const qrCanvas = qrCodeDiv ? qrCodeDiv.querySelector('canvas') : null;
+        if (qrCanvas && typeof getLogoBytes === 'function') {
+            try {
+                qrBytes = await getLogoBytes(qrCanvas.toDataURL('image/jpeg', 1.0));
+            } catch (e) {
+                console.warn('[Print] QR conversion failed:', e);
+            }
+        }
+    }
+
     // Route print job through ThermalPrinterBridge if available
     if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
         try {
-            const routeResult = await window.ThermalPrinterBridge.routePrintJob(order, { role: 'RECEIPT' });
+            const routeResult = await window.ThermalPrinterBridge.routePrintJob(order, { 
+                role: 'RECEIPT',
+                storeProfile: shopProfile,
+                logoBytes: logoBytes,
+                qrBytes: qrBytes
+            });
             if (routeResult && (routeResult.data?.printed || routeResult.data?.cancelled)) {
                 if (routeResult.data?.method === 'BROWSER_DIALOG') {
                     await executeHtmlPrint('print-receipt');
@@ -2399,7 +2439,11 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
     // 1. Route KOT print job through ThermalPrinterBridge if available
     if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
         try {
-            const routeResult = await window.ThermalPrinterBridge.routePrintJob(kotJobPayload, { role: 'KOT' });
+            const routeResult = await window.ThermalPrinterBridge.routePrintJob(kotJobPayload, { 
+                role: 'KOT',
+                logoBytes: null,
+                qrBytes: null
+            });
             if (routeResult && (routeResult.data?.printed || routeResult.data?.cancelled)) {
                 if (routeResult.data?.method === 'BROWSER_DIALOG') {
                     const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;

@@ -123,7 +123,7 @@ async function itAsync(name, fn) {
     const posJs = fs.readFileSync(path.join(__dirname, '../js/pos.js'), 'utf8');
 
     it('POS-PRN-01: sendEscPosToPrinter routes through ThermalPrinterBridge.routePrintJob', () => {
-        assert.ok(posJs.includes('window.ThermalPrinterBridge.routePrintJob(order, { role: \'RECEIPT\' })'),
+        assert.ok(posJs.includes('window.ThermalPrinterBridge.routePrintJob(order,') && posJs.includes("role: 'RECEIPT'"),
             'Must route through ThermalPrinterBridge.routePrintJob');
     });
 

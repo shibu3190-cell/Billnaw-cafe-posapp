@@ -928,7 +928,7 @@ export const ThermalPrinterBridge = {
     // ESC a 1 (Center alignment)
     parts.push(new Uint8Array([0x1B, 0x61, 0x01]));
 
-    const profile = options.storeProfile || {};
+    const profile = options.storeProfile || (typeof window !== 'undefined' && window.shopProfile) || {};
     const isKot = options.isKot || data.jobType === 'KOT' || Boolean(data.kot_id);
 
     if (isKot) {
@@ -996,6 +996,13 @@ export const ThermalPrinterBridge = {
       parts.push(encodeClean(`*** END OF KOT ***\n\n\n\n\n`));
     } else {
       // ------------- CUSTOMER INVOICE FORMATTING -------------
+      // 1. Optional Shop Logo Bitmap
+      if (options.logoBytes && options.logoBytes.length > 0) {
+        parts.push(new Uint8Array([0x1B, 0x61, 0x01])); // Center
+        parts.push(options.logoBytes);
+        parts.push(new Uint8Array([0x0A])); // Linefeed
+      }
+
       const storeName = profile.name || data.shop_name || 'BILLNAW POS';
       // Double Size + Bold
       parts.push(new Uint8Array([0x1D, 0x21, 0x11, 0x1B, 0x45, 0x01]));
@@ -1144,6 +1151,17 @@ export const ThermalPrinterBridge = {
       }
       parts.push(encodeClean('\n'));
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
+
+      // 2. Dynamic UPI QR Code (if available)
+      if (options.qrBytes && options.qrBytes.length > 0) {
+        parts.push(new Uint8Array([0x1B, 0x61, 0x01])); // Center
+        parts.push(encodeClean("\nScan to Pay\n"));
+        parts.push(options.qrBytes);
+        parts.push(new Uint8Array([0x0A]));
+        if (profile.upiId) {
+          parts.push(encodeClean(`UPI: ${profile.upiId}\n\n`));
+        }
+      }
 
       // Center Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x01]));
@@ -1502,9 +1520,27 @@ export const ThermalPrinterBridge = {
     // 5. Generate ESC/POS commands with paper width configured for chosen slot
     const slotConfig = this.printers?.[targetSlot] || this.printers?.printer1;
     const width = options.width || slotConfig?.paperWidth || (role === 'KOT' ? '58mm' : '80mm');
+    const profile = options.storeProfile || (typeof window !== 'undefined' && window.shopProfile) || {};
+
+    let logoBytes = options.logoBytes || null;
+    let qrBytes = options.qrBytes || null;
+
+    if (role === 'RECEIPT') {
+      if (!logoBytes && profile.logo && typeof window !== 'undefined' && typeof window.getLogoBytes === 'function') {
+        try { logoBytes = await window.getLogoBytes(profile.logo); } catch(e) {}
+      }
+    } else {
+      // Invariant: KOT slips never carry shop logo, payment QR, or store identity headers
+      logoBytes = null;
+      qrBytes = null;
+    }
+
     const bytes = this.generateEscPosCommands(jobPayload, width, {
       ...options,
-      isKot: role === 'KOT'
+      isKot: role === 'KOT',
+      storeProfile: profile,
+      logoBytes,
+      qrBytes
     });
 
     // 6. Dispatch to chosen slot

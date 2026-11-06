@@ -120,11 +120,14 @@ function updateProfileVisuals() {
         }
     }
     
+    const sidebarLogo = document.getElementById('sidebarLogo');
+    const printLogo = document.getElementById('printLogo');
     if (shopProfile.logo) {
-        const sidebarLogo = document.getElementById('sidebarLogo');
         if (sidebarLogo) { sidebarLogo.src = shopProfile.logo; sidebarLogo.style.display = 'block'; }
-        const printLogo = document.getElementById('printLogo');
         if (printLogo) { printLogo.src = shopProfile.logo; printLogo.style.display = 'block'; }
+    } else {
+        if (sidebarLogo) { sidebarLogo.src = ''; sidebarLogo.style.display = 'none'; }
+        if (printLogo) { printLogo.src = ''; printLogo.style.display = 'none'; }
     }
 }
 window.updateProfileVisuals = updateProfileVisuals;
@@ -297,6 +300,7 @@ function saveSettings() {
 window.saveSettings = saveSettings;
 
 async function refreshAiQuotaDisplay() {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     try {
         const res = await fetch(`/api/ai/quota?clientId=${encodeURIComponent(myClientID || 'BONGBHOJ-TERMINAL')}`);
         if (!res.ok) return;
@@ -317,6 +321,7 @@ async function refreshAiQuotaDisplay() {
             keyType.style.color = data.hasCustomKey ? "var(--success)" : "var(--primary)";
         }
     } catch (e) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
         console.warn("Could not fetch AI quota status:", e.message);
     }
 }

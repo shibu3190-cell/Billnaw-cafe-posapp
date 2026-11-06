@@ -1386,7 +1386,9 @@ function handleRemoteFirestoreUpdate(data) {
 
     if (data.profile) {
         const existingPinHash = shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash');
+        const existingLogo = shopProfile?.logo || localStorage.getItem('billnaw_shop_logo');
         shopProfile = { ...shopProfile, ...data.profile };
+        if (!shopProfile.logo && existingLogo) shopProfile.logo = existingLogo;
         if (!shopProfile.adminPinHash && existingPinHash) {
             shopProfile.adminPinHash = existingPinHash;
         } else if (!shopProfile.adminPinHash) {
@@ -1396,6 +1398,7 @@ function handleRemoteFirestoreUpdate(data) {
         window.shopProfile = shopProfile;
         try {
             idb.set('cafe_profile', shopProfile);
+            if (shopProfile.logo) idb.set('cafe_logo', shopProfile.logo);
             localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
             if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
             if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone);
@@ -1403,6 +1406,7 @@ function handleRemoteFirestoreUpdate(data) {
             if (shopProfile.fssai) localStorage.setItem('billnaw_shop_fssai', shopProfile.fssai);
             if (shopProfile.gstin) localStorage.setItem('billnaw_shop_gstin', shopProfile.gstin);
             if (shopProfile.upiId) localStorage.setItem('billnaw_shop_upi_id', shopProfile.upiId);
+            if (shopProfile.logo && shopProfile.logo.length < 2000000) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
             if (shopProfile.adminPinHash) localStorage.setItem('billnaw_admin_pin_hash', shopProfile.adminPinHash);
             localStorage.setItem('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false');
             localStorage.setItem('billnaw_gst_mode', shopProfile.gstMode || 'inclusive');
@@ -2233,20 +2237,31 @@ function persistProfile() {
     }
     window.shopProfile = shopProfile;
     idb.set('cafe_profile', shopProfile); 
+    if (shopProfile.logo) {
+        idb.set('cafe_logo', shopProfile.logo);
+    }
 
     // Quad-Tier Local Persistence: Save JSON + discrete keys to prevent wipe on cache clear
     try {
         localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
-        if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
-        if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone);
-        if (shopProfile.address) localStorage.setItem('billnaw_shop_address', shopProfile.address);
-        if (shopProfile.fssai) localStorage.setItem('billnaw_shop_fssai', shopProfile.fssai);
-        if (shopProfile.gstin) localStorage.setItem('billnaw_shop_gstin', shopProfile.gstin);
-        if (shopProfile.upiId) localStorage.setItem('billnaw_shop_upi_id', shopProfile.upiId);
-        if (shopProfile.adminPinHash) localStorage.setItem('billnaw_admin_pin_hash', shopProfile.adminPinHash);
-        localStorage.setItem('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false');
-        localStorage.setItem('billnaw_gst_mode', shopProfile.gstMode || 'inclusive');
-        localStorage.setItem('billnaw_default_gst_rate', String(shopProfile.defaultGstRate || 5));
+    } catch(e) {
+        console.warn('[STORAGE] Profile snapshot local storage defer:', e.message);
+    }
+
+    try { if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name); } catch(e) {}
+    try { if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone); } catch(e) {}
+    try { if (shopProfile.address) localStorage.setItem('billnaw_shop_address', shopProfile.address); } catch(e) {}
+    try { if (shopProfile.fssai) localStorage.setItem('billnaw_shop_fssai', shopProfile.fssai); } catch(e) {}
+    try { if (shopProfile.gstin) localStorage.setItem('billnaw_shop_gstin', shopProfile.gstin); } catch(e) {}
+    try { if (shopProfile.upiId) localStorage.setItem('billnaw_shop_upi_id', shopProfile.upiId); } catch(e) {}
+    try { if (shopProfile.adminPinHash) localStorage.setItem('billnaw_admin_pin_hash', shopProfile.adminPinHash); } catch(e) {}
+    try { localStorage.setItem('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false'); } catch(e) {}
+    try { localStorage.setItem('billnaw_gst_mode', shopProfile.gstMode || 'inclusive'); } catch(e) {}
+    try { localStorage.setItem('billnaw_default_gst_rate', String(shopProfile.defaultGstRate || 5)); } catch(e) {}
+    try {
+        if (shopProfile.logo && shopProfile.logo.length < 2000000) {
+            localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
+        }
     } catch(e) {}
 
     // Cloud Master Persistence
@@ -3275,6 +3290,8 @@ async function initDatabase() {
         if (savedUpi) shopProfile.upiId = savedUpi;
         const savedQr = localStorage.getItem('billnaw_shop_show_qr');
         if (savedQr !== null) shopProfile.showQr = (savedQr === 'true');
+        const savedLogo = localStorage.getItem('billnaw_shop_logo');
+        if (savedLogo && !shopProfile.logo) shopProfile.logo = savedLogo;
         const savedGstMode = localStorage.getItem('billnaw_gst_mode');
         if (savedGstMode) shopProfile.gstMode = savedGstMode;
         const savedGstRate = localStorage.getItem('billnaw_default_gst_rate');
@@ -3290,6 +3307,12 @@ async function initDatabase() {
             storedProfile.name = 'billnaw';
         }
         shopProfile = { ...shopProfile, ...storedProfile };
+    }
+    if (!shopProfile.logo) {
+        try {
+            const idbLogo = await idb.get('cafe_logo');
+            if (idbLogo) shopProfile.logo = idbLogo;
+        } catch(e) {}
     }
     if (!shopProfile.startInvoiceNo) shopProfile.startInvoiceNo = 1001;
     if (shopProfile.adminPinHash) {
