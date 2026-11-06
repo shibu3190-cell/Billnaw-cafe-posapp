@@ -1792,6 +1792,13 @@ function openPrinterSettingsModal() {
     const dr = document.getElementById('cfgDefaultReceiptPrinter'); if (dr && routing.defaultReceiptPrinter) dr.value = routing.defaultReceiptPrinter;
     const dk = document.getElementById('cfgDefaultKotPrinter'); if (dk && routing.defaultKotPrinter) dk.value = routing.defaultKotPrinter;
 
+    const isSingle = Boolean(routing.singlePrinterMode || localStorage.getItem('billnaw_single_printer_mode') === 'true');
+    const singleEl = document.getElementById('cfgSinglePrinterMode');
+    if (singleEl) {
+        singleEl.checked = isSingle;
+        handleSinglePrinterToggle(isSingle);
+    }
+
     const hubEl = document.getElementById('cfgMasterPrintHub');
     if (hubEl) hubEl.checked = localStorage.getItem('billnaw_master_print_hub') === 'true';
     const relayEl = document.getElementById('cfgKotRelayMode');
@@ -1805,6 +1812,31 @@ function openPrinterSettingsModal() {
     modal.style.display = 'flex';
 }
 window.openPrinterSettingsModal = openPrinterSettingsModal;
+
+function handleSinglePrinterToggle(isSingle) {
+    const dr = document.getElementById('cfgDefaultReceiptPrinter');
+    const dk = document.getElementById('cfgDefaultKotPrinter');
+    const p2Card = document.getElementById('printer2SlotCard');
+    const badge = document.getElementById('singlePrinterActiveBadge');
+    if (isSingle) {
+        if (dr) dr.value = 'printer1';
+        if (dk) dk.value = 'printer1';
+        if (p2Card) p2Card.style.opacity = '0.55';
+        if (badge) {
+            badge.innerText = 'UNIFIED ACTIVE';
+            badge.style.background = 'rgba(20, 56, 50, 0.15)';
+            badge.style.color = 'var(--primary)';
+        }
+    } else {
+        if (p2Card) p2Card.style.opacity = '1';
+        if (badge) {
+            badge.innerText = 'DUAL MODE';
+            badge.style.background = '#F1F5F9';
+            badge.style.color = '#64748B';
+        }
+    }
+}
+window.handleSinglePrinterToggle = handleSinglePrinterToggle;
 
 function closePrinterSettingsModal() {
     const modal = document.getElementById('printerSettingsModal');
@@ -1961,14 +1993,17 @@ function savePrinterSettingsFromUi() {
     const h2 = document.getElementById('printer2Host')?.value?.trim() || '';
     const prt2 = Number(document.getElementById('printer2Port')?.value) || 9100;
 
-    const dr = document.getElementById('cfgDefaultReceiptPrinter')?.value || 'printer1';
-    const dk = document.getElementById('cfgDefaultKotPrinter')?.value || 'printer2';
+    const isSingle = Boolean(document.getElementById('cfgSinglePrinterMode')?.checked);
+    localStorage.setItem('billnaw_single_printer_mode', isSingle ? 'true' : 'false');
+
+    const dr = isSingle ? 'printer1' : (document.getElementById('cfgDefaultReceiptPrinter')?.value || 'printer1');
+    const dk = isSingle ? 'printer1' : (document.getElementById('cfgDefaultKotPrinter')?.value || 'printer2');
     const ap = Boolean(document.getElementById('cfgAlwaysPromptPrinters')?.checked);
 
     const config = {
         printer1: { transport: t1, paperWidth: w1, host: h1, port: prt1 },
         printer2: { transport: t2, paperWidth: w2, host: h2, port: prt2 },
-        routing: { defaultReceiptPrinter: dr, defaultKotPrinter: dk, alwaysPrompt: ap }
+        routing: { defaultReceiptPrinter: dr, defaultKotPrinter: dk, alwaysPrompt: ap, singlePrinterMode: isSingle }
     };
 
     const isMasterHub = Boolean(document.getElementById('cfgMasterPrintHub')?.checked);
@@ -1988,7 +2023,9 @@ function savePrinterSettingsFromUi() {
         localStorage.setItem('pos_dual_printers', JSON.stringify(config));
     }
 
-    if (typeof showToast === 'function') showToast("Dual printer configuration saved successfully!", 'success');
+    if (typeof showToast === 'function') {
+        showToast(isSingle ? "Single printer configuration saved! Both Bills and KOT will print on Printer 1." : "Dual printer configuration saved successfully!", 'success');
+    }
     closePrinterSettingsModal();
     if (typeof evaluateKitchenStationConsumer === 'function') {
         evaluateKitchenStationConsumer();
@@ -2398,7 +2435,13 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
         }
     }
 
-    const targetKotChar = window.posPrinters?.printer2?.characteristic || window.posPrinters?.printer1?.characteristic || printCharacteristic;
+    const isSinglePrinter = Boolean(
+        window.ThermalPrinterBridge?.routing?.singlePrinterMode ||
+        localStorage.getItem('billnaw_single_printer_mode') === 'true'
+    );
+    const targetKotChar = isSinglePrinter
+        ? (window.posPrinters?.printer1?.characteristic || printCharacteristic || window.posPrinters?.printer2?.characteristic)
+        : (window.posPrinters?.printer2?.characteristic || window.posPrinters?.printer1?.characteristic || printCharacteristic);
     if (!targetKotChar) {
         const relayMode = localStorage.getItem('billnaw_kot_relay_mode') || 'ASK_ON_FAILURE';
         if (relayMode === 'ASK_ON_FAILURE' && typeof promptKotRelayFallback === 'function') {
@@ -2782,25 +2825,40 @@ if (typeof window !== 'undefined') {
 
 async function printKitchenTicket() {
     const btn = document.querySelector('#kotModal .btn-warning'); 
+    let tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[activeTable] : null;
+    const currentTableName = (typeof getTableName === 'function') ? getTableName(activeTable) : String(activeTable || 1);
+
+    const delta = (typeof computeKotDelta === 'function')
+        ? computeKotDelta(activeTable)
+        : { deltaItems: tInfo?.items || [], isAddon: false, hasNewItems: Boolean(tInfo?.items?.length) };
+
+    if (!delta.hasNewItems) {
+        if (typeof showToast === 'function') showToast("KOT already sent for all items.", "info");
+        const kotModal = document.getElementById('kotModal');
+        if (kotModal) kotModal.style.display = 'none';
+        return;
+    }
+
     if (btn) {
         btn.disabled = true; 
         btn.innerHTML = (window.posPrinters?.printer2?.characteristic || window.posPrinters?.printer1?.characteristic || printCharacteristic)
             ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Printing KOT...</span>' 
             : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Generating KOT...</span>';
     }
-    let tInfo = tablesInfo[activeTable];
-    const currentTableName = getTableName(activeTable);
+
     try { 
         const kotHeader = delta.isAddon ? `ADD-ON / RUNNING ORDER - TABLE ${currentTableName}` : `KITCHEN ORDER TICKET - TABLE ${currentTableName}`;
         await sendKotToPrinter(currentTableName, delta.deltaItems, { isAddon: delta.isAddon, kotHeader });
 
         // Update qtyKotPrinted for each line item on the table
-        tInfo.items.forEach(item => {
-            item.qtyKotPrinted = Number(item.qty || item.quantity || 0);
-        }); 
-        tInfo.status = 'kot';
-        persistTables();
-        syncTableUI();
+        if (tInfo && Array.isArray(tInfo.items)) {
+            tInfo.items.forEach(item => {
+                item.qtyKotPrinted = Number(item.qty || item.quantity || 0);
+            });
+            tInfo.status = 'kot';
+            persistTables();
+            syncTableUI();
+        }
 
         // Dispatch to Kitchen Display System (KDS) & persist ticket
         if (window.kotUIInstance && typeof window.kotUIInstance.handleDispatchKot === 'function') {

@@ -256,7 +256,8 @@ export const DEFAULT_PRINTERS_CONFIG = {
   routing: {
     defaultReceiptPrinter: 'printer1', // 'printer1' | 'printer2' | 'PROMPT'
     defaultKotPrinter: 'printer2',     // 'printer1' | 'printer2' | 'PROMPT'
-    alwaysPrompt: false
+    alwaysPrompt: false,
+    singlePrinterMode: false
   }
 };
 
@@ -309,7 +310,8 @@ export const ThermalPrinterBridge = {
   routing: {
     defaultReceiptPrinter: 'printer1',
     defaultKotPrinter: 'printer2',
-    alwaysPrompt: false
+    alwaysPrompt: false,
+    singlePrinterMode: false
   },
 
   // Backward compatibility legacy properties & getters/setters for existing test suites
@@ -422,7 +424,8 @@ export const ThermalPrinterBridge = {
       routing: {
         defaultReceiptPrinter: this.routing?.defaultReceiptPrinter || 'printer1',
         defaultKotPrinter: this.routing?.defaultKotPrinter || 'printer2',
-        alwaysPrompt: Boolean(this.routing?.alwaysPrompt)
+        alwaysPrompt: Boolean(this.routing?.alwaysPrompt),
+        singlePrinterMode: Boolean(this.routing?.singlePrinterMode)
       }
     };
 
@@ -1409,9 +1412,39 @@ export const ThermalPrinterBridge = {
     );
 
     // 2. Determine initial target slot from routing configuration
-    let targetSlot = (role === 'RECEIPT')
-      ? this.routing?.defaultReceiptPrinter
-      : this.routing?.defaultKotPrinter;
+    const isSinglePrinter = Boolean(
+      this.routing?.singlePrinterMode ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_single_printer_mode') === 'true')
+    );
+
+    let targetSlot;
+    if (isSinglePrinter) {
+      targetSlot = 'printer1';
+    } else {
+      targetSlot = (role === 'RECEIPT')
+        ? (this.routing?.defaultReceiptPrinter || 'printer1')
+        : (this.routing?.defaultKotPrinter || 'printer2');
+
+      // Auto-fallback: If KOT is assigned to printer2, but printer2 has no active connection
+      // while printer1 IS connected (or active characteristic exists), fallback directly to printer1!
+      if (role === 'KOT' && targetSlot === 'printer2') {
+        const isPrinter2Connected = Boolean(
+          this.printers?.printer2?.characteristic ||
+          this.printers?.printer2?.device?.gatt?.connected ||
+          (typeof window !== 'undefined' && window.posPrinters?.printer2?.characteristic)
+        );
+        const isPrinter1Connected = Boolean(
+          this.printers?.printer1?.characteristic ||
+          this.printers?.printer1?.device?.gatt?.connected ||
+          this.activeCharacteristic ||
+          (typeof window !== 'undefined' && (window.posPrinters?.printer1?.characteristic || window.printCharacteristic))
+        );
+        if (!isPrinter2Connected && isPrinter1Connected) {
+          console.info('[PrinterBridge] Printer 2 disconnected. Direct KOT print fallback to connected Printer 1.');
+          targetSlot = 'printer1';
+        }
+      }
+    }
 
     // 3. Fallback to interactive selection if requested, target is PROMPT, or unassigned
     const shouldPrompt = Boolean(

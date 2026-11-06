@@ -5523,6 +5523,18 @@
                         </button>
                     </div>
 
+                    <!-- Single vs Dual Printer Setup Banner -->
+                    <div style="margin-top: 14px; background: #F8FAFC; border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="cfgSinglePrinterMode" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary);" onchange="handleSinglePrinterToggle(this.checked)">
+                            <div>
+                                <label for="cfgSinglePrinterMode" style="margin: 0; font-size: 13px; font-weight: 700; color: var(--text-dark); cursor: pointer; display: block;">1 Printer Setup (Single Printer for Bills &amp; KOT)</label>
+                                <span style="font-size: 11px; color: var(--text-muted);">When enabled or only 1 printer is connected, both customer bills and kitchen KOT tickets print directly on Printer 1.</span>
+                            </div>
+                        </div>
+                        <span id="singlePrinterActiveBadge" class="badge" style="background: rgba(20, 56, 50, 0.1); color: var(--primary); font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 6px;">UNIFIED</span>
+                    </div>
+
                     <!-- Dual Printer Slots Grid -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 14px;">
                         <!-- Printer 1 Slot Card (Billing / Counter) -->
@@ -5584,7 +5596,7 @@
                         </div>
 
                         <!-- Printer 2 Slot Card (Kitchen KOT) -->
-                        <div class="card" style="padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 12px;">
+                        <div id="printer2SlotCard" class="card" style="padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 12px; transition: opacity 0.2s ease;">
                             <div style="display: flex; align-items: center; justify-content: space-between;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <div style="width: 30px; height: 30px; border-radius: 8px; background: rgba(224, 90, 56, 0.1); color: #E05A38; display: flex; align-items: center; justify-content: center;">
