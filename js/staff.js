@@ -209,8 +209,12 @@ window.verifyStaffPin = verifyStaffPin;
 let isTerminalLocked = false;
 window.isTerminalLocked = isTerminalLocked;
 window.STRICT_RBAC_MODE = true;
-let selectedLoginStaffId = null;
-window.selectedLoginStaffId = selectedLoginStaffId;
+if (typeof selectedLoginStaffId === 'undefined') {
+    globalThis.selectedLoginStaffId = null;
+}
+if (typeof window !== 'undefined') {
+    window.selectedLoginStaffId = selectedLoginStaffId;
+}
 let failedPinAttempts = 0;
 let pinLockoutUntil = null;
 

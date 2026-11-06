@@ -1332,12 +1332,13 @@ function renderAuthorizedDevicesHub() {
         } else {
             authListEl.innerHTML = authorizedDevices.map(dev => {
                 const isMaster = Boolean(dev.isMaster);
+                const isRevoked = (dev.status === 'REVOKED');
                 const profileBadge = dev.stationProfile || 'GENERAL_STATION';
                 const nameDisplay = typeof escapeHtml === 'function' ? escapeHtml(dev.deviceName || 'Terminal') : (dev.deviceName || 'Terminal');
                 return `
-                    <div class="auth-device-card" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+                    <div class="auth-device-card" style="background: var(--bg-surface); border: 1px solid ${isRevoked ? '#FECACA' : 'var(--border)'}; border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; border-radius: 10px; background: ${isMaster ? 'rgba(20, 56, 50, 0.1)' : 'rgba(37, 99, 235, 0.1)'}; color: ${isMaster ? 'var(--primary)' : '#2563EB'}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <div style="width: 40px; height: 40px; border-radius: 10px; background: ${isMaster ? 'rgba(20, 56, 50, 0.1)' : (isRevoked ? 'rgba(220, 38, 38, 0.1)' : 'rgba(37, 99, 235, 0.1)')}; color: ${isMaster ? 'var(--primary)' : (isRevoked ? 'var(--danger)' : '#2563EB')}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
                                     <line x1="8" y1="21" x2="16" y2="21"></line>
@@ -1347,18 +1348,23 @@ function renderAuthorizedDevicesHub() {
                             <div>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <strong style="font-size: 14px; color: var(--text-dark);">${nameDisplay}</strong>
-                                    ${isMaster ? '<span style="font-size: 10px; font-weight: 700; background: #DCFCE7; color: #15803D; padding: 2px 7px; border-radius: 10px;">Master Terminal</span>' : `<span style="font-size: 10px; font-weight: 700; background: #EFF6FF; color: #1D4ED8; padding: 2px 7px; border-radius: 10px;">${profileBadge}</span>`}
+                                    ${isMaster ? '<span style="font-size: 10px; font-weight: 700; background: #DCFCE7; color: #15803D; padding: 2px 7px; border-radius: 10px;">Master Terminal</span>' : (isRevoked ? '<span style="font-size: 10px; font-weight: 700; background: #FEE2E2; color: #B91C1C; padding: 2px 7px; border-radius: 10px;">REVOKED</span>' : `<span style="font-size: 10px; font-weight: 700; background: #EFF6FF; color: #1D4ED8; padding: 2px 7px; border-radius: 10px;">${profileBadge}</span>`)}
                                 </div>
-                                <p style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; font-family: monospace;">ID: ${dev.deviceId} • ${isMaster ? 'Permanent' : `Approved: ${dev.approvedAt ? new Date(dev.approvedAt).toLocaleDateString() : 'Active'}`}</p>
+                                <p style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; font-family: monospace;">ID: ${dev.deviceId} • ${isMaster ? 'Permanent' : (isRevoked ? `Revoked: ${dev.revokedAt ? new Date(dev.revokedAt).toLocaleTimeString() : 'Inactive'}` : `Approved: ${dev.approvedAt ? new Date(dev.approvedAt).toLocaleDateString() : 'Active'}`)}</p>
                             </div>
                         </div>
                         <div>
-                            ${isMaster ? '' : `
+                            ${isMaster ? '' : (isRevoked ? `
+                                <button type="button" class="btn btn-outline" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: #16A34A; border-color: rgba(22, 163, 74, 0.3); display: inline-flex; align-items: center; gap: 6px;" onclick="resumeAuthorizedDevice('${dev.deviceId}')">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Resume</span>
+                                </button>
+                            ` : `
                                 <button type="button" class="btn btn-outline" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: var(--danger); border-color: rgba(220, 38, 38, 0.3); display: inline-flex; align-items: center; gap: 6px;" onclick="revokeAuthorizedDevice('${dev.deviceId}')">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
                                     <span>Revoke</span>
                                 </button>
-                            `}
+                            `)}
                         </div>
                     </div>
                 `;
@@ -1570,6 +1576,39 @@ async function revokeAuthorizedDevice(deviceId) {
     }
 }
 window.revokeAuthorizedDevice = revokeAuthorizedDevice;
+
+async function resumeAuthorizedDevice(deviceId) {
+    if (!deviceId) return;
+    const dev = (window.authorizedDevices || []).find(d => d.deviceId === deviceId || d.id === deviceId);
+
+    const updates = {
+        status: 'AUTHORIZED',
+        resumedAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString()
+    };
+
+    if (window.authorizedDevices) {
+        const idx = window.authorizedDevices.findIndex(d => d.deviceId === deviceId || d.id === deviceId);
+        if (idx >= 0) {
+            window.authorizedDevices[idx] = { ...window.authorizedDevices[idx], ...updates };
+        }
+    }
+    renderAuthorizedDevicesHub();
+
+    try {
+        if (typeof setTenantDevice === 'function') {
+            await setTenantDevice(deviceId, updates);
+        } else if (window.firestoreDB && window.firestoreSetDoc && typeof getStoreSubdocRef === 'function') {
+            const devRef = getStoreSubdocRef('devices', deviceId);
+            if (devRef) await window.firestoreSetDoc(devRef, updates, { merge: true });
+        }
+        if (typeof showToast === 'function') showToast(`Terminal "${dev ? dev.deviceName : deviceId}" access resumed!`, 'success');
+    } catch (err) {
+        console.error('Error resuming device:', err);
+        if (typeof showToast === 'function') showToast('Failed to resume device: ' + err.message, 'error');
+    }
+}
+window.resumeAuthorizedDevice = resumeAuthorizedDevice;
 
 async function rejectPendingDevice(deviceId) {
     if (!deviceId) return;

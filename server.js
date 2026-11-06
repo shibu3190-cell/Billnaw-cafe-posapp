@@ -833,6 +833,61 @@ app.post(['/api/auth/validate-device', '/api/auth/validate-device-and-login'], a
   }
 });
 
+// 2E. Backend Device Access Management: Revoke & Resume
+app.post('/api/devices/revoke', async (req, res) => {
+  try {
+    const { storeCode, deviceId, reason } = req.body || {};
+    if (!deviceId) return res.status(400).json({ success: false, error: 'deviceId is required' });
+    const code = storeCode || 'default';
+    
+    if (CONFIG?.firebase?.projectId && CONFIG?.firebase?.firestoreDatabaseId) {
+      const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
+      const url = `${base}/cafes/${encodeURIComponent(code)}/devices/${encodeURIComponent(deviceId)}?updateMask.fieldPaths=status&updateMask.fieldPaths=revokedAt`;
+      await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            status: { stringValue: 'REVOKED' },
+            revokedAt: { stringValue: new Date().toISOString() }
+          }
+        })
+      }).catch(() => null);
+    }
+    
+    res.json({ success: true, message: `Device ${deviceId} revoked`, status: 'REVOKED' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/devices/resume', async (req, res) => {
+  try {
+    const { storeCode, deviceId } = req.body || {};
+    if (!deviceId) return res.status(400).json({ success: false, error: 'deviceId is required' });
+    const code = storeCode || 'default';
+    
+    if (CONFIG?.firebase?.projectId && CONFIG?.firebase?.firestoreDatabaseId) {
+      const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
+      const url = `${base}/cafes/${encodeURIComponent(code)}/devices/${encodeURIComponent(deviceId)}?updateMask.fieldPaths=status&updateMask.fieldPaths=resumedAt`;
+      await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            status: { stringValue: 'AUTHORIZED' },
+            resumedAt: { stringValue: new Date().toISOString() }
+          }
+        })
+      }).catch(() => null);
+    }
+    
+    res.json({ success: true, message: `Device ${deviceId} resumed & authorized`, status: 'AUTHORIZED' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 3. User Signup (Email + Password account registration)
 app.post(['/api/auth/signup', '/api/auth/register'], (req, res) => {
   try {
