@@ -1477,6 +1477,23 @@ function handleRemoteFirestoreUpdate(data) {
         }
     }
 
+    if (Array.isArray(data.kots)) {
+        try {
+            const rawPrev = localStorage.getItem('billnaw_active_kots');
+            const prevList = rawPrev ? JSON.parse(rawPrev) : [];
+            const prevIds = new Set(prevList.map(k => k.kot_id || k.id));
+            const hasNewTicket = data.kots.some(k => !prevIds.has(k.kot_id || k.id) && k.status === 'PENDING');
+
+            localStorage.setItem('billnaw_active_kots', JSON.stringify(data.kots));
+
+            if (hasNewTicket && typeof playKdsAudioChime === 'function') {
+                try { playKdsAudioChime(); } catch(chimeErr) {}
+            }
+        } catch (kotErr) {
+            console.warn('[KDS Sync] KOT update notice:', kotErr);
+        }
+    }
+
     if (typeof pruneClientTransactionalCache === 'function') {
         pruneClientTransactionalCache(10).catch(() => {});
     }
@@ -2042,6 +2059,12 @@ async function persistAllToFirestore() {
         const storeDocRef = getStoreDocRef();
         if (!storeDocRef) return;
         const sanitizedMenu = Array.isArray(menuItems) ? menuItems.map(item => sanitizeMenuItemForStorage(item)) : menuItems;
+        let activeKots = [];
+        try {
+            const rawK = localStorage.getItem('billnaw_active_kots');
+            if (rawK) activeKots = JSON.parse(rawK);
+        } catch(e) {}
+
         await window.firestoreSetDoc(storeDocRef, {
             profile: shopProfile,
             staff: staffList,
@@ -2051,6 +2074,7 @@ async function persistAllToFirestore() {
             history: orderHistory,
             expenses: dailyExpenses,
             tables: tablesInfo,
+            kots: Array.isArray(activeKots) ? activeKots.slice(0, 50) : [],
             updatedAt: new Date().toISOString()
         }, { merge: true });
         lastCloudSyncTime = Date.now();
@@ -3019,6 +3043,14 @@ function updateAllUI() {
         }
     } catch(e) {
         console.warn('Dashboard render error:', e);
+    }
+    try {
+        const kdsTab = document.getElementById('kds');
+        if (kdsTab && kdsTab.classList.contains('active') && typeof renderKdsUI === 'function') {
+            renderKdsUI();
+        }
+    } catch(kdsErr) {
+        console.warn('KDS auto-render notice:', kdsErr);
     }
 }
 window.updateAllUI = updateAllUI;

@@ -95,6 +95,10 @@ export class KotUI {
       });
     } catch (e) {}
 
+    if (typeof window !== 'undefined' && typeof window.persistAllToFirestore === 'function') {
+      window.persistAllToFirestore();
+    }
+
     return { success: true, kot: res.data };
   }
 
@@ -110,6 +114,9 @@ export class KotUI {
       target.status = newStatus;
       this.render();
     }
+    if (typeof window !== 'undefined' && typeof window.persistAllToFirestore === 'function') {
+      window.persistAllToFirestore();
+    }
   }
 
   async handleCancelKot(kotId, reason, staffId) {
@@ -123,6 +130,9 @@ export class KotUI {
     if (target) {
       target.status = 'CANCELLED';
       this.render();
+    }
+    if (typeof window !== 'undefined' && typeof window.persistAllToFirestore === 'function') {
+      window.persistAllToFirestore();
     }
     return true;
   }
