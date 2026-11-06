@@ -240,17 +240,33 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })
-            }).then(res => res.json()).then(data => {
+            }).then(async res => {
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch (e) {
+                    data = { success: false, error: 'Server returned unexpected status (' + res.status + ')' };
+                }
                 if (data && data.success) {
                     if (typeof showToast === 'function') {
                         showToast('Verification code dispatched to ' + email, 'success');
                     }
-                    showValidationMsg('otpValidationFeedback', '', '');
+                    showValidationMsg('otpValidationFeedback', 'Code sent! Check your inbox or spam folder.', 'success');
                 } else if (data && data.error) {
                     showValidationMsg('loginEmailValidationFeedback', data.error, 'error');
                     showValidationMsg('otpValidationFeedback', data.error, 'error');
+                    if (typeof showToast === 'function') {
+                        showToast(data.error, 'error');
+                    }
                 }
-            }).catch(() => {});
+            }).catch(err => {
+                const msg = 'Unable to send code: ' + (err.message || 'Network error');
+                showValidationMsg('loginEmailValidationFeedback', msg, 'error');
+                showValidationMsg('otpValidationFeedback', msg, 'error');
+                if (typeof showToast === 'function') {
+                    showToast(msg, 'error');
+                }
+            });
         }
     }
     window.handleSendOtpCode = handleSendOtpCode;
@@ -601,16 +617,31 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, purpose: 'signup' })
-            }).then(res => res.json()).then(data => {
+            }).then(async res => {
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch (e) {
+                    data = { success: false, error: 'Server returned unexpected status (' + res.status + ')' };
+                }
                 if (data && data.success) {
                     if (typeof showToast === 'function') {
                         showToast('Verification code sent to ' + email, 'success');
                     }
-                    showValidationMsg('signupOtpValidationFeedback', '', '');
+                    showValidationMsg('signupOtpValidationFeedback', 'Code sent! Check your inbox or spam folder.', 'success');
                 } else if (data && data.error) {
-                    alert(data.error);
+                    showValidationMsg('signupOtpValidationFeedback', data.error, 'error');
+                    if (typeof showToast === 'function') {
+                        showToast(data.error, 'error');
+                    }
                 }
-            }).catch(() => {});
+            }).catch(err => {
+                const msg = 'Unable to send code: ' + (err.message || 'Network error');
+                showValidationMsg('signupOtpValidationFeedback', msg, 'error');
+                if (typeof showToast === 'function') {
+                    showToast(msg, 'error');
+                }
+            });
         }
     }
     window.handleCreateShopAccount = handleCreateShopAccount;
@@ -627,14 +658,31 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, purpose: 'signup' })
-            }).then(res => res.json()).then(data => {
+            }).then(async res => {
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch (e) {
+                    data = { success: false, error: 'Server returned unexpected status (' + res.status + ')' };
+                }
                 if (data && data.success) {
                     if (typeof showToast === 'function') {
                         showToast('New verification code sent to ' + email, 'success');
                     }
-                    showValidationMsg('signupOtpValidationFeedback', '', '');
+                    showValidationMsg('signupOtpValidationFeedback', 'New code sent! Check your inbox or spam folder.', 'success');
+                } else if (data && data.error) {
+                    showValidationMsg('signupOtpValidationFeedback', data.error, 'error');
+                    if (typeof showToast === 'function') {
+                        showToast(data.error, 'error');
+                    }
                 }
-            }).catch(() => {});
+            }).catch(err => {
+                const msg = 'Unable to resend code: ' + (err.message || 'Network error');
+                showValidationMsg('signupOtpValidationFeedback', msg, 'error');
+                if (typeof showToast === 'function') {
+                    showToast(msg, 'error');
+                }
+            });
         }
     }
     window.handleResendSignupOtp = handleResendSignupOtp;
