@@ -1458,15 +1458,63 @@ function handleRemoteFirestoreUpdate(data) {
     if (Array.isArray(data.customers) && data.customers.length > 0) {
         customersList = data.customers;
     }
-    if (Array.isArray(data.history)) {
-        orderHistory = data.history.sort((a,b) => b.id - a.id);
-    } else if (data.history && typeof data.history === 'object') {
-        orderHistory = Object.values(data.history).sort((a,b) => b.id - a.id);
+    if (Array.isArray(data.history) || (data.history && typeof data.history === 'object')) {
+        const remoteList = Array.isArray(data.history) ? data.history : Object.values(data.history);
+        const orderMap = new Map();
+        remoteList.forEach(o => {
+            if (o) {
+                const key = String(o.id || o.billNo || o.bill_no || Math.random());
+                if (!o.filterDate || !/^\d{4}-\d{2}-\d{2}$/.test(o.filterDate)) {
+                    o.filterDate = (typeof getOrderFilterDate === 'function') ? getOrderFilterDate(o) : (o.date ? o.date.split(',')[0].trim() : getLocalISODate());
+                }
+                orderMap.set(key, o);
+            }
+        });
+        (orderHistory || []).forEach(o => {
+            if (o) {
+                const key = String(o.id || o.billNo || o.bill_no || Math.random());
+                if (!orderMap.has(key)) {
+                    if (!o.filterDate || !/^\d{4}-\d{2}-\d{2}$/.test(o.filterDate)) {
+                        o.filterDate = (typeof getOrderFilterDate === 'function') ? getOrderFilterDate(o) : (o.date ? o.date.split(',')[0].trim() : getLocalISODate());
+                    }
+                    orderMap.set(key, o);
+                }
+            }
+        });
+        orderHistory = Array.from(orderMap.values()).sort((a,b) => (Number(b.id || b.billNo || 0) - Number(a.id || a.billNo || 0)));
+        window.orderHistory = orderHistory;
+        if (typeof idb !== 'undefined' && idb.set) {
+            idb.set('cafe_history', orderHistory);
+        }
     }
-    if (Array.isArray(data.expenses)) {
-        dailyExpenses = data.expenses.sort((a,b) => b.id - a.id);
-    } else if (data.expenses && typeof data.expenses === 'object') {
-        dailyExpenses = Object.values(data.expenses).sort((a,b) => b.id - a.id);
+    if (Array.isArray(data.expenses) || (data.expenses && typeof data.expenses === 'object')) {
+        const remoteExp = Array.isArray(data.expenses) ? data.expenses : Object.values(data.expenses);
+        const expMap = new Map();
+        remoteExp.forEach(e => {
+            if (e) {
+                const key = String(e.id || Math.random());
+                if (!e.filterDate || !/^\d{4}-\d{2}-\d{2}$/.test(e.filterDate)) {
+                    e.filterDate = (typeof getExpenseFilterDate === 'function') ? getExpenseFilterDate(e) : (e.date ? e.date.split(',')[0].trim() : getLocalISODate());
+                }
+                expMap.set(key, e);
+            }
+        });
+        (dailyExpenses || []).forEach(e => {
+            if (e) {
+                const key = String(e.id || Math.random());
+                if (!expMap.has(key)) {
+                    if (!e.filterDate || !/^\d{4}-\d{2}-\d{2}$/.test(e.filterDate)) {
+                        e.filterDate = (typeof getExpenseFilterDate === 'function') ? getExpenseFilterDate(e) : (e.date ? e.date.split(',')[0].trim() : getLocalISODate());
+                    }
+                    expMap.set(key, e);
+                }
+            }
+        });
+        dailyExpenses = Array.from(expMap.values()).sort((a,b) => (Number(b.id || 0) - Number(a.id || 0)));
+        window.dailyExpenses = dailyExpenses;
+        if (typeof idb !== 'undefined' && idb.set) {
+            idb.set('cafe_expenses', dailyExpenses);
+        }
     }
     if (data.tables && typeof data.tables === 'object') {
         const fetchedTables = data.tables;
@@ -1799,6 +1847,50 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
                     invoices.push({ id: docSnap.id, ...data });
                 }
             });
+            if (invoices.length > 0) {
+                const orderMap = new Map((orderHistory || []).map(o => [String(o.id || o.billNo || o.bill_no || ''), o]));
+                let hasNewInvoices = false;
+                invoices.forEach(inv => {
+                    const key = String(inv.id || inv.bill_no || inv.billNo || '');
+                    if (key && !orderMap.has(key)) {
+                        hasNewInvoices = true;
+                        const totalAmount = inv.amount !== undefined ? Number(inv.amount) : (inv.final_payable_paise !== undefined ? inv.final_payable_paise / 100 : 0);
+                        const rawItems = inv.rawItems || inv.items || [];
+                        const formattedOrder = {
+                            id: inv.id || Date.now(),
+                            billNo: inv.billNo || inv.bill_no || inv.id,
+                            date: inv.date || (inv.created_at ? new Date(inv.created_at).toLocaleString() : new Date().toLocaleString()),
+                            filterDate: (typeof getOrderFilterDate === 'function') ? getOrderFilterDate(inv) : getLocalISODate(),
+                            table: inv.table || inv.table_id || 'Takeaway',
+                            orderType: inv.orderType || inv.order_type || 'Dine-In',
+                            paymentMode: inv.paymentMode || inv.payment_mode || inv.payment_method || 'Cash',
+                            customer: inv.customer || inv.customer_name || '',
+                            biller: inv.biller || inv.biller_name || 'Staff',
+                            items: rawItems.map(it => `${it.qty || it.quantity || 1}x ${it.name || 'Item'}`).join(', '),
+                            rawItems: rawItems,
+                            amount: totalAmount,
+                            grossSubtotal: inv.grossSubtotal || totalAmount,
+                            subtotal: inv.subtotal || totalAmount,
+                            tax: inv.tax || 0,
+                            discountAmount: inv.discountAmount || 0
+                        };
+                        orderMap.set(key, formattedOrder);
+                    }
+                });
+                if (hasNewInvoices) {
+                    orderHistory = Array.from(orderMap.values()).sort((a,b) => (Number(b.id || b.billNo || 0) - Number(a.id || a.billNo || 0)));
+                    window.orderHistory = orderHistory;
+                    if (typeof idb !== 'undefined' && idb.set) {
+                        idb.set('cafe_history', orderHistory);
+                    }
+                    if (typeof renderDashboardAnalytics === 'function') {
+                        const dashTab = document.getElementById('dashboard');
+                        if (dashTab && dashTab.classList.contains('active')) {
+                            renderDashboardAnalytics();
+                        }
+                    }
+                }
+            }
             window.dispatchEvent(new CustomEvent('billnaw:invoices-updated', { detail: { invoices } }));
         };
 

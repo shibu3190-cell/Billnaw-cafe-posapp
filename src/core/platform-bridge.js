@@ -226,6 +226,26 @@ export function wrapText(text, maxCols, indent = '') {
 }
 
 /**
+ * Sanitizes text destined for ESC/POS thermal printers by converting Unicode currency
+ * symbols, non-breaking spaces, smart quotes, and bullets into clean CP437 ASCII equivalents.
+ * Strips unsupported non-ASCII characters to prevent garbage characters and line wrap glitches.
+ * @param {string} text
+ * @returns {string}
+ */
+export function sanitizeEscPosText(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/[\u20B9\u20A8]\s*/g, 'Rs. ')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u2022\u25CF\u00B7]/g, '|')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/[^\x00-\x7F]/g, '');
+}
+
+/**
  * Default dual thermal printer slots and role routing configuration.
  */
 export const DEFAULT_PRINTERS_CONFIG = {
@@ -894,10 +914,12 @@ export const ThermalPrinterBridge = {
    */
   generateEscPosCommands(data, width = '58mm', options = {}) {
     const encoder = new TextEncoder();
+    const encodeClean = (str) => encoder.encode(sanitizeEscPosText(str));
     const parts = [];
 
     const is80mm = width === '80mm';
     const cols = is80mm ? 48 : 32;
+    const dCols = Math.floor(cols / 2); // Double-width column boundary (16 for 58mm, 24 for 80mm)
     const divider = '-'.repeat(cols) + '\n';
 
     // 1. ESC @ (Initialize printer) - STRICT INVARIANT: bytes[0]===0x1B, bytes[1]===0x40
@@ -913,27 +935,27 @@ export const ThermalPrinterBridge = {
       // ----------------- KOT FORMATTING -----------------
       // GS ! 0x11 (Double Size) + ESC E 1 (Bold On)
       parts.push(new Uint8Array([0x1D, 0x21, 0x11, 0x1B, 0x45, 0x01]));
-      parts.push(encoder.encode(`\nKITCHEN TICKET\n`));
+      parts.push(encodeClean(`\nKITCHEN TICKET\n`));
       // Normal Size + Bold Off
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
-      parts.push(encoder.encode(divider));
+      parts.push(encodeClean(divider));
 
-      // Table
+      // Table (wrapped at dCols so double-width never wraps awkwardly)
       const tableStr = `TABLE: ${data.table || data.table_id || data.tableNo || 'T1'}`;
       parts.push(new Uint8Array([0x1D, 0x21, 0x11, 0x1B, 0x45, 0x01]));
-      const tableLines = wrapText(tableStr, cols);
+      const tableLines = wrapText(tableStr, dCols);
       for (const tl of tableLines) {
-        parts.push(encoder.encode(`${tl}\n`));
+        parts.push(encodeClean(`${tl}\n`));
       }
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
 
       const timeStr = data.date || (data.created_at ? new Date(data.created_at).toLocaleTimeString() : new Date().toLocaleTimeString());
       const staffStr = data.biller || data.server_staff_id || 'Staff';
-      const metaLines = wrapText(`Time: ${timeStr} • Server: ${staffStr}`, cols);
+      const metaLines = wrapText(`Time: ${timeStr} | Server: ${staffStr}`, cols);
       for (const ml of metaLines) {
-        parts.push(encoder.encode(`${ml}\n`));
+        parts.push(encodeClean(`${ml}\n`));
       }
-      parts.push(encoder.encode(divider));
+      parts.push(encodeClean(divider));
 
       // Left Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x00]));
@@ -941,104 +963,104 @@ export const ThermalPrinterBridge = {
       for (const item of items) {
         const qty = item.quantity || item.qty || 1;
         const name = item.name || 'Item';
-        // Double size item line
+        // Double size item line wrapped at cols (32 for 58mm)
         parts.push(new Uint8Array([0x1D, 0x21, 0x11]));
         const itemLines = wrapText(`${qty}x ${name}`, cols, '  ');
         for (const il of itemLines) {
-          parts.push(encoder.encode(`${il}\n`));
+          parts.push(encodeClean(`${il}\n`));
         }
         parts.push(new Uint8Array([0x1D, 0x21, 0x00]));
         if (item.notes) {
           const noteLines = wrapText(`>> Note: ${item.notes}`, cols, '  ');
           for (const nl of noteLines) {
-            parts.push(encoder.encode(`${nl}\n`));
+            parts.push(encodeClean(`${nl}\n`));
           }
         }
-        parts.push(encoder.encode(divider));
+        parts.push(encodeClean(divider));
       }
 
       if (data.special_instructions) {
         const instLines = wrapText(`Note: ${data.special_instructions}`, cols, '  ');
         for (const il of instLines) {
-          parts.push(encoder.encode(`${il}\n`));
+          parts.push(encodeClean(`${il}\n`));
         }
-        parts.push(encoder.encode(divider));
+        parts.push(encodeClean(divider));
       }
 
       // Center Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x01]));
-      parts.push(encoder.encode(`*** END OF KOT ***\n\n\n`));
+      parts.push(encodeClean(`*** END OF KOT ***\n\n\n\n\n`));
     } else {
       // ------------- CUSTOMER INVOICE FORMATTING -------------
       const storeName = profile.name || data.shop_name || 'BILLNAW POS';
       // Double Size + Bold
       parts.push(new Uint8Array([0x1D, 0x21, 0x11, 0x1B, 0x45, 0x01]));
-      parts.push(encoder.encode('\n'));
-      const storeNameLines = wrapText(storeName, cols);
+      parts.push(encodeClean('\n'));
+      const storeNameLines = wrapText(storeName, dCols);
       for (const snl of storeNameLines) {
-        parts.push(encoder.encode(`${snl}\n`));
+        parts.push(encodeClean(`${snl}\n`));
       }
       // Normal Size + Bold Off
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
 
       if (profile.address) {
         const addrLines = wrapText(profile.address, cols);
-        for (const al of addrLines) parts.push(encoder.encode(`${al}\n`));
+        for (const al of addrLines) parts.push(encodeClean(`${al}\n`));
       }
       if (profile.phone) {
         const phoneLines = wrapText(`Tel: ${profile.phone}`, cols);
-        for (const pl of phoneLines) parts.push(encoder.encode(`${pl}\n`));
+        for (const pl of phoneLines) parts.push(encodeClean(`${pl}\n`));
       }
       if (profile.fssai) {
         const fssaiLines = wrapText(`FSSAI Lic. No.: ${profile.fssai}`, cols);
-        for (const fl of fssaiLines) parts.push(encoder.encode(`${fl}\n`));
+        for (const fl of fssaiLines) parts.push(encodeClean(`${fl}\n`));
       }
       if (profile.gstin && profile.gstMode !== 'none') {
         const gstinLines = wrapText(`GSTIN: ${profile.gstin}`, cols);
-        for (const gl of gstinLines) parts.push(encoder.encode(`${gl}\n`));
+        for (const gl of gstinLines) parts.push(encodeClean(`${gl}\n`));
       }
 
-      parts.push(encoder.encode(divider));
+      parts.push(encodeClean(divider));
 
       const isGstActive = profile.gstMode !== 'none' && data.gstMode !== 'none';
       const invoiceTitle = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
       parts.push(new Uint8Array([0x1B, 0x45, 0x01])); // Bold On
-      parts.push(encoder.encode(`${invoiceTitle}\n`));
+      parts.push(encodeClean(`${invoiceTitle}\n`));
       parts.push(new Uint8Array([0x1B, 0x45, 0x00])); // Bold Off
-      parts.push(encoder.encode(divider));
+      parts.push(encodeClean(divider));
 
       // Left Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x00]));
       const billId = data.bill_no || data.billNo || data.invoice_id || data.id || 'N/A';
       const billLines = wrapText(`Bill #${billId}`, cols);
-      for (const bl of billLines) parts.push(encoder.encode(`${bl}\n`));
+      for (const bl of billLines) parts.push(encodeClean(`${bl}\n`));
 
       const dateStr = data.date || data.settled_at || data.created_at || new Date().toLocaleString();
       const dateLines = wrapText(dateStr, cols);
-      for (const dl of dateLines) parts.push(encoder.encode(`${dl}\n`));
+      for (const dl of dateLines) parts.push(encodeClean(`${dl}\n`));
 
       if (data.table && data.orderType !== 'Takeaway') {
         const tableLines = wrapText(`Table: ${String(data.table).replace('Table ', '')}`, cols);
-        for (const tl of tableLines) parts.push(encoder.encode(`${tl}\n`));
+        for (const tl of tableLines) parts.push(encodeClean(`${tl}\n`));
       }
       if (data.orderType) {
         const otLines = wrapText(`Type: ${data.orderType}`, cols);
-        for (const ot of otLines) parts.push(encoder.encode(`${ot}\n`));
+        for (const ot of otLines) parts.push(encodeClean(`${ot}\n`));
       }
       if (data.paymentMode) {
         const pmLines = wrapText(`Payment: ${data.paymentMode}`, cols);
-        for (const pm of pmLines) parts.push(encoder.encode(`${pm}\n`));
+        for (const pm of pmLines) parts.push(encodeClean(`${pm}\n`));
       }
       if (data.customer) {
         const custLines = wrapText(`Customer: ${data.customer}`, cols);
-        for (const cl of custLines) parts.push(encoder.encode(`${cl}\n`));
+        for (const cl of custLines) parts.push(encodeClean(`${cl}\n`));
       }
       if (data.biller) {
         const staffLines = wrapText(`Staff: ${data.biller}`, cols);
-        for (const sl of staffLines) parts.push(encoder.encode(`${sl}\n`));
+        for (const sl of staffLines) parts.push(encodeClean(`${sl}\n`));
       }
 
-      parts.push(encoder.encode(divider));
+      parts.push(encodeClean(divider));
 
       // Header Table Row
       const nameWidth = is80mm ? 28 : 17;
@@ -1047,8 +1069,8 @@ export const ThermalPrinterBridge = {
       const colSpace = is80mm ? '  ' : ' ';
 
       const headerRow = 'ITEM'.padEnd(nameWidth, ' ') + colSpace + 'QTY'.padStart(qtyWidth, ' ') + colSpace + 'AMOUNT'.padStart(priceWidth, ' ') + '\n';
-      parts.push(encoder.encode(headerRow));
-      parts.push(encoder.encode(divider));
+      parts.push(encodeClean(headerRow));
+      parts.push(encodeClean(divider));
 
       // Items
       const items = data.items || data.rawItems || [];
@@ -1069,29 +1091,29 @@ export const ThermalPrinterBridge = {
         if (neededRightWidth >= cols || cols - neededRightWidth < 4) {
           const nameLines = wrapText(name, cols);
           for (const nl of nameLines) {
-            parts.push(encoder.encode(`${nl}\n`));
+            parts.push(encodeClean(`${nl}\n`));
           }
           const rightLine = String(qty).padStart(actualQtyWidth, ' ') + colSpace + priceStr.padStart(cols - actualQtyWidth - colSpace.length, ' ') + '\n';
-          parts.push(encoder.encode(rightLine));
+          parts.push(encodeClean(rightLine));
         } else {
           const availNameWidth = cols - neededRightWidth;
           const firstChunk = name.slice(0, availNameWidth);
           const itemLine = firstChunk.padEnd(availNameWidth, ' ') + colSpace + String(qty).padStart(actualQtyWidth, ' ') + colSpace + priceStr.padStart(actualPriceWidth, ' ') + '\n';
-          parts.push(encoder.encode(itemLine));
+          parts.push(encodeClean(itemLine));
 
           if (name.length > availNameWidth) {
             const remainder = name.slice(availNameWidth).trim();
             if (remainder.length > 0) {
               const overflowLines = wrapText(remainder, cols - 2);
               for (const ol of overflowLines) {
-                parts.push(encoder.encode(`  ${ol}\n`));
+                parts.push(encodeClean(`  ${ol}\n`));
               }
             }
           }
         }
       }
 
-      parts.push(encoder.encode(divider));
+      parts.push(encodeClean(divider));
 
       // Totals Section
       // Right Align
@@ -1103,18 +1125,18 @@ export const ThermalPrinterBridge = {
             : ((data.amount || 0) * 100));
       const totalRupees = (totalPaise / 100).toFixed(2);
 
-      // Double Size + Bold
+      // Double Size + Bold (wrapped at dCols so it fits cleanly)
       parts.push(new Uint8Array([0x1D, 0x21, 0x11, 0x1B, 0x45, 0x01]));
-      const totalLines = wrapText(`TOTAL: Rs. ${totalRupees}`, cols);
+      const totalLines = wrapText(`TOTAL: Rs. ${totalRupees}`, dCols);
       for (const tl of totalLines) {
-        parts.push(encoder.encode(`${tl}\n`));
+        parts.push(encodeClean(`${tl}\n`));
       }
-      parts.push(encoder.encode('\n'));
+      parts.push(encodeClean('\n'));
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
 
       // Center Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x01]));
-      parts.push(encoder.encode(`Thank You! Visit Again\n\n\n`));
+      parts.push(encodeClean(`Thank You! Visit Again\n\n\n\n\n`));
     }
 
     // Paper Cut: GS V 66 0 ([0x1D, 0x56, 0x42, 0x00]) - STRICT TEST INVARIANT
@@ -1798,6 +1820,7 @@ export function listenPrintQueue(db, shopId, onJobCallback, options = {}) {
 // Auto-initialize bridge and expose to window in browser runtime
 if (typeof window !== 'undefined') {
   window.ThermalPrinterBridge = ThermalPrinterBridge;
+  window.sanitizeEscPosText = sanitizeEscPosText;
   window.enqueueCloudKotPrintJob = enqueueCloudKotPrintJob;
   window.claimPrintJob = claimPrintJob;
   window.completePrintJob = completePrintJob;

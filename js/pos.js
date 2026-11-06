@@ -2103,115 +2103,115 @@ async function sendEscPosToPrinter(order) {
         }
     }
 
-    if (!printCharacteristic) {
-        // Document & Business Headers
-        const pInvoiceTitle = document.getElementById('printInvoiceTitle');
-        if (pInvoiceTitle) pInvoiceTitle.innerText = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
+    // Document & Business Headers for HTML print preview
+    const pInvoiceTitle = document.getElementById('printInvoiceTitle');
+    if (pInvoiceTitle) pInvoiceTitle.innerText = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
 
-        const pShopName = document.getElementById('printShopName');
-        if (pShopName) pShopName.innerText = shopProfile.name || 'billnaw';
+    const pShopName = document.getElementById('printShopName');
+    if (pShopName) pShopName.innerText = shopProfile.name || 'billnaw';
 
-        const pShopAddr = document.getElementById('printShopAddress');
-        if (pShopAddr) {
-            pShopAddr.innerText = shopProfile.address || '';
-            pShopAddr.style.display = shopProfile.address ? 'block' : 'none';
-        }
+    const pShopAddr = document.getElementById('printShopAddress');
+    if (pShopAddr) {
+        pShopAddr.innerText = shopProfile.address || '';
+        pShopAddr.style.display = shopProfile.address ? 'block' : 'none';
+    }
 
-        const pShopPhone = document.getElementById('printShopPhone');
-        if (pShopPhone) {
-            pShopPhone.innerText = shopProfile.phone ? `Tel: ${shopProfile.phone}` : '';
-            pShopPhone.style.display = shopProfile.phone ? 'block' : 'none';
-        }
+    const pShopPhone = document.getElementById('printShopPhone');
+    if (pShopPhone) {
+        pShopPhone.innerText = shopProfile.phone ? `Tel: ${shopProfile.phone}` : '';
+        pShopPhone.style.display = shopProfile.phone ? 'block' : 'none';
+    }
 
-        const pFssai = document.getElementById('printFssai');
-        if (pFssai) {
-            pFssai.innerText = shopProfile.fssai ? `FSSAI Lic. No.: ${shopProfile.fssai}` : '';
-            pFssai.style.display = shopProfile.fssai ? 'block' : 'none';
-        }
+    const pFssai = document.getElementById('printFssai');
+    if (pFssai) {
+        pFssai.innerText = shopProfile.fssai ? `FSSAI Lic. No.: ${shopProfile.fssai}` : '';
+        pFssai.style.display = shopProfile.fssai ? 'block' : 'none';
+    }
 
-        const pGstin = document.getElementById('printGstin');
-        if (pGstin) {
-            pGstin.innerText = (isGstActive && shopProfile.gstin) ? `GSTIN: ${shopProfile.gstin}` : '';
-            pGstin.style.display = (isGstActive && shopProfile.gstin) ? 'block' : 'none';
-        }
+    const pGstin = document.getElementById('printGstin');
+    if (pGstin) {
+        pGstin.innerText = (isGstActive && shopProfile.gstin) ? `GSTIN: ${shopProfile.gstin}` : '';
+        pGstin.style.display = (isGstActive && shopProfile.gstin) ? 'block' : 'none';
+    }
 
-        const pBillNo = document.getElementById('printBillNo'); if (pBillNo) pBillNo.innerText = order.billNo;
-        const pDate = document.getElementById('printDate'); if (pDate) pDate.innerText = order.date;
-        const pTableNoRow = document.getElementById('printTableNoRow');
-        const pTableNo = document.getElementById('printTableNo');
-        if (pTableNoRow) {
-            if(order.orderType === 'Takeaway') { pTableNoRow.style.display = 'none'; }
-            else { pTableNoRow.style.display = 'block'; if (pTableNo) pTableNo.innerText = String(order.table || 'T1'); }
-        }
-        const pOrderType = document.getElementById('printOrderType'); if (pOrderType) pOrderType.innerText = order.orderType;
-        const pPayMode = document.getElementById('printPayMode'); if (pPayMode) pPayMode.innerText = order.paymentMode;
-        const pCustRow = document.getElementById('printCustomerRow');
-        const pCust = document.getElementById('printCustomer');
-        if (pCustRow) { if(order.customer) { pCustRow.style.display = 'block'; if (pCust) pCust.innerText = order.customer; } else { pCustRow.style.display = 'none'; } }
-        const pBillerRow = document.getElementById('printBillerRow');
-        const pBiller = document.getElementById('printBiller');
-        if (pBillerRow) { if(order.biller) { pBillerRow.style.display = 'block'; if (pBiller) pBiller.innerText = order.biller; } else { pBillerRow.style.display = 'none'; } }
-        
-        const printItemsEl = document.getElementById('printItems');
-        if (printItemsEl) {
-            printItemsEl.innerHTML = ''; 
-            order.rawItems.forEach(item => { 
-                let itemTotal = item.price * item.qty; 
-                let gst = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : defaultRate;
-                if (!isGstActive) gst = 0;
+    const pBillNo = document.getElementById('printBillNo'); if (pBillNo) pBillNo.innerText = order.billNo;
+    const pDate = document.getElementById('printDate'); if (pDate) pDate.innerText = order.date;
+    const pTableNoRow = document.getElementById('printTableNoRow');
+    const pTableNo = document.getElementById('printTableNo');
+    if (pTableNoRow) {
+        if(order.orderType === 'Takeaway') { pTableNoRow.style.display = 'none'; }
+        else { pTableNoRow.style.display = 'block'; if (pTableNo) pTableNo.innerText = String(order.table || 'T1'); }
+    }
+    const pOrderType = document.getElementById('printOrderType'); if (pOrderType) pOrderType.innerText = order.orderType;
+    const pPayMode = document.getElementById('printPayMode'); if (pPayMode) pPayMode.innerText = order.paymentMode;
+    const pCustRow = document.getElementById('printCustomerRow');
+    const pCust = document.getElementById('printCustomer');
+    if (pCustRow) { if(order.customer) { pCustRow.style.display = 'block'; if (pCust) pCust.innerText = order.customer; } else { pCustRow.style.display = 'none'; } }
+    const pBillerRow = document.getElementById('printBillerRow');
+    const pBiller = document.getElementById('printBiller');
+    if (pBillerRow) { if(order.biller) { pBillerRow.style.display = 'block'; if (pBiller) pBiller.innerText = order.biller; } else { pBillerRow.style.display = 'none'; } }
+    
+    const printItemsEl = document.getElementById('printItems');
+    if (printItemsEl) {
+        printItemsEl.innerHTML = ''; 
+        order.rawItems.forEach(item => { 
+            let itemTotal = item.price * item.qty; 
+            let gst = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0) ? Number(item.gstRate) : defaultRate;
+            if (!isGstActive) gst = 0;
 
-                printItemsEl.innerHTML += `<div class="print-row"><span>${escapeHtml(item.name)} x${item.qty}</span><span>₹ ${itemTotal.toFixed(2)}</span></div>`; 
-            });
+            printItemsEl.innerHTML += `<div class="print-row"><span>${escapeHtml(item.name)} x${item.qty}</span><span>₹ ${itemTotal.toFixed(2)}</span></div>`; 
+        });
 
-            // Use order totals if available, otherwise recalculate
-            const totals = calculateOrderTotals(order.rawItems, order.discount || (hasDiscount ? { type: 'fixed', value: discountAmount } : null));
-            rawSubtotal = totals.subtotal;
-            totalTax = totals.totalTax;
-            gstSummary = totals.gstSummary || {};
+        // Use order totals if available, otherwise recalculate
+        const totals = calculateOrderTotals(order.rawItems, order.discount || (hasDiscount ? { type: 'fixed', value: discountAmount } : null));
+        rawSubtotal = totals.subtotal;
+        totalTax = totals.totalTax;
+        gstSummary = totals.gstSummary || {};
 
-            if (hasDiscount || (isGstActive && gstMode === 'exclusive')) {
-                printItemsEl.innerHTML += `<div class="print-line"></div>`;
-                if (hasDiscount) {
-                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Gross Subtotal</span><span>₹ ${grossSubtotal.toFixed(2)}</span></div>`;
-                    const dLabel = order.discount && order.discount.type === 'percent' ? `Discount (${order.discount.value}%)` : 'Discount (Flat)';
-                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600; color:#c00;"><span>${dLabel}</span><span>-₹ ${discountAmount.toFixed(2)}</span></div>`;
-                }
-                if (isGstActive && gstMode === 'exclusive' && totalTax > 0) {
-                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Net Taxable Subtotal</span><span>₹ ${rawSubtotal.toFixed(2)}</span></div>`;
-                    printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Total GST</span><span>₹ ${totalTax.toFixed(2)}</span></div>`;
-                }
+        if (hasDiscount || (isGstActive && gstMode === 'exclusive')) {
+            printItemsEl.innerHTML += `<div class="print-line"></div>`;
+            if (hasDiscount) {
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Gross Subtotal</span><span>₹ ${grossSubtotal.toFixed(2)}</span></div>`;
+                const dLabel = order.discount && order.discount.type === 'percent' ? `Discount (${order.discount.value}%)` : 'Discount (Flat)';
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600; color:#c00;"><span>${dLabel}</span><span>-₹ ${discountAmount.toFixed(2)}</span></div>`;
             }
-
-            if(Object.keys(gstSummary).length > 0 && isGstActive) {
-                let htmlGstContent = '<div class="print-line"></div><div style="font-weight:700; font-size:11px; margin-bottom:5px; text-align:center;">--- GST BREAKDOWN ---</div>';
-                for(let rate in gstSummary) {
-                    let slab = gstSummary[rate];
-                    let base = Number(slab.base || 0).toFixed(2);
-                    let cgst = Number(slab.cgst || (slab.tax / 2)).toFixed(2);
-                    let sgst = Number(slab.sgst || (slab.tax / 2)).toFixed(2);
-                    let halfRate = Number(rate) / 2;
-                    htmlGstContent += `<div style="font-size:11px; color:#333; margin-bottom:4px;">
-                        <div style="display:flex; justify-content:space-between;"><span>Taxable Value (${rate}%)</span><span>₹ ${base}</span></div>
-                        <div style="display:flex; justify-content:space-between;"><span>CGST @ ${halfRate}%</span><span>₹ ${cgst}</span></div>
-                        <div style="display:flex; justify-content:space-between;"><span>SGST @ ${halfRate}%</span><span>₹ ${sgst}</span></div>
-                    </div>`;
-                }
-                printItemsEl.innerHTML += htmlGstContent;
-            }
-
-            if (order.paymentMode === 'Cash' && order.amountTendered && order.amountTendered > order.amount) {
-                printItemsEl.innerHTML += `<div class="print-line"></div>`;
-                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Cash Tendered</span><span>₹ ${Number(order.amountTendered).toFixed(2)}</span></div>`;
-                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#266838;"><span>Change Due</span><span>₹ ${Number(order.changeReturned).toFixed(2)}</span></div>`;
-            } else if (order.paymentMode === 'Khata') {
-                printItemsEl.innerHTML += `<div class="print-line"></div>`;
-                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#b45309;"><span>Khata Due (Pay Later)</span><span>₹ ${Number(order.amount).toFixed(2)}</span></div>`;
+            if (isGstActive && gstMode === 'exclusive' && totalTax > 0) {
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Net Taxable Subtotal</span><span>₹ ${rawSubtotal.toFixed(2)}</span></div>`;
+                printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Total GST</span><span>₹ ${totalTax.toFixed(2)}</span></div>`;
             }
         }
-        const pTot = document.getElementById('printTotal'); if (pTot) pTot.innerText = `₹ ${order.amount.toFixed(2)}`;
-        
-        // Route print job through ThermalPrinterBridge if available
-        if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
+
+        if(Object.keys(gstSummary).length > 0 && isGstActive) {
+            let htmlGstContent = '<div class="print-line"></div><div style="font-weight:700; font-size:11px; margin-bottom:5px; text-align:center;">--- GST BREAKDOWN ---</div>';
+            for(let rate in gstSummary) {
+                let slab = gstSummary[rate];
+                let base = Number(slab.base || 0).toFixed(2);
+                let cgst = Number(slab.cgst || (slab.tax / 2)).toFixed(2);
+                let sgst = Number(slab.sgst || (slab.tax / 2)).toFixed(2);
+                let halfRate = Number(rate) / 2;
+                htmlGstContent += `<div style="font-size:11px; color:#333; margin-bottom:4px;">
+                    <div style="display:flex; justify-content:space-between;"><span>Taxable Value (${rate}%)</span><span>₹ ${base}</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>CGST @ ${halfRate}%</span><span>₹ ${cgst}</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>SGST @ ${halfRate}%</span><span>₹ ${sgst}</span></div>
+                </div>`;
+            }
+            printItemsEl.innerHTML += htmlGstContent;
+        }
+
+        if (order.paymentMode === 'Cash' && order.amountTendered && order.amountTendered > order.amount) {
+            printItemsEl.innerHTML += `<div class="print-line"></div>`;
+            printItemsEl.innerHTML += `<div class="print-row" style="font-weight:600;"><span>Cash Tendered</span><span>₹ ${Number(order.amountTendered).toFixed(2)}</span></div>`;
+            printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#266838;"><span>Change Due</span><span>₹ ${Number(order.changeReturned).toFixed(2)}</span></div>`;
+        } else if (order.paymentMode === 'Khata') {
+            printItemsEl.innerHTML += `<div class="print-line"></div>`;
+            printItemsEl.innerHTML += `<div class="print-row" style="font-weight:700; color:#b45309;"><span>Khata Due (Pay Later)</span><span>₹ ${Number(order.amount).toFixed(2)}</span></div>`;
+        }
+    }
+    const pTot = document.getElementById('printTotal'); if (pTot) pTot.innerText = `₹ ${order.amount.toFixed(2)}`;
+    
+    // Route print job through ThermalPrinterBridge if available
+    if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
+        try {
             const routeResult = await window.ThermalPrinterBridge.routePrintJob(order, { role: 'RECEIPT' });
             if (routeResult && (routeResult.data?.printed || routeResult.data?.cancelled)) {
                 if (routeResult.data?.method === 'BROWSER_DIALOG') {
@@ -2219,8 +2219,12 @@ async function sendEscPosToPrinter(order) {
                 }
                 return routeResult;
             }
+        } catch (routeErr) {
+            console.warn('[PrinterBridge] routePrintJob error, falling back:', routeErr);
         }
+    }
 
+    if (!printCharacteristic && !window.posPrinters?.printer1?.characteristic) {
         await executeHtmlPrint('print-receipt');
         return;
     }
@@ -2251,11 +2255,12 @@ async function sendEscPosToPrinter(order) {
     order.rawItems.forEach(item => {
         let qtyName = `${item.qty}x ${item.name}`; 
         let priceStr = (item.price * item.qty).toFixed(2);
-        if (qtyName.length + priceStr.length > 31) { 
+        if (qtyName.length + priceStr.length >= 31) { 
             receiptText += qtyName.substring(0, 32) + '\n'; 
             receiptText += priceStr.padStart(32, ' ') + '\n'; 
         } else { 
-            receiptText += qtyName.padEnd(32 - priceStr.length, ' ') + priceStr + '\n'; 
+            const spaces = Math.max(1, 32 - qtyName.length - priceStr.length);
+            receiptText += qtyName + ' '.repeat(spaces) + priceStr + '\n'; 
         }
     });
 
@@ -2312,7 +2317,10 @@ async function sendEscPosToPrinter(order) {
         }
     }
 
-    payloads.push(new TextEncoder().encode(receiptText));
+    const cleanReceiptText = (typeof sanitizeEscPosText === 'function') 
+        ? sanitizeEscPosText(receiptText) 
+        : receiptText.replace(/[\u20B9\u20A8]/g, 'Rs. ').replace(/\u00A0/g, ' ');
+    payloads.push(new TextEncoder().encode(cleanReceiptText));
 
     if (shopProfile.showQr && shopProfile.upiId) {
         const qrCanvas = qrCodeDiv ? qrCodeDiv.querySelector('canvas') : null;
@@ -2327,7 +2335,7 @@ async function sendEscPosToPrinter(order) {
         }
     }
 
-    payloads.push(new TextEncoder().encode(ALIGN_CENTER + 'Thank You! Visit Again\n\x0A\x0A\x0A\x0A\x1B\x6D'));
+    payloads.push(new TextEncoder().encode(ALIGN_CENTER + 'Thank You! Visit Again\n\x0A\x0A\x0A\x0A\x1D\x56\x42\x00'));
 
     let totalLength = payloads.reduce((sum, p) => sum + p.length, 0);
     let finalPayload = new Uint8Array(totalLength);
@@ -2478,13 +2486,13 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
         return;
     }
 
-    const ESC = '\x1B'; const GS = '\x1D'; const INIT = ESC + '@'; const ALIGN_CENTER = ESC + 'a\x01'; const ALIGN_LEFT = ESC + 'a\x00'; const BOLD_ON = ESC + 'E\x01'; const BOLD_OFF = ESC + 'E\x00'; const DOUBLE_SIZE = GS + '!\x11'; const NORMAL_SIZE = GS + '!\x00'; const FEED_AND_CUT = '\x0A\x0A\x0A\x0A' + ESC + 'm'; 
+    const ESC = '\x1B'; const GS = '\x1D'; const INIT = ESC + '@'; const ALIGN_CENTER = ESC + 'a\x01'; const ALIGN_LEFT = ESC + 'a\x00'; const BOLD_ON = ESC + 'E\x01'; const BOLD_OFF = ESC + 'E\x00'; const DOUBLE_SIZE = GS + '!\x11'; const NORMAL_SIZE = GS + '!\x00'; const FEED_AND_CUT = '\x0A\x0A\x0A\x0A' + GS + 'V\x42\x00'; 
 
     let kotText = INIT; 
     kotText += ALIGN_CENTER + BOLD_ON + "KITCHEN TICKET\n" + BOLD_OFF; 
     kotText += "--------------------------------\n"; 
     kotText += DOUBLE_SIZE + BOLD_ON + `TABLE: ${tableNo}\n` + NORMAL_SIZE + BOLD_OFF; 
-    kotText += `Time: ${new Date().toLocaleTimeString()} • Server: ${billerName}\n`; 
+    kotText += `Time: ${new Date().toLocaleTimeString()} | Server: ${billerName}\n`; 
     kotText += "--------------------------------\n"; 
     kotText += ALIGN_LEFT;
     items.forEach(item => { 
@@ -2493,7 +2501,10 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
     });
     kotText += ALIGN_CENTER + "*** END OF KOT ***\n" + FEED_AND_CUT;
     const encoder = new TextEncoder(); 
-    const payload = encoder.encode(kotText); 
+    const cleanKot = (typeof sanitizeEscPosText === 'function') 
+        ? sanitizeEscPosText(kotText) 
+        : kotText.replace(/[\u20B9\u20A8]/g, 'Rs. ').replace(/\u00A0/g, ' ');
+    const payload = encoder.encode(cleanKot); 
     const CHUNK_SIZE = 100; 
     try { 
         for (let i = 0; i < payload.length; i += CHUNK_SIZE) { 

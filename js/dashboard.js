@@ -365,6 +365,64 @@ function resetHistoryPagination() {
 }
 window.resetHistoryPagination = resetHistoryPagination;
 
+/**
+ * Universal date extractor for sales orders.
+ * Accurately extracts YYYY-MM-DD from filterDate, ISO created_at / settled_at timestamps,
+ * Unix millisecond IDs, or localized date strings across any device locale.
+ */
+function getOrderFilterDate(o) {
+    if (!o) return '';
+    if (o.filterDate && /^\d{4}-\d{2}-\d{2}$/.test(o.filterDate)) return o.filterDate;
+    if (o.created_at) {
+        const d = new Date(o.created_at);
+        if (!isNaN(d.getTime())) return (typeof getLocalISODate === 'function') ? getLocalISODate(d) : d.toISOString().slice(0, 10);
+    }
+    if (o.settled_at) {
+        const d = new Date(o.settled_at);
+        if (!isNaN(d.getTime())) return (typeof getLocalISODate === 'function') ? getLocalISODate(d) : d.toISOString().slice(0, 10);
+    }
+    if (o.id && typeof o.id === 'number' && o.id > 1500000000000) {
+        return (typeof getLocalISODate === 'function') ? getLocalISODate(new Date(o.id)) : new Date(o.id).toISOString().slice(0, 10);
+    }
+    if (o.date) {
+        const parts = o.date.split(',')[0].trim().split(/[\/\-]/);
+        if (parts.length === 3) {
+            if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+            if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+        const d = new Date(o.date);
+        if (!isNaN(d.getTime())) return (typeof getLocalISODate === 'function') ? getLocalISODate(d) : d.toISOString().slice(0, 10);
+    }
+    return (typeof getLocalISODate === 'function') ? getLocalISODate() : '';
+}
+window.getOrderFilterDate = getOrderFilterDate;
+
+/**
+ * Universal date extractor for expense entries.
+ */
+function getExpenseFilterDate(e) {
+    if (!e) return '';
+    if (e.filterDate && /^\d{4}-\d{2}-\d{2}$/.test(e.filterDate)) return e.filterDate;
+    if (e.created_at) {
+        const d = new Date(e.created_at);
+        if (!isNaN(d.getTime())) return (typeof getLocalISODate === 'function') ? getLocalISODate(d) : d.toISOString().slice(0, 10);
+    }
+    if (e.id && typeof e.id === 'number' && e.id > 1500000000000) {
+        return (typeof getLocalISODate === 'function') ? getLocalISODate(new Date(e.id)) : new Date(e.id).toISOString().slice(0, 10);
+    }
+    if (e.date) {
+        const parts = e.date.split(',')[0].trim().split(/[\/\-]/);
+        if (parts.length === 3) {
+            if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+            if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+        const d = new Date(e.date);
+        if (!isNaN(d.getTime())) return (typeof getLocalISODate === 'function') ? getLocalISODate(d) : d.toISOString().slice(0, 10);
+    }
+    return (typeof getLocalISODate === 'function') ? getLocalISODate() : '';
+}
+window.getExpenseFilterDate = getExpenseFilterDate;
+
 async function renderDashboardAnalytics() {
     const todayISO = getLocalISODate();
     const d = new Date();
@@ -381,7 +439,7 @@ async function renderDashboardAnalytics() {
     
     // 1. Date Range Filtering
     let filteredOrders = orderHistory.filter(o => {
-        const fDate = o.filterDate || (o.date ? o.date.split(',')[0].trim() : '');
+        const fDate = getOrderFilterDate(o);
         if (currentDashboardRange === 'today') return fDate === todayISO;
         if (currentDashboardRange === 'yesterday') return fDate === yesterdayISO;
         if (currentDashboardRange === 'week') return fDate >= weekAgoISO && fDate <= todayISO;
@@ -396,7 +454,7 @@ async function renderDashboardAnalytics() {
     });
 
     let filteredExpenses = dailyExpenses.filter(e => {
-        const fDate = e.filterDate || (e.date ? e.date.split(',')[0].trim() : '');
+        const fDate = getExpenseFilterDate(e);
         if (currentDashboardRange === 'today') return fDate === todayISO;
         if (currentDashboardRange === 'yesterday') return fDate === yesterdayISO;
         if (currentDashboardRange === 'week') return fDate >= weekAgoISO && fDate <= todayISO;
@@ -661,8 +719,8 @@ async function renderDashboardChart(orders, expenses, selectedMonth) {
             const dayLabel = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
             labels.push(dayLabel);
             
-            const dSales = orders.filter(o => o.filterDate === iso).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
-            const dExp = expenses.filter(e => e.filterDate === iso).reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
+            const dSales = orders.filter(o => getOrderFilterDate(o) === iso).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+            const dExp = expenses.filter(e => getExpenseFilterDate(e) === iso).reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
             salesData.push(dSales);
             expenseData.push(dExp);
         }
@@ -677,8 +735,8 @@ async function renderDashboardChart(orders, expenses, selectedMonth) {
             const targetDate = `${selectedMonth}-${dayStr}`;
             labels.push(dayStr);
             
-            const dSales = orders.filter(o => o.filterDate === targetDate).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
-            const dExp = expenses.filter(e => e.filterDate === targetDate).reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
+            const dSales = orders.filter(o => getOrderFilterDate(o) === targetDate).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+            const dExp = expenses.filter(e => getExpenseFilterDate(e) === targetDate).reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
             salesData.push(dSales);
             expenseData.push(dExp);
         }
@@ -978,7 +1036,7 @@ function exportFilteredSalesCSV() {
     const selectedMonth = document.getElementById('reportDateSelect')?.value || getLocalISOMonth();
 
     let exportSet = orderHistory.filter(o => {
-        const fDate = o.filterDate || (o.date ? o.date.split(',')[0].trim() : '');
+        const fDate = getOrderFilterDate(o);
         if (currentDashboardRange === 'today') return fDate === todayISO;
         if (currentDashboardRange === 'yesterday') return fDate === yesterdayISO;
         if (currentDashboardRange === 'week') return fDate >= weekAgoISO && fDate <= todayISO;
@@ -1032,8 +1090,8 @@ window.exportExpensesCSV = exportExpensesCSV;
 
 function printDailyZReport() {
     const todayISO = getLocalISODate();
-    const todayOrders = orderHistory.filter(o => (o.filterDate === todayISO || (o.date && o.date.startsWith(new Date().toLocaleDateString()))));
-    const todayExpenses = dailyExpenses.filter(e => (e.filterDate === todayISO || (e.date && e.date.startsWith(new Date().toLocaleDateString()))));
+    const todayOrders = orderHistory.filter(o => (getOrderFilterDate(o) === todayISO || o.filterDate === todayISO || (o.date && o.date.startsWith(new Date().toLocaleDateString()))));
+    const todayExpenses = dailyExpenses.filter(e => (getExpenseFilterDate(e) === todayISO || e.filterDate === todayISO || (e.date && e.date.startsWith(new Date().toLocaleDateString()))));
 
     const totalGross = todayOrders.reduce((sum, o) => sum + o.amount, 0);
     const totalExp = todayExpenses.reduce((sum, e) => sum + e.cost, 0);
@@ -1560,3 +1618,15 @@ document.addEventListener('keydown', (event) => {
         }
     }
 });
+
+// Real-time synchronization: Re-render dashboard analytics when remote/subcollection invoices arrive
+if (typeof window !== 'undefined') {
+    window.addEventListener('billnaw:invoices-updated', () => {
+        if (typeof renderDashboardAnalytics === 'function') {
+            const dashTab = document.getElementById('dashboard');
+            if (dashTab && dashTab.classList.contains('active')) {
+                renderDashboardAnalytics();
+            }
+        }
+    });
+}
