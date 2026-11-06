@@ -24,6 +24,11 @@
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 
+[[headers]]
+  for = "/service-worker.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
 # Cache static assets (fonts, icons, audio) for performance
 [[headers]]
   for = "/assets/*"
