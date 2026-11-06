@@ -959,10 +959,14 @@ export const ThermalPrinterBridge = {
 
       // Left Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x00]));
-      const items = data.items || data.rawItems || [];
+      // Prefer rawItems (structured objects) over items (may be a string-summary array like ["Chai (x2)"])
+      const _kotRaw = data.rawItems || data.items || [];
+      const items = (_kotRaw.length > 0 && typeof _kotRaw[0] === 'object' && _kotRaw[0] !== null)
+        ? _kotRaw
+        : (data.rawItems || []);
       for (const item of items) {
-        const qty = item.quantity || item.qty || 1;
-        const name = item.name || 'Item';
+        const qty = item.quantity || item.qty || item.count || 1;
+        const name = item.name || item.item_name || item.menuItemName || item.title || 'Item';
         // Double size item line wrapped at cols (32 for 58mm)
         parts.push(new Uint8Array([0x1D, 0x21, 0x11]));
         const itemLines = wrapText(`${qty}x ${name}`, cols, '  ');
@@ -1073,15 +1077,22 @@ export const ThermalPrinterBridge = {
       parts.push(encodeClean(divider));
 
       // Items
-      const items = data.items || data.rawItems || [];
+      // Prefer rawItems (structured objects with name/price/qty) over items (may be string-summary array like ["Chai (x2)"])
+      const _receiptRaw = data.rawItems || data.items || [];
+      const items = (_receiptRaw.length > 0 && typeof _receiptRaw[0] === 'object' && _receiptRaw[0] !== null)
+        ? _receiptRaw
+        : (data.rawItems || []);
       for (const item of items) {
-        const name = item.name || 'Item';
-        const qty = item.quantity || item.qty || 1;
+        const name = item.name || item.item_name || item.menuItemName || item.title || 'Item';
+        const qty = item.quantity || item.qty || item.count || 1;
+        const unitPrice = item.price || item.rate || item.unitPrice || item.unit_price || item.basePrice || 0;
         const totalPaise = item.line_total_paise !== undefined
           ? item.line_total_paise
           : (item.item_subtotal_paise !== undefined 
               ? item.item_subtotal_paise 
-              : ((item.price || 0) * qty * 100));
+              : (item.total !== undefined
+                  ? item.total * 100
+                  : (unitPrice * qty * 100)));
         const priceStr = "Rs. " + (totalPaise / 100).toFixed(2);
 
         const actualQtyWidth = Math.max(qtyWidth, String(qty).length);
