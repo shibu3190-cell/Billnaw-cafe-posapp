@@ -1250,19 +1250,47 @@ function executeHtmlPrint(divId) {
             if (qrSrc) {
                 qrScript = `<div style="text-align:center; margin-top:14px; padding-top:8px; border-top:1px dashed #000;">
                     <div style="font-weight:bold; font-size:12px; margin-bottom:4px; letter-spacing:0.5px;">SCAN TO PAY VIA UPI</div>
-                    <img src="${qrSrc}" style="margin:0 auto; display:block; width:160px; height:160px; image-rendering:pixelated;">
+                    <img class="print-qr-img" src="${qrSrc}" style="margin:0 auto; display:block; width:160px; height:160px; max-width:160px; image-rendering:pixelated;">
                     <div style="font-size:10px; margin-top:4px; font-weight:bold;">UPI: ${escapeHtml(shopProfile.upiId)}</div>
                 </div>`;
             }
         }
         
+        if (divId === 'print-kot') {
+            if (typeof document !== 'undefined' && document.body && document.body.classList) {
+                document.body.classList.add('printing-kot');
+            }
+        } else {
+            if (typeof document !== 'undefined' && document.body && document.body.classList) {
+                document.body.classList.remove('printing-kot');
+            }
+            const printLogoEl = document.getElementById('printLogo');
+            if (printLogoEl) {
+                if (shopProfile.logo) {
+                    printLogoEl.src = shopProfile.logo;
+                    printLogoEl.style.display = 'block';
+                } else {
+                    printLogoEl.src = '';
+                    printLogoEl.style.display = 'none';
+                }
+            }
+        }
+
         const printElem = document.getElementById(divId);
         const content = printElem ? printElem.innerHTML : '';
         const doc = iframe.contentWindow.document;
+        const docTitle = divId === 'print-kot' ? 'KOT' : 'Receipt';
         doc.open();
-        doc.write(`<html><head><title>Receipt</title><style>body{font-family:'Courier New',Courier,monospace;font-size:12px;color:#000;margin:0;padding:10px;width:300px;}.print-center{text-align:center;}.print-row{display:flex;justify-content:space-between;margin-bottom:5px;}.print-line{border-bottom:1px dashed #000;margin:8px 0;}img{max-width:50px;filter:grayscale(100%) contrast(200%);margin-bottom:5px;}</style></head><body>${content} ${qrScript}</body></html>`);
+        doc.write(`<html><head><title>${docTitle}</title><style>body{font-family:'Courier New',Courier,monospace;font-size:12px;color:#000;margin:0;padding:10px;width:300px;}.print-center{text-align:center;}.print-row{display:flex;justify-content:space-between;margin-bottom:5px;}.print-line{border-bottom:1px dashed #000;margin:8px 0;}#printLogo{max-width:60px;max-height:60px;margin:0 auto 6px auto;object-fit:contain;filter:grayscale(100%) contrast(200%);}.print-qr-img{width:160px !important;height:160px !important;max-width:160px !important;filter:none !important;}</style></head><body>${content} ${qrScript}</body></html>`);
         doc.close();
-        setTimeout(() => { iframe.contentWindow.focus(); iframe.contentWindow.print(); resolve(); }, 500);
+        setTimeout(() => {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            if (typeof document !== 'undefined' && document.body && document.body.classList) {
+                document.body.classList.remove('printing-kot');
+            }
+            resolve();
+        }, 500);
     });
 }
 window.executeHtmlPrint = executeHtmlPrint;
@@ -2083,7 +2111,38 @@ window.handleInteractivePrinterSelect = handleInteractivePrinterSelect;
  * Customer receipts NEVER queue to Distributed Cloud Print Relay.
  */
 async function sendEscPosToPrinter(order) {
+    if (typeof document !== 'undefined' && document.body && document.body.classList) {
+        document.body.classList.remove('printing-kot');
+    }
+    if (typeof ensureShopProfileHydrated === 'function') {
+        try { await ensureShopProfileHydrated(); } catch (e) {}
+    }
     if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
+
+    // Ensure order.rawItems is always a structured array of item objects
+    if (!Array.isArray(order.rawItems) || order.rawItems.length === 0 || typeof order.rawItems[0] !== 'object') {
+        if (Array.isArray(order.items) && order.items.length > 0 && typeof order.items[0] === 'object') {
+            order.rawItems = order.items;
+        } else if (typeof order.items === 'string' && order.items.trim()) {
+            const chunks = order.items.split(',').map(s => s.trim()).filter(Boolean);
+            const catalog = Array.isArray(menuItems) ? menuItems : [];
+            order.rawItems = chunks.map(c => {
+                const m1 = c.match(/^(.*?)\s*\(x(\d+)\)$/i);
+                const name = m1 ? m1[1].trim() : c;
+                const qty = m1 ? (parseInt(m1[2], 10) || 1) : 1;
+                const found = catalog.find(m => m && m.name && m.name.toLowerCase() === name.toLowerCase());
+                return {
+                    name,
+                    qty,
+                    price: found ? Number(found.price) : Number(((Number(order.amount || 0)) / Math.max(1, chunks.length * qty)).toFixed(2)),
+                    gstRate: found && found.gstRate !== undefined ? found.gstRate : undefined
+                };
+            });
+        } else {
+            order.rawItems = [];
+        }
+    }
+
     let gstSummary = {}; 
     const gstMode = order.gstMode || getStoreGstConfig().mode;
     const isGstActive = gstMode !== 'none';
@@ -2098,9 +2157,9 @@ async function sendEscPosToPrinter(order) {
     if (qrCodeDiv) {
         qrCodeDiv.innerHTML = '';
         if (shopProfile.showQr && shopProfile.upiId && window.QRCode) {
-            const upiString = `upi://pay?pa=${shopProfile.upiId}&pn=${encodeURIComponent(shopProfile.name || 'billnaw')}&am=${order.amount.toFixed(2)}&cu=INR`;
+            const upiString = `upi://pay?pa=${shopProfile.upiId}&pn=${encodeURIComponent(shopProfile.name || 'billnaw')}&am=${Number(order.amount || 0).toFixed(2)}&cu=INR`;
             new QRCode(qrCodeDiv, { text: upiString, width: 256, height: 256, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
-            await new Promise(r => setTimeout(r, 50)); 
+            await new Promise(r => setTimeout(r, 60)); 
         }
     }
 
@@ -2235,24 +2294,34 @@ async function sendEscPosToPrinter(order) {
     let qrBytes = null;
     if (shopProfile.showQr && shopProfile.upiId) {
         const qrCanvas = qrCodeDiv ? qrCodeDiv.querySelector('canvas') : null;
-        if (qrCanvas && typeof getLogoBytes === 'function') {
+        const qrImg = qrCodeDiv ? qrCodeDiv.querySelector('img') : null;
+        const qrDataUrl = (qrCanvas && typeof qrCanvas.toDataURL === 'function')
+            ? qrCanvas.toDataURL('image/png')
+            : (qrImg && qrImg.src ? qrImg.src : null);
+        if (qrDataUrl && typeof getLogoBytes === 'function') {
             try {
-                qrBytes = await getLogoBytes(qrCanvas.toDataURL('image/jpeg', 1.0));
+                qrBytes = await getLogoBytes(qrDataUrl);
             } catch (e) {
                 console.warn('[Print] QR conversion failed:', e);
             }
         }
     }
 
+    // Attach calculated GST summary, subtotal, storeProfile, logoBytes & qrBytes to order so ThermalPrinterBridge has exact tax breakdown & assets
+    order.gstMode = gstMode;
+    order.subtotal = rawSubtotal;
+    order.totalTax = totalTax;
+    order.gstSummary = gstSummary;
+    order.grossSubtotal = grossSubtotal;
+    order.discountAmount = discountAmount;
+    order.storeProfile = shopProfile;
+    order.logoBytes = logoBytes;
+    order.qrBytes = qrBytes;
+
     // Route print job through ThermalPrinterBridge if available
     if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
         try {
-            const routeResult = await window.ThermalPrinterBridge.routePrintJob(order, { 
-                role: 'RECEIPT',
-                storeProfile: shopProfile,
-                logoBytes: logoBytes,
-                qrBytes: qrBytes
-            });
+            const routeResult = await window.ThermalPrinterBridge.routePrintJob(order, { role: 'RECEIPT' });
             if (routeResult && (routeResult.data?.printed || routeResult.data?.cancelled)) {
                 if (routeResult.data?.method === 'BROWSER_DIALOG') {
                     await executeHtmlPrint('print-receipt');
@@ -2437,25 +2506,28 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
     };
 
     // 1. Route KOT print job through ThermalPrinterBridge if available
+    const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
+    const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
+    const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
+    let itemsHtml = '';
+    items.forEach(item => {
+        itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${escapeHtml(item.name)}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
+    });
+    const kotItems = document.getElementById('printKotItems');
+    if (kotItems) kotItems.innerHTML = itemsHtml;
+
+    if (typeof document !== 'undefined' && document.body && document.body.classList) {
+        document.body.classList.add('printing-kot');
+    }
     if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
         try {
-            const routeResult = await window.ThermalPrinterBridge.routePrintJob(kotJobPayload, { 
-                role: 'KOT',
-                logoBytes: null,
-                qrBytes: null
-            });
+            const routeResult = await window.ThermalPrinterBridge.routePrintJob(kotJobPayload, { role: 'KOT' });
             if (routeResult && (routeResult.data?.printed || routeResult.data?.cancelled)) {
                 if (routeResult.data?.method === 'BROWSER_DIALOG') {
-                    const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
-                    const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
-                    const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
-                    let itemsHtml = '';
-                    items.forEach(item => {
-                        itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${item.name}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
-                    });
-                    const kotItems = document.getElementById('printKotItems');
-                    if (kotItems) kotItems.innerHTML = itemsHtml;
                     await executeHtmlPrint('print-kot');
+                }
+                if (typeof document !== 'undefined' && document.body && document.body.classList) {
+                    document.body.classList.remove('printing-kot');
                 }
                 return routeResult;
             }

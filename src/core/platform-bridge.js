@@ -913,6 +913,10 @@ export const ThermalPrinterBridge = {
    * @returns {Uint8Array}
    */
   generateEscPosCommands(data, width = '58mm', options = {}) {
+    if (typeof width === 'object' && width !== null) {
+      options = width;
+      width = options.width || '58mm';
+    }
     const encoder = new TextEncoder();
     const encodeClean = (str) => encoder.encode(sanitizeEscPosText(str));
     const parts = [];
@@ -931,11 +935,59 @@ export const ThermalPrinterBridge = {
     const profile = options.storeProfile || (typeof window !== 'undefined' && window.shopProfile) || {};
     const isKot = options.isKot || data.jobType === 'KOT' || Boolean(data.kot_id);
 
+    // Helper: Safely resolve structured item objects even if legacy/history order only has string `items` (e.g. "Samosa (x1)")
+    const resolveStructuredItems = (orderData) => {
+      if (Array.isArray(orderData.rawItems) && orderData.rawItems.length > 0 && typeof orderData.rawItems[0] === 'object' && orderData.rawItems[0] !== null) {
+        return orderData.rawItems;
+      }
+      if (Array.isArray(orderData.items) && orderData.items.length > 0 && typeof orderData.items[0] === 'object' && orderData.items[0] !== null) {
+        return orderData.items;
+      }
+      const rawChunks = typeof orderData.items === 'string'
+        ? orderData.items.split(',').map(s => s.trim()).filter(Boolean)
+        : (Array.isArray(orderData.items) ? orderData.items.filter(s => typeof s === 'string') : []);
+      if (rawChunks.length === 0) return [];
+      const catalog = (typeof window !== 'undefined' && Array.isArray(window.menuItems)) ? window.menuItems : [];
+      const parsed = rawChunks.map(chunk => {
+        let name = chunk;
+        let qty = 1;
+        const m1 = chunk.match(/^(.*?)\s*\(x(\d+)\)$/i);
+        const m2 = chunk.match(/^(\d+)\s*x\s+(.*)$/i);
+        if (m1) {
+          name = m1[1].trim();
+          qty = parseInt(m1[2], 10) || 1;
+        } else if (m2) {
+          qty = parseInt(m2[1], 10) || 1;
+          name = m2[2].trim();
+        }
+        const matched = catalog.find(m => m && m.name && m.name.toLowerCase() === name.toLowerCase());
+        return {
+          name: name || 'Item',
+          qty,
+          price: matched && typeof matched.price === 'number' ? matched.price : null,
+          gstRate: matched && matched.gstRate !== undefined ? matched.gstRate : undefined
+        };
+      });
+      const totalOrderAmt = Number(orderData.amount || (orderData.final_payable_paise ? orderData.final_payable_paise / 100 : 0)) || 0;
+      const knownSum = parsed.reduce((acc, it) => acc + (it.price !== null ? it.price * it.qty : 0), 0);
+      const unknownItems = parsed.filter(it => it.price === null);
+      if (unknownItems.length > 0) {
+        const remainingAmt = Math.max(0, totalOrderAmt - knownSum);
+        const unknownQtySum = unknownItems.reduce((acc, it) => acc + it.qty, 0) || 1;
+        const fallbackUnit = remainingAmt / unknownQtySum;
+        for (const it of unknownItems) {
+          it.price = Number(fallbackUnit.toFixed(2));
+        }
+      }
+      return parsed;
+    };
+
     if (isKot) {
       // ----------------- KOT FORMATTING -----------------
       // GS ! 0x11 (Double Size) + ESC E 1 (Bold On)
       parts.push(new Uint8Array([0x1D, 0x21, 0x11, 0x1B, 0x45, 0x01]));
-      parts.push(encodeClean(`\nKITCHEN TICKET\n`));
+      const kotTitle = data.isAddon ? 'ADD-ON KOT' : 'KITCHEN TICKET';
+      parts.push(encodeClean(`\n${kotTitle}\n`));
       // Normal Size + Bold Off
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
       parts.push(encodeClean(divider));
@@ -959,11 +1011,8 @@ export const ThermalPrinterBridge = {
 
       // Left Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x00]));
-      // Prefer rawItems (structured objects) over items (may be a string-summary array like ["Chai (x2)"])
       const _kotRaw = data.rawItems || data.items || [];
-      const items = (_kotRaw.length > 0 && typeof _kotRaw[0] === 'object' && _kotRaw[0] !== null)
-        ? _kotRaw
-        : (data.rawItems || []);
+      const items = resolveStructuredItems(data);
       for (const item of items) {
         const qty = item.quantity || item.qty || item.count || 1;
         const name = item.name || item.item_name || item.menuItemName || item.title || 'Item';
@@ -1026,14 +1075,15 @@ export const ThermalPrinterBridge = {
         const fssaiLines = wrapText(`FSSAI Lic. No.: ${profile.fssai}`, cols);
         for (const fl of fssaiLines) parts.push(encodeClean(`${fl}\n`));
       }
-      if (profile.gstin && profile.gstMode !== 'none') {
+      const gstMode = data.gstMode || profile.gstMode || 'inclusive';
+      const isGstActive = gstMode !== 'none' && profile.gstMode !== 'none';
+      if (profile.gstin && isGstActive) {
         const gstinLines = wrapText(`GSTIN: ${profile.gstin}`, cols);
         for (const gl of gstinLines) parts.push(encodeClean(`${gl}\n`));
       }
 
       parts.push(encodeClean(divider));
 
-      const isGstActive = profile.gstMode !== 'none' && data.gstMode !== 'none';
       const invoiceTitle = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
       parts.push(new Uint8Array([0x1B, 0x45, 0x01])); // Bold On
       parts.push(encodeClean(`${invoiceTitle}\n`));
@@ -1084,11 +1134,9 @@ export const ThermalPrinterBridge = {
       parts.push(encodeClean(divider));
 
       // Items
-      // Prefer rawItems (structured objects with name/price/qty) over items (may be string-summary array like ["Chai (x2)"])
       const _receiptRaw = data.rawItems || data.items || [];
-      const items = (_receiptRaw.length > 0 && typeof _receiptRaw[0] === 'object' && _receiptRaw[0] !== null)
-        ? _receiptRaw
-        : (data.rawItems || []);
+      const items = resolveStructuredItems(data);
+      let computedGrossSubtotal = 0;
       for (const item of items) {
         const name = item.name || item.item_name || item.menuItemName || item.title || 'Item';
         const qty = item.quantity || item.qty || item.count || 1;
@@ -1100,6 +1148,7 @@ export const ThermalPrinterBridge = {
               : (item.total !== undefined
                   ? item.total * 100
                   : (unitPrice * qty * 100)));
+        computedGrossSubtotal += (totalPaise / 100);
         const priceStr = "Rs. " + (totalPaise / 100).toFixed(2);
 
         const actualQtyWidth = Math.max(qtyWidth, String(qty).length);
@@ -1133,6 +1182,93 @@ export const ThermalPrinterBridge = {
 
       parts.push(encodeClean(divider));
 
+      // Subtotal, Discount & Tax / GST Breakdown Section
+      const formatKeyValRow = (leftText, rightText) => {
+        const rStr = String(rightText);
+        const maxLeft = Math.max(4, cols - rStr.length - 1);
+        const lStr = String(leftText).slice(0, maxLeft);
+        return lStr.padEnd(cols - rStr.length, ' ') + rStr + '\n';
+      };
+
+      const discountAmount = Number(data.discountAmount || 0);
+      const grossSubtotal = Number(data.grossSubtotal || computedGrossSubtotal || 0);
+      const defaultRate = (profile.defaultGstRate !== undefined && profile.defaultGstRate !== null && !isNaN(Number(profile.defaultGstRate)))
+        ? Number(profile.defaultGstRate)
+        : 5;
+
+      let gstSummary = (data.gstSummary && typeof data.gstSummary === 'object' && Object.keys(data.gstSummary).length > 0)
+        ? data.gstSummary
+        : {};
+      let rawSubtotal = Number(data.subtotal || 0);
+      let totalTax = Number(data.totalTax || 0);
+
+      if (isGstActive && Object.keys(gstSummary).length === 0 && items.length > 0) {
+        const netRatio = grossSubtotal > 0 ? Math.max(0, (grossSubtotal - discountAmount) / grossSubtotal) : 1;
+        let calcSub = 0;
+        let calcTax = 0;
+        for (const item of items) {
+          const qty = item.quantity || item.qty || item.count || 1;
+          const unitPrice = item.price || item.rate || item.unitPrice || item.unit_price || item.basePrice || 0;
+          const lineGross = (item.line_total_paise !== undefined ? item.line_total_paise / 100 : unitPrice * qty) * netRatio;
+          const rate = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(Number(item.gstRate)) && Number(item.gstRate) > 0)
+            ? Number(item.gstRate)
+            : defaultRate;
+          if (rate > 0) {
+            let base = 0;
+            let tax = 0;
+            if (gstMode === 'exclusive') {
+              base = lineGross;
+              tax = base * (rate / 100);
+            } else {
+              base = lineGross / (1 + (rate / 100));
+              tax = lineGross - base;
+            }
+            calcSub += base;
+            calcTax += tax;
+            if (!gstSummary[rate]) gstSummary[rate] = { base: 0, tax: 0, cgst: 0, sgst: 0 };
+            gstSummary[rate].base += base;
+            gstSummary[rate].tax += tax;
+            gstSummary[rate].cgst += tax / 2;
+            gstSummary[rate].sgst += tax / 2;
+          } else {
+            calcSub += lineGross;
+          }
+        }
+        if (!rawSubtotal) rawSubtotal = calcSub;
+        if (!totalTax) totalTax = calcTax;
+      }
+
+      if (discountAmount > 0 || (isGstActive && gstMode === 'exclusive' && totalTax > 0)) {
+        parts.push(new Uint8Array([0x1B, 0x61, 0x00])); // Left Align
+        if (discountAmount > 0) {
+          parts.push(encodeClean(formatKeyValRow('Gross Subtotal:', `Rs. ${grossSubtotal.toFixed(2)}`)));
+          const dLabel = (data.discount && data.discount.type === 'percent') ? `Discount (${data.discount.value}%):` : 'Discount:';
+          parts.push(encodeClean(formatKeyValRow(dLabel, `-Rs. ${discountAmount.toFixed(2)}`)));
+        }
+        if (isGstActive && gstMode === 'exclusive' && totalTax > 0) {
+          parts.push(encodeClean(formatKeyValRow('Taxable Subtotal:', `Rs. ${rawSubtotal.toFixed(2)}`)));
+          parts.push(encodeClean(formatKeyValRow('Total GST:', `Rs. ${totalTax.toFixed(2)}`)));
+        }
+        parts.push(encodeClean(divider));
+      }
+
+      if (isGstActive && Object.keys(gstSummary).length > 0) {
+        parts.push(new Uint8Array([0x1B, 0x61, 0x01])); // Center Align
+        parts.push(encodeClean('--- GST BREAKDOWN ---\n'));
+        parts.push(new Uint8Array([0x1B, 0x61, 0x00])); // Left Align
+        for (const rate of Object.keys(gstSummary)) {
+          const slab = gstSummary[rate];
+          const baseVal = Number(slab.base || 0).toFixed(2);
+          const cgstVal = Number(slab.cgst !== undefined ? slab.cgst : (slab.tax || 0) / 2).toFixed(2);
+          const sgstVal = Number(slab.sgst !== undefined ? slab.sgst : (slab.tax || 0) / 2).toFixed(2);
+          const halfRate = Number(rate) / 2;
+          parts.push(encodeClean(formatKeyValRow(`Taxable Value (${rate}%)`, `Rs. ${baseVal}`)));
+          parts.push(encodeClean(formatKeyValRow(`CGST @ ${halfRate}%`, `Rs. ${cgstVal}`)));
+          parts.push(encodeClean(formatKeyValRow(`SGST @ ${halfRate}%`, `Rs. ${sgstVal}`)));
+        }
+        parts.push(encodeClean(divider));
+      }
+
       // Totals Section
       // Right Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x02]));
@@ -1151,6 +1287,13 @@ export const ThermalPrinterBridge = {
       }
       parts.push(encodeClean('\n'));
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
+
+      if (data.paymentMode === 'Cash' && data.amountTendered && Number(data.amountTendered) > Number(data.amount || 0)) {
+        parts.push(new Uint8Array([0x1B, 0x61, 0x00])); // Left Align
+        parts.push(encodeClean(formatKeyValRow('Cash Tendered:', `Rs. ${Number(data.amountTendered).toFixed(2)}`)));
+        parts.push(encodeClean(formatKeyValRow('Change Due:', `Rs. ${Number(data.changeReturned || (data.amountTendered - data.amount)).toFixed(2)}`)));
+        parts.push(encodeClean(divider));
+      }
 
       // 2. Dynamic UPI QR Code (if available)
       if (options.qrBytes && options.qrBytes.length > 0) {
@@ -1258,7 +1401,7 @@ export const ThermalPrinterBridge = {
    */
   async dispatchToPrinterSlot(printerSlot = 'printer1', bytes) {
     if (printerSlot === 'SYSTEM_DIALOG') {
-      if (typeof window !== 'undefined' && typeof window.print === 'function') {
+      if (typeof window !== 'undefined' && typeof window.executeHtmlPrint !== 'function' && typeof window.print === 'function') {
         window.print();
       }
       return successResult({ printed: true, method: 'BROWSER_DIALOG', slot: 'SYSTEM_DIALOG' });
@@ -1270,8 +1413,10 @@ export const ThermalPrinterBridge = {
     try {
       // 0. Explicit System Dialog Transport
       if (printer.transport === 'SYSTEM_DIALOG') {
-        if (typeof window !== 'undefined' && typeof window.print === 'function') {
-          window.print();
+        if (typeof window !== 'undefined' && (typeof window.print === 'function' || typeof window.executeHtmlPrint === 'function')) {
+          if (typeof window.executeHtmlPrint !== 'function' && typeof window.print === 'function') {
+            window.print();
+          }
           return successResult({ printed: true, method: 'BROWSER_DIALOG', slot: slotKey });
         }
       }
@@ -1355,8 +1500,10 @@ export const ThermalPrinterBridge = {
       }
 
       // 8. Browser Dialog Fallback
-      if (typeof window !== 'undefined' && typeof window.print === 'function') {
-        window.print();
+      if (typeof window !== 'undefined' && (typeof window.print === 'function' || typeof window.executeHtmlPrint === 'function')) {
+        if (typeof window.executeHtmlPrint !== 'function' && typeof window.print === 'function') {
+          window.print();
+        }
         return successResult({ printed: true, method: 'BROWSER_DIALOG', slot: slotKey });
       }
 
@@ -1364,8 +1511,10 @@ export const ThermalPrinterBridge = {
     } catch (hwErr) {
       console.warn(`[PrinterBridge] Hardware transmission to '${slotKey}' failed:`, hwErr.message);
       // Fall back to browser dialog if available
-      if (typeof window !== 'undefined' && typeof window.print === 'function') {
-        window.print();
+      if (typeof window !== 'undefined' && (typeof window.print === 'function' || typeof window.executeHtmlPrint === 'function')) {
+        if (typeof window.executeHtmlPrint !== 'function' && typeof window.print === 'function') {
+          window.print();
+        }
         return successResult({ printed: true, method: 'BROWSER_DIALOG', slot: slotKey, fallbackFrom: hwErr.message });
       }
       return errorResult('WRITE_FAILED', hwErr.message);
@@ -1520,10 +1669,10 @@ export const ThermalPrinterBridge = {
     // 5. Generate ESC/POS commands with paper width configured for chosen slot
     const slotConfig = this.printers?.[targetSlot] || this.printers?.printer1;
     const width = options.width || slotConfig?.paperWidth || (role === 'KOT' ? '58mm' : '80mm');
-    const profile = options.storeProfile || (typeof window !== 'undefined' && window.shopProfile) || {};
+    const profile = options.storeProfile || jobPayload?.storeProfile || (typeof window !== 'undefined' && window.shopProfile) || {};
 
-    let logoBytes = options.logoBytes || null;
-    let qrBytes = options.qrBytes || null;
+    let logoBytes = options.logoBytes || jobPayload?.logoBytes || null;
+    let qrBytes = options.qrBytes || jobPayload?.qrBytes || null;
 
     if (role === 'RECEIPT') {
       if (!logoBytes && profile.logo && typeof window !== 'undefined' && typeof window.getLogoBytes === 'function') {

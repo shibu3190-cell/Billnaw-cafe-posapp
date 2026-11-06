@@ -129,6 +129,57 @@ function updateProfileVisuals() {
         if (sidebarLogo) { sidebarLogo.src = ''; sidebarLogo.style.display = 'none'; }
         if (printLogo) { printLogo.src = ''; printLogo.style.display = 'none'; }
     }
+
+    // Sync Settings Hub summary header & avatar
+    const settingsStoreName = document.getElementById('settingsStoreName');
+    if (settingsStoreName) settingsStoreName.innerText = shopProfile.name || 'billnaw';
+    const settingsStorePhone = document.getElementById('settingsStorePhone');
+    if (settingsStorePhone && shopProfile.phone) settingsStorePhone.innerText = shopProfile.phone;
+    const settingsStoreAvatar = document.getElementById('settingsStoreAvatar');
+    if (settingsStoreAvatar) {
+        if (shopProfile.logo) {
+            settingsStoreAvatar.innerHTML = `<img src="${shopProfile.logo}" alt="Logo" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+        } else {
+            settingsStoreAvatar.innerText = (shopProfile.name || 'B').charAt(0).toUpperCase();
+        }
+    }
+
+    // Keep modal inputs synchronized with shopProfile so unopened modals never hold stale empty values
+    const storeModal = document.getElementById('storeProfileModal');
+    const gstModal = document.getElementById('gstConfigModal');
+    const payModal = document.getElementById('paymentConfigModal');
+    const isModalOpen = (el) => Boolean(el && el.style && el.style.display && el.style.display !== 'none');
+
+    if (!isModalOpen(storeModal)) {
+        const sName = document.getElementById('shopNameInput');
+        if (sName && (!sName.value || sName.value === 'billnaw')) sName.value = shopProfile.name || 'billnaw';
+        const sAddr = document.getElementById('shopAddressInput');
+        if (sAddr && !sAddr.value && shopProfile.address) sAddr.value = shopProfile.address;
+        const sPhone = document.getElementById('shopPhoneInput');
+        if (sPhone && !sPhone.value && shopProfile.phone) sPhone.value = shopProfile.phone;
+        const sFssai = document.getElementById('fssaiInput');
+        if (sFssai && !sFssai.value && shopProfile.fssai) sFssai.value = shopProfile.fssai;
+        const sGstin = document.getElementById('gstinInput');
+        if (sGstin && !sGstin.value && shopProfile.gstin) sGstin.value = shopProfile.gstin;
+        const sUpi = document.getElementById('shopUpiIdInput');
+        if (sUpi && !sUpi.value && shopProfile.upiId) sUpi.value = shopProfile.upiId;
+        const sQr = document.getElementById('shopShowQrInput');
+        if (sQr) sQr.checked = Boolean(shopProfile.showQr);
+    }
+    if (!isModalOpen(payModal)) {
+        const pUpi = document.getElementById('upiIdInput');
+        if (pUpi && !pUpi.value && shopProfile.upiId) pUpi.value = shopProfile.upiId;
+        const pQr = document.getElementById('enableQrCodeInput');
+        if (pQr) pQr.checked = Boolean(shopProfile.showQr);
+    }
+    if (!isModalOpen(gstModal)) {
+        const gMode = document.getElementById('gstPricingModeInput');
+        if (gMode && shopProfile.gstMode) gMode.value = shopProfile.gstMode;
+        const gRate = document.getElementById('defaultGstRateInput');
+        if (gRate && (gRate.value === '' || gRate.value === undefined)) {
+            gRate.value = (shopProfile.defaultGstRate !== undefined && shopProfile.defaultGstRate !== null) ? shopProfile.defaultGstRate : 5;
+        }
+    }
 }
 window.updateProfileVisuals = updateProfileVisuals;
 
@@ -142,8 +193,11 @@ function loadLogo(event) {
             const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
             const MAX_DIM = 250; let w = img.width, h = img.height;
             if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
-            canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0, w, h);
-            shopProfile.logo = canvas.toDataURL('image/jpeg', 0.8); 
+            canvas.width = Math.round(w); canvas.height = Math.round(h);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            shopProfile.logo = canvas.toDataURL('image/jpeg', 0.85); 
             updateProfileVisuals(); persistProfile(); showToast("Logo Updated.");
         };
         img.src = e.target.result;
@@ -194,28 +248,62 @@ function generateSettingsQRPreview() {
 window.generateSettingsQRPreview = generateSettingsQRPreview;
 
 function saveSettings() {
+    if (typeof ensureShopProfileHydrated === 'function') {
+        try { ensureShopProfileHydrated(); } catch (e) {}
+    }
+
+    const storeModal = document.getElementById('storeProfileModal');
+    const gstModal = document.getElementById('gstConfigModal');
+    const payModal = document.getElementById('paymentConfigModal');
+    const isModalOpen = (el) => Boolean(el && el.style && el.style.display && el.style.display !== 'none');
+
+    const storeOpen = isModalOpen(storeModal);
+    const gstOpen = isModalOpen(gstModal);
+    const payOpen = isModalOpen(payModal);
+    const anyModalOpen = storeOpen || gstOpen || payOpen;
+
     const shopNameInput = document.getElementById('shopNameInput');
     if (shopNameInput) {
         const val = shopNameInput.value.trim();
-        shopProfile.name = val || "billnaw";
+        if (storeOpen || !anyModalOpen || (val && val !== 'billnaw')) {
+            shopProfile.name = val || shopProfile.name || "billnaw";
+        }
     }
     
     const shopAddressInput = document.getElementById('shopAddressInput');
-    if (shopAddressInput) shopProfile.address = shopAddressInput.value.trim();
+    if (shopAddressInput) {
+        const val = shopAddressInput.value.trim();
+        if (storeOpen || (!anyModalOpen && val !== '') || val !== '') {
+            shopProfile.address = val;
+        }
+    }
     
     const shopPhoneInput = document.getElementById('shopPhoneInput');
     if (shopPhoneInput) {
         const cleanPhone = shopPhoneInput.value.replace(/[^\d+]/g, '').trim();
-        shopProfile.phone = cleanPhone || shopPhoneInput.value.trim();
-        shopProfile.ownerPhone = shopProfile.phone;
-        try { localStorage.setItem('billnaw_auth_phone', shopProfile.phone); } catch(e) {}
+        const finalPhone = cleanPhone || shopPhoneInput.value.trim();
+        if (storeOpen || finalPhone !== '') {
+            shopProfile.phone = finalPhone;
+            shopProfile.ownerPhone = shopProfile.phone;
+            try { localStorage.setItem('billnaw_auth_phone', shopProfile.phone); } catch(e) {}
+        }
     }
 
     const fssaiInput = document.getElementById('fssaiInput');
-    if (fssaiInput) shopProfile.fssai = fssaiInput.value.trim();
+    if (fssaiInput) {
+        const val = fssaiInput.value.trim();
+        if (storeOpen || val !== '') {
+            shopProfile.fssai = val;
+        }
+    }
     
     const gstinInput = document.getElementById('gstinInput');
-    if (gstinInput) shopProfile.gstin = gstinInput.value.trim().toUpperCase();
+    if (gstinInput) {
+        const val = gstinInput.value.trim().toUpperCase();
+        if (storeOpen || val !== '') {
+            shopProfile.gstin = val;
+        }
+    }
     
     const tableCountInput = document.getElementById('tableCountInput');
     if (tableCountInput) {
@@ -261,29 +349,67 @@ function saveSettings() {
     
     const shopUpiIdInput = document.getElementById('shopUpiIdInput');
     const upiIdInput = document.getElementById('upiIdInput');
-    if (shopUpiIdInput && shopUpiIdInput.value !== undefined && shopUpiIdInput.value.trim() !== '') {
+    if (storeOpen && !payOpen && shopUpiIdInput) {
         shopProfile.upiId = shopUpiIdInput.value.trim();
-        if (upiIdInput) upiIdInput.value = shopProfile.upiId;
-    } else if (upiIdInput && upiIdInput.value !== undefined) {
+    } else if (payOpen && !storeOpen && upiIdInput) {
         shopProfile.upiId = upiIdInput.value.trim();
-        if (shopUpiIdInput) shopUpiIdInput.value = shopProfile.upiId;
+    } else {
+        const sVal = shopUpiIdInput && shopUpiIdInput.value ? shopUpiIdInput.value.trim() : '';
+        const pVal = upiIdInput && upiIdInput.value ? upiIdInput.value.trim() : '';
+        const prevUpi = shopProfile.upiId || '';
+        if (sVal && sVal !== prevUpi) {
+            shopProfile.upiId = sVal;
+        } else if (pVal && pVal !== prevUpi) {
+            shopProfile.upiId = pVal;
+        } else if (sVal || pVal) {
+            shopProfile.upiId = sVal || pVal;
+        }
     }
+    if (shopUpiIdInput) shopUpiIdInput.value = shopProfile.upiId || '';
+    if (upiIdInput) upiIdInput.value = shopProfile.upiId || '';
     
     const shopShowQrInput = document.getElementById('shopShowQrInput');
     const enableQrCodeInput = document.getElementById('enableQrCodeInput');
-    if (shopShowQrInput && shopShowQrInput.offsetParent !== null) {
+    if (storeOpen && !payOpen && shopShowQrInput) {
         shopProfile.showQr = Boolean(shopShowQrInput.checked);
-        if (enableQrCodeInput) enableQrCodeInput.checked = shopProfile.showQr;
-    } else if (enableQrCodeInput) {
+    } else if (payOpen && !storeOpen && enableQrCodeInput) {
         shopProfile.showQr = Boolean(enableQrCodeInput.checked);
-        if (shopShowQrInput) shopShowQrInput.checked = shopProfile.showQr;
+    } else if (shopShowQrInput && shopShowQrInput.offsetParent !== null) {
+        shopProfile.showQr = Boolean(shopShowQrInput.checked);
+    } else if (enableQrCodeInput && enableQrCodeInput.offsetParent !== null) {
+        shopProfile.showQr = Boolean(enableQrCodeInput.checked);
+    } else {
+        const prevQr = Boolean(shopProfile.showQr);
+        const sChecked = shopShowQrInput ? Boolean(shopShowQrInput.checked) : prevQr;
+        const pChecked = enableQrCodeInput ? Boolean(enableQrCodeInput.checked) : prevQr;
+        if (sChecked !== prevQr) {
+            shopProfile.showQr = sChecked;
+        } else if (pChecked !== prevQr) {
+            shopProfile.showQr = pChecked;
+        } else {
+            shopProfile.showQr = Boolean(sChecked || pChecked);
+        }
     }
+    if (shopShowQrInput) shopShowQrInput.checked = Boolean(shopProfile.showQr);
+    if (enableQrCodeInput) enableQrCodeInput.checked = Boolean(shopProfile.showQr);
     
     const gstPricingModeInput = document.getElementById('gstPricingModeInput');
-    if (gstPricingModeInput) shopProfile.gstMode = gstPricingModeInput.value || 'inclusive';
+    if (gstPricingModeInput && gstPricingModeInput.value) {
+        if (gstOpen || !anyModalOpen || !shopProfile.gstMode) {
+            shopProfile.gstMode = gstPricingModeInput.value || 'inclusive';
+        }
+    }
     
     const defaultGstRateInput = document.getElementById('defaultGstRateInput');
-    if (defaultGstRateInput) shopProfile.defaultGstRate = parseFloat(defaultGstRateInput.value) || 0;
+    if (defaultGstRateInput) {
+        const rawRateStr = String(defaultGstRateInput.value ?? '').trim();
+        if (rawRateStr !== '' && !isNaN(parseFloat(rawRateStr))) {
+            shopProfile.defaultGstRate = parseFloat(rawRateStr);
+        } else if (shopProfile.defaultGstRate === undefined || shopProfile.defaultGstRate === null || isNaN(Number(shopProfile.defaultGstRate))) {
+            shopProfile.defaultGstRate = 5;
+        }
+        defaultGstRateInput.value = shopProfile.defaultGstRate;
+    }
     
     for (let i = 1; i <= shopProfile.tableCount; i++) {
         if (!tablesInfo[i]) tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };

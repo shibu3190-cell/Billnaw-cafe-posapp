@@ -17,8 +17,8 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="js/defensive-stubs.js?v=2800"></script>
-    <link rel="stylesheet" href="style.css">
+    <script src="js/defensive-stubs.js?v=2900"></script>
+    <link rel="stylesheet" href="style.css?v=2900">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display: none;" aria-hidden="true">
@@ -5804,6 +5804,7 @@
             <h2 style="margin: 0; border-bottom: 2px dashed #000; padding-bottom: 5px;">KITCHEN TICKET</h2>
             <h1 style="margin: 10px 0; font-size: 28px;">TABLE: <span id="printKotTableNo"></span></h1>
             <p style="margin: 0; font-weight: bold;">Time: <span id="printKotTime"></span></p>
+            <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: bold;">Server: <span id="printKotBiller"></span></p>
             <div class="print-line" style="border-bottom: 2px solid #000;"></div>
         </div>
         <div id="printKotItems" style="font-size: 16px; font-weight: bold; margin-top: 15px;"></div>
@@ -5905,22 +5906,22 @@
         </div>
     </div>
 
-    <script type="module" src="js/firebase-init.js?v=2800"></script>
+    <script type="module" src="js/firebase-init.js?v=2900"></script>
     
-    <script src="js/sw-register.js?v=2800"></script>
-    <script src="js/device-identity.js?v=2800"></script>
-    <script src="js/core.js?v=2800"></script>
-    <script src="js/staff.js?v=2800"></script>
-    <script src="js/pos.js?v=2800"></script>
-    <script src="js/menu.js?v=2800"></script>
-    <script src="js/customers.js?v=2800"></script>
-    <script src="js/dashboard.js?v=2800"></script>
-    <script src="js/marketing_inventory.js?v=2800"></script>
-    <script src="js/culinary_inventory.js?v=2800"></script>
-    <script src="js/settings.js?v=2800"></script>
-    <script src="app.js?v=2800"></script>
+    <script src="js/sw-register.js?v=2900"></script>
+    <script src="js/device-identity.js?v=2900"></script>
+    <script src="js/core.js?v=2900"></script>
+    <script src="js/staff.js?v=2900"></script>
+    <script src="js/pos.js?v=2900"></script>
+    <script src="js/menu.js?v=2900"></script>
+    <script src="js/customers.js?v=2900"></script>
+    <script src="js/dashboard.js?v=2900"></script>
+    <script src="js/marketing_inventory.js?v=2900"></script>
+    <script src="js/culinary_inventory.js?v=2900"></script>
+    <script src="js/settings.js?v=2900"></script>
+    <script src="app.js?v=2900"></script>
 
-    <script src="js/shop-auth.js?v=2800"></script>
+    <script src="js/shop-auth.js?v=2900"></script>
 
     <div id="appUpdatePopup" class="app-update-popup" style="display: none; position: fixed; bottom: 24px; right: 24px; z-index: 10000000; background: #143832; color: #FFFFFF; padding: 16px 20px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1.5px solid rgba(255,255,255,0.18); max-width: 360px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
@@ -6029,10 +6030,10 @@
         </div>
     </div>
 
-    <script src="js/cloud-sync.js?v=2800"></script>
-    <script type="module" src="js/feature-controllers.js?v=2800"></script>
+    <script src="js/cloud-sync.js?v=2900"></script>
+    <script type="module" src="js/feature-controllers.js?v=2900"></script>
     <script type="module">
-        import { ThermalPrinterBridge } from './src/core/platform-bridge.js';
+        import { ThermalPrinterBridge } from './src/core/platform-bridge.js?v=2900';
         window.ThermalPrinterBridge = ThermalPrinterBridge;
         if (typeof ThermalPrinterBridge.init === 'function') {
             ThermalPrinterBridge.init();

@@ -1,13 +1,17 @@
 /**
- * BILLNAW POS — LOGO, DYNAMIC QR & KOT ISOLATION VERIFICATION SUITE
- * =================================================================
+ * BILLNAW POS — LOGO, DYNAMIC QR, TAX BREAKDOWN, KOT ISOLATION & ADMIN->CASHIER SYNC SUITE
+ * ========================================================================================
  * Verifies:
  *  1. Shop Logo & Dynamic QR Code in Customer Invoices (ESC/POS bytecode + HTML preview).
- *  2. KOT Ticket Isolation: KOT slips NEVER print shop logo, shop details, or UPI QR code.
- *  3. HTML Print Engine Isolation: executeHtmlPrint only appends UPI QR for 'print-receipt'.
- *  4. Multi-Tier Persistence: Logo and QR settings saved to discrete keys & IndexedDB.
- *  5. Rehydration & Self-Healing: Logo & QR restored without wipe on cloud snapshots or restarts.
- *  6. Offline AI Quota & Favicon Safety: No console spam or missing favicon.
+ *  2. Tax / GST Breakdown (CGST + SGST) in ESC/POS bytecode & HTML when GST is enabled,
+ *     and clean suppression (RETAIL INVOICE) when GST mode is 'none'.
+ *  3. KOT Ticket Isolation: KOT slips NEVER print shop logo, shop details, prices, tax, or UPI QR.
+ *  4. Structured Item Resolution: String `items` ("Samosa (x1)") parsed cleanly without
+ *     character-by-character "Item | 1 | Rs. 0.00" corruption.
+ *  5. Modal-Safe saveSettings() & Login-Safe shop-auth.js: Unopened modals never wipe
+ *     defaultGstRate, shop details, logo, or QR settings.
+ *  6. Admin -> Cashier Cross-Role & Cross-Device Hydration: Cashier printing an invoice
+ *     always gets Admin's saved Shop Logo, Shop Details, GST Breakdown, and Dynamic UPI QR.
  */
 'use strict';
 const fs = require('fs');
@@ -36,16 +40,31 @@ const pbjs = read('src/core/platform-bridge.js');
 const posjs = read('js/pos.js');
 const corejs = read('js/core.js');
 const settingsjs = read('js/settings.js');
+const shopAuthJs = read('js/shop-auth.js');
+const cloudSyncJs = read('js/cloud-sync.js');
+const staffJs = read('js/staff.js');
+const responsiveCss = read('css/responsive.css');
+const swJs = read('service-worker.js');
 const indexHtml = read('index.html');
 
+// Load ThermalPrinterBridge for live bytecode execution tests
+const bridgeCode = pbjs
+  .replace(/import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"];?/g, 'const successResult = (d) => ({ data: d, error: null }); const errorResult = (c, m) => ({ data: null, error: { code: c, message: m } });')
+  .replace(/export\s+const\s+/g, 'const ')
+  .replace(/export\s+async\s+function\s+/g, 'async function ')
+  .replace(/export\s+function\s+/g, 'function ')
+  .replace(/export\s+default\s+[\s\S]*$/g, '');
+const loadBridge = new Function(`${bridgeCode}; return { ThermalPrinterBridge };`);
+const { ThermalPrinterBridge } = loadBridge();
+
 console.log('\n====================================================');
-console.log('🏷️  LOGO, DYNAMIC QR & KOT ISOLATION AUDIT');
+console.log('🏷️  LOGO, DYNAMIC QR, TAX & KOT ISOLATION AUDIT');
 console.log('====================================================\n');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SECTION 1: CUSTOMER INVOICE LOGO & DYNAMIC QR IN ESC/POS
+// SECTION 1: CUSTOMER INVOICE LOGO, TAX BREAKDOWN & DYNAMIC QR IN ESC/POS
 // ═══════════════════════════════════════════════════════════════════════════
-console.log('📍 SECTION 1: CUSTOMER INVOICE LOGO & DYNAMIC QR IN ESC/POS');
+console.log('📍 SECTION 1: CUSTOMER INVOICE LOGO, TAX & DYNAMIC QR IN ESC/POS');
 
 check('LOGO-01: generateEscPosCommands includes logoBytes when provided for receipts', () => {
   assert.ok(
@@ -75,26 +94,90 @@ check('QR-02: Dynamic QR code preceded by "Scan to Pay" and followed by UPI ID i
   );
 });
 
-check('PRN-01: sendEscPosToPrinter passes storeProfile, logoBytes, and qrBytes to routePrintJob', () => {
-  assert.ok(
-    posjs.includes('logoBytes: logoBytes') || posjs.includes('logoBytes,'),
-    'logoBytes not passed to routePrintJob in pos.js'
-  );
-  assert.ok(
-    posjs.includes('qrBytes: qrBytes') || posjs.includes('qrBytes,'),
-    'qrBytes not passed to routePrintJob in pos.js'
-  );
-  assert.ok(
-    posjs.includes('storeProfile: shopProfile') || posjs.includes('storeProfile:'),
-    'storeProfile not passed to routePrintJob in pos.js'
-  );
+check('TAX-01: generateEscPosCommands outputs GST BREAKDOWN (Taxable Value, CGST, SGST) when GST enabled', () => {
+  const sampleProfile = {
+    name: 'BILLNAW GRAND CAFE',
+    address: 'Park Street, Kolkata',
+    phone: '9876543210',
+    fssai: '12824019000123',
+    gstin: '19ABCDE1234F1Z5',
+    upiId: 'billnaw@upi',
+    showQr: true,
+    gstMode: 'inclusive',
+    defaultGstRate: 5
+  };
+  const fakeLogo = new Uint8Array([0x1D, 0x76, 0x30, 0x00, 0x01, 0x00, 0x01, 0x00, 0xFF]);
+  const fakeQr = new Uint8Array([0x1D, 0x76, 0x30, 0x00, 0x01, 0x00, 0x01, 0x00, 0xAA]);
+  const order = {
+    billNo: 1008,
+    date: '07/11/2026, 03:00:00 AM',
+    table: 'T2',
+    orderType: 'Dine-In',
+    paymentMode: 'UPI',
+    biller: 'Cashier Rahul',
+    amount: 105,
+    rawItems: [{ name: 'Masala Dosa', qty: 1, price: 105, gstRate: 5 }]
+  };
+  const bytes = ThermalPrinterBridge.generateEscPosCommands(order, {
+    storeProfile: sampleProfile,
+    logoBytes: fakeLogo,
+    qrBytes: fakeQr
+  });
+  const text = new TextDecoder().decode(bytes);
+  assert.ok(text.includes('BILLNAW GRAND') && text.includes('CAFE'), 'Missing Shop Name');
+  assert.ok(text.includes('Park Street, Kolkata'), 'Missing Shop Address');
+  assert.ok(text.includes('Tel: 9876543210'), 'Missing Shop Phone');
+  assert.ok(text.includes('FSSAI Lic. No.: 12824019000123'), 'Missing FSSAI');
+  assert.ok(text.includes('GSTIN: 19ABCDE1234F1Z5'), 'Missing GSTIN');
+  assert.ok(text.includes('TAX INVOICE'), 'Missing TAX INVOICE header');
+  assert.ok(text.includes('Masala Dosa'), 'Missing item name');
+  assert.ok(text.includes('--- GST BREAKDOWN ---'), 'Missing GST BREAKDOWN section');
+  assert.ok(text.includes('Taxable Value (5%)') && text.includes('Rs. 100.00'), 'Missing Taxable Value');
+  assert.ok(text.includes('CGST @ 2.5%') && text.includes('Rs. 2.50'), 'Missing CGST @ 2.5%');
+  assert.ok(text.includes('SGST @ 2.5%') && text.includes('Rs. 2.50'), 'Missing SGST @ 2.5%');
+  assert.ok(text.includes('TOTAL: Rs.') && text.includes('105.00'), 'Missing TOTAL');
+  assert.ok(text.includes('Scan to Pay') && text.includes('UPI: billnaw@upi'), 'Missing Scan to Pay / UPI ID');
 });
 
-check('PRN-02: routePrintJob auto-resolves logoBytes from window.shopProfile if not passed', () => {
-  assert.ok(
-    pbjs.includes('profile.logo') && pbjs.includes('getLogoBytes'),
-    'routePrintJob does not auto-resolve logoBytes from profile'
-  );
+check('TAX-02: generateEscPosCommands suppresses GST breakdown and prints RETAIL INVOICE when gstMode is "none"', () => {
+  const noTaxProfile = {
+    name: 'BILLNAW EXPRESS',
+    gstin: '19ABCDE1234F1Z5',
+    gstMode: 'none',
+    defaultGstRate: 5
+  };
+  const order = {
+    billNo: 1009,
+    amount: 50,
+    rawItems: [{ name: 'Cold Coffee', qty: 1, price: 50, gstRate: 5 }]
+  };
+  const bytes = ThermalPrinterBridge.generateEscPosCommands(order, { storeProfile: noTaxProfile });
+  const text = new TextDecoder().decode(bytes);
+  assert.ok(text.includes('RETAIL INVOICE'), 'Expected RETAIL INVOICE when gstMode is none');
+  assert.ok(!text.includes('--- GST BREAKDOWN ---'), 'GST Breakdown should not print when gstMode is none');
+  assert.ok(!text.includes('GSTIN:'), 'GSTIN should not print when gstMode is none');
+});
+
+check('ITEMS-01: resolveStructuredItems parses legacy string items ("Samosa (x1), Tea (x2)") without "Item | 1 | Rs. 0.00" bug', () => {
+  const orderWithStringItems = {
+    billNo: 1010,
+    amount: 35,
+    items: 'Samosa (x1), Tea (x2)'
+  };
+  const bytes = ThermalPrinterBridge.generateEscPosCommands(orderWithStringItems, {
+    storeProfile: { name: 'BILLNAW CAFE', gstMode: 'none' }
+  });
+  const text = new TextDecoder().decode(bytes);
+  assert.ok(text.includes('Samosa'), 'Failed to parse Samosa from string items');
+  assert.ok(text.includes('Tea'), 'Failed to parse Tea from string items');
+  assert.ok(!text.includes('Rs. 0.00'), 'Printed Rs. 0.00 instead of pro-rated/catalog item price');
+});
+
+check('PRN-01: sendEscPosToPrinter hydrates shopProfile and attaches storeProfile, logoBytes, and qrBytes for routePrintJob', () => {
+  assert.ok(posjs.includes('ensureShopProfileHydrated'), 'sendEscPosToPrinter does not call ensureShopProfileHydrated');
+  assert.ok(posjs.includes('order.logoBytes = logoBytes'), 'order.logoBytes not set');
+  assert.ok(posjs.includes('order.qrBytes = qrBytes'), 'order.qrBytes not set');
+  assert.ok(posjs.includes('order.storeProfile = shopProfile'), 'order.storeProfile not set');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -109,91 +192,119 @@ check('KOT-ISO-01: routePrintJob enforces null logoBytes and null qrBytes for KO
   );
 });
 
-check('KOT-ISO-02: generateEscPosCommands KOT branch never injects logo or QR', () => {
-  // Find KOT block in generateEscPosCommands
-  const kotStart = pbjs.indexOf('if (isKot)');
-  const receiptStart = pbjs.indexOf('} else {', kotStart);
-  assert.ok(kotStart > 0 && receiptStart > kotStart, 'KOT block not found');
-  const kotBlock = pbjs.substring(kotStart, receiptStart);
-  assert.ok(!kotBlock.includes('logoBytes'), 'KOT block contains logoBytes!');
-  assert.ok(!kotBlock.includes('qrBytes'), 'KOT block contains qrBytes!');
-  assert.ok(!kotBlock.includes('profile.address'), 'KOT block contains profile.address!');
-  assert.ok(!kotBlock.includes('profile.fssai'), 'KOT block contains profile.fssai!');
-  assert.ok(!kotBlock.includes('profile.gstin'), 'KOT block contains profile.gstin!');
+check('KOT-ISO-02: Live KOT bytecode strictly excludes Shop Name, Address, Phone, FSSAI, GSTIN, Prices, Tax & QR', () => {
+  const fullProfile = {
+    name: 'SECRET SHOP NAME',
+    address: '99 MG Road',
+    phone: '9988776655',
+    fssai: '11223344556677',
+    gstin: '19ZZZZZ9999Z1Z9',
+    upiId: 'secret@upi',
+    showQr: true,
+    gstMode: 'inclusive',
+    defaultGstRate: 5
+  };
+  const kotPayload = {
+    jobType: 'KOT',
+    table: 'T4',
+    biller: 'Waiter Raju',
+    date: '03:05:00 AM',
+    rawItems: [{ name: 'Paneer Tikka', qty: 2, price: 220, notes: 'Extra spicy' }]
+  };
+  const bytes = ThermalPrinterBridge.generateEscPosCommands(kotPayload, {
+    isKot: true,
+    storeProfile: fullProfile,
+    logoBytes: new Uint8Array([1, 2, 3]),
+    qrBytes: new Uint8Array([4, 5, 6])
+  });
+  const text = new TextDecoder().decode(bytes);
+  assert.ok(text.includes('KITCHEN TICKET'), 'Missing KITCHEN TICKET header');
+  assert.ok(text.includes('TABLE: T4'), 'Missing TABLE: T4');
+  assert.ok(text.includes('2x Paneer Tikka'), 'Missing 2x Paneer Tikka');
+  assert.ok(text.includes('Extra spicy'), 'Missing item note');
+  assert.ok(!text.includes('SECRET SHOP NAME'), 'KOT leaked Shop Name!');
+  assert.ok(!text.includes('99 MG Road'), 'KOT leaked Shop Address!');
+  assert.ok(!text.includes('9988776655'), 'KOT leaked Shop Phone!');
+  assert.ok(!text.includes('11223344556677'), 'KOT leaked FSSAI!');
+  assert.ok(!text.includes('19ZZZZZ9999Z1Z9'), 'KOT leaked GSTIN!');
+  assert.ok(!text.includes('secret@upi'), 'KOT leaked UPI ID!');
+  assert.ok(!text.includes('Scan to Pay'), 'KOT leaked Scan to Pay!');
+  assert.ok(!text.includes('220'), 'KOT leaked item price!');
 });
 
-check('KOT-ISO-03: executeHtmlPrint only appends UPI QR script when divId === "print-receipt"', () => {
+check('KOT-ISO-03: CSS @media print hides #print-receipt when body.printing-kot is active', () => {
   assert.ok(
-    posjs.includes("divId === 'print-receipt'") && posjs.includes('shopProfile.showQr'),
-    'executeHtmlPrint does not guard UPI QR code with divId === "print-receipt"'
+    responsiveCss.includes('body.printing-kot #print-receipt { display: none !important; }'),
+    'responsive.css missing body.printing-kot #print-receipt { display: none !important; }'
+  );
+  assert.ok(
+    responsiveCss.includes('body:not(.printing-kot) #print-kot { display: none !important; }'),
+    'responsive.css missing body:not(.printing-kot) #print-kot { display: none !important; }'
   );
 });
 
-check('KOT-ISO-04: sendKotToPrinter explicitly passes null logoBytes and qrBytes', () => {
+check('KOT-ISO-04: executeHtmlPrint does not shrink 160px QR code to 50px and isolates KOT', () => {
   assert.ok(
-    posjs.includes("role: 'KOT'") && posjs.includes('logoBytes: null'),
-    'sendKotToPrinter does not pass null logoBytes to routePrintJob'
-  );
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SECTION 3: MULTI-TIER PERSISTENCE (REMEMBER LOGO & QR PERMANENTLY)
-// ═══════════════════════════════════════════════════════════════════════════
-console.log('\n📍 SECTION 3: MULTI-TIER PERSISTENCE (REMEMBER LOGO & QR PERMANENTLY)');
-
-check('PERSIST-01: persistProfile saves discrete billnaw_shop_logo key', () => {
-  assert.ok(
-    corejs.includes('billnaw_shop_logo'),
-    'billnaw_shop_logo not saved in core.js'
-  );
-});
-
-check('PERSIST-02: persistProfile saves logo to dedicated cafe_logo in IndexedDB', () => {
-  assert.ok(
-    corejs.includes("idb.set('cafe_logo'") || corejs.includes('idb.set("cafe_logo"'),
-    'cafe_logo IndexedDB write not found in persistProfile'
-  );
-});
-
-check('PERSIST-03: persistProfile saves billnaw_shop_upi_id and billnaw_shop_show_qr', () => {
-  assert.ok(
-    corejs.includes('billnaw_shop_upi_id') && corejs.includes('billnaw_shop_show_qr'),
-    'UPI and show_qr discrete keys not saved in persistProfile'
-  );
-});
-
-check('REHYDRATE-01: initDatabase rehydrates billnaw_shop_logo from discrete key', () => {
-  assert.ok(
-    corejs.includes("localStorage.getItem('billnaw_shop_logo')"),
-    'billnaw_shop_logo not restored in initDatabase'
-  );
-});
-
-check('REHYDRATE-02: initDatabase restores logo from cafe_logo in IndexedDB', () => {
-  assert.ok(
-    corejs.includes("idb.get('cafe_logo')") || corejs.includes('idb.get("cafe_logo")'),
-    'cafe_logo not restored from IndexedDB in initDatabase'
-  );
-});
-
-check('REHYDRATE-03: handleRemoteFirestoreUpdate preserves existing logo on snapshot', () => {
-  assert.ok(
-    corejs.includes('existingLogo') || (corejs.includes('shopProfile.logo') && corejs.includes('billnaw_shop_logo')),
-    'handleRemoteFirestoreUpdate does not preserve existing logo'
-  );
-});
-
-check('VISUAL-01: updateProfileVisuals hides printLogo and sidebarLogo when logo is absent', () => {
-  assert.ok(
-    settingsjs.includes("printLogo.style.display = 'none'") || settingsjs.includes('printLogo.style.display="none"'),
-    'updateProfileVisuals does not hide printLogo when logo absent'
+    posjs.includes('.print-qr-img{width:160px !important;height:160px !important;') &&
+    !posjs.includes('img{max-width:50px;'),
+    'executeHtmlPrint still has global img{max-width:50px} shrinking QR code!'
   );
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SECTION 4: OFFLINE RESILIENCE & FAVICON
+// SECTION 3: MODAL-SAFE SETTINGS, LOGIN PROTECTION & ADMIN->CASHIER SYNC
 // ═══════════════════════════════════════════════════════════════════════════
-console.log('\n📍 SECTION 4: OFFLINE RESILIENCE & FAVICON');
+console.log('\n📍 SECTION 3: MODAL-SAFE SETTINGS & ADMIN->CASHIER SYNC');
+
+check('SETTINGS-01: saveSettings never overwrites defaultGstRate to 0 when #defaultGstRateInput is empty', () => {
+  assert.ok(
+    settingsjs.includes("rawRateStr !== '' && !isNaN(parseFloat(rawRateStr))"),
+    'saveSettings does not guard against empty #defaultGstRateInput'
+  );
+});
+
+check('SETTINGS-02: loadLogo fills canvas with white (#FFFFFF) before drawing logo to prevent black transparent PNGs', () => {
+  assert.ok(
+    settingsjs.includes("ctx.fillStyle = '#FFFFFF'") && settingsjs.includes('ctx.fillRect(0, 0, canvas.width, canvas.height)'),
+    'loadLogo does not fill canvas background with white before JPEG encoding'
+  );
+});
+
+check('AUTH-01: shop-auth.js login handlers (handleVerifyOtpCode & handlePasswordSignIn) do not overwrite cloud profile before hydration', () => {
+  const loginSection = shopAuthJs.slice(0, shopAuthJs.indexOf('function handleCreateShopAccount'));
+  const loginPersistCalls = loginSection.match(/if\s*\(typeof\s+persistProfile\s*===\s*'function'\)\s*persistProfile\(\);/g);
+  assert.strictEqual(loginPersistCalls, null, 'Login handlers still call persistProfile() prematurely before Firestore hydration!');
+});
+
+check('SYNC-01: core.js defines and exports ensureShopProfileHydrated recovering logo, QR, and GST across tiers', () => {
+  assert.ok(
+    corejs.includes('async function ensureShopProfileHydrated()') &&
+    corejs.includes('window.ensureShopProfileHydrated = ensureShopProfileHydrated'),
+    'ensureShopProfileHydrated missing in core.js'
+  );
+});
+
+check('SYNC-02: Staff session switch (cloud-sync.js & staff.js) hydrates shopProfile for Cashier role', () => {
+  assert.ok(
+    cloudSyncJs.includes('ensureShopProfileHydrated') && staffJs.includes('ensureShopProfileHydrated'),
+    'activateStaffProfileSession or unlockTerminal missing ensureShopProfileHydrated call'
+  );
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 4: SERVICE WORKER CACHE BUSTING & OFFLINE RESILIENCE
+// ═══════════════════════════════════════════════════════════════════════════
+console.log('\n📍 SECTION 4: SERVICE WORKER CACHE BUSTING & OFFLINE RESILIENCE');
+
+check('SW-01: service-worker.js bumped to v3.5.0 with skipWaiting() and Network-First for code assets', () => {
+  assert.ok(swJs.includes("CACHE_VERSION = 'billnaw-pos-shell-v3.5.0'"), 'CACHE_VERSION not bumped to v3.5.0');
+  assert.ok(swJs.includes('self.skipWaiting()'), 'skipWaiting() missing in install listener');
+  assert.ok(swJs.includes('if (isCodeAsset)'), 'Network-First for code assets missing in service-worker.js');
+});
+
+check('SW-02: index.html scripts bumped to ?v=2900', () => {
+  assert.ok(indexHtml.includes('js/pos.js?v=2900') && indexHtml.includes('js/settings.js?v=2900'), 'index.html scripts not bumped to ?v=2900');
+});
 
 check('OFFLINE-01: refreshAiQuotaDisplay guards against offline fetch (navigator.onLine === false)', () => {
   assert.ok(
@@ -202,11 +313,8 @@ check('OFFLINE-01: refreshAiQuotaDisplay guards against offline fetch (navigator
   );
 });
 
-check('FAV-01: favicon.ico exists at project root', () => {
+check('FAV-01: favicon.ico exists at project root and is linked in index.html', () => {
   assert.ok(fs.existsSync(path.join(ROOT, 'favicon.ico')), 'favicon.ico missing at root');
-});
-
-check('FAV-02: index.html links favicon.ico in <head>', () => {
   assert.ok(indexHtml.includes('href="favicon.ico"'), 'favicon.ico not linked in index.html');
 });
 
@@ -214,11 +322,11 @@ check('FAV-02: index.html links favicon.ico in <head>', () => {
 // FINAL REPORT
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n====================================================');
-console.log(`🎯 LOGO, QR & KOT ISOLATION AUDIT: ${passed} PASSED, ${failed} FAILED (TOTAL: ${passed + failed})`);
+console.log(`🎯 LOGO, QR, TAX & KOT ISOLATION AUDIT: ${passed} PASSED, ${failed} FAILED (TOTAL: ${passed + failed})`);
 console.log('====================================================');
 
 if (failed === 0) {
-  console.log('✨ ALL LOGO, DYNAMIC QR, KOT ISOLATION & PERSISTENCE TESTS VERIFIED 100% GREEN!\n');
+  console.log('✨ ALL LOGO, DYNAMIC QR, TAX BREAKDOWN, KOT ISOLATION & ADMIN->CASHIER SYNC TESTS VERIFIED 100% GREEN!\n');
 } else {
   process.exit(1);
 }

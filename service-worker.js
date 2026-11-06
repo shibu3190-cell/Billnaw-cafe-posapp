@@ -9,7 +9,7 @@
  * 4. All API mutations (/api/*) and Firebase/Firestore requests bypass CacheStorage completely.
  */
 
-const CACHE_VERSION = 'billnaw-pos-shell-v3.3.0';
+const CACHE_VERSION = 'billnaw-pos-shell-v3.5.0';
 
 const STATIC_SHELL_ASSETS = [
   './',
@@ -74,8 +74,9 @@ const STATIC_SHELL_ASSETS = [
   './js/cloud-sync.js'
 ];
 
-// Install Phase: Pre-cache static shell without premature activation
+// Install Phase: Pre-cache static shell and activate immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) => {
       console.log(`[SW] Pre-caching static application shell (${CACHE_VERSION})...`);
@@ -152,7 +153,16 @@ self.addEventListener('fetch', (event) => {
             })
             .catch(() => cachedResponse);
 
-          return cachedResponse || fetchPromise;
+          const isCodeAsset =
+          url.pathname === '/' ||
+          url.pathname.endsWith('.html') ||
+          url.pathname.endsWith('.js') ||
+          url.pathname.endsWith('.css');
+
+        if (isCodeAsset) {
+          return fetchPromise;
+        }
+        return cachedResponse || fetchPromise;
         });
       })
     );
@@ -180,6 +190,15 @@ self.addEventListener('fetch', (event) => {
             throw networkErr;
           });
 
+        const isCodeAsset =
+          url.pathname === '/' ||
+          url.pathname.endsWith('.html') ||
+          url.pathname.endsWith('.js') ||
+          url.pathname.endsWith('.css');
+
+        if (isCodeAsset) {
+          return fetchPromise;
+        }
         return cachedResponse || fetchPromise;
       });
     })

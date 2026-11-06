@@ -533,6 +533,13 @@ function unlockTerminal(staff) {
 
     enforcePermissions();
     updateStaffTopbarDisplay();
+    if (typeof ensureShopProfileHydrated === 'function') {
+        Promise.resolve(ensureShopProfileHydrated()).then(() => {
+            if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
+        }).catch(() => {});
+    } else if (typeof updateProfileVisuals === 'function') {
+        updateProfileVisuals();
+    }
 
     // Milestone 3: Route immediately to tailored station view
     const initialView = (typeof resolveInitialViewForStation === 'function')

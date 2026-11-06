@@ -223,6 +223,12 @@ function activateStaffProfileSession(staff) {
     _cancelStaffPinEntry();
     hideStaffProfileSelector();
 
+    if (typeof ensureShopProfileHydrated === 'function') {
+        Promise.resolve(ensureShopProfileHydrated()).then(() => {
+            if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
+        }).catch(() => {});
+    }
+
     // 1. Set global active staff
     const activeObj = { id: staff.id, name: staff.name, role: staff.role };
     window.currentStaff = activeObj;

@@ -329,9 +329,13 @@
                             loginAt: Date.now()
                         }));
                         if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
-                            shopProfile.name = data.shop.name;
-                            if (data.shop.phone) shopProfile.phone = data.shop.phone;
-                            if (typeof persistProfile === 'function') persistProfile();
+                            if (!shopProfile.name || shopProfile.name === 'billnaw') {
+                                shopProfile.name = data.shop.name;
+                            }
+                            if (data.shop.phone && !shopProfile.phone) {
+                                shopProfile.phone = data.shop.phone;
+                            }
+                            try { localStorage.setItem('billnaw_shop_name', shopProfile.name); } catch(e) {}
                         }
                     } catch (e) {}
 
@@ -443,8 +447,13 @@
                             loginAt: Date.now()
                         }));
                         if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
-                            shopProfile.name = data.shop.name;
-                            if (typeof persistProfile === 'function') persistProfile();
+                            if (!shopProfile.name || shopProfile.name === 'billnaw') {
+                                shopProfile.name = data.shop.name;
+                            }
+                            if (data.shop.phone && !shopProfile.phone) {
+                                shopProfile.phone = data.shop.phone;
+                            }
+                            try { localStorage.setItem('billnaw_shop_name', shopProfile.name); } catch(e) {}
                         }
                     } catch (e) {}
 
