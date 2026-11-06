@@ -1385,7 +1385,13 @@ function handleRemoteFirestoreUpdate(data) {
     console.log("⚡ Received Firestore live store snapshot for:", myClientID);
 
     if (data.profile) {
+        const existingPinHash = shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash');
         shopProfile = { ...shopProfile, ...data.profile };
+        if (!shopProfile.adminPinHash && existingPinHash) {
+            shopProfile.adminPinHash = existingPinHash;
+        } else if (!shopProfile.adminPinHash) {
+            shopProfile.adminPinHash = (typeof hashString === 'function' ? hashString('1234') : defaultPinHash);
+        }
         if (!shopProfile.startInvoiceNo) shopProfile.startInvoiceNo = 1001;
         window.shopProfile = shopProfile;
         try {
@@ -2128,6 +2134,11 @@ function persistCategories() {
 window.persistCategories = persistCategories;
 
 function persistProfile() { 
+    if (!shopProfile) shopProfile = {};
+    if (!shopProfile.adminPinHash) {
+        const savedHash = localStorage.getItem('billnaw_admin_pin_hash');
+        shopProfile.adminPinHash = savedHash || (typeof hashString === 'function' ? hashString('1234') : defaultPinHash);
+    }
     window.shopProfile = shopProfile;
     idb.set('cafe_profile', shopProfile); 
 

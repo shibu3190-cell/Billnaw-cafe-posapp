@@ -8,7 +8,32 @@ import {
   generateMarketingCampaign
 } from '../../server/gemini-service.js';
 import { parseMenuFromText } from '../../server/menu-parser.js';
-import { getApproxAutoFill } from '../../server/inventory-service.js';
+import {
+  getRawMaterials,
+  addRawMaterial,
+  updateRawMaterialStock,
+  updateRawMaterialPrice,
+  getSubRecipes,
+  produceMorningBatch,
+  getDishRecipes,
+  saveDishRecipe,
+  calculateDishCosting,
+  getTransfers,
+  createTransfer,
+  receiveTransfer,
+  getPurchaseOrders,
+  createPurchaseOrder,
+  updatePurchaseOrderStatus,
+  getPredictiveForecast,
+  logWastage,
+  getWastageHistory,
+  performStockAudit,
+  getApproxAutoFill,
+  updateAlertThreshold,
+  recordRestockExpense,
+  getRestockExpenses,
+  deductOrderInventory
+} from '../../server/inventory-service.js';
 import { CONFIG } from '../../server/config.js';
 
 // Firebase & SMTP Configuration with Production Environment Variables & Resilient Fallbacks
@@ -409,6 +434,151 @@ export async function handler(event, context) {
     });
   }
 
+  // -----------------------------------------------------------
+  // Route: /inventory/transfers & /inventory/transfers/:id/receive
+  // -----------------------------------------------------------
+  if (cleanPath === '/inventory/transfers' || cleanPath.endsWith('/inventory/transfers')) {
+    if (event.httpMethod === 'GET') {
+      return jsonResponse(200, { success: true, transfers: getTransfers() });
+    }
+    if (event.httpMethod === 'POST') {
+      const res = createTransfer(body || {});
+      return jsonResponse(res.status, res.data);
+    }
+  }
+
+  const transferReceiveMatch = cleanPath.match(/\/inventory\/transfers\/([^\/]+)\/receive$/);
+  if (event.httpMethod === 'POST' && transferReceiveMatch) {
+    const res = receiveTransfer(transferReceiveMatch[1]);
+    return jsonResponse(res.status, res.data);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /inventory/purchase-orders & status update
+  // -----------------------------------------------------------
+  if (cleanPath === '/inventory/purchase-orders' || cleanPath.endsWith('/inventory/purchase-orders')) {
+    if (event.httpMethod === 'GET') {
+      return jsonResponse(200, { success: true, purchase_orders: getPurchaseOrders() });
+    }
+    if (event.httpMethod === 'POST') {
+      const res = createPurchaseOrder(body || {});
+      return jsonResponse(res.status, res.data);
+    }
+  }
+
+  const poStatusMatch = cleanPath.match(/\/inventory\/purchase-orders\/([^\/]+)(?:\/status)?$/);
+  if (event.httpMethod === 'POST' && poStatusMatch) {
+    const res = updatePurchaseOrderStatus(poStatusMatch[1], body?.status);
+    return jsonResponse(res.status, res.data);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /inventory/costing & /inventory/forecast
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'GET' && (cleanPath === '/inventory/costing' || cleanPath.endsWith('/inventory/costing'))) {
+    return jsonResponse(200, { success: true, costing: calculateDishCosting() });
+  }
+
+  if (event.httpMethod === 'GET' && (cleanPath === '/inventory/forecast' || cleanPath.endsWith('/inventory/forecast'))) {
+    return jsonResponse(200, { success: true, forecast: getPredictiveForecast() });
+  }
+
+  // -----------------------------------------------------------
+  // Route: /inventory/wastage
+  // -----------------------------------------------------------
+  if (cleanPath === '/inventory/wastage' || cleanPath.endsWith('/inventory/wastage')) {
+    if (event.httpMethod === 'GET') {
+      return jsonResponse(200, { success: true, ...getWastageHistory() });
+    }
+    if (event.httpMethod === 'POST') {
+      const res = logWastage(body || {});
+      return jsonResponse(res.status, res.data);
+    }
+  }
+
+  // -----------------------------------------------------------
+  // Route: /inventory/restock-history & /inventory/restock
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'GET' && (cleanPath === '/inventory/restock-history' || cleanPath.endsWith('/inventory/restock-history'))) {
+    return jsonResponse(200, { success: true, expenses: getRestockExpenses() });
+  }
+
+  if (event.httpMethod === 'POST' && (cleanPath === '/inventory/restock' || cleanPath.endsWith('/inventory/restock'))) {
+    const res = recordRestockExpense(body || {});
+    return jsonResponse(res.status, res.data);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /inventory/raw-materials
+  // -----------------------------------------------------------
+  if (cleanPath === '/inventory/raw-materials' || cleanPath.endsWith('/inventory/raw-materials')) {
+    if (event.httpMethod === 'GET') {
+      return jsonResponse(200, { success: true, materials: getRawMaterials() });
+    }
+    if (event.httpMethod === 'POST') {
+      const res = addRawMaterial(body || {});
+      return jsonResponse(201, { success: true, material: res });
+    }
+  }
+
+  if (event.httpMethod === 'POST' && (cleanPath === '/inventory/raw-materials/stock' || cleanPath.endsWith('/inventory/raw-materials/stock'))) {
+    const res = updateRawMaterialStock(body.materialId || body.id, body.adjustment || body.stock, body.isAbsolute);
+    return jsonResponse(res.status, res.data);
+  }
+
+  if (event.httpMethod === 'POST' && (cleanPath === '/inventory/raw-materials/price' || cleanPath.endsWith('/inventory/raw-materials/price'))) {
+    const res = updateRawMaterialPrice(body.materialId || body.id, body.newPrice || body.price);
+    return jsonResponse(res.status, res.data);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /inventory/sub-recipes & /inventory/batch-produce
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'GET' && (cleanPath === '/inventory/sub-recipes' || cleanPath.endsWith('/inventory/sub-recipes'))) {
+    return jsonResponse(200, { success: true, sub_recipes: getSubRecipes() });
+  }
+
+  if (event.httpMethod === 'POST' && (cleanPath === '/inventory/batch-produce' || cleanPath.endsWith('/inventory/batch-produce'))) {
+    const res = produceMorningBatch(body.subRecipeId || body.id, body.produceQuantity || body.quantity);
+    return jsonResponse(res.status, res.data);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /inventory/recipes & /inventory/save-recipe
+  // -----------------------------------------------------------
+  if (cleanPath === '/inventory/recipes' || cleanPath.endsWith('/inventory/recipes')) {
+    if (event.httpMethod === 'GET') {
+      return jsonResponse(200, { success: true, recipes: getDishRecipes() });
+    }
+    if (event.httpMethod === 'POST') {
+      const res = saveDishRecipe(body || {});
+      return jsonResponse(res.status, res.data);
+    }
+  }
+
+  if (event.httpMethod === 'POST' && (cleanPath === '/inventory/save-recipe' || cleanPath.endsWith('/inventory/save-recipe'))) {
+    const res = saveDishRecipe(body || {});
+    return jsonResponse(res.status, res.data);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /inventory/pos-deduct, /inventory/alert-threshold, /inventory/audit
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && (cleanPath === '/inventory/pos-deduct' || cleanPath.endsWith('/inventory/pos-deduct'))) {
+    const res = deductOrderInventory(body?.order || body);
+    return jsonResponse(res.status, res.data);
+  }
+
+  if (event.httpMethod === 'POST' && (cleanPath === '/inventory/alert-threshold' || cleanPath.endsWith('/inventory/alert-threshold'))) {
+    const res = updateAlertThreshold(body.materialId || body.id, body.minThreshold || body.threshold);
+    return jsonResponse(res.status, res.data);
+  }
+
+  if (event.httpMethod === 'POST' && (cleanPath === '/inventory/audit' || cleanPath.endsWith('/inventory/audit'))) {
+    const res = performStockAudit(body.entries || body);
+    return jsonResponse(res.status, res.data);
+  }
+
   // ===========================================================
   // AUTHENTICATION & OTP SUITE
   // ===========================================================
@@ -607,9 +777,13 @@ export async function handler(event, context) {
     memoryOtpStore.delete(email);
     await removeOtpFromFirestore(email);
 
+    const pinHash = crypto.createHash('sha256').update(newPin).digest('hex');
+
     return jsonResponse(200, {
       success: true,
-      message: 'Master Admin PIN reset successfully.'
+      message: 'Master Admin PIN reset successfully.',
+      adminPinHash: pinHash,
+      storeCode: body.storeCode || ''
     });
   }
 

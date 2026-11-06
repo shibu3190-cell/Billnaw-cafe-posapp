@@ -148,12 +148,42 @@ async function initFirebaseFromBackend() {
         }
     }
 
+    function deepCleanFirestoreData(data) {
+        if (data === undefined) return undefined;
+        if (data === null) return null;
+        if (typeof data !== 'object') return data;
+        if (data instanceof Date) return data;
+        if (Array.isArray(data)) {
+            return data
+                .map(item => deepCleanFirestoreData(item))
+                .filter(item => item !== undefined);
+        }
+        const clean = {};
+        for (const key of Object.keys(data)) {
+            const val = data[key];
+            if (val !== undefined) {
+                const cleanedVal = deepCleanFirestoreData(val);
+                if (cleanedVal !== undefined) {
+                    clean[key] = cleanedVal;
+                }
+            }
+        }
+        return clean;
+    }
+    window.deepCleanFirestoreData = deepCleanFirestoreData;
+
     window.firestoreDB = db;
     window.firestoreDoc = doc;
     window.firestoreCollection = collection;
     window.firestoreOnSnapshot = onSnapshot;
-    window.firestoreSetDoc = setDoc;
-    window.firestoreUpdateDoc = updateDoc;
+    window.firestoreSetDoc = (ref, data, options) => {
+        const sanitized = deepCleanFirestoreData(data);
+        return options ? setDoc(ref, sanitized, options) : setDoc(ref, sanitized);
+    };
+    window.firestoreUpdateDoc = (ref, data, ...rest) => {
+        const sanitized = deepCleanFirestoreData(data);
+        return updateDoc(ref, sanitized, ...rest);
+    };
     window.firestoreDeleteDoc = deleteDoc;
     window.firestoreGetDoc = getDoc;
     window.firestoreGetDocs = getDocs;

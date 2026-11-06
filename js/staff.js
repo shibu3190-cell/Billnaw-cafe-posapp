@@ -2020,12 +2020,13 @@ async function submitAdminForgotPinReset() {
 
         if (data.success) {
             // Update local shopProfile adminPinHash
+            const validPinHash = data.adminPinHash || (typeof hashString === 'function' ? hashString(newPin) : '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4');
             if (typeof shopProfile !== 'undefined') {
                 if (!shopProfile) shopProfile = {};
-                shopProfile.adminPinHash = data.adminPinHash;
+                shopProfile.adminPinHash = validPinHash;
             }
             try {
-                localStorage.setItem('billnaw_admin_pin_hash', data.adminPinHash);
+                localStorage.setItem('billnaw_admin_pin_hash', validPinHash);
             } catch(e) {}
 
             // Update Admin staff member in staffList
