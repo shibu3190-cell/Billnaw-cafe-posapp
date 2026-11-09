@@ -1838,9 +1838,57 @@ function openPrinterSettingsModal() {
     handlePrinterTransportChange('printer2');
     updatePrinterSlotBadges();
 
+    applyPrinterModalRoleRestrictions();
+
     modal.style.display = 'flex';
 }
 window.openPrinterSettingsModal = openPrinterSettingsModal;
+
+function applyPrinterModalRoleRestrictions() {
+    const isFloorServer = (typeof isFloorServerRole === 'function' && isFloorServerRole());
+    const modal = document.getElementById('printerSettingsModal');
+    if (!modal) return;
+
+    // 1. Single printer mode banner
+    const singleCheckbox = document.getElementById('cfgSinglePrinterMode');
+    const singleBanner = singleCheckbox ? (singleCheckbox.closest('div[style*="background"]') || singleCheckbox.parentElement?.parentElement) : null;
+    if (singleBanner) singleBanner.style.display = isFloorServer ? 'none' : 'flex';
+
+    // 2. Printer 1 slot card (Receipts)
+    const p2Card = document.getElementById('printer2SlotCard');
+    const p1Card = p2Card ? p2Card.previousElementSibling : null;
+    if (p1Card) p1Card.style.display = isFloorServer ? 'none' : 'flex';
+
+    // 3. Printer 2 slot card (Kitchen KOT)
+    if (p2Card) {
+        p2Card.style.display = 'flex';
+        p2Card.style.opacity = '1';
+        p2Card.style.pointerEvents = 'auto';
+
+        const p2Transport = document.getElementById('printer2Transport');
+        if (p2Transport) {
+            if (isFloorServer) {
+                p2Transport.value = 'BLUETOOTH';
+                p2Transport.disabled = true;
+            } else {
+                p2Transport.disabled = false;
+            }
+        }
+        const p2Net = document.getElementById('printer2NetworkSettings');
+        if (p2Net && isFloorServer) p2Net.style.display = 'none';
+
+        const btnPair2 = document.getElementById('btnPairPrinter2');
+        if (btnPair2) btnPair2.disabled = false;
+        const btnTest2 = document.getElementById('btnTestPrinter2');
+        if (btnTest2) btnTest2.disabled = false;
+    }
+
+    // 4. Role routing preferences card
+    const defaultReceiptSel = document.getElementById('cfgDefaultReceiptPrinter');
+    const routingCard = defaultReceiptSel ? defaultReceiptSel.closest('.card') : null;
+    if (routingCard) routingCard.style.display = isFloorServer ? 'none' : 'block';
+}
+window.applyPrinterModalRoleRestrictions = applyPrinterModalRoleRestrictions;
 
 function handleSinglePrinterToggle(isSingle) {
     const dr = document.getElementById('cfgDefaultReceiptPrinter');
@@ -3055,6 +3103,17 @@ function viewOrderInvoiceModal(orderId) {
     if (invDocBadge) invDocBadge.innerText = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
 
     // Set business headers
+    const invShopLogo = document.getElementById('invModalLogo');
+    if (invShopLogo) {
+        if (shopProfile.logo) {
+            invShopLogo.src = shopProfile.logo;
+            invShopLogo.style.display = 'block';
+        } else {
+            invShopLogo.src = '';
+            invShopLogo.style.display = 'none';
+        }
+    }
+
     const invShopName = document.getElementById('invModalShopName');
     if (invShopName) invShopName.innerText = shopProfile.name || "billnaw";
 
@@ -3114,29 +3173,59 @@ function viewOrderInvoiceModal(orderId) {
     const invBiller = document.getElementById('invModalBiller');
     if (invBiller) invBiller.innerText = order.biller || 'Cashier';
 
+    // Defensive resolution of item rows for preview
+    let itemsToRender = [];
+    if (Array.isArray(order.rawItems) && order.rawItems.length > 0 && typeof order.rawItems[0] === 'object') {
+        itemsToRender = order.rawItems;
+    } else if (Array.isArray(order.items) && order.items.length > 0 && typeof order.items[0] === 'object') {
+        itemsToRender = order.items;
+    } else if (typeof order.items === 'string' && order.items.trim()) {
+        const chunks = order.items.split(',').map(s => s.trim()).filter(Boolean);
+        const catalog = (typeof menuItems !== 'undefined' && Array.isArray(menuItems)) ? menuItems : [];
+        itemsToRender = chunks.map(c => {
+            const m1 = c.match(/^(.*?)\s*\(x(\d+)\)$/i);
+            const m2 = c.match(/^(\d+)\s*x\s+(.*)$/i);
+            const name = m1 ? m1[1].trim() : (m2 ? m2[2].trim() : c);
+            const qty = m1 ? (parseInt(m1[2], 10) || 1) : (m2 ? (parseInt(m2[1], 10) || 1) : 1);
+            const matched = catalog.find(m => m && m.name && m.name.toLowerCase() === name.toLowerCase());
+            return {
+                name,
+                qty,
+                price: matched ? Number(matched.price || 0) : Number(((Number(order.amount || 0)) / Math.max(1, chunks.length * qty)).toFixed(2))
+            };
+        });
+    }
+
     // Items table rows
     const itemsTableBody = document.getElementById('invModalItemsBody');
-    if (itemsTableBody && Array.isArray(order.rawItems)) {
+    if (itemsTableBody) {
         let itemsHtml = '';
-        order.rawItems.forEach(item => {
-            const itemTotal = (item.price || 0) * (item.qty || 1);
-            itemsHtml += `
-                <tr>
-                    <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 13px;">
-                        <div style="font-weight: 700; color: var(--text-dark);">${escapeHtml(item.name)}</div>
-                    </td>
-                    <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: center; font-size: 13px; font-weight: 700;">
-                        x${item.qty}
-                    </td>
-                    <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: right; font-size: 13px; font-family: monospace;">
-                        ₹ ${Number(item.price).toFixed(2)}
-                    </td>
-                    <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: right; font-size: 13px; font-weight: 700; font-family: monospace;">
-                        ₹ ${itemTotal.toFixed(2)}
-                    </td>
-                </tr>
-            `;
-        });
+        if (itemsToRender.length === 0) {
+            itemsHtml = '<tr><td colspan="4" style="text-align:center; padding:12px; color:var(--text-muted);">No item details available.</td></tr>';
+        } else {
+            itemsToRender.forEach(item => {
+                const name = (typeof escapeHtml === 'function') ? escapeHtml(item.name || item.item_name || 'Item') : (item.name || 'Item');
+                const price = Number(item.price || item.rate || 0);
+                const qty = Number(item.qty || item.quantity || 1);
+                const itemTotal = price * qty;
+                itemsHtml += `
+                    <tr>
+                        <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 13px;">
+                            <div style="font-weight: 700; color: var(--text-dark);">${name}</div>
+                        </td>
+                        <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: center; font-size: 13px; font-weight: 700;">
+                            x${qty}
+                        </td>
+                        <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: right; font-size: 13px; font-family: monospace;">
+                            ₹ ${price.toFixed(2)}
+                        </td>
+                        <td style="padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: right; font-size: 13px; font-weight: 700; font-family: monospace;">
+                            ₹ ${itemTotal.toFixed(2)}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
         itemsTableBody.innerHTML = itemsHtml;
     }
 
@@ -3144,10 +3233,10 @@ function viewOrderInvoiceModal(orderId) {
     const hasDiscount = Boolean(order.discountAmount && Number(order.discountAmount) > 0);
     const grossSubtotal = order.grossSubtotal !== undefined 
         ? order.grossSubtotal 
-        : (Array.isArray(order.rawItems) ? order.rawItems.reduce((s, i) => s + (i.price * i.qty), 0) : order.amount);
+        : (itemsToRender.length > 0 ? itemsToRender.reduce((s, i) => s + ((Number(i.price) || 0) * (Number(i.qty) || 1)), 0) : order.amount);
     
     const grossEl = document.getElementById('invModalGrossSubtotal');
-    if (grossEl) grossEl.innerText = `₹ ${grossSubtotal.toFixed(2)}`;
+    if (grossEl) grossEl.innerText = `₹ ${Number(grossSubtotal).toFixed(2)}`;
 
     const discountRow = document.getElementById('invModalDiscountRow');
     const discountLabel = document.getElementById('invModalDiscountLabel');
@@ -3157,7 +3246,9 @@ function viewOrderInvoiceModal(orderId) {
             discountRow.style.display = 'flex';
             const typeStr = order.discount && order.discount.type === 'percent' ? `${order.discount.value}%` : 'Flat';
             const reasonStr = order.discount && order.discount.reason ? ` (${escapeHtml(order.discount.reason)})` : '';
-            if (discountLabel) discountLabel.innerText = `🏷️ Discount ${typeStr}${reasonStr}:`;
+            if (discountLabel) {
+                discountLabel.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24"><use href="#icon-tag"></use></svg><span>Discount ${typeStr}${reasonStr}:</span>`;
+            }
             if (discountAmtEl) discountAmtEl.innerText = `-₹ ${Number(order.discountAmount).toFixed(2)}`;
         } else {
             discountRow.style.display = 'none';
@@ -3189,7 +3280,8 @@ function viewOrderInvoiceModal(orderId) {
     // Itemized GST breakdown in invoice modal
     const invGstBreakdown = document.getElementById('invModalGstBreakdown');
     if (invGstBreakdown) {
-        const modalTotals = calculateOrderTotals(order.rawItems, order.discount || (hasDiscount ? { type: 'fixed', value: discountAmount } : null));
+        const effectiveItems = itemsToRender.length > 0 ? itemsToRender : (order.rawItems || []);
+        const modalTotals = calculateOrderTotals(effectiveItems, order.discount || (hasDiscount ? { type: 'fixed', value: discountAmount } : null));
         if (isGstActive && modalTotals.gstSummary && Object.keys(modalTotals.gstSummary).length > 0) {
             let breakdownHtml = '<div style="font-weight:700; font-size:10px; text-transform:uppercase; color:var(--text-muted); margin-bottom:2px; letter-spacing:0.5px;">Tax Breakdown</div>';
             for (let r in modalTotals.gstSummary) {
@@ -3245,11 +3337,25 @@ function viewOrderInvoiceModal(orderId) {
         }
     }
 
-    // Set action buttons
+    // Set action buttons (Print, Edit, Void)
     const printBtn = document.getElementById('invModalPrintBtn');
     if (printBtn) {
         printBtn.onclick = () => {
             sendEscPosToPrinter(order);
+        };
+    }
+    const editBtn = document.getElementById('invModalEditBtn');
+    if (editBtn) {
+        editBtn.onclick = () => {
+            closeOrderInvoiceModal();
+            if (typeof openEditOrderModal === 'function') openEditOrderModal(order.id);
+        };
+    }
+    const voidBtn = document.getElementById('invModalVoidBtn');
+    if (voidBtn) {
+        voidBtn.onclick = () => {
+            closeOrderInvoiceModal();
+            if (typeof voidTransaction === 'function') voidTransaction(order.id);
         };
     }
 

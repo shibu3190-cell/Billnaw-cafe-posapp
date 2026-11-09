@@ -38,7 +38,7 @@ export function createShopExportBundle({ clientId, profile, staff, menu, custome
   return {
     version: '2.0.0',
     exportedAt: new Date().toISOString(),
-    clientId: clientId || 'BONGBHOJ-TERMINAL',
+    clientId: clientId || 'SHOP-BILLNAW-01',
     profile: profile || {},
     staff: staff || [],
     customers: customers || [],
@@ -57,7 +57,7 @@ export function validateShopImportBundle(bundle) {
   return {
     valid: true,
     shopName: bundle.profile?.name || 'Unnamed Store',
-    clientId: bundle.clientId || 'BONGBHOJ-TERMINAL',
+    clientId: bundle.clientId || 'SHOP-BILLNAW-01',
     staffCount: Array.isArray(bundle.staff) ? bundle.staff.length : 0,
     customerCount: Array.isArray(bundle.customers) ? bundle.customers.length : 0,
     menuItemCount: Array.isArray(bundle.menu) ? bundle.menu.length : 0,

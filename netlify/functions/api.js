@@ -5,9 +5,23 @@ import {
   isGeminiKeyOperational,
   extractMenuFromDocument,
   generateMenuItemImage,
-  generateMarketingCampaign
+  generateMarketingCampaign,
+  resolveGeminiApiKey
 } from '../../server/gemini-service.js';
 import { parseMenuFromText } from '../../server/menu-parser.js';
+import {
+  checkAiQuotaAndKey,
+  recordSuccessfulAiUsage,
+  getClientQuotaInfo,
+  updateClientProfileData,
+  releaseAiQuotaSlot,
+  getCurrentYearMonth
+} from '../../server/quota-service.js';
+import {
+  getShopSubscription,
+  updateShopSubscription,
+  validateSubscriptionTransition
+} from '../../server/subscription-service.js';
 import {
   getRawMaterials,
   addRawMaterial,
@@ -237,6 +251,7 @@ export async function handler(event, context) {
     }
   }
 
+  const headers = event.headers || {};
   console.log(`[NETLIFY API] ${event.httpMethod} ${cleanPath}`);
 
   // ===========================================================
@@ -247,18 +262,47 @@ export async function handler(event, context) {
   // Route: /gemini/status (Check Gemini AI Operational Status)
   // -----------------------------------------------------------
   if (event.httpMethod === 'GET' && (cleanPath === '/gemini/status' || cleanPath.endsWith('/gemini/status'))) {
+    const headerKey = headers['x-gemini-api-key'] || headers['x-api-key'];
+    const customKey = (headerKey || event.queryStringParameters?.apiKey || '').trim();
+    const shopId = (headers['x-shop-id'] || event.queryStringParameters?.shopId || event.queryStringParameters?.clientId || 'SHOP-BILLNAW-01').trim();
+    let keyCheck = null;
+    try {
+      keyCheck = await checkAiQuotaAndKey({ shopId, customApiKey: customKey, reserveSlot: false });
+    } catch (quotaErr) {
+      if (quotaErr.status === 429) {
+        return jsonResponse(200, {
+          operational: false,
+          quotaExceeded: true,
+          message: quotaErr.message || 'Monthly AI scan quota of 15 scans reached for this shop.',
+          quota: quotaErr.quota || null
+        });
+      }
+    }
+    const resolvedApiKey = resolveGeminiApiKey(customKey || keyCheck?.apiKey);
     let operational = true;
     try {
-      operational = await isGeminiKeyOperational();
+      if (resolvedApiKey) {
+        operational = await isGeminiKeyOperational(resolvedApiKey);
+      }
     } catch (e) {
       operational = true;
     }
     return jsonResponse(200, {
       operational,
-      keyAvailable: true,
-      model: CONFIG?.gemini?.model || 'gemini-3.8-flash',
-      scansRemaining: 999,
-      monthlyLimit: 1000
+      keyAvailable: Boolean(resolvedApiKey),
+      isCustomKey: Boolean(customKey || (keyCheck && keyCheck.isCustomKey)),
+      model: CONFIG?.gemini?.model || 'gemini-3.5-flash-lite',
+      scansRemaining: keyCheck ? Math.max(0, keyCheck.monthlyLimit - keyCheck.currentUsage) : 15,
+      monthlyLimit: keyCheck?.monthlyLimit || 15,
+      quota: keyCheck ? {
+        limit: keyCheck.monthlyLimit,
+        remaining: Math.max(0, keyCheck.monthlyLimit - keyCheck.currentUsage),
+        used: keyCheck.currentUsage
+      } : {
+        limit: 15,
+        remaining: 15,
+        used: 0
+      }
     });
   }
 
@@ -266,52 +310,213 @@ export async function handler(event, context) {
   // Route: /ai/quota (Client AI Quota Telemetry)
   // -----------------------------------------------------------
   if (event.httpMethod === 'GET' && (cleanPath === '/ai/quota' || cleanPath.endsWith('/ai/quota'))) {
-    const clientId = event.queryStringParameters?.clientId || 'BONGBHOJ-TERMINAL';
-    return jsonResponse(200, {
-      clientId,
-      tier: 'Pro',
-      monthlyLimit: 1000,
-      usedThisMonth: 1,
-      remaining: 999,
-      hasCustomKey: true,
-      status: 'operational'
-    });
+    const clientId = (headers['x-shop-id'] || event.queryStringParameters?.shopId || event.queryStringParameters?.clientId || 'SHOP-BILLNAW-01').trim();
+    try {
+      const quota = await getClientQuotaInfo(clientId);
+      return jsonResponse(200, {
+        tier: 'Pro',
+        status: 'operational',
+        monthlyLimit: quota.limit,
+        usedThisMonth: quota.used,
+        ...quota
+      });
+    } catch (err) {
+      return jsonResponse(500, { error: err.message });
+    }
   }
 
   // -----------------------------------------------------------
   // Route: /admin/client-quota (Update Client Quota)
   // -----------------------------------------------------------
   if (event.httpMethod === 'POST' && (cleanPath === '/admin/client-quota' || cleanPath.endsWith('/admin/client-quota'))) {
+    const clientId = (body?.shopId || body?.clientId || '').trim();
+    const { aiMonthlyLimit, customGeminiKey } = body;
+    if (!clientId) {
+      return jsonResponse(400, { error: 'clientId or shopId is required' });
+    }
+
+    const updates = {};
+    if (typeof aiMonthlyLimit === 'number') {
+      updates.aiMonthlyLimit = Math.max(0, aiMonthlyLimit);
+      updates.monthlyLimit = Math.max(0, aiMonthlyLimit);
+      updates.limit = Math.max(0, aiMonthlyLimit);
+    }
+    if (typeof customGeminiKey === 'string') {
+      updates.customGeminiKey = customGeminiKey.trim();
+    }
+
+    const success = await updateClientProfileData(clientId, updates);
+    if (!success) {
+      return jsonResponse(500, { error: 'Failed to update client profile in Firestore' });
+    }
+
+    const updatedQuota = await getClientQuotaInfo(clientId);
     return jsonResponse(200, {
       success: true,
-      message: 'Client AI quota updated successfully'
+      message: `Updated quota settings for client '${clientId}'`,
+      quota: updatedQuota
     });
   }
 
   // -----------------------------------------------------------
-  // Route: /extract-menu & /menu/ocr & /gemini (AI Menu OCR)
+  // Route: /extract-menu & /menu/ocr & /gemini & /ai/scan-menu (AI Menu OCR)
   // -----------------------------------------------------------
-  if (event.httpMethod === 'POST' && (cleanPath === '/extract-menu' || cleanPath.endsWith('/extract-menu') || cleanPath === '/menu/ocr' || cleanPath === '/gemini')) {
+  if (event.httpMethod === 'POST' && (
+    cleanPath === '/extract-menu' || cleanPath.endsWith('/extract-menu') ||
+    cleanPath === '/menu/ocr' || cleanPath.endsWith('/menu/ocr') ||
+    cleanPath === '/gemini' || cleanPath.endsWith('/gemini') ||
+    cleanPath === '/ai/scan-menu' || cleanPath.endsWith('/ai/scan-menu') ||
+    cleanPath === '/scan-menu' || cleanPath.endsWith('/scan-menu')
+  )) {
     const { base64Data, mimeType, extractedText } = body;
+    const customHeaderKey = headers['x-gemini-api-key'] || headers['x-api-key'];
+    const customKey = (customHeaderKey || body.apiKey || body.customGeminiKey || '').trim();
+    const shopId = (headers['x-shop-id'] || body.shopId || event.queryStringParameters?.shopId || body.clientId || event.queryStringParameters?.clientId || 'SHOP-BILLNAW-01').trim();
+
+    let keyCheck = null;
+    let slotReserved = false;
+
     try {
-      if (base64Data) {
-        const result = await extractMenuFromDocument({ base64Data, mimeType });
-        if (result && Array.isArray(result.categories) && result.categories.length > 0) {
-          return jsonResponse(200, {
-            ...result,
-            isFallback: false
+      try {
+        keyCheck = await checkAiQuotaAndKey({ shopId, customApiKey: customKey });
+        slotReserved = true;
+      } catch (quotaErr) {
+        if (quotaErr.status === 429) {
+          return jsonResponse(429, {
+            error: quotaErr.message || 'Monthly AI scan quota of 15 scans reached for this shop.',
+            quota: quotaErr.quota || null
+          });
+        }
+        throw quotaErr;
+      }
+
+      const resolvedApiKey = resolveGeminiApiKey(customKey || keyCheck?.apiKey);
+      const isCustomKey = Boolean(customKey || (keyCheck && keyCheck.isCustomKey));
+
+      if (isCustomKey && resolvedApiKey) {
+        const isCustomKeyValid = await isGeminiKeyOperational(resolvedApiKey);
+        if (!isCustomKeyValid) {
+          if (slotReserved) {
+            releaseAiQuotaSlot(shopId);
+            slotReserved = false;
+          }
+          return jsonResponse(401, {
+            error: 'Custom Gemini API key is unauthorized or invalid. Please verify your key in Settings > AI Quota & Custom Key.',
+            invalidCustomKey: true
           });
         }
       }
+
+      if (base64Data && resolvedApiKey) {
+        try {
+          const isOperationalKey = await isGeminiKeyOperational(resolvedApiKey);
+          if (isOperationalKey) {
+            const result = await extractMenuFromDocument({ base64Data, mimeType, apiKey: resolvedApiKey });
+            if (result && Array.isArray(result.categories) && result.categories.length > 0) {
+              const quotaInfo = await recordSuccessfulAiUsage(shopId, keyCheck || { currentUsage: 0, monthlyLimit: 15, currentMonth: getCurrentYearMonth() }).catch(() => null);
+              slotReserved = false;
+              return jsonResponse(200, {
+                ...result,
+                isFallback: false,
+                quota: quotaInfo
+              });
+            }
+          }
+        } catch (geminiError) {
+          // Continue to fallback
+        }
+      }
+
+      if (slotReserved) {
+        releaseAiQuotaSlot(shopId);
+        slotReserved = false;
+      }
+
+      const fallback = parseMenuFromText(extractedText || '');
+      return jsonResponse(200, {
+        categories: fallback.categories,
+        isFallback: true,
+        fallbackSource: fallback.source,
+        warning: 'Menu processed using smart layout parser.',
+        quota: keyCheck ? {
+          limit: keyCheck.monthlyLimit,
+          used: keyCheck.currentUsage,
+          remaining: Math.max(0, keyCheck.monthlyLimit - keyCheck.currentUsage),
+          month: keyCheck.currentMonth,
+          resetMonth: keyCheck.currentMonth
+        } : null
+      });
     } catch (err) {
-      console.warn('[NETLIFY AI] Menu extraction fallback notice:', err.message);
+      if (slotReserved) {
+        releaseAiQuotaSlot(shopId);
+        slotReserved = false;
+      }
+      return jsonResponse(500, { error: err.message });
     }
-    const fallback = parseMenuFromText(extractedText || '');
+  }
+
+  // -----------------------------------------------------------
+  // Route: /subscription/status & /api/subscription/status
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'GET' && (cleanPath === '/subscription/status' || cleanPath.endsWith('/subscription/status'))) {
+    const q = event.queryStringParameters || {};
+    const email = (q.email || q.shopEmail || headers['x-shop-email'] || '').trim();
+    const shopId = (q.shopId || headers['x-shop-id'] || '').trim();
+    try {
+      const subscription = await getShopSubscription(shopId, email);
+      return jsonResponse(200, { success: true, subscription });
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Failed to retrieve subscription status' });
+    }
+  }
+
+  // -----------------------------------------------------------
+  // Route: /subscription/manage & /api/subscription/manage
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && (cleanPath === '/subscription/manage' || cleanPath.endsWith('/subscription/manage'))) {
+    const email = (body.email || body.shopEmail || headers['x-shop-email'] || '').trim();
+    const shopId = (body.shopId || headers['x-shop-id'] || '').trim();
+    const action = String(body.action || '').trim().toUpperCase();
+    const reason = String(body.reason || '').trim();
+    const updatedBy = String(body.updatedBy || 'admin').trim();
+
+    try {
+      const currentSub = await getShopSubscription(shopId, email);
+      const transitionCheck = validateSubscriptionTransition(currentSub?.status, action);
+      if (!transitionCheck.allowed) {
+        return jsonResponse(transitionCheck.statusCode || 400, { success: false, error: transitionCheck.error });
+      }
+
+      const updatedSub = await updateShopSubscription(shopId, email, {
+        status: action,
+        statusReason: reason,
+        updatedBy
+      });
+
+      return jsonResponse(200, {
+        success: true,
+        message: `Subscription successfully transitioned to ${action}`,
+        action,
+        subscription: updatedSub
+      });
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Failed to manage subscription' });
+    }
+  }
+
+  // -----------------------------------------------------------
+  // Route: /subscription/features
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'GET' && (cleanPath === '/subscription/features' || cleanPath.endsWith('/subscription/features'))) {
     return jsonResponse(200, {
-      categories: fallback.categories,
-      isFallback: true,
-      fallbackSource: fallback.source,
-      warning: 'Menu processed using smart layout parser.'
+      success: true,
+      features: {
+        maxTerminals: 10,
+        unlimitedOrders: true,
+        kdsAndKot: true,
+        aiMenuScansPerMonth: 15,
+        cloudSync: true
+      }
     });
   }
 

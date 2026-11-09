@@ -315,6 +315,10 @@ function filterDashboardByMetric(metric) {
         openExpensesDetailModal();
         return;
     }
+    if (metric === 'orders') {
+        openOrdersLogModal();
+        return;
+    }
     currentDashboardMetric = (currentDashboardMetric === metric) ? 'all' : metric;
     
     const kpiCards = document.querySelectorAll('.dashboard-kpi-card');
@@ -328,6 +332,232 @@ function filterDashboardByMetric(metric) {
     renderDashboardAnalytics();
 }
 window.filterDashboardByMetric = filterDashboardByMetric;
+
+let ordersModalCurrentPage = 0;
+const ordersModalPageSize = 12;
+
+function getDashboardRangeLabel() {
+    if (currentDashboardRange === 'today') return 'Today';
+    if (currentDashboardRange === 'yesterday') return 'Yesterday';
+    if (currentDashboardRange === 'week') return 'This Week';
+    if (currentDashboardRange === 'month') {
+        const m = document.getElementById('reportDateSelect')?.value;
+        return m ? `Month (${m})` : 'This Month';
+    }
+    if (currentDashboardRange === 'custom') {
+        const start = document.getElementById('reportCustomStartDate')?.value;
+        const end = document.getElementById('reportCustomEndDate')?.value;
+        if (start && end) return `Custom Range (${start} to ${end})`;
+        if (start) return `Since ${start}`;
+        if (end) return `Until ${end}`;
+        return 'Custom Range';
+    }
+    return 'All Time';
+}
+window.getDashboardRangeLabel = getDashboardRangeLabel;
+
+function openOrdersLogModal() {
+    const modal = document.getElementById('ordersLogModal');
+    if (!modal) return;
+    ordersModalCurrentPage = 0;
+    const searchInput = document.getElementById('ordersModalSearchInput');
+    if (searchInput) searchInput.value = '';
+    renderOrdersLogModalCards();
+    modal.style.display = 'flex';
+}
+window.openOrdersLogModal = openOrdersLogModal;
+
+function closeOrdersLogModal() {
+    const modal = document.getElementById('ordersLogModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeOrdersLogModal = closeOrdersLogModal;
+
+function ordersModalPrevPage() {
+    if (ordersModalCurrentPage > 0) {
+        ordersModalCurrentPage--;
+        renderOrdersLogModalCards();
+    }
+}
+window.ordersModalPrevPage = ordersModalPrevPage;
+
+function ordersModalNextPage() {
+    ordersModalCurrentPage++;
+    renderOrdersLogModalCards();
+}
+window.ordersModalNextPage = ordersModalNextPage;
+
+function onOrdersModalSearchInput() {
+    ordersModalCurrentPage = 0;
+    renderOrdersLogModalCards();
+}
+window.onOrdersModalSearchInput = onOrdersModalSearchInput;
+
+function renderOrderHistoryCard(order) {
+    if (!order) return '';
+    let tableStr = String(order.table || 'Takeaway');
+    let isTakeaway = tableStr === 'Takeaway';
+    let badgeClass = isTakeaway ? 'table-pill-takeaway' : 'table-pill-dinein';
+    let tableDisplayText = isTakeaway ? 'Takeaway' : (tableStr.startsWith('Table') ? tableStr : `Table ${tableStr}`);
+    
+    let payBadgeClass = 'pay-badge-cash';
+    const pModeLower = (order.paymentMode || '').toLowerCase();
+    if (pModeLower === 'upi') payBadgeClass = 'pay-badge-upi';
+    else if (pModeLower === 'card') payBadgeClass = 'pay-badge-card';
+    else if (pModeLower === 'khata') payBadgeClass = 'pay-badge-khata';
+
+    const timeStr = (order.date && order.date.includes(',')) ? order.date.split(',')[1].trim() : (order.date || '-');
+    const custName = order.customer ? ((typeof escapeHtml === 'function') ? escapeHtml(order.customer) : order.customer) : 'Walk-in Guest';
+    const itemsSummary = (typeof escapeHtml === 'function') ? escapeHtml(order.items || '-') : (order.items || '-');
+    const discountBadge = (order.discountAmount && Number(order.discountAmount) > 0)
+        ? `<span style="font-size:10px; font-weight:700; color:var(--success); background:rgba(30,138,76,0.12); padding:2px 6px; border-radius:6px;">-${order.discount?.type === 'percent' ? order.discount.value + '%' : '₹ ' + order.discountAmount}</span>`
+        : '';
+
+    return `
+        <div class="order-history-card" onclick="viewOrderInvoiceModal(${order.id})" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; display: flex; flex-direction: column; justify-content: space-between; gap: 10px;" onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'; this.style.borderColor='var(--primary)';" onmouseout="this.style.boxShadow='none'; this.style.borderColor='var(--border)';">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                    <div>
+                        <div style="font-family: monospace; font-size: 15px; font-weight: 800; color: var(--primary);">#${order.billNo || order.id || '-'}</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">${timeStr}</div>
+                    </div>
+                    <span class="custom-pill ${badgeClass}" style="font-size: 11px; padding: 3px 8px;">${tableDisplayText}</span>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dark); font-weight: 600; margin-bottom: 6px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>${custName}</span>
+                </div>
+
+                <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 8px;">
+                    ${itemsSummary}
+                </div>
+            </div>
+
+            <div style="border-top: 1px dashed var(--border); padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span class="custom-pill ${payBadgeClass}" style="font-size: 11px; padding: 2px 8px;">${order.paymentMode || 'Cash'}</span>
+                    ${discountBadge}
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 16px; font-weight: 800; color: var(--success); font-family: monospace;">₹ ${Number(order.amount).toFixed(2)}</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 6px; margin-top: 4px;" onclick="event.stopPropagation();">
+                <button type="button" class="btn btn-outline" style="flex: 1; padding: 5px 8px; font-size: 11px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;" onclick="viewOrderInvoiceModal(${order.id});">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    <span>Details</span>
+                </button>
+                <button type="button" class="btn btn-outline" style="flex: 1; padding: 5px 8px; font-size: 11px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;" onclick="openEditOrderModal(${order.id});">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                    <span>Edit</span>
+                </button>
+                <button type="button" class="btn btn-outline" style="padding: 5px 8px; font-size: 11px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="Print Receipt" onclick="reprintReceipt(${order.id});">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                </button>
+            </div>
+        </div>
+    `;
+}
+window.renderOrderHistoryCard = renderOrderHistoryCard;
+
+function renderOrdersLogModalCards() {
+    const cardsGrid = document.getElementById('ordersModalCardsGrid');
+    if (!cardsGrid) return;
+
+    const todayISO = (typeof getLocalISODate === 'function') ? getLocalISODate() : new Date().toISOString().slice(0, 10);
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yesterdayISO = (typeof getLocalISODate === 'function') ? getLocalISODate(d) : d.toISOString().slice(0, 10);
+    
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgoISO = (typeof getLocalISODate === 'function') ? getLocalISODate(weekAgo) : weekAgo.toISOString().slice(0, 10);
+    
+    const selectedMonth = document.getElementById('reportDateSelect')?.value || ((typeof getLocalISOMonth === 'function') ? getLocalISOMonth() : new Date().toISOString().slice(0, 7));
+    const customStart = document.getElementById('reportCustomStartDate')?.value || '';
+    const customEnd = document.getElementById('reportCustomEndDate')?.value || '';
+
+    const orders = Array.isArray(orderHistory) ? orderHistory : [];
+    
+    // Filter matching top date selection
+    let filtered = orders.filter(o => {
+        const fDate = getOrderFilterDate(o);
+        if (currentDashboardRange === 'today') return fDate === todayISO;
+        if (currentDashboardRange === 'yesterday') return fDate === yesterdayISO;
+        if (currentDashboardRange === 'week') return fDate >= weekAgoISO && fDate <= todayISO;
+        if (currentDashboardRange === 'month') return fDate.startsWith(selectedMonth);
+        if (currentDashboardRange === 'custom') {
+            if (customStart && customEnd) return fDate >= customStart && fDate <= customEnd;
+            if (customStart) return fDate >= customStart;
+            if (customEnd) return fDate <= customEnd;
+            return true;
+        }
+        return true;
+    });
+
+    const rangeLabel = getDashboardRangeLabel();
+    const subtitleEl = document.getElementById('ordersModalFilterSubtitle');
+    if (subtitleEl) {
+        subtitleEl.textContent = `Showing ${filtered.length} completed orders for ${rangeLabel} (Filtered by top selection)`;
+    }
+
+    const countBadge = document.getElementById('ordersModalCountBadge');
+    if (countBadge) {
+        countBadge.textContent = `${filtered.length} Orders`;
+    }
+
+    const totalSum = filtered.reduce((s, o) => s + (Number(o.amount) || 0), 0);
+    const amountBadge = document.getElementById('ordersModalAmountBadge');
+    if (amountBadge) {
+        amountBadge.textContent = `₹ ${totalSum.toFixed(2)}`;
+    }
+
+    // Secondary text search inside modal
+    const searchVal = (document.getElementById('ordersModalSearchInput')?.value || '').trim().toLowerCase();
+    if (searchVal) {
+        filtered = filtered.filter(o => {
+            const billStr = String(o.billNo || o.id || '').toLowerCase();
+            const custStr = String(o.customer || '').toLowerCase();
+            const itemsStr = String(o.items || '').toLowerCase();
+            const payStr = String(o.paymentMode || '').toLowerCase();
+            return billStr.includes(searchVal) || custStr.includes(searchVal) || itemsStr.includes(searchVal) || payStr.includes(searchVal);
+        });
+    }
+
+    // Pagination
+    const totalCount = filtered.length;
+    const maxPage = Math.max(0, Math.ceil(totalCount / ordersModalPageSize) - 1);
+    if (ordersModalCurrentPage > maxPage) ordersModalCurrentPage = maxPage;
+    if (ordersModalCurrentPage < 0) ordersModalCurrentPage = 0;
+
+    const startIdx = ordersModalCurrentPage * ordersModalPageSize;
+    const paged = filtered.slice(startIdx, startIdx + ordersModalPageSize);
+
+    // Update pagination controls
+    const prevBtn = document.getElementById('ordersModalPrevBtn');
+    const nextBtn = document.getElementById('ordersModalNextBtn');
+    const pageInd = document.getElementById('ordersModalPageIndicator');
+
+    if (prevBtn) prevBtn.disabled = (ordersModalCurrentPage === 0);
+    if (nextBtn) nextBtn.disabled = (startIdx + ordersModalPageSize >= totalCount);
+    if (pageInd) {
+        pageInd.textContent = totalCount === 0 ? 'Page 0 of 0' : `Page ${ordersModalCurrentPage + 1} of ${maxPage + 1} (${totalCount} total)`;
+    }
+
+    if (paged.length === 0) {
+        cardsGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 48px 20px; font-weight: 500; background: var(--bg-surface); border: 1.5px dashed var(--border); border-radius: 16px;">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 8px; opacity: 0.6;"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                <div>No orders found for the selected period.</div>
+            </div>`;
+        return;
+    }
+
+    cardsGrid.innerHTML = paged.map(order => renderOrderHistoryCard(order)).join('');
+}
+window.renderOrdersLogModalCards = renderOrdersLogModalCards;
 
 function onDashboardMonthChanged() {
     currentDashboardRange = 'month';
@@ -545,7 +775,17 @@ async function renderDashboardAnalytics() {
     if (nextBtn) nextBtn.disabled = historyLedgerCurrentPage >= totalPages - 1;
     if (indicator) indicator.innerText = `Page ${historyLedgerCurrentPage + 1} of ${totalPages} (${totalMatching} bills)`;
 
-    // 5. Render History Table Body
+    // 5. Render History Cards Grid & Table Body
+    const cardsContainer = document.getElementById('historyCardsGrid');
+    if (cardsContainer) {
+        if (pagedOrders.length === 0) {
+            cardsContainer.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 36px 20px; font-weight: 500; background: var(--bg-surface); border: 1px dashed var(--border); border-radius: 12px;">No transactions found matching the selected range and filters.</div>`;
+        } else {
+            cardsContainer.innerHTML = pagedOrders.map(order => renderOrderHistoryCard(order)).join('');
+        }
+    }
+
+    // Render Tabular Ledger Body
     const tbody = document.getElementById('historyTableBody');
     if (tbody) {
         if (pagedOrders.length === 0) {
@@ -619,6 +859,10 @@ async function renderDashboardAnalytics() {
         }
     }
 
+    if (typeof setDashboardViewMode === 'function') {
+        setDashboardViewMode(currentDashboardViewMode);
+    }
+
     // 6. Top Selling Items
     const topListEl = document.getElementById('dashTopSellingList');
     if (topListEl) {
@@ -669,6 +913,10 @@ async function renderDashboardAnalytics() {
 
     // 7. Render Interactive Sales Chart & Vertical Progress Meters
     renderVerticalProgressMeters(filteredOrders);
+    const ordersLogModal = document.getElementById('ordersLogModal');
+    if (ordersLogModal && ordersLogModal.style.display !== 'none' && typeof renderOrdersLogModalCards === 'function') {
+        renderOrdersLogModalCards();
+    }
     await renderDashboardChart(filteredOrders, filteredExpenses, selectedMonth);
 }
 window.renderDashboardAnalytics = renderDashboardAnalytics;
@@ -1171,23 +1419,27 @@ window.editOrderItemQty = editOrderItemQty;
 function renderEditOrderItems() {
     const container = document.getElementById('editOrderItemsContainer');
     if (!container) return;
-    if (!currentEditingOrderItems || currentEditingOrderItems.length === 0) {
+    if (!Array.isArray(currentEditingOrderItems) || currentEditingOrderItems.length === 0) {
+        currentEditingOrderItems = [];
         container.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">No items in this order.</div>';
         return;
     }
     let html = '<div style="font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">Ordered Items & Quantities</div>';
     html += '<div style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; padding: 4px;">';
     currentEditingOrderItems.forEach((item, idx) => {
-        const itemTotal = (item.price || 0) * (item.qty || 0);
+        const name = (typeof escapeHtml === 'function') ? escapeHtml(item.name || item.item_name || 'Item') : (item.name || 'Item');
+        const price = Number(item.price || item.rate || 0);
+        const qty = Number(item.qty || item.quantity || 0);
+        const itemTotal = price * qty;
         html += `
             <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border);">
                 <div>
-                    <div style="font-size: 13px; font-weight: 700; color: var(--text-main);">${item.name}</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">₹ ${item.price} each • ₹ ${itemTotal}</div>
+                    <div style="font-size: 13px; font-weight: 700; color: var(--text-main);">${name}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">₹ ${price.toFixed(2)} each • ₹ ${itemTotal.toFixed(2)}</div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
                     <button type="button" class="btn btn-outline" style="width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-weight: 800;" onclick="editOrderItemQty(${idx}, -1)">−</button>
-                    <span style="font-size: 13px; font-weight: 800; min-width: 20px; text-align: center;">${item.qty || 0}</span>
+                    <span style="font-size: 13px; font-weight: 800; min-width: 20px; text-align: center;">${qty}</span>
                     <button type="button" class="btn btn-outline" style="width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-weight: 800;" onclick="editOrderItemQty(${idx}, 1)">+</button>
                 </div>
             </div>
@@ -1212,7 +1464,31 @@ function openEditOrderModal(id) {
     selectPayment(order.paymentMode || 'Cash', 'edit'); 
     document.getElementById('editCustomerName').value = order.customer || ''; 
     document.getElementById('editBillerName').value = order.biller || ''; 
-    currentEditingOrderItems = JSON.parse(JSON.stringify(order.items || []));
+    
+    // Defensive extraction of structured items
+    let resolved = [];
+    if (Array.isArray(order.rawItems) && order.rawItems.length > 0 && typeof order.rawItems[0] === 'object') {
+        resolved = JSON.parse(JSON.stringify(order.rawItems));
+    } else if (Array.isArray(order.items) && order.items.length > 0 && typeof order.items[0] === 'object') {
+        resolved = JSON.parse(JSON.stringify(order.items));
+    } else if (typeof order.items === 'string' && order.items.trim()) {
+        const chunks = order.items.split(',').map(s => s.trim()).filter(Boolean);
+        const catalog = (typeof menuItems !== 'undefined' && Array.isArray(menuItems)) ? menuItems : [];
+        resolved = chunks.map(c => {
+            const m1 = c.match(/^(.*?)\s*\(x(\d+)\)$/i);
+            const m2 = c.match(/^(\d+)\s*x\s+(.*)$/i);
+            const name = m1 ? m1[1].trim() : (m2 ? m2[2].trim() : c);
+            const qty = m1 ? (parseInt(m1[2], 10) || 1) : (m2 ? (parseInt(m2[1], 10) || 1) : 1);
+            const matched = catalog.find(m => m && m.name && m.name.toLowerCase() === name.toLowerCase());
+            return {
+                name,
+                qty,
+                price: matched ? Number(matched.price || 0) : Number(((Number(order.amount || 0)) / Math.max(1, chunks.length * qty)).toFixed(2))
+            };
+        });
+    }
+    if (!Array.isArray(resolved)) resolved = [];
+    currentEditingOrderItems = resolved;
     renderEditOrderItems();
     document.getElementById('editOrderModal').style.display = 'flex';
 }
@@ -1227,9 +1503,11 @@ function saveEditedOrder() {
         order.customer = document.getElementById('editCustomerName').value.trim(); 
         order.biller = document.getElementById('editBillerName').value.trim();
         if(order.orderType === 'Takeaway') order.table = 'Takeaway'; 
-        if (currentEditingOrderItems && currentEditingOrderItems.length > 0) {
-            order.items = currentEditingOrderItems.filter(i => (i.qty || 0) > 0);
-            order.amount = Math.max(0, order.items.reduce((sum, i) => sum + ((i.price || 0) * (i.qty || 0)), 0));
+        if (Array.isArray(currentEditingOrderItems) && currentEditingOrderItems.length > 0) {
+            const validItems = currentEditingOrderItems.filter(i => (Number(i.qty || i.quantity || 0)) > 0);
+            order.rawItems = JSON.parse(JSON.stringify(validItems));
+            order.items = validItems.map(i => `${i.name} (x${i.qty || i.quantity || 1})`).join(', ');
+            order.amount = Math.max(0, validItems.reduce((sum, i) => sum + ((Number(i.price || 0)) * (Number(i.qty || i.quantity || 1))), 0));
         }
         persistHistoryFirebase(); 
         renderDashboardAnalytics(); 
@@ -1416,6 +1694,26 @@ function setDashboardPaymentFilter(mode) {
     renderDashboardAnalytics();
 }
 window.setDashboardPaymentFilter = setDashboardPaymentFilter;
+
+let currentDashboardViewMode = 'cards';
+if (typeof window !== 'undefined') window.currentDashboardViewMode = currentDashboardViewMode;
+
+function setDashboardViewMode(mode) {
+    currentDashboardViewMode = 'cards';
+    if (typeof window !== 'undefined') window.currentDashboardViewMode = 'cards';
+    try { localStorage.setItem('billnaw_dashboard_view_mode', 'cards'); } catch (e) {}
+
+    const cardsGrid = document.getElementById('historyCardsGrid');
+    const tableWrap = document.getElementById('historyTableViewWrap');
+    const cardsBtn = document.getElementById('dashViewModeCardsBtn');
+    const tableBtn = document.getElementById('dashViewModeTableBtn');
+
+    if (cardsGrid) cardsGrid.style.display = 'grid';
+    if (tableWrap) tableWrap.style.display = 'none';
+    if (cardsBtn) cardsBtn.classList.add('active');
+    if (tableBtn) tableBtn.classList.remove('active');
+}
+window.setDashboardViewMode = setDashboardViewMode;
 
 // --- Decision 2: Clean Vertical Progress Meters for Categories & Payment Channels ---
 function renderVerticalProgressMeters(orders) {
@@ -1616,6 +1914,9 @@ document.addEventListener('keydown', (event) => {
         if (typeof toggleWaPreviewExpand === 'function') {
             toggleWaPreviewExpand(false);
         }
+        if (typeof closeOrdersLogModal === 'function') {
+            closeOrdersLogModal();
+        }
     }
 });
 
@@ -1627,6 +1928,10 @@ if (typeof window !== 'undefined') {
             if (dashTab && dashTab.classList.contains('active')) {
                 renderDashboardAnalytics();
             }
+        }
+        const ordersLogModal = document.getElementById('ordersLogModal');
+        if (ordersLogModal && ordersLogModal.style.display !== 'none' && typeof renderOrdersLogModalCards === 'function') {
+            renderOrdersLogModalCards();
         }
     });
 }

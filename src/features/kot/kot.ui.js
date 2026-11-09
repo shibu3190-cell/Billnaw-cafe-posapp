@@ -153,8 +153,8 @@ export class KotUI {
 
       const itemsList = (kot.items || []).map(it => `
         <div class="kot-item-row">
-          <span class="kot-item-qty">${it.quantity}x</span>
-          <span class="kot-item-name">${it.name}</span>
+          <span class="kot-item-qty">${it.quantity || it.qty || 1}x</span>
+          <span class="kot-item-name">${it.name || it.item_name || 'Item'}</span>
           ${it.notes ? `<span class="kot-item-note">(${it.notes})</span>` : ''}
         </div>
       `).join('');

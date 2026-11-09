@@ -53,73 +53,67 @@ The user interface is structured around 5 central operational hubs:
      - 💎 **Subscription & Billing**: Active Free Pro tier with zero billing locks and enterprise cloud sync.
      - 🧾 **GST & Tax Configuration**: Configurable CGST/SGST rates, inclusive/exclusive pricing modes, and start invoice number.
      - 💳 **Payment & UPI QR**: Dynamic QR code generation for payments directly to merchant VPA.
-     - 🔄 **Cloud Sync & Terminals**: Firestore bidirectional sync state and custom Shop Store Code (`BONGBHOJ-TERMINAL`).
+     - 🔄 **Cloud Sync & Terminals**: Firestore bidirectional sync state and custom Shop Store Code (`SHOP-BILLNAW-01`).
      - 📞 **Contact & Support**: Integrated direct helpdesk and concierge support.
 
 ---
 
-## 2. Real-Time Cloud Firestore Sync
+## 2. Real-Time Cloud Firestore Sync & Multi-Tenant Security
 
-All store data syncs automatically across terminals and devices using Google Cloud Firestore:
+All store data syncs automatically across terminals and devices using Google Cloud Firestore with hardened tenant & email boundaries (`firestore.rules` and `database/firestore.rules`):
 
 - **Database ID**: `ai-studio-billnawcafepos-3ac17879-08c8-4e15-9a3d-a965f7d92fda`
-- **Client Document / Scope**: `/clients/{clientId}` (e.g., `BONGBHOJ-TERMINAL`)
+- **Primary Store Scope**: `/shops/{shopId}` and `/cafes/{cafeId}` (tagged with `shopEmail` and `shopId`)
 
 ### Data Collections
 | Collection Path | Purpose |
 | :--- | :--- |
-| `/clients/{id}` | Store profile, tax settings, admin PIN, AI quotas, subscription status. |
-| `/clients/{id}/menu` | Menu categories, dish details, pricing, GST rates, stock counts. |
-| `/clients/{id}/tables` | Real-time dine-in table states, occupied item lists, and KOT timers. |
-| `/clients/{id}/history` | Historical sales records, customer invoices, payment breakdowns. |
-| `/clients/{id}/expenses`| Daily operational expense vouchers with categories and payment methods. |
-| `/clients/{id}/customers`| Customer CRM records, loyalty points ledger, visit logs. |
-| `/clients/{id}/staff` | Authorized store operators, role permissions, and access credentials. |
+| `/shops/{shopId}` & `/cafes/{cafeId}` | Store profile (name, logo, address, phone, FSSAI, GSTIN, UPI ID), tax settings, subscription status (`ACTIVE`, `PAUSED`, `RESUMED`, `REVOKED`). |
+| `/shops/{shopId}/menu` | Menu categories, dish details, pricing, GST rates, dietary tags, stock counts. |
+| `/shops/{shopId}/staff` | Authorized staff profiles (max 10/shop: `Admin`, `Cashier`, `Floor Server`, `Kitchen Chef`), temporary 4-digit onboarding OTPs, salted SHA-256 PIN hashes (`billnaw_pin_v2`). |
+| `/shops/{shopId}/sessions` | Real-time active cloud presence (`ONLINE`, `OFFLINE`, `REVOKED`), device binding, last-seen heartbeats, and remote terminal lock flags. |
+| `/shops/{shopId}/tables` | Real-time dine-in table states (`T1`, `T2`, ...), occupied item lists, and Delta-KOT print counters (`qtyKotPrinted`). |
+| `/shops/{shopId}/invoices` | Immutable settled customer tax invoices (30-day audit-logged `PAID -> VOID` transition; physical deletion forbidden). |
+| `/shops/{shopId}/printQueue` | Isolated remote KOT print queue (`jobType == 'KOT'`). |
+| `/shops/{shopId}/quota/menu_scans` | Monthly Gemini AI menu scan quota tracker (15 scans/month/shop with automatic `YYYY-MM` rollover and BYOK key masking). |
+| `/shops/{shopId}/expenses` | Daily operational expense vouchers with categories and payment methods. |
+| `/shops/{shopId}/customers` | Customer CRM records, Khata due ledger, loyalty points, and visit logs. |
 
 ---
 
-## 3. Google Gemini AI Architecture & Implementation
+## 3. Google Gemini AI Architecture, 15-Scan Monthly Quota & BYOK
 
-### 3.1 Data Flow & Processing Pipeline
-The application uses Google Gemini 3.7 Flash to read and parse printed, handwritten, or digital cafe menus from uploaded images and PDF documents.
+### 3.1 Data Flow & Fast Vision Cascade Pipeline
+The application uses a fast **Google Gemini Flash-Lite Vision Cascade** (`gemini-3.5-flash-lite` -> `gemini-3.1-flash-lite` -> `gemini-flash-latest`) with a **7,000ms per-candidate timeout** and `thinkingBudget: 0` to parse printed, handwritten, or digital cafe menus from uploaded images and PDF documents without false "no clear image" timeouts.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           GEMINI MULTIMODAL PIPELINE                        │
 └─────────────────────────────────────────────────────────────────────────────┘
-  [ Client Browser (app.js) ]
-         │ 1. User uploads menu image/PDF (JPEG, PNG, PDF)
+  [ Client Browser (js/menu.js) ]
+         │ 1. User uploads menu image/PDF (JPEG, PNG, WebP, PDF)
          │ 2. File converted to standard Base64 string + MIME type
          ▼
-  [ POST /api/extract-menu ] ──► Express Backend (server.js)
+  [ POST /api/ai/scan-menu ] ──► Express Backend (server.js)
          │
-         │ 3. Server sanitizes payload & checks key status
-         │ 4. Invokes @google/genai SDK (server/gemini-service.js)
+         │ 3. Checks 15-scan monthly quota & custom BYOK key (server/quota-service.js)
+         │ 4. Invokes fast vision cascade (server/gemini-service.js, 7s timeout, thinkingBudget: 0)
          ▼
-  [ Google Gemini 3.7 Flash API (models/gemini-3.7-flash) ]
-         │ 5. Vision transformer reads layout, categories, items, and rates
-         │ 6. Enforces strict JSON Schema response
+  [ Gemini Vision Cascade (gemini-3.5-flash-lite / gemini-3.1-flash-lite) ]
+         │ 5. Vision transformer reads layout, categories, items, ₹/Rs. prices & dietary tags
+         │ 6. Multi-strategy JSON parser (parseMenuJsonSafely) extracts structured catalog
          ▼
-  [ Backend Normalizer ]
-         │ 7. Sanitizes item prices, GST rates, and categories
-         │ 8. Attaches auto-generated dish prompts and thumbnails
+  [ Backend Normalizer & Quota Recorder ]
+         │ 7. Sanitizes item prices, GST rates, and curated food photography
+         │ 8. Atomically increments monthly scan usage (1..15) in Firestore
          ▼
-  [ Client Review Modal ] ──► Interactive correction & 1-click catalog import
+  [ Client Review Modal ] ──► Interactive correction & 1-click catalog import (syncs to all terminals)
 ```
 
-### 3.2 How the Gemini API Reads Document Data
-1. **Multimodal Ingestion**: The image or PDF is converted into an `inlineData` part containing the Base64 data and IANA MIME type (`image/jpeg`, `image/png`, `application/pdf`).
-2. **Vision & OCR Analysis**: `gemini-3.7-flash` visually processes columns, indentation, pricing symbols (₹, Rs, /-), category headers, and descriptions without requiring external OCR tools.
-3. **Structured Schema Output**: The request specifies `responseMimeType: "application/json"` with system instructions requiring an array of categories and item objects (`name`, `price`, `description`, `image_prompt`).
-4. **Resilience & Fallback Engine**: If Gemini is unavailable, the backend automatically routes through a smart regex/layout parser so operations are never blocked.
-
-### 3.3 Implementation Details
-- **Backend SDK**: `@google/genai` (official Google GenAI TypeScript/JavaScript SDK).
-- **Client Isolation**: The browser client never touches or stores the API key; all calls route through `/api/extract-menu` and `/api/generate-image`.
-- **Model Configuration**:
-  - Multimodal Menu OCR: `gemini-3.7-flash` (fallback: `gemini-flash-latest`, `gemini-3.1-flash-lite`).
-  - Dish Visual Synthesis: `gemini-3.1-flash-lite-image`.
-- **Header Telemetry**: Requests include `httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }`.
+### 3.2 Monthly 15-Scan Quota & Bring-Your-Own-Key (BYOK)
+1. **Default Monthly Allowance**: Every shop receives **15 AI menu scans per calendar month (`YYYY-MM`)**, tracked atomically in `/shops/{shopId}/quota/menu_scans`.
+2. **Quota Exhaustion (`HTTP 429`)**: On the 16th scan attempt within the same calendar month, `/api/ai/scan-menu` returns `HTTP 429` (`Monthly AI scan quota of 15 scans reached for this shop.`). Usage automatically resets to `0` at the start of the next calendar month.
+3. **Custom Gemini API Key (`BYOK`)**: Shop owners can configure their own dedicated Gemini API key (`AIzaSy...`) under **Settings ➔ AI Menu Scanner Quota & Key**, which is masked in the UI (`AIzaSyB...1234`) and sent via `x-gemini-api-key`.
 
 ---
 
@@ -158,9 +152,11 @@ The global `GEMINI_API_KEY` powers AI Menu OCR scanning and image synthesis.
    - Calculated Net Cash in Drawer for physical register reconciliation.
 4. An automated thermal or PDF print preview is triggered.
 
-### Staff & Admin Access
-- Default Admin PIN: `1234` (configurable under **Settings ➔ Staff & Team Management** or **Store Profile**).
-- Staff members can take orders and generate bills without full administrative permissions.
+### Staff Onboarding (4-Digit OTP -> Salted PIN) & Role-Based Access
+- **Up to 10 Staff Profiles per Shop**: Admin creates staff profiles (`Admin`, `Cashier`, `Floor Server`, `Kitchen Chef`) with an auto-generated 4-digit temporary OTP.
+- **Secondary Terminal Login**: Staff log into a secondary device using the shop email, select their profile from the picker, validate their 4-digit temporary OTP, and create their own private salted SHA-256 PIN (`#firstLoginPinModal`).
+- **Active Cloud Presence & Remote Revocation**: Admin views live staff status (`Active (Active now)`, `Offline (Active Xm ago)`, or `Inactive (Never Logged In)`). Removing a staff member immediately revokes their cloud session and locks their active POS terminal.
+- **Floor Server Bluetooth KOT Lock**: Floor Servers can access Settings solely to pair a Bluetooth thermal printer for KOT printing; all administrative settings tiles are shielded.
 
 ---
 
@@ -168,9 +164,14 @@ The global `GEMINI_API_KEY` powers AI Menu OCR scanning and image synthesis.
 
 - `GET /api/version` — Application version and build timestamp.
 - `GET /api/health` — Server health status and system load.
-- `GET /api/ai/quota?clientId={id}` — Current AI OCR quota usage and limit.
-- `POST /api/admin/client-quota` — Update monthly scan limits.
-- `POST /api/extract-menu` — Multimodal AI extraction for menu images and PDFs.
-- `POST /api/generate-image` — AI dish image generator.
+- `POST /api/auth/send-otp` — Dispatch 6-digit registration/login OTP to shop owner email.
+- `POST /api/auth/register` — Register new shop owner account, verify OTP, and provision `/shops/{storeCode}`.
+- `GET /api/subscription/status?email={email}&shopId={shopId}` — Inspect shop subscription state (`ACTIVE`, `PAUSED`, `RESUMED`, `REVOKED`).
+- `POST /api/subscription/manage` — Transition shop subscription (`ACTIVE`, `PAUSED`, `RESUMED`, `REVOKED`) with real-time Firestore propagation.
+- `GET /api/ai/quota?clientId={shopId}` — Current monthly AI OCR quota usage (`used`, `remaining`, `limit: 15`, `keyMasked`).
+- `POST /api/admin/client-quota` — Update monthly scan limits and save custom BYOK Gemini API key.
+- `POST /api/ai/scan-menu` (and `/api/extract-menu`) — Fast vision cascade AI extraction for menu images and PDFs.
+- `POST /api/generate-image` — AI dish image generator with curated gourmet fallback.
+- `POST /api/print/network` — Non-blocking TCP 9100 raw ESC/POS thermal printer proxy.
 - `POST /api/sync-sheets` — Real-time Google Sheets webhook bridge.
 - `POST /api/shop/export` — Full encrypted JSON database backup.

@@ -96,8 +96,14 @@ export function normalizeRole(roleInput) {
   if (clean === 'manager') return ROLES.MANAGER;
   if (clean === 'cashier') return ROLES.CASHIER;
   if (clean === 'kitchen' || clean === 'kitchen chef' || clean === 'chef') return ROLES.CHEF;
-  if (clean === 'waiter' || clean === 'server' || clean === 'floor server' || clean === 'waiters') return ROLES.SERVER;
+  if (clean === 'waiter' || clean === 'server' || clean === 'floor server' || clean === 'waiters' || clean === 'floor_server') return ROLES.SERVER;
   return ROLES.CASHIER;
+}
+
+export function isFloorServerRole(staffOrRole = null) {
+  if (!staffOrRole) return false;
+  const raw = typeof staffOrRole === 'string' ? staffOrRole : staffOrRole.role;
+  return normalizeRole(raw) === ROLES.SERVER;
 }
 
 /**

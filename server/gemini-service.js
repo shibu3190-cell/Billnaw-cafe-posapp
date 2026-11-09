@@ -91,6 +91,172 @@ export async function isGeminiKeyOperational(apiKey = null) {
   return looksValid;
 }
 
+export const CANDIDATE_TIMEOUT_MS = 7000;
+
+export const CANDIDATE_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash',
+  CONFIG.gemini.model || 'gemini-3.8-flash'
+];
+
+/**
+ * Execute an async operation with a strict millisecond timeout using Promise.race
+ */
+export async function executeWithTimeout(promiseFn, timeoutMs = CANDIDATE_TIMEOUT_MS, errorMsg = 'Operation timed out') {
+  let timer = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(errorMsg);
+      err.name = 'TimeoutError';
+      reject(err);
+    }, timeoutMs);
+    if (timer.unref) timer.unref();
+  });
+
+  try {
+    return await Promise.race([promiseFn(), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Cleans and sanitizes raw price inputs from Gemini OCR or JSON into a positive float.
+ * Handles currency prefixes/abbreviations (Rs., Rs, INR, ₹, $, €, £, ¥, MRP),
+ * trailing slashes/dashes (/-), thousands separators, leading dots, and negative values.
+ *
+ * @param {number|string|null|undefined} rawPrice
+ * @returns {number} Non-negative numeric price (default 0)
+ */
+export function cleanParsedPrice(rawPrice) {
+  let price = 0;
+  if (typeof rawPrice === 'number') {
+    price = rawPrice;
+  } else if (rawPrice && typeof rawPrice === 'string') {
+    const rawStr = rawPrice.trim();
+    // Guard against negative price strings (e.g. "-50", "- Rs. 50", "Rs. -50", "-$15")
+    const parts = rawStr.split(/\d/);
+    if (parts.length > 1 && parts[0].includes('-')) {
+      return 0;
+    }
+    // Strip currency abbreviations, symbols, colons, and abbreviation periods
+    const cleanedStr = rawStr
+      .replace(/(?:mrp|rs|inr|₹|\$|€|£|¥)\s*[:.]?\s*/gi, '')
+      .replace(/,/g, '')
+      .replace(/[^\d.]/g, '')
+      .replace(/^\.+/, '');
+    price = parseFloat(cleanedStr) || 0;
+  }
+  if (isNaN(price) || price < 0) price = 0;
+  return price;
+}
+
+/**
+ * Resilient multi-strategy JSON parser for AI vision OCR outputs.
+ * Handles direct JSON, markdown code fences, leading conversational preambles,
+ * and outermost bracket/brace slicing.
+ */
+export function parseMenuJsonSafely(rawText) {
+  if (!rawText || typeof rawText !== 'string' || rawText.trim().length === 0) {
+    throw new Error('AI output was empty or invalid string.');
+  }
+
+  const text = rawText.trim();
+  let parsed = null;
+
+  // Strategy 1: Direct JSON parse
+  try {
+    parsed = JSON.parse(text);
+  } catch (e1) {
+    // Strategy 2: Code fence regex matching (handles ```json ... ``` or ``` ... ``` anywhere in text)
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fenceMatch && fenceMatch[1]) {
+      try {
+        parsed = JSON.parse(fenceMatch[1].trim());
+      } catch (e2) {
+        // Continue to bracket extraction
+      }
+    }
+
+    // Strategy 3: Find outermost object curly braces { ... }
+    if (!parsed) {
+      const firstBrace = text.indexOf('{');
+      const lastBrace = text.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        try {
+          parsed = JSON.parse(text.substring(firstBrace, lastBrace + 1));
+        } catch (e3) {
+          // Continue to array extraction
+        }
+      }
+    }
+
+    // Strategy 4: Find outermost array brackets [ ... ]
+    if (!parsed) {
+      const firstBracket = text.indexOf('[');
+      const lastBracket = text.lastIndexOf(']');
+      if (firstBracket !== -1 && lastBracket > firstBracket) {
+        try {
+          const arr = JSON.parse(text.substring(firstBracket, lastBracket + 1));
+          if (Array.isArray(arr)) {
+            if (arr.length > 0 && Array.isArray(arr[0].items)) {
+              parsed = { menu_categories: arr };
+            } else {
+              parsed = { menu_categories: [{ category_name: 'General', items: arr }] };
+            }
+          }
+        } catch (e4) {
+          // Fall through
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    if (parsed.length > 0 && Array.isArray(parsed[0].items)) {
+      parsed = { menu_categories: parsed };
+    } else {
+      parsed = { menu_categories: [{ category_name: 'General', items: parsed }] };
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('AI output was not valid JSON');
+  }
+
+  // Normalize both menu_categories and categories schemas for POS compatibility
+  const rawCategories = parsed.menu_categories || parsed.categories || [];
+  const normalizedCategories = (Array.isArray(rawCategories) ? rawCategories : []).map(cat => ({
+    name: String(cat.category_name || cat.name || cat.category || 'General').trim() || 'General',
+    items: (Array.isArray(cat.items) ? cat.items : []).map(item => {
+      const name = String(item.item_name || item.name || item.title || '').trim();
+      const price = cleanParsedPrice(item.price);
+
+      let isVeg = null;
+      if (typeof item.isVeg === 'boolean') isVeg = item.isVeg;
+      else if (typeof item.is_veg === 'boolean') isVeg = item.is_veg;
+      else if (typeof item.veg === 'boolean') isVeg = item.veg;
+
+      return {
+        name,
+        description: item.description ? String(item.description).trim() : null,
+        price,
+        isVeg
+      };
+    }).filter(i => i.name.length > 0)
+  })).filter(c => c.items.length > 0);
+
+  return {
+    menu_categories: rawCategories,
+    categories: normalizedCategories,
+    gst_pricing_note: parsed.gst_pricing_note || 'inclusive'
+  };
+}
+
 /**
  * Digitizes menu scan/photo/pdf into structured JSON menu
  */
@@ -110,63 +276,105 @@ export async function extractMenuFromDocument({ base64Data, mimeType, apiKey }) 
   }
 
   const ai = getGeminiClient(resolvedKey);
-  const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+
+  // Clean base64 extraction and MIME type detection
+  let cleanBase64 = '';
+  let detectedMime = mimeType || 'image/jpeg';
+
+  if (Buffer.isBuffer(base64Data)) {
+    cleanBase64 = base64Data.toString('base64');
+  } else if (typeof base64Data === 'string') {
+    if (base64Data.startsWith('data:')) {
+      const match = base64Data.match(/^data:([^;]+);base64,(.+)$/s);
+      if (match) {
+        if (match[1]) detectedMime = match[1].trim();
+        cleanBase64 = match[2].trim();
+      } else {
+        const parts = base64Data.split(',');
+        cleanBase64 = (parts[1] || parts[0]).trim();
+      }
+    } else {
+      cleanBase64 = base64Data.trim();
+    }
+    cleanBase64 = cleanBase64.replace(/\s+/g, '');
+  }
+
+  if (!cleanBase64 || cleanBase64.length < 10) {
+    throw new Error('Invalid or empty image payload.');
+  }
+
+  const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
+  if (!validMimes.includes(detectedMime.toLowerCase())) {
+    detectedMime = 'image/jpeg';
+  }
+
   const promptParts = [
     {
-      text: `You are an advanced, specialized Restaurant POS Data Entry Automation Engine. Your sole purpose is to analyze restaurant menu images or PDFs and convert them into a structured database-ready format.
+      text: `You are an advanced, specialized Restaurant & Cafe POS Data Entry Automation Engine. Your sole purpose is to analyze restaurant/cafe menu images or PDFs and convert them into a structured database-ready JSON format.
 
-Analyze the provided menu carefully and adhere to these strict rules:
-1. EXTRACTION ACCURACY: Extract every food item, beverage, variation, combo, and category exactly as written. Do not summarize or omit anything.
-2. PRICE CLEANING: Extract the exact price as a numerical float. Strip away all currency symbols (e.g., $, ₹, £, €, AED) and stray text. If a price is omitted, use null.
-3. LAYOUT INTELLIGENCE: Read multi-column, grids, or parallel tables correctly. Do not combine text columns horizontally. Ensure the item text on the left matches its corresponding price on the right.
-4. CATEGORIZATION: Group items under their logical menu headings (e.g., Starters, Beverages, Pizzas) as displayed in the image.
+Analyze the provided menu image carefully and adhere to these strict rules:
+1. EXTRACTION ACCURACY: Extract every food item, beverage, variation, combo, and category visible in the image. Do not summarize, truncate, or omit anything. Do not invent items not present in the menu.
+2. PRICE CLEANING: Extract the exact price as a numerical float (e.g., 120.00). Strip away all currency symbols (e.g., ₹, Rs., INR, $, £, €, AED), trailing dots, dashes, and stray characters. If an item lists multiple sizes (e.g., Regular 120, Large 180 or Half 80, Full 150), create distinct item entries for each size (e.g., "Cappuccino (Regular)" and "Cappuccino (Large)") or use the base price. If a price is genuinely omitted or market price, use null.
+3. LAYOUT INTELLIGENCE: Accurately parse multi-column layouts, grids, parallel tables, and chalkboard sections. Do not cross-read columns horizontally. Align each item name with its true matching price.
+4. CATEGORIZATION: Group items under their logical menu headings (e.g., Coffee & Tea, Starters, Sandwiches & Wraps, Burgers, Pizzas, Desserts, Beverages) as displayed. If no category heading is present, categorize logically by food/beverage type.
+5. DIETARY / VEG RECOGNITION:
+   - "isVeg": true if marked with a green veg indicator/dot, labeled Vegetarian/Veg, or inherently vegetarian (e.g., Paneer, Veg Sandwich, Chai).
+   - "isVeg": false if marked with a red/brown dot, contains meat/chicken/fish/egg/mutton/prawn, or labeled Non-Veg.
+   - "isVeg": null if ambiguous or not indicated.
+6. FORMAT INTEGRITY: Output ONLY a valid JSON object adhering strictly to the schema below. Do NOT include markdown code blocks, conversational text, notes, or explanations.
 
-Output the final result ONLY as a valid JSON object adhering strictly to this schema:
+Schema:
 {
   "menu_categories": [
     {
-      "category_name": "Mains",
+      "category_name": "Hot Coffee",
       "items": [
         {
-          "item_name": "Paneer Butter Masala",
-          "description": null,
-          "price": 320.00
+          "item_name": "Espresso",
+          "description": "Bold single shot espresso",
+          "price": 120.00,
+          "isVeg": true
         }
       ]
     }
-  ]
+  ],
+  "gst_pricing_note": "inclusive"
 }`
     },
     {
       inlineData: {
-        mimeType: mimeType || 'image/jpeg',
+        mimeType: detectedMime,
         data: cleanBase64
       }
     }
   ];
 
-  const candidateModels = [...new Set([
-    CONFIG.gemini.model,
-    'gemini-3.8-flash',
-    'gemini-3.1-flash-lite',
-    'gemini-flash-latest',
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite'
-  ].filter(Boolean))];
+  // Prioritize fast flash-lite models for vision OCR, preserving candidate order
+  const candidateModels = Array.from(new Set(CANDIDATE_MODELS.filter(Boolean)));
   
   let response = null;
+  let successfulModel = null;
   let lastError = null;
 
   for (const modelName of candidateModels) {
     try {
-      response = await ai.models.generateContent({
-        model: modelName,
-        contents: [{ role: 'user', parts: promptParts }],
-        config: {
-          responseMimeType: 'application/json'
-        }
-      });
-      if (response && response.text) break;
+      response = await executeWithTimeout(async () => {
+        return await ai.models.generateContent({
+          model: modelName,
+          contents: [{ role: 'user', parts: promptParts }],
+          config: {
+            responseMimeType: 'application/json',
+            thinkingConfig: {
+              thinkingBudget: 0
+            }
+          }
+        });
+      }, CANDIDATE_TIMEOUT_MS, `Model '${modelName}' request exceeded ${CANDIDATE_TIMEOUT_MS}ms timeout`);
+
+      if (response && response.text) {
+        successfulModel = modelName;
+        break;
+      }
     } catch (modelErr) {
       lastError = modelErr;
       const errMsg = String(modelErr?.message || modelErr);
@@ -183,29 +391,12 @@ Output the final result ONLY as a valid JSON object adhering strictly to this sc
   }
 
   const responseText = response?.text ? response.text.trim() : '';
-  const cleanedText = responseText.replace(/^```(json)?|```$/gi, '').trim();
+  const parsed = parseMenuJsonSafely(responseText);
 
-  try {
-    const rawParsed = JSON.parse(cleanedText);
-    // Normalize both menu_categories and categories schemas for POS compatibility
-    const rawCategories = rawParsed.menu_categories || rawParsed.categories || [];
-    const normalizedCategories = rawCategories.map(cat => ({
-      name: cat.category_name || cat.name || 'General',
-      items: (cat.items || []).map(item => ({
-        name: item.item_name || item.name || '',
-        description: item.description || null,
-        price: typeof item.price === 'number' ? item.price : (parseFloat(item.price) || 0)
-      }))
-    }));
-
-    return {
-      menu_categories: rawCategories,
-      categories: normalizedCategories,
-      gst_pricing_note: rawParsed.gst_pricing_note || 'inclusive'
-    };
-  } catch (err) {
-    throw new Error('AI output was not valid JSON');
-  }
+  return {
+    ...parsed,
+    modelUsed: successfulModel
+  };
 }
 
 const SERVER_CULINARY_PHOTO_MAP = [

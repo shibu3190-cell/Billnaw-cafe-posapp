@@ -26,9 +26,10 @@ import {
 } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
-import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData } from './server/quota-service.js';
+import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
-import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData, requestAdminPinResetOtp, resetAdminPinWithOtp } from './server/auth-service.js';
+import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData, requestAdminPinResetOtp, resetAdminPinWithOtp, normalizeEmail, isValidEmail } from './server/auth-service.js';
+import { getShopSubscription, updateShopSubscription, validateSubscriptionTransition } from './server/subscription-service.js';
 import { executeValidateDeviceAndLogin } from './database/server-functions/device-security.js';
 import { getDbClient } from './src/core/db-client.js';
 import {
@@ -171,8 +172,8 @@ app.get('/api/config/client', (req, res) => {
 // Client AI Quota Info: Returns current month usage, limit, and quota remaining
 app.get('/api/ai/quota', async (req, res) => {
   try {
-    const clientId = req.query.clientId || 'BONGBHOJ-TERMINAL';
-    const quota = await getClientQuotaInfo(clientId);
+    const shopId = (req.headers['x-shop-id'] || req.query.shopId || req.query.clientId || 'SHOP-BILLNAW-01').trim();
+    const quota = await getClientQuotaInfo(shopId);
     res.json(quota);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -180,17 +181,20 @@ app.get('/api/ai/quota', async (req, res) => {
 });
 
 // Admin Client Quota & Custom Key Update Endpoint (Option B implementation)
-// Allows updating aiMonthlyLimit and dedicated customGeminiKey for any specific client
+// Allows updating aiMonthlyLimit and dedicated customGeminiKey for any specific client/shop
 app.post('/api/admin/client-quota', async (req, res) => {
   try {
-    const { clientId, aiMonthlyLimit, customGeminiKey } = req.body;
+    const clientId = (req.body?.shopId || req.body?.clientId || '').trim();
+    const { aiMonthlyLimit, customGeminiKey } = req.body;
     if (!clientId) {
-      return res.status(400).json({ error: 'clientId is required' });
+      return res.status(400).json({ error: 'clientId or shopId is required' });
     }
 
     const updates = {};
     if (typeof aiMonthlyLimit === 'number') {
       updates.aiMonthlyLimit = Math.max(0, aiMonthlyLimit);
+      updates.monthlyLimit = Math.max(0, aiMonthlyLimit);
+      updates.limit = Math.max(0, aiMonthlyLimit);
     }
     if (typeof customGeminiKey === 'string') {
       updates.customGeminiKey = customGeminiKey.trim();
@@ -314,38 +318,43 @@ app.post('/api/print/network', (req, res) => {
   });
 });
 
-// Check Gemini AI Operational Status for the active client
+// Check Gemini AI Operational Status for the active client / shop
 app.get('/api/gemini/status', async (req, res) => {
-  const { clientId } = req.query;
+  const headerKey = req.headers['x-gemini-api-key'] || req.headers['x-api-key'];
+  const customKey = (headerKey || req.query.apiKey || '').trim();
+  const shopId = (req.headers['x-shop-id'] || req.query.shopId || req.query.clientId || 'SHOP-BILLNAW-01').trim();
+
   try {
     let keyCheck = null;
-    if (clientId) {
-      try {
-        keyCheck = await checkAiQuotaAndKey(clientId);
-      } catch (quotaErr) {
-        if (quotaErr.status === 429) {
-          return res.json({
-            operational: false,
-            quotaExceeded: true,
-            message: 'Monthly AI menu scan quota reached for this store.'
-          });
-        }
+    try {
+      keyCheck = await checkAiQuotaAndKey({ shopId, customApiKey: customKey, reserveSlot: false });
+    } catch (quotaErr) {
+      if (quotaErr.status === 429) {
+        return res.json({
+          operational: false,
+          quotaExceeded: true,
+          message: quotaErr.message || 'Monthly AI scan quota of 15 scans reached for this shop.',
+          quota: quotaErr.quota || null
+        });
       }
     }
 
-    const resolvedApiKey = resolveGeminiApiKey(keyCheck?.apiKey);
-
+    const resolvedApiKey = resolveGeminiApiKey(customKey || keyCheck?.apiKey);
     const hasKey = Boolean(resolvedApiKey && resolvedApiKey.length > 5);
     const operational = hasKey ? await isGeminiKeyOperational(resolvedApiKey) : false;
+    const isCustomKey = Boolean(customKey || (keyCheck && keyCheck.isCustomKey));
 
     res.json({
       operational,
       hasKey,
+      isCustomKey,
+      keySource: customKey ? 'header_byok' : (keyCheck?.isCustomKey ? 'profile_byok' : 'server_env'),
       quota: keyCheck ? {
         limit: keyCheck.monthlyLimit,
         used: keyCheck.currentUsage,
         remaining: Math.max(0, keyCheck.monthlyLimit - keyCheck.currentUsage),
-        month: keyCheck.currentMonth
+        month: keyCheck.currentMonth,
+        resetMonth: keyCheck.currentMonth
       } : null
     });
   } catch (err) {
@@ -354,24 +363,47 @@ app.get('/api/gemini/status', async (req, res) => {
 });
 
 // Protected Gemini Menu Extraction: AI key resolution + Monthly quota enforcement + Graceful Fallback
-app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res) => {
-  const { base64Data, mimeType, clientId, extractedText } = req.body;
+const handleMenuScanRequest = async (req, res) => {
+  const customHeaderKey = req.headers['x-gemini-api-key'] || req.headers['x-api-key'];
+  const customKey = (customHeaderKey || req.body?.apiKey || req.body?.customGeminiKey || '').trim();
+  const shopId = (req.headers['x-shop-id'] || req.body?.shopId || req.query?.shopId || req.body?.clientId || req.query?.clientId || 'SHOP-BILLNAW-01').trim();
+  const shopEmail = (req.headers['x-shop-email'] || req.body?.shopEmail || req.query?.shopEmail || '').trim();
+  const { base64Data, mimeType, extractedText } = req.body || {};
   let keyCheck = null;
+  let slotReserved = false;
 
   try {
     // 1. Check quota and resolve effective API key (Client dedicated key or global server key)
     try {
-      keyCheck = await checkAiQuotaAndKey(clientId);
+      keyCheck = await checkAiQuotaAndKey({ shopId, customApiKey: customKey });
+      slotReserved = true;
     } catch (quotaErr) {
       if (quotaErr.status === 429) {
         return res.status(429).json({
-          error: quotaErr.message || 'Monthly AI upload quota reached for this store.',
+          error: quotaErr.message || 'Monthly AI scan quota of 15 scans reached for this shop.',
           quota: quotaErr.quota || null
         });
       }
+      throw quotaErr;
     }
 
-    const resolvedApiKey = resolveGeminiApiKey(keyCheck?.apiKey);
+    const resolvedApiKey = resolveGeminiApiKey(customKey || keyCheck?.apiKey);
+    const isCustomKey = Boolean(customKey || (keyCheck && keyCheck.isCustomKey));
+
+    // If custom key was provided, ensure it is operational; otherwise fail with 401
+    if (isCustomKey && resolvedApiKey) {
+      const isCustomKeyValid = await isGeminiKeyOperational(resolvedApiKey);
+      if (!isCustomKeyValid) {
+        if (slotReserved) {
+          releaseAiQuotaSlot(shopId);
+          slotReserved = false;
+        }
+        return res.status(401).json({
+          error: 'Custom Gemini API key is unauthorized or invalid. Please verify your key in Settings > AI Quota & Custom Key.',
+          invalidCustomKey: true
+        });
+      }
+    }
 
     let isOperationalKey = false;
     if (base64Data && resolvedApiKey) {
@@ -385,8 +417,9 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
           });
 
           if (result && Array.isArray(result.categories) && result.categories.length > 0) {
-            // Increment usage counter upon successful extraction
-            const quotaInfo = await recordSuccessfulAiUsage(clientId, keyCheck || { currentUsage: 0, monthlyLimit: 10, currentMonth: getCurrentYearMonth() }).catch(() => null);
+            // Increment usage counter upon successful extraction (also decrements in-flight slot)
+            const quotaInfo = await recordSuccessfulAiUsage(shopId, keyCheck || { currentUsage: 0, monthlyLimit: 15, currentMonth: getCurrentYearMonth() }).catch(() => null);
+            slotReserved = false;
 
             return res.json({
               ...result,
@@ -401,6 +434,11 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
     }
 
     // 2. Fallback parser (Extracts text lines or populates editable category starter)
+    if (slotReserved) {
+      releaseAiQuotaSlot(shopId);
+      slotReserved = false;
+    }
+
     const fallbackData = parseMenuFromText(extractedText || '');
 
     let warningMessage = 'Menu digitized using Smart Layout Parser.';
@@ -417,14 +455,19 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
         limit: keyCheck.monthlyLimit,
         used: keyCheck.currentUsage,
         remaining: Math.max(0, keyCheck.monthlyLimit - keyCheck.currentUsage),
-        month: keyCheck.currentMonth
+        month: keyCheck.currentMonth,
+        resetMonth: keyCheck.currentMonth
       } : null
     });
   } catch (error) {
+    if (slotReserved) {
+      releaseAiQuotaSlot(shopId);
+      slotReserved = false;
+    }
     const isQuotaBlocked = error.status === 429;
     if (isQuotaBlocked) {
       return res.status(429).json({
-        error: error.message || 'Monthly AI upload quota reached for this store.',
+        error: error.message || 'Monthly AI scan quota of 15 scans reached for this shop.',
         quota: error.quota || null
       });
     }
@@ -440,7 +483,11 @@ app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], async (req, res)
       quota: null
     });
   }
-});
+};
+
+app.post(['/api/extract-menu', '/api/menu/ocr', '/api/gemini'], handleMenuScanRequest);
+app.post('/api/ai/scan-menu', handleMenuScanRequest);
+app.post('/api/menu/scan', handleMenuScanRequest);
 
 // Protected Google Imagen 3 Food Image Generation Endpoint (Milestone M1)
 // Enforces server-side rate limits (5s cooldown, 20/hr burst), input validation,
@@ -888,14 +935,14 @@ app.post('/api/auth/admin-forgot-pin/send-otp', (req, res) => {
   }
 });
 
-// 2C. Admin Forgot PIN: Verify OTP & Reset Master Admin PIN
+// 2C. Admin / Selective Staff Forgot PIN: Verify OTP & Reset PIN with Selective Role
 app.post('/api/auth/admin-forgot-pin/reset', (req, res) => {
   try {
-    const { email, otp, newPin, storeCode } = req.body || {};
-    const result = resetAdminPinWithOtp(email, otp, newPin, storeCode);
+    const { email, otp, newPin, storeCode, staffId, staffName, role } = req.body || {};
+    const result = resetAdminPinWithOtp(email, otp, newPin, storeCode, staffId, staffName, role);
     res.status(result.status).json(result.data);
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message || 'Failed to reset Admin PIN' });
+    res.status(500).json({ success: false, error: err.message || 'Failed to reset PIN' });
   }
 });
 
@@ -1102,7 +1149,110 @@ app.post('/api/store/reset-data', (req, res) => {
   }
 });
 
-// 6C. Subscription & Plan Features API
+// 6C. Subscription & Plan Features API (Milestone 1)
+
+// GET /api/subscription/status?email=...&shopId=...
+app.get('/api/subscription/status', async (req, res) => {
+  try {
+    const rawEmail = req.query.email || req.query.shopEmail;
+    const rawShopId = req.query.shopId || req.query.storeCode;
+
+    const email = rawEmail ? normalizeEmail(rawEmail) : '';
+    const shopId = rawShopId ? String(rawShopId).trim() : '';
+
+    if (!email && !shopId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Either shopId or a valid email query parameter is required.'
+      });
+    }
+
+    if (email && !isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email address provided.'
+      });
+    }
+
+    const subscription = await getShopSubscription(shopId, email);
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        error: 'Shop not found for the provided identifier.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      subscription
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to retrieve subscription status' });
+  }
+});
+
+// POST /api/subscription/manage
+app.post('/api/subscription/manage', async (req, res) => {
+  try {
+    const { shopEmail, shopId, action, reason, updatedBy } = req.body || {};
+
+    const email = shopEmail ? normalizeEmail(shopEmail) : '';
+    const cleanShopId = shopId ? String(shopId).trim() : '';
+
+    if (!action || (!email && !cleanShopId)) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required field: action ('ACTIVE', 'PAUSED', 'RESUMED', 'REVOKED') and at least one of shopEmail or shopId."
+      });
+    }
+
+    if (email && !isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid shopEmail address format.'
+      });
+    }
+
+    const currentSub = await getShopSubscription(cleanShopId, email);
+    if (!currentSub) {
+      return res.status(404).json({
+        success: false,
+        error: 'Shop not found for the provided email or shopId.'
+      });
+    }
+
+    const transition = validateSubscriptionTransition(currentSub.status, action);
+    if (!transition.allowed) {
+      return res.status(transition.statusCode).json({
+        success: false,
+        error: transition.error
+      });
+    }
+
+    const updatedSub = {
+      ...currentSub,
+      status: transition.resultingStatus,
+      plan: req.body?.plan || currentSub.plan || 'billnaw Pro',
+      statusReason: reason ? String(reason).slice(0, 500) : '',
+      updatedAt: new Date().toISOString(),
+      updatedBy: updatedBy || 'admin'
+    };
+
+    const propagationResult = await updateShopSubscription(updatedSub.shopId, updatedSub);
+
+    return res.status(200).json({
+      success: true,
+      message: `Subscription status successfully updated to ${updatedSub.status}`,
+      previousStatus: currentSub.status,
+      status: updatedSub.status,
+      subscription: updatedSub,
+      propagated: propagationResult
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to manage subscription' });
+  }
+});
+
 app.get('/api/subscription/features', (req, res) => {
   try {
     res.json({

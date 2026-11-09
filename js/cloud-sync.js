@@ -92,7 +92,10 @@ function _renderStaffProfileCards() {
         isAdmin: true
     };
 
-    const allProfiles = [adminStaff, ...staffSource.filter(s => s && s.id !== 'admin')];
+    const allProfiles = [
+        adminStaff,
+        ...staffSource.filter(s => s && s.id !== 'admin' && s.role !== 'Admin' && s.id !== 1)
+    ];
     const sessions = (typeof window !== 'undefined' && window.activeStaffSessions) || [];
 
     grid.innerHTML = allProfiles.map(staff => {
@@ -127,15 +130,28 @@ function onStaffProfileSelected(staffId, encodedName, encodedRole) {
 
     _pendingSelectedStaff = { id: staffId, name: staffName, role: staffRole };
 
-    // Prompt for 4-digit PIN verification
+    const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList)) ? window.staffList : [];
+    const matched = staffSource.find(s => String(s.id) === String(staffId));
+    const isFirstLogin = matched && (matched.mustChangePin === true || (matched.initialOtp && !matched.otpConsumed));
+
+    // Prompt for 4-digit PIN / OTP verification
     const pinWrap = document.getElementById('staffPinEntryWrap');
     const pinNameEl = document.getElementById('staffPinName');
+    const promptTextEl = pinWrap ? pinWrap.querySelector('p') : null;
+
     if (pinNameEl) pinNameEl.innerText = staffName;
+    if (promptTextEl) {
+        promptTextEl.innerHTML = isFirstLogin
+            ? `Enter 4-Digit Onboarding OTP for <span id="staffPinName" style="color: var(--primary);">${staffName}</span>`
+            : `Enter 4-Digit PIN for <span id="staffPinName" style="color: var(--primary);">${staffName}</span>`;
+    }
+
     if (pinWrap) {
         pinWrap.style.display = 'block';
         const pInput = document.getElementById('staffGatewayPinInput');
         if (pInput) {
             pInput.value = '';
+            pInput.placeholder = isFirstLogin ? 'OTP' : '••••';
             pInput.focus();
         }
     }
@@ -172,11 +188,12 @@ async function confirmStaffProfilePin() {
     const enteredPin = input ? input.value.trim() : '';
 
     if (enteredPin.length < 4) {
-        if (typeof showToast === 'function') showToast("Please enter complete 4-digit PIN.", "warning");
+        if (typeof showToast === 'function') showToast("Please enter complete 4-digit PIN / OTP.", "warning");
         return;
     }
 
     let isValid = false;
+    let targetStaff = null;
 
     if (_pendingSelectedStaff.role === 'Admin' || _pendingSelectedStaff.id === 'admin') {
         if (typeof verifyAdminPin === 'function') {
@@ -184,30 +201,40 @@ async function confirmStaffProfilePin() {
         } else {
             isValid = (enteredPin === '1234');
         }
+        if (isValid) {
+            const list = (typeof window !== 'undefined' && Array.isArray(window.staffList)) ? window.staffList : [];
+            targetStaff = list.find(s => s && (s.role === 'Admin' || s.id === 'admin' || s.id === 1)) || _pendingSelectedStaff;
+        }
     } else {
         const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList)) ? window.staffList : [];
         const matched = staffSource.find(s => String(s.id) === String(_pendingSelectedStaff.id));
         if (matched) {
-            if (matched.pinHash) {
-                let computedHash = '';
-                try {
-                    const encoded = new TextEncoder().encode(enteredPin);
-                    const buf = await crypto.subtle.digest('SHA-256', encoded);
-                    computedHash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-                } catch(e) {}
-                isValid = (computedHash === matched.pinHash || enteredPin === matched.pin || enteredPin === '1234');
-            } else {
-                isValid = (!matched.pin || enteredPin === matched.pin || enteredPin === '1234');
+            if (typeof verifyStaffPin === 'function') {
+                isValid = await verifyStaffPin(matched, enteredPin);
+            } else if (typeof verifyPin === 'function' && (matched.pin_salt || matched.pinSalt) && (matched.pin_hash || matched.pinHash)) {
+                isValid = await verifyPin(enteredPin, matched.pin_salt || matched.pinSalt, matched.pin_hash || matched.pinHash);
             }
-        } else {
-            isValid = (enteredPin === '1234');
+            if (isValid) {
+                targetStaff = matched;
+            }
         }
     }
 
-    if (isValid) {
-        activateStaffProfileSession(_pendingSelectedStaff);
+    if (isValid && targetStaff) {
+        const isFirstLogin = targetStaff.mustChangePin === true || (targetStaff.initialOtp && !targetStaff.otpConsumed);
+        if (isFirstLogin) {
+            _cancelStaffPinEntry();
+            hideStaffProfileSelector();
+            if (typeof openFirstLoginPinModal === 'function') {
+                openFirstLoginPinModal(targetStaff);
+            } else {
+                activateStaffProfileSession(targetStaff);
+            }
+            return;
+        }
+        activateStaffProfileSession(targetStaff);
     } else {
-        if (typeof showToast === 'function') showToast("Incorrect PIN. Please try again.", "error");
+        if (typeof showToast === 'function') showToast("Incorrect PIN / OTP. Please try again.", "error");
         clearGatewayPin();
     }
 }
@@ -234,10 +261,39 @@ function activateStaffProfileSession(staff) {
     window.currentStaff = activeObj;
     window.currentRole = (staff.role === 'Admin' || staff.role === 'Manager') ? 'admin' : 'staff';
 
+    const devId = (typeof getDeviceId === 'function' ? getDeviceId() : null) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_device_id') : null) || 'DEV_' + Math.random().toString(36).substring(2, 9);
+    const sessionId = (typeof window !== 'undefined' && window.currentSessionId) || 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    window.currentSessionId = sessionId;
+
     try {
         localStorage.setItem('billnaw_active_staff', JSON.stringify(activeObj));
         localStorage.setItem('billnaw_last_staff_id', String(staff.id));
+        localStorage.setItem('billnaw_current_session_id', sessionId);
+        localStorage.setItem('billnaw_pin_verified_at', Date.now().toString());
+        localStorage.removeItem('billnaw_terminal_locked');
     } catch(e) {}
+
+    const nowIso = new Date().toISOString();
+    const sessionRecord = {
+        sessionId: sessionId,
+        staffId: staff.id,
+        staffName: staff.name,
+        staffRole: staff.role || 'Cashier',
+        deviceId: devId,
+        deviceName: localStorage.getItem('billnaw_station_name') || 'Terminal',
+        stationProfile: localStorage.getItem('billnaw_station_profile') || 'GENERAL_STATION',
+        status: 'ONLINE',
+        shiftStartedAt: nowIso,
+        lastActiveAt: nowIso,
+        isLocked: false
+    };
+
+    if (typeof syncSessionRecordToCloud === 'function') {
+        syncSessionRecordToCloud(sessionRecord);
+    }
+    if (typeof startSessionHeartbeat === 'function') {
+        startSessionHeartbeat(sessionRecord);
+    }
 
     // 2. Register staffSession in Firebase
     registerStaffSessionCloud(staff);

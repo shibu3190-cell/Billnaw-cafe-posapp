@@ -183,7 +183,7 @@ let selectedLoginStaffId = 1;
 let firestoreUnsubscribe = null;
 let lastCloudSyncTime = null;
 
-let myClientID = localStorage.getItem('cafeLicenseKey') || 'BONGBHOJ-TERMINAL';
+let myClientID = localStorage.getItem('billnaw_store_code') || localStorage.getItem('cafeLicenseKey') || 'SHOP-BILLNAW-01';
 let currentRole = null;
 let activeTable = 1;
 let activeCategory = "All";
@@ -1379,10 +1379,258 @@ function setCloudSyncStatus(status, text) {
 }
 window.setCloudSyncStatus = setCloudSyncStatus;
 
+// ============================================================================
+// 💎 Subscription Management & Real-Time Client Enforcement (Milestone 1)
+// ============================================================================
+
+let currentSubscriptionState = null;
+
+function isSubscriptionPaused() {
+    const status = (window.currentSubscriptionState && window.currentSubscriptionState.status) ||
+                   (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_subscription_status') : null) ||
+                   'ACTIVE';
+    return status.toUpperCase() === 'PAUSED';
+}
+window.isSubscriptionPaused = isSubscriptionPaused;
+
+function isSubscriptionRevoked() {
+    const status = (window.currentSubscriptionState && window.currentSubscriptionState.status) ||
+                   (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_subscription_status') : null) ||
+                   'ACTIVE';
+    return status.toUpperCase() === 'REVOKED';
+}
+window.isSubscriptionRevoked = isSubscriptionRevoked;
+
+function applySubscriptionStatus(subscription) {
+    if (!subscription || typeof subscription !== 'object') {
+        subscription = {
+            status: 'ACTIVE',
+            plan: 'billnaw Pro',
+            isFree: true
+        };
+    }
+
+    const rawStatus = (subscription.status || 'ACTIVE').toUpperCase();
+    currentSubscriptionState = { ...subscription, status: rawStatus };
+    window.currentSubscriptionState = currentSubscriptionState;
+
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('billnaw_subscription_status', rawStatus);
+            localStorage.setItem('billnaw_subscription_record', JSON.stringify(currentSubscriptionState));
+        }
+    } catch (e) {}
+
+    const pausedBanner = document.getElementById('subscriptionPausedBanner');
+    const revokedOverlay = document.getElementById('subscriptionRevokedOverlay');
+    const desktopCheckoutBtn = document.getElementById('desktopCheckoutBtn');
+    const floatingCartRight = document.querySelector('#floatingCart .sc-right');
+    const checkoutModalPayBtn = document.querySelector('#checkoutModal .btn-success');
+    const settingsSubTitle = document.getElementById('settingsSubscriptionSubtitle');
+
+    if (rawStatus === 'ACTIVE' || rawStatus === 'RESUMED') {
+        // 1. Hide restriction banners and overlays
+        if (pausedBanner) pausedBanner.style.display = 'none';
+        if (revokedOverlay) revokedOverlay.style.display = 'none';
+
+        // 2. Re-enable checkout and ordering buttons
+        if (desktopCheckoutBtn) {
+            desktopCheckoutBtn.disabled = false;
+            desktopCheckoutBtn.removeAttribute('title');
+        }
+        if (floatingCartRight) {
+            floatingCartRight.disabled = false;
+            floatingCartRight.removeAttribute('title');
+        }
+        if (checkoutModalPayBtn) {
+            checkoutModalPayBtn.disabled = false;
+        }
+
+        // 3. Update Settings Subtitle
+        if (settingsSubTitle) {
+            settingsSubTitle.innerText = `${subscription.plan || 'Pro Plan'} Active • Free Tier`;
+        }
+
+        if (typeof updateCartUI === 'function') {
+            try { updateCartUI(); } catch (e) {}
+        }
+
+    } else if (rawStatus === 'PAUSED') {
+        // 1. Show persistent amber banner
+        if (pausedBanner) pausedBanner.style.display = 'flex';
+        if (revokedOverlay) revokedOverlay.style.display = 'none';
+
+        // 2. Disable checkout and ordering buttons
+        if (desktopCheckoutBtn) {
+            desktopCheckoutBtn.disabled = true;
+            desktopCheckoutBtn.title = 'Subscription Paused - Contact Admin';
+        }
+        if (floatingCartRight) {
+            floatingCartRight.disabled = true;
+            floatingCartRight.title = 'Subscription Paused - Contact Admin';
+        }
+        if (checkoutModalPayBtn) {
+            checkoutModalPayBtn.disabled = true;
+        }
+
+        // Dismiss checkout modal if currently open
+        const cModal = document.getElementById('checkoutModal');
+        if (cModal && cModal.style.display !== 'none') {
+            cModal.style.display = 'none';
+        }
+
+        // 3. Update Settings Subtitle
+        if (settingsSubTitle) {
+            settingsSubTitle.innerText = 'Subscription Paused • Contact Admin';
+        }
+
+        if (typeof showToast === 'function') {
+            showToast("⚠️ Subscription paused. Checkout is disabled.", "warning");
+        }
+
+    } else if (rawStatus === 'REVOKED') {
+        // 1. Dismiss any open modals except the revoked overlay
+        document.querySelectorAll('.modal-overlay').forEach(modal => {
+            if (modal.id !== 'subscriptionRevokedOverlay') {
+                modal.style.display = 'none';
+            }
+        });
+
+        // 2. Show full-screen lockout overlay
+        if (revokedOverlay) {
+            revokedOverlay.style.display = 'flex';
+            const emailDisp = document.getElementById('revokedShopEmailDisplay');
+            if (emailDisp) {
+                emailDisp.innerText = subscription.shopEmail || (window.shopProfile && window.shopProfile.email) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_shop_email') : '') || 'N/A';
+            }
+            const storeDisp = document.getElementById('revokedStoreCodeDisplay');
+            if (storeDisp) {
+                storeDisp.innerText = subscription.shopId || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : '') || 'N/A';
+            }
+            const reasonDisp = document.getElementById('subscriptionRevokedReason');
+            if (reasonDisp && subscription.statusReason) {
+                reasonDisp.innerText = subscription.statusReason;
+            }
+        }
+        if (pausedBanner) pausedBanner.style.display = 'none';
+
+        // 3. Lock POS session & purge active staff
+        if (typeof clearCart === 'function') {
+            try { clearCart(); } catch (e) {}
+        }
+        window.cart = [];
+        window.currentStaff = null;
+        window.currentRole = null;
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.removeItem('billnaw_active_staff');
+                localStorage.removeItem('billnaw_current_session_id');
+                localStorage.setItem('billnaw_terminal_locked', 'true');
+            }
+        } catch (e) {}
+        isTerminalLocked = true;
+        window.isTerminalLocked = true;
+        if (typeof stopSessionHeartbeat === 'function') {
+            try { stopSessionHeartbeat(); } catch (e) {}
+        }
+        if (typeof updateStaffTopbarDisplay === 'function') {
+            try { updateStaffTopbarDisplay(); } catch (e) {}
+        }
+
+        // 4. Disconnect operational subcollections (sessions, invoices)
+        if (typeof firestoreSessionsUnsubscribe === 'function') {
+            try { firestoreSessionsUnsubscribe(); } catch (e) {}
+            firestoreSessionsUnsubscribe = null;
+        }
+        if (typeof firestoreInvoicesUnsubscribe === 'function') {
+            try { firestoreInvoicesUnsubscribe(); } catch (e) {}
+            firestoreInvoicesUnsubscribe = null;
+        }
+
+        if (typeof setCloudSyncStatus === 'function') {
+            setCloudSyncStatus('offline', 'Subscription Revoked');
+        }
+
+        if (settingsSubTitle) {
+            settingsSubTitle.innerText = 'Subscription Revoked • Contact Admin';
+        }
+    }
+
+    // 5. Dispatch decoupled DOM event for modular listeners
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('billnaw:subscription-updated', {
+            detail: { subscription: currentSubscriptionState, status: rawStatus }
+        }));
+    }
+}
+window.applySubscriptionStatus = applySubscriptionStatus;
+
+async function checkSubscriptionStatusNow() {
+    const email = (window.shopProfile && window.shopProfile.email) ||
+                  (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_shop_email') || localStorage.getItem('ownerEmail')) : '') ||
+                  '';
+    const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+                      (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : '') ||
+                      '';
+    try {
+        const query = new URLSearchParams();
+        if (email) query.set('email', email);
+        if (storeCode) query.set('shopId', storeCode);
+        const res = await fetch(`/api/subscription/status?${query.toString()}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.subscription) {
+                applySubscriptionStatus(data.subscription);
+                if (typeof showToast === 'function') {
+                    showToast(`Subscription status: ${data.subscription.status}`, 'info');
+                }
+                return;
+            }
+        }
+        if (typeof showToast === 'function') {
+            showToast('Unable to reach subscription service. Please verify internet connection.', 'error');
+        }
+    } catch (err) {
+        if (typeof showToast === 'function') {
+            showToast('Network error while checking subscription status.', 'error');
+        }
+    }
+}
+window.checkSubscriptionStatusNow = checkSubscriptionStatusNow;
+
+// Capture-phase listener to disable checkout actions when subscription is paused or revoked
+if (typeof document !== 'undefined') {
+    document.addEventListener('click', function(e) {
+        if (isSubscriptionPaused()) {
+            const target = e.target.closest('#desktopCheckoutBtn, #floatingCart .sc-right, #checkoutModal .btn-success, #btnPlaceOrder');
+            if (target) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof showToast === 'function') {
+                    showToast("⚠️ Subscription paused. Checkout is disabled - please contact admin.", "warning");
+                }
+            }
+        } else if (isSubscriptionRevoked()) {
+            const target = e.target.closest('#desktopCheckoutBtn, #floatingCart .sc-right, #checkoutModal .btn-success, #btnPlaceOrder');
+            if (target) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }
+    }, true);
+}
+
 // Firestore Sync Integration
 function handleRemoteFirestoreUpdate(data) {
     if (!data || typeof data !== 'object') return;
     console.log("⚡ Received Firestore live store snapshot for:", myClientID);
+
+    // 💎 Handle Subscription State Transitions (Milestone 1)
+    if (data.subscription && typeof data.subscription === 'object') {
+        applySubscriptionStatus(data.subscription);
+    } else if (!currentSubscriptionState) {
+        applySubscriptionStatus({ status: 'ACTIVE', plan: 'billnaw Pro', isFree: true });
+    }
 
     if (data.profile) {
         const existingPinHash = shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash');
@@ -1415,6 +1663,18 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
     }
     if (Array.isArray(data.staff) && data.staff.length > 0) {
+        const activeStaff = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
+        if (activeStaff && activeStaff.role !== 'Admin') {
+            const stillExists = data.staff.some(s => String(s.id) === String(activeStaff.id));
+            if (!stillExists) {
+                try { localStorage.setItem('billnaw_session_revoked', 'true'); } catch (e) {}
+                if (typeof lockTerminalByRemote === 'function') {
+                    lockTerminalByRemote({ staffId: activeStaff.id, status: 'REVOKED', reason: 'Staff profile removed by Admin' });
+                } else if (typeof logoutStaff === 'function') {
+                    logoutStaff();
+                }
+            }
+        }
         staffList = data.staff;
         window.staffList = staffList;
         try {
@@ -1563,10 +1823,15 @@ window.handleRemoteFirestoreUpdate = handleRemoteFirestoreUpdate;
 
 // Firestore Store Resolution & Sync Integration (Dual-path: /shops/{storeCode} and /cafes/{cafeId} with /clients/{clientId} fallback)
 function getActiveStoreIdentifier() {
-    return localStorage.getItem('billnaw_store_code') || 
-           localStorage.getItem('cafeLicenseKey') || 
-           myClientID || 
-           'BONGBHOJ-TERMINAL';
+    const code = localStorage.getItem('billnaw_store_code') || 
+                 localStorage.getItem('bongbhoj_client_id') ||
+                 localStorage.getItem('cafeLicenseKey') || 
+                 myClientID || 
+                 'SHOP-BILLNAW-01';
+    if (typeof localStorage !== 'undefined' && !localStorage.getItem('billnaw_store_code') && code) {
+        try { localStorage.setItem('billnaw_store_code', code); } catch(e) {}
+    }
+    return code;
 }
 window.getActiveStoreIdentifier = getActiveStoreIdentifier;
 
@@ -1636,7 +1901,7 @@ function subscribeDevicesCloudListener(targetStoreCode = null) {
             try { localStorage.setItem('billnaw_authorized_devices', JSON.stringify(devices)); } catch(e) {}
             if (typeof idb !== 'undefined' && idb.set) { idb.set('billnaw_devices', devices); }
 
-            const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+            const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
             const myRecord = devices.find(d => d.deviceId === myDevId || d.id === myDevId);
             if (myRecord) {
                 window.currentDeviceRecord = myRecord;
@@ -1695,10 +1960,13 @@ function subscribeDevicesCloudListener(targetStoreCode = null) {
                     if (typeof registerMasterDeviceToCloud === 'function') registerMasterDeviceToCloud(myDevId);
                     if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
                 } else if (otherActiveMaster) {
-                    // Another device is already active as Master: this is a secondary terminal requiring pairing approval!
+                    // Secondary terminal authenticated under store tenant: auto-authorize & register passively for admin audit
                     localStorage.setItem('billnaw_is_master', 'false');
-                    localStorage.setItem('billnaw_device_status', 'PENDING');
-                    if (typeof showDevicePairingOverlay === 'function') showDevicePairingOverlay();
+                    localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                    localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+                    const devName = localStorage.getItem('billnaw_station_name') || (typeof detectDefaultDeviceName === 'function' ? detectDefaultDeviceName(myDevId) : 'Secondary Terminal');
+                    if (typeof registerDeviceToCloud === 'function') registerDeviceToCloud(myDevId, devName, false);
+                    if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
                 }
             }
             window.dispatchEvent(new CustomEvent('billnaw:devices-updated', { detail: { devices } }));
@@ -1760,19 +2028,28 @@ function subscribeSessionsCloudListener(targetStoreCode = null) {
             try { localStorage.setItem('billnaw_active_sessions', JSON.stringify(sessions)); } catch(e) {}
             if (typeof idb !== 'undefined' && idb.set) { idb.set('billnaw_sessions', sessions); }
 
-            const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
-            const lockedSession = sessions.find(s => (s.deviceId === myDevId || s.sessionId === window.currentSessionId) && (s.status === 'LOCKED' || s.isLocked === true));
+            const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
+            const activeStaffId = (typeof window !== 'undefined' && window.currentStaff && window.currentStaff.id) || (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.id);
+            const lockedSession = sessions.find(s => 
+                (s.deviceId === myDevId || s.sessionId === window.currentSessionId || (activeStaffId && String(s.staffId) === String(activeStaffId))) && 
+                (s.status === 'LOCKED' || s.status === 'REVOKED' || s.isLocked === true)
+            );
             if (lockedSession) {
+                try { localStorage.setItem('billnaw_session_revoked', 'true'); } catch (e) {}
                 window.dispatchEvent(new CustomEvent('billnaw:session-locked', { detail: { session: lockedSession } }));
                 if (typeof lockTerminalByRemote === 'function') {
                     lockTerminalByRemote(lockedSession);
                 } else if (typeof lockPosTerminal === 'function') {
                     lockPosTerminal();
                 }
+                if (typeof showToast === 'function') {
+                    showToast(lockedSession.status === 'REVOKED' ? "Your staff session was revoked by Admin. Terminal locked." : "Terminal locked remotely.", "error");
+                }
             }
 
             window.dispatchEvent(new CustomEvent('billnaw:sessions-updated', { detail: { sessions } }));
             if (typeof renderLiveSessionCards === 'function') renderLiveSessionCards();
+            if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
         }, (err) => {
             console.warn('[Firestore] sessions listener warning:', err.message);
         });
@@ -1799,6 +2076,21 @@ function subscribeStaffCloudListener(targetStoreCode = null) {
             snap.forEach(docSnap => {
                 staffDocs.push({ id: docSnap.id, ...docSnap.data() });
             });
+            const activeStaff = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
+            if (activeStaff && activeStaff.role !== 'Admin' && staffDocs.length > 0) {
+                const stillExists = staffDocs.some(s => String(s.id) === String(activeStaff.id));
+                if (!stillExists) {
+                    try { localStorage.setItem('billnaw_session_revoked', 'true'); } catch (e) {}
+                    if (typeof lockTerminalByRemote === 'function') {
+                        lockTerminalByRemote({ staffId: activeStaff.id, status: 'REVOKED', reason: 'Staff profile removed by Admin' });
+                    } else if (typeof logoutStaff === 'function') {
+                        logoutStaff();
+                    }
+                    if (typeof showToast === 'function') {
+                        showToast("Your staff profile has been removed by Admin. Session logged out.", "error");
+                    }
+                }
+            }
             if (staffDocs.length > 0) {
                 staffList = staffDocs;
                 window.staffList = staffList;
@@ -2113,7 +2405,7 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
         attachFirestoreListener();
         const status = typeof getDeviceStatus === 'function' ? getDeviceStatus() : localStorage.getItem('billnaw_device_status');
         if (status === 'PENDING') {
-            const devId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+            const devId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
             const code = localStorage.getItem('billnaw_pairing_code');
             if (devId && code && typeof registerPendingDeviceToCloud === 'function') {
                 registerPendingDeviceToCloud(devId, code);
@@ -2407,6 +2699,12 @@ function persistStaffToFirestore(newStaff = null) {
         }
         if (newStaff && (newStaff.id || newStaff.staffId)) {
             syncStaffRecordToCloud(newStaff).catch(() => {});
+        } else if (Array.isArray(staffList)) {
+            staffList.forEach(s => {
+                if (s && (s.id || s.staffId)) {
+                    syncStaffRecordToCloud(s).catch(() => {});
+                }
+            });
         }
     }
 }
@@ -2470,7 +2768,7 @@ function isStoreAuthenticated() {
 window.isStoreAuthenticated = isStoreAuthenticated;
 
 async function verifyDeviceAuthorizationOnLogin(storeCode) {
-    const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+    const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
     
     // Check if this physical device is already marked as master
     if (localStorage.getItem('billnaw_is_master') === 'true' && localStorage.getItem('billnaw_device_status') === 'AUTHORIZED') {
@@ -2492,15 +2790,22 @@ async function verifyDeviceAuthorizationOnLogin(storeCode) {
 
         const myRecord = Array.isArray(devices) ? devices.find(d => d.deviceId === myDevId || d.id === myDevId) : null;
         if (myRecord) {
+            if (myRecord.status === 'REVOKED') {
+                await handleDeviceRevocation(myRecord);
+                return;
+            }
             if (myRecord.isMaster === true || myRecord.status === 'AUTHORIZED') {
                 if (myRecord.isMaster && typeof setMasterTerminal === 'function') setMasterTerminal(true);
                 localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
                 if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
                 return;
             } else if (myRecord.status === 'PENDING') {
+                // Auto-authorize store-authenticated terminal & register passively for admin audit
                 localStorage.setItem('billnaw_is_master', 'false');
-                localStorage.setItem('billnaw_device_status', 'PENDING');
-                if (typeof showDevicePairingOverlay === 'function') showDevicePairingOverlay();
+                localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+                if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
+                registerDeviceToCloud(myDevId, myRecord.deviceName || detectDefaultDeviceName(myDevId), false);
                 return;
             }
         }
@@ -2515,10 +2820,13 @@ async function verifyDeviceAuthorizationOnLogin(storeCode) {
             if (typeof registerMasterDeviceToCloud === 'function') registerMasterDeviceToCloud(myDevId);
             if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
         } else {
-            // Another device is already active -> secondary device requires pairing approval
+            // Secondary terminal is authenticated via store credentials: auto-authorize & register passively for admin audit
             localStorage.setItem('billnaw_is_master', 'false');
-            localStorage.setItem('billnaw_device_status', 'PENDING');
-            if (typeof showDevicePairingOverlay === 'function') showDevicePairingOverlay();
+            localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+            localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+            const devName = localStorage.getItem('billnaw_station_name') || detectDefaultDeviceName(myDevId);
+            if (typeof registerDeviceToCloud === 'function') registerDeviceToCloud(myDevId, devName, false);
+            if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
         }
     } catch (e) {
         console.warn('verifyDeviceAuthorizationOnLogin notice:', e);
@@ -2534,7 +2842,7 @@ function isMasterTerminal() {
     // Do NOT auto-promote to master if not explicitly declared true.
     // Check if this device is explicitly registered as Master in cloud records
     const devices = window.authorizedDevices || [];
-    const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (typeof localStorage !== 'undefined' ? localStorage.getItem('bongbhoj_device_id') : null);
+    const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id')) : null);
     const isConfirmedMaster = Array.isArray(devices) && devices.some(d => (d.deviceId === myDevId || d.id === myDevId) && d.isMaster === true);
 
     if (isConfirmedMaster) {
@@ -2567,6 +2875,34 @@ async function registerMasterDeviceToCloud(deviceId) {
 }
 window.registerMasterDeviceToCloud = registerMasterDeviceToCloud;
 
+function detectDefaultDeviceName(devId) {
+    const isMobile = (typeof navigator !== 'undefined') && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+    const shortId = (devId || '').slice(-4).toUpperCase() || 'POS';
+    return isMobile ? `Mobile Terminal (${shortId})` : `Counter Terminal (${shortId})`;
+}
+window.detectDefaultDeviceName = detectDefaultDeviceName;
+
+async function registerDeviceToCloud(deviceId, deviceName, isMaster = false) {
+    try {
+        if (typeof window.firestoreDB !== 'undefined' && typeof window.firestoreDoc !== 'undefined') {
+            const devDocRef = getStoreSubdocRef('devices', deviceId);
+            if (devDocRef && window.firestoreSetDoc) {
+                await window.firestoreSetDoc(devDocRef, {
+                    deviceId,
+                    deviceName: deviceName || (isMaster ? 'Master Admin Terminal' : detectDefaultDeviceName(deviceId)),
+                    stationProfile: isMaster ? 'BILLING_COUNTER' : 'GENERAL_STATION',
+                    status: 'AUTHORIZED',
+                    isMaster: Boolean(isMaster),
+                    lastSeenAt: new Date().toISOString()
+                }, { merge: true });
+            }
+        }
+    } catch (e) {
+        console.warn('[DeviceRegistry] Passive cloud device sync notice:', e.message);
+    }
+}
+window.registerDeviceToCloud = registerDeviceToCloud;
+
 function setMasterTerminal(isMaster = true) {
     localStorage.setItem('billnaw_is_master', isMaster ? 'true' : 'false');
     if (isMaster) {
@@ -2574,7 +2910,7 @@ function setMasterTerminal(isMaster = true) {
         localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
         setStationProfile('BILLING_COUNTER');
         if (typeof hideDevicePairingOverlay === 'function') hideDevicePairingOverlay();
-        const devId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+        const devId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
         if (devId) {
             registerMasterDeviceToCloud(devId);
         }
@@ -3009,7 +3345,7 @@ async function checkDeviceAuthorizationStatus() {
         return;
     }
 
-    const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+    const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
     const devices = window.authorizedDevices || [];
     const myRecord = devices.find(d => d.deviceId === myDevId || d.id === myDevId);
 
@@ -3065,8 +3401,14 @@ async function checkDeviceAuthorizationStatus() {
     }
 
     if (myRecord.status === 'PENDING') {
-        localStorage.setItem('billnaw_device_status', 'PENDING');
-        showDevicePairingOverlay();
+        // Option 1: Auto-Authorize on Store Login + Passive Audit
+        localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+        localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+        hideDevicePairingOverlay();
+        const myDevName = myRecord.deviceName || (typeof detectDefaultDeviceName === 'function' ? detectDefaultDeviceName(myDevId) : `Counter Terminal ${myDevId.slice(-4)}`);
+        if (typeof registerDeviceToCloud === 'function') {
+            registerDeviceToCloud(myDevId, myDevName, false);
+        }
     }
 }
 window.checkDeviceAuthorizationStatus = checkDeviceAuthorizationStatus;
@@ -3102,7 +3444,7 @@ async function handleDeviceRevocation(deviceRecord) {
     if (revOverlay) {
         revOverlay.style.display = 'flex';
         const idDisplay = document.getElementById('revokedDeviceIdDisplay');
-        if (idDisplay) idDisplay.innerText = (deviceRecord && deviceRecord.deviceId) ? deviceRecord.deviceId : (localStorage.getItem('bongbhoj_device_id') || 'DEV_UNKNOWN');
+        if (idDisplay) idDisplay.innerText = (deviceRecord && deviceRecord.deviceId) ? deviceRecord.deviceId : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id') || 'DEV_UNKNOWN');
     }
 }
 window.handleDeviceRevocation = handleDeviceRevocation;
@@ -3141,7 +3483,7 @@ function initDevicePairingFlow() {
 
     // Verify if another device is active for this store:
     const devices = window.authorizedDevices || [];
-    const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+    const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
     const hasOtherActiveMaster = Array.isArray(devices) && devices.some(d => (d.deviceId !== myDevId && d.id !== myDevId) && (d.isMaster === true || d.status === 'AUTHORIZED'));
 
     // If no other device is active for this store yet, promote this authenticated device to Master
@@ -3154,7 +3496,15 @@ function initDevicePairingFlow() {
         return;
     }
 
-    showDevicePairingOverlay();
+    // Option 1: Auto-Authorize on Store Login + Passive Audit
+    // Secondary device logged in with store credentials -> auto-authorize and register passively
+    localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+    localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+    hideDevicePairingOverlay();
+    if (typeof registerDeviceToCloud === 'function') {
+        const myDevName = (typeof detectDefaultDeviceName === 'function') ? detectDefaultDeviceName(myDevId) : `Counter Terminal ${myDevId.slice(-4)}`;
+        registerDeviceToCloud(myDevId, myDevName, false);
+    }
 }
 window.initDevicePairingFlow = initDevicePairingFlow;
 
@@ -3162,6 +3512,11 @@ function showDevicePairingOverlay() {
     if (typeof isStoreAuthenticated === 'function' && !isStoreAuthenticated()) {
         hideDevicePairingOverlay();
         if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
+        return;
+    }
+    // Option 1: Suppress pairing overlay for store-authenticated devices
+    if (typeof isStoreAuthenticated === 'function' && isStoreAuthenticated()) {
+        hideDevicePairingOverlay();
         return;
     }
     if ((typeof getDeviceStatus === 'function' && getDeviceStatus() === 'AUTHORIZED') || localStorage.getItem('billnaw_device_status') === 'AUTHORIZED') {
@@ -3702,33 +4057,58 @@ function initStaffSystem() {
     if (typeof enforcePermissions === 'function') enforcePermissions();
     if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
 
-    // Check terminal lock persistence & 10-day persistence
+    // Check terminal lock persistence & 24-hour shift session persistence
     try {
         const isLocked = localStorage.getItem('billnaw_terminal_locked') === 'true';
         const isAuthorized = localStorage.getItem('billnaw_device_status') === 'AUTHORIZED';
         const isExpired = (typeof checkDeviceAuthExpiration === 'function') ? checkDeviceAuthExpiration() : false;
 
-        if (!isExpired && isAuthorized) {
-            const devCount = (typeof getStoreActiveDeviceCount === 'function') ? getStoreActiveDeviceCount() : 1;
-            const isSingleDevice = devCount <= 1;
+        const lastPinVerification = localStorage.getItem('billnaw_pin_verified_at');
+        const is24hShiftValid = Boolean(lastPinVerification && (Date.now() - Number(lastPinVerification)) < (24 * 60 * 60 * 1000));
 
-            if (isLocked || !isSingleDevice) {
-                // Multi-device setup OR explicit manual lock: enforce PIN lock on launch
+        if (!isExpired && isAuthorized && currentStaff) {
+            if (isLocked || !is24hShiftValid) {
+                // Multi-device or single-device: lock terminal ONLY if manually locked OR if 24 hours have elapsed
                 if (typeof lockTerminal === 'function' && typeof document !== 'undefined' && document.getElementById('loginOverlay')) {
                     lockTerminal(false);
                 }
             } else {
-                // Single-device solo merchant: 10-day persistence auto-login without PIN prompt
-                if (typeof unlockTerminal === 'function' && currentStaff) {
-                    unlockTerminal(currentStaff);
+                // Within 24-hour shift window: remain smoothly unlocked without asking for PIN on reload
+                if (typeof unlockTerminal === 'function') {
+                    unlockTerminal(currentStaff, false);
                 }
             }
         } else if (isLocked && typeof lockTerminal === 'function') {
             lockTerminal(false);
         }
     } catch(e) {}
+
+    if (typeof start24hShiftMonitor === 'function') {
+        start24hShiftMonitor();
+    }
 }
 window.initStaffSystem = initStaffSystem;
+
+function start24hShiftMonitor() {
+    if (typeof window === 'undefined') return;
+    const checkShift = () => {
+        const lastPin = localStorage.getItem('billnaw_pin_verified_at');
+        if (lastPin && (Date.now() - Number(lastPin)) >= (24 * 60 * 60 * 1000)) {
+            const isLocked = localStorage.getItem('billnaw_terminal_locked') === 'true';
+            if (!isLocked && typeof lockTerminal === 'function') {
+                console.info('[ShiftMonitor] 24-hour shift session expired. Prompting PIN lock.');
+                lockTerminal(true);
+            }
+        }
+    };
+    setInterval(checkShift, 60000);
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkShift();
+        });
+    }
+}
+window.start24hShiftMonitor = start24hShiftMonitor;
 
 function initFirestoreSync() {
     if (typeof isStoreAuthenticated === 'function' && isStoreAuthenticated()) {
@@ -3748,7 +4128,7 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
                 const cachedDevices = JSON.parse(cachedDevicesStr);
                 if (Array.isArray(cachedDevices)) {
                     window.authorizedDevices = cachedDevices;
-                    const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : localStorage.getItem('bongbhoj_device_id');
+                    const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
                     const myRecord = cachedDevices.find(d => d.deviceId === myDevId || d.id === myDevId);
                     if (myRecord) {
                         window.currentDeviceRecord = myRecord;

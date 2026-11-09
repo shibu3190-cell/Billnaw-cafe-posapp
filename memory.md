@@ -61,8 +61,11 @@ Any modification to this codebase must strictly preserve the following four syst
 - Do not duplicate HTML structures for mobile vs desktop.
 - Responsive changes across viewport breakpoints (`320px`, `640px`, `900px`, `1080px`, `1200px`) must rely exclusively on CSS Media Queries and toggled classes.
 
-### Invariant 4: 100% Automated Test Suite Pass Rate
-- Running `npm test` (all 12 test suites) must pass with **0 errors**.
+### Invariant 4: 100% Automated Test Suite Pass Rate & Firestore Rules Binary Parity
+- `firestore.rules` and `database/firestore.rules` must remain **100% byte-for-byte identical** (`cmd /c fc /b firestore.rules database\firestore.rules`).
+- Running `npm test` (all 24 test suites) must pass with **0 errors**.
+- Running `node scratch/test_e2e_production_hardening.cjs` (86 tests) must pass **86 / 86 tests**.
+- Running `node scratch/test_new_shopowner_4staff_e2e_simulation.cjs` (20 full-stack stages) must pass **20 / 20 tests**.
 - Running `node scratch/test_consolidated_hub_suite.cjs` (100 tests) must pass **100 / 100 tests**.
 - Running `node scratch/challenger_m4_empirical_suite.cjs` (28 tests) must pass **28 / 28 tests**.
 
@@ -125,21 +128,38 @@ The `#customers` view unifies customer management into 3 clean segmented tabs:
 - **Liquid Telemetry Matrix**: Precise volume deductions for beverages and draft beer with configurable pour froth/foam buffers (5–8%).
 - **Live Food Costing**: Dynamic recalculation of unit dish food cost and gross profit margin percentage when raw material supplier prices fluctuate.
 
-### 6. Reports, Analytics & Transaction Ledger
+### 6. Reports, Analytics, Order Cards View & Full-Screen Invoice Modal
 - **Date Range Picker**: Quick filters for Today, Yesterday, This Week, This Month, and Custom Date Range.
-- **Sales & Transaction Ledger**: Compact row structure with centered dates, left icons, right-aligned monetary values, and triple-dot action dropdown (`.action-dropdown`) with click-outside dismissal.
-- **Transaction Editor**: Edit payment method, order channel (Dine-in vs Takeaway), customer notes, or line items with real-time gross revenue and net profit recalculation.
+- **Interactive Order Cards Grid (`#historyCardsGrid`) & Table Toggle**:
+  - Settled bills render by default as responsive, clickable Order Cards (`.order-history-card`) displaying Bill #, Table/Channel badge, Customer, Staff Biller, Payment Mode, Item Summary, and Total Amount (`₹ `).
+  - Clicking any Order Card opens the **Full-Screen Invoice Modal (`#billInvoiceModal`)** with Shop Logo (`#invModalLogo`), statutory headers (Address, Phone, FSSAI, GSTIN), itemized table, GST breakdown, dynamic UPI QR preview, and working **Edit Order (`openEditOrderModal`)**, **Void Bill (`voidTransaction`)**, and **Reprint (`sendEscPosToPrinter`)** buttons.
+- **Resilient Transaction Editor (`resolveOrderItemsArray`)**: Safely resolves structured item arrays from either `order.rawItems` or legacy string `order.items` (e.g. `"Cold Coffee (x2), Veg Puff (x1)"`), eliminating `TypeError: currentEditingOrderItems.forEach is not a function` and synchronizing both `rawItems` and `items` upon save.
 - **Interactive Visualizations**: SVG Donut chart displaying Revenue vs Expenses vs Category distribution with comparative toggles (Cash vs UPI, Dine-In vs Takeaway).
 
-### 7. SaaS Subscription & Shop Settings
-- **Transparent 3-Tier Pricing Model**:
-  - **Starter**: ₹0 Free Forever (Single counter terminal, 50 orders/mo).
-  - **Pro Cafe**: ₹499/mo (Most Popular, unlimited orders, multi-table, inventory & WhatsApp hub).
-  - **Enterprise Chain**: ₹1,499/mo (Multi-outlet central kitchen, live cloud sync, custom reports).
-  - Price-first typography hierarchy (28–32px) and "What's included next" callout.
-- **Shop Profile & GST**: Live GST toggle, tax rate settings, receipt header/footer customization.
-- **Device Isolation & Clean Logout**: `logoutShopCloudAccount()` flushes session cache and returns cleanly to `?auth=login`.
-- **Pristine Reset**: Danger tile **"Clear All Store Data"** purges both local storage and cloud server Firestore collections, neatly re-seeding the 4-item clean state.
+### 7. Multi-Tenant Cloud Sync, Subscription Lifecycle & 4-Role Staff Architecture
+- **Dual-Path Firestore Persistence (`/shops/{shopId}` & `/cafes/{cafeId}`)**:
+  - Store documents, menus, staff profiles, active sessions, tables, invoices, and print queues sync across `/shops/{shopId}` and `/cafes/{cafeId}` tagged with `shopEmail` and `shopId`.
+- **Backend Subscription Lifecycle (`server/subscription-service.js` & `js/core.js`)**:
+  - Supports `ACTIVE`, `PAUSED`, `RESUMED`, and `REVOKED` states via `POST /api/subscription/manage` and `GET /api/subscription/status`.
+  - Real-time `storeDocRef` snapshot listener immediately disables checkout with a banner when `PAUSED`, locks the terminal with a full-screen overlay when `REVOKED`, and restores billing when `ACTIVE` or `RESUMED`.
+- **Staff Onboarding (4-Digit OTP -> Salted SHA-256 PIN), Cloud Presence & Remote Revocation (`js/staff.js`, `src/core/rbac.js`)**:
+  - Supports up to **10 staff profiles per shop** across canonical roles (`Admin`, `Manager`, `Cashier`, `Floor Server`, `Kitchen Chef`).
+  - Admin creates a profile with an auto-generated 4-digit temporary OTP (`onboardingOtp`). When the staff member logs in on a secondary device, they select their profile, validate the 4-digit OTP, and create their own private salted SHA-256 PIN (`cleanPin:cleanSalt:billnaw_pin_v2`) in `#firstLoginPinModal`.
+  - **Cloud Presence Panel**: Displays `Active (Active now)` (emerald dot) for sessions active within 15 minutes, `Offline (Active Xm ago)` (gray dot `#94A3B8`) for stale sessions, and `Inactive (Never Logged In)` for profiles that have not yet completed first login.
+  - **Immediate Remote Logout**: Deleting a staff profile deletes `/shops/{shopId}/staff/{id}`, marks their sessions `REVOKED` (`isLocked: true`), and immediately triggers `lockTerminalByRemote()` on their active device.
+  - **Floor Server Settings Lock**: `applySettingsRoleRestrictions()` in `js/settings.js` enables the Settings tab for `Floor Server` solely to pair a Bluetooth thermal printer (`#settingTilePrinterConfig`) for KOT printing while shielding all administrative tiles.
+
+### 8. Thermal Printing: Shop Logo, Dynamic UPI QR & Strict KOT Isolation (`src/core/platform-bridge.js`)
+- **Customer Tax Invoice (`isKot: false`)**:
+  - Automatically hydrates the shop logo (`GS v 0` 1-bit raster bitmap) from `shopProfile.logo` / `localStorage.getItem('billnaw_shop_logo')` and generates a native ESC/POS dynamic UPI QR (`GS ( k`) encoding the exact bill total (`upi://pay?pa={upiId}&pn={storeName}&am={total}&cu=INR`), even when printed by a Cashier.
+  - Resolves item names and prices via `resolveStructuredItems()` so historical or string-item orders never print `"Item 1 Rs. 0.00"`.
+- **Kitchen Order Ticket (`isKot: true`)**:
+  - Strictly isolated from customer billing metadata: never prints shop logo, shop name, address, phone, FSSAI, GSTIN, prices, GST breakdown, or UPI QR code.
+  - Supports **ADD-ON KOT** (Delta-KOT) printing only newly added quantities (`qty - qtyKotPrinted`), and KDS (`src/features/kot/kot.ui.js`) renders quantities cleanly via `it.quantity || it.qty || 1`.
+
+### 9. Gemini AI Fast Vision Cascade, 15-Scan Monthly Quota & BYOK (`server/gemini-service.js`, `server/quota-service.js`)
+- **Fast Vision Model Cascade**: Prioritizes `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, and `gemini-flash-latest` with a 7,000ms per-candidate timeout and `thinkingBudget: 0`, plus a multi-strategy JSON parser (`parseMenuJsonSafely`) that handles markdown fences, currency prefixes (`₹`, `Rs.`), and dietary tags.
+- **15-Scan Monthly Quota & BYOK**: Tracks 15 scans per shop per calendar month (`YYYY-MM`) in `/shops/{shopId}/quota/menu_scans`. Rejects the 16th scan with HTTP 429 (`Monthly AI scan quota of 15 scans reached for this shop.`) and supports Bring-Your-Own-Key (`BYOK`) custom Gemini API keys via Settings and `x-gemini-api-key`.
 
 ---
 
@@ -240,4 +260,79 @@ On mobile screens ($\le 640\text{px}$), `.clean-item-card` previously rendered 3
    - Verified in headless Chrome at 375×667 viewport: all dish names render with full width ("Chicken Curry" at $104.9\text{px}$, "Masala Coke" at $93.8\text{px}$, "Samosa" at $59.5\text{px}$) with zero truncation.
    - Verified 3-dot click opens dropdown, click outside dismisses, and clicking "Adjust Stock" launches `#quickAdjustStockModal`.
    - Verified 100% test pass rate across all suites and exact 26 SVG modal close buttons invariant.
+5. **Quick Stock Adjustment Null Safety Fix (`js/menu.js`)**:
+   - `saveQuickStockAdjustment` and `toggleStockUnlimited` previously invoked `closeQuickAdjustStockModal()` before calling `showToast()`. Because `closeQuickAdjustStockModal()` sets `activeAdjustingItem = null`, accessing `activeAdjustingItem.name` in `showToast` caused `Uncaught TypeError: Cannot read properties of null (reading 'name')`.
+   - Resolution: Stored `itemName` and `finalQty` into local variables before closing the modal, and added fallback item lookup from `#quickAdjustItemId` if `activeAdjustingItem` was unreferenced. Validated via `scratch/test_quick_stock_adjustment_fix.cjs` (100% pass).
+
+---
+
+## 9. 📱 Modern Multi-Device Architecture: Auto-Authorize on Store Login + Passive Audit (Option 1)
+
+### Problem Solved
+Previously, secondary terminals/tablets were blocked by a legacy 6-digit `#devicePairingOverlay` ("Device Pairing Required") popup, which required an admin on the master counter to manually enter a 6-digit code. In a modern cafe setting where staff login with store email/OTP followed by profile selection, temporary onboarding OTP, and salted private 4-digit PINs, this blocking hardware popup caused unnecessary friction and blocked secondary devices.
+
+### Architecture Implementation (Option 1)
+1. **Auto-Authorize on Store Login (`js/shop-auth.js` & `js/core.js`)**:
+   - Secondary devices logging in via store email/OTP or password directly set `localStorage.setItem('billnaw_device_status', 'AUTHORIZED')`.
+   - `verifyDeviceAuthorizationOnLogin` and `initDevicePairingFlow` suppress `#devicePairingOverlay` for authenticated devices.
+   - Secondary devices register passively in Firestore under `/shops/{storeCode}/devices/{deviceId}` with a default name (`Counter Terminal XXXX` or `Mobile Terminal XXXX`).
+2. **Immediate Profile Picker Routing**:
+   - Device displays smooth loading/sync overlay and immediately proceeds to `#loginStaffPicker` (Staff Profile Selector).
+   - Staff member enters temporary onboarding 4-digit OTP or their salted personal PIN to unlock the POS according to their assigned role.
+3. **Passive Audit & Instant Remote Revocation**:
+   - Admin can view all registered devices under **Authorized Terminals Hub** in Settings.
+   - Admin can rename terminals or click **"Revoke"** at any time.
+   - When an Admin revokes a terminal (`status: 'REVOKED'`), the terminal's real-time snapshot listener detects this immediately, invokes `handleDeviceRevocation()`, purges all local tenant data, and locks the terminal behind `#deviceRevokedOverlay`.
+4. **Verification**:
+   - Validated via `scratch/test_device_pairing_elimination_option1.cjs` (11/11 tests pass).
+   - Validated in full-stack simulation `scratch/test_new_shopowner_4staff_e2e_simulation.cjs` (20/20 stages pass).
+
+---
+
+## 10. 🔐 24-Hour Shift Sessions, Salted PINs & Active Sessions Telemetry
+
+### Architecture Implementation
+1. **24-Hour Shift Boundary (`js/core.js` & `js/staff.js`)**:
+   - Entering a verified 4-digit PIN records `billnaw_pin_verified_at = Date.now()`.
+   - Reopening or refreshing the POS retains the session without prompting for PIN again until exactly 24 hours (86,400,000 ms) pass.
+   - `start24hShiftMonitor()` periodically checks the elapsed time and locks the terminal when 24 hours expire.
+2. **Backend-Safe Salted Admin PIN**:
+   - Forgot PIN reset via email OTP generates a cryptographically secure 16-byte hex salt on the backend (`server/auth-service.js`).
+   - Hashes with `${cleanPin}:${cleanSalt}:billnaw_pin_v2` and syncs both `pin_hash` and `pin_salt` to `/shops/{shopId}/staff/{adminId}` and `/shops/{shopId}.adminPinHash`.
+3. **Active Sessions Purge & Telemetry (`js/staff.js`)**:
+   - Sessions marked as `REVOKED`, `DELETED`, or `ENDED` are permanently filtered out from the active sessions list (`renderLiveSessionCards`).
+   - Only live, active sessions are displayed, with real-time inactivity telemetry:
+     - `🟢 Active now` (within 2 minutes)
+     - `⚪ Inactive for Xm` (2 to 59 minutes)
+     - `⚪ Inactive for Xh` (60+ minutes)
+4. **Verification**:
+   - Validated via `scratch/test_staff_pin_sessions_24h_lifecycle.cjs` (15/15 tests pass).
+
+---
+
+## 11. 📊 Sales & Billing Transactions Strictly Card View & Total Orders Modal
+
+### Problem Solved
+Previously, the reports section offered a confusing toggle between cards and table ledger views. When clicking the "Total Orders" KPI card, the interface did not display a focused transaction view synchronized with the active date range filter or provide seamless access to customer invoices.
+
+### Architecture Implementation
+1. **Strictly Card View in Reports Section (`index.html` & `js/dashboard.js`)**:
+   - The view mode toggle (`dashFilterPill-group`) in the reports section is hidden (`display: none;`), enforcing strictly modern, responsive card views (`#historyCardsGrid`).
+   - `setDashboardViewMode()` defaults and locks to `'cards'`, hiding table view containers.
+2. **Total Orders KPI Card Navigation (`filterDashboardByMetric('orders')`)**:
+   - Clicking `#kpiCard-orders` calls `filterDashboardByMetric('orders')`, which opens `#ordersLogModal`.
+   - `#ordersLogModal` uses collision-free close button `.orders-log-close-btn` (preserving the strict 26 `.modal-close-btn` invariant).
+3. **Top Date Range Synchronization (`currentDashboardRange`)**:
+   - `#ordersLogModal` dynamically filters transactions matching the top selection (`today`, `yesterday`, `week`, `month`, `custom`, `all`).
+   - Dynamic subtitle `#ordersModalFilterSubtitle` states: `Showing X completed orders for <Range> (Filtered by top selection)`.
+   - Live telemetry badges display total orders count (`#ordersModalCountBadge`) and gross settled sum (`#ordersModalAmountBadge`).
+   - Quick search input (`#ordersModalSearchInput`) allows instant filtering by bill #, customer name, items, or payment method with page reset.
+4. **Details Invoice Action (`viewOrderInvoiceModal`)**:
+   - Card primary button is labeled **"Details"** (`<span>Details</span>`) with document SVG, calling `viewOrderInvoiceModal(order.id)`.
+   - Tapping the order card body also triggers `viewOrderInvoiceModal(order.id)`, opening `#billInvoiceModal` (full customer tax invoice with GST breakdown, dynamic UPI QR code, Edit, Void, and Print actions).
+5. **Verification**:
+   - Validated via `scratch/test_report_total_orders_card_view.cjs` (100% pass).
+   - All 26 `.modal-close-btn` SVGs, 0 button emojis, and Firestore rules parity preserved.
+
+
 

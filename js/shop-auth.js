@@ -311,11 +311,11 @@
                         if (isOwner) {
                             localStorage.setItem('billnaw_is_master', 'true');
                             localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                            localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                         } else if (localStorage.getItem('billnaw_is_master') !== 'true') {
                             localStorage.setItem('billnaw_is_master', 'false');
-                            if (localStorage.getItem('billnaw_device_status') !== 'AUTHORIZED') {
-                                localStorage.setItem('billnaw_device_status', 'PENDING');
-                            }
+                            localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                            localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                         }
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
                         if (email) localStorage.setItem('billnaw_auth_email', email);
@@ -430,11 +430,11 @@
                         if (isOwner) {
                             localStorage.setItem('billnaw_is_master', 'true');
                             localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                            localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                         } else if (localStorage.getItem('billnaw_is_master') !== 'true') {
                             localStorage.setItem('billnaw_is_master', 'false');
-                            if (localStorage.getItem('billnaw_device_status') !== 'AUTHORIZED') {
-                                localStorage.setItem('billnaw_device_status', 'PENDING');
-                            }
+                            localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+                            localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                         }
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
                         if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
@@ -1145,6 +1145,7 @@
 
     // 📱 Active Sessions Management Handlers
     async function openActiveSessionsModal() {
+        if (typeof checkFloorServerModalBlock === 'function' && checkFloorServerModalBlock('activeSessionsModal')) return;
         const modal = document.getElementById('activeSessionsModal');
         if (modal) modal.style.display = 'flex';
         const hasStaffSessions = (window.activeStaffSessions && window.activeStaffSessions.length > 0) ||
@@ -1305,6 +1306,7 @@
 
     // 🪑 Floor & Table Management Functions
     function openTableManagementModal() {
+        if (typeof checkFloorServerModalBlock === 'function' && checkFloorServerModalBlock('tableManagementModal')) return;
         const modal = document.getElementById('tableManagementModal');
         if (!modal) return;
         const countInput = document.getElementById('tblMgmtCountInput');

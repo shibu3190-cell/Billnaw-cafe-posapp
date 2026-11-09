@@ -284,6 +284,23 @@ export const DEFAULT_PRINTERS_CONFIG = {
 /**
  * Universal Hardware Thermal Printer Bridge.
  */
+function generateEscPosNativeQr(text, moduleSize = 6) {
+  if (!text) return new Uint8Array(0);
+  const enc = new TextEncoder();
+  const textBytes = enc.encode(text);
+  const len = textBytes.length + 3;
+  const pL = len & 0xFF;
+  const pH = (len >> 8) & 0xFF;
+  return new Uint8Array([
+    0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00, // Function 165: QR Model 2
+    0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, Math.max(3, Math.min(12, moduleSize)), // Function 167: Module size
+    0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31,        // Function 169: Error correction Level M
+    0x1D, 0x28, 0x6B, pL,   pH,   0x31, 0x50, 0x30,        // Function 180: Store data
+    ...textBytes,
+    0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30         // Function 181: Print symbol
+  ]);
+}
+
 export const ThermalPrinterBridge = {
   // Dual-slot printer configuration
   printers: {
@@ -933,21 +950,75 @@ export const ThermalPrinterBridge = {
     parts.push(new Uint8Array([0x1B, 0x61, 0x01]));
 
     const profile = options.storeProfile || (typeof window !== 'undefined' && window.shopProfile) || {};
-    const isKot = options.isKot || data.jobType === 'KOT' || Boolean(data.kot_id);
+    const isKot = Boolean(options.isKot) || data.jobType === 'KOT' || Boolean(data.kot_id) || Boolean(data.kotId) || Boolean(data.isAddon) || Boolean(data.isKot) || data.role === 'KOT' || options.role === 'KOT';
 
     // Helper: Safely resolve structured item objects even if legacy/history order only has string `items` (e.g. "Samosa (x1)")
     const resolveStructuredItems = (orderData) => {
+      const catalog = (typeof window !== 'undefined' && Array.isArray(window.menuItems)) ? window.menuItems : [];
+      const totalOrderAmt = Number(orderData.amount || (orderData.final_payable_paise ? orderData.final_payable_paise / 100 : 0)) || 0;
+
+      const normalizeItem = (it) => {
+        let name = it.name || it.item_name || it.menuItemName || it.title || it.dishName || 'Item';
+        let qty = Number(it.quantity || it.qty || it.count || 1);
+        if (isNaN(qty) || qty <= 0) qty = 1;
+        let price = (it.price !== undefined && it.price !== null) 
+          ? Number(it.price) 
+          : ((it.rate !== undefined && it.rate !== null) 
+              ? Number(it.rate) 
+              : ((it.unitPrice !== undefined && it.unitPrice !== null) 
+                  ? Number(it.unitPrice) 
+                  : ((it.unit_price !== undefined && it.unit_price !== null) 
+                      ? Number(it.unit_price) 
+                      : null)));
+        if (name === 'Item' && it.id) {
+          const matchById = catalog.find(m => m && m.id === it.id);
+          if (matchById && matchById.name) name = matchById.name;
+        }
+        if ((price === null || price === 0) && name !== 'Item') {
+          const matchByName = catalog.find(m => m && m.name && m.name.toLowerCase() === name.toLowerCase());
+          if (matchByName && typeof matchByName.price === 'number') price = matchByName.price;
+        }
+        return {
+          ...it,
+          name,
+          qty,
+          price,
+          gstRate: it.gstRate
+        };
+      };
+
       if (Array.isArray(orderData.rawItems) && orderData.rawItems.length > 0 && typeof orderData.rawItems[0] === 'object' && orderData.rawItems[0] !== null) {
-        return orderData.rawItems;
+        const normalized = orderData.rawItems.map(normalizeItem);
+        const zeroPriceItems = normalized.filter(it => it.price === null || it.price === 0);
+        if (zeroPriceItems.length > 0 && totalOrderAmt > 0) {
+          const knownSum = normalized.reduce((acc, it) => acc + (it.price ? it.price * it.qty : 0), 0);
+          const remainingAmt = Math.max(0, totalOrderAmt - knownSum);
+          const zeroQtySum = zeroPriceItems.reduce((acc, it) => acc + it.qty, 0) || 1;
+          const fallbackUnit = remainingAmt / zeroQtySum;
+          for (const it of zeroPriceItems) {
+            it.price = Number(fallbackUnit.toFixed(2));
+          }
+        }
+        return normalized;
       }
       if (Array.isArray(orderData.items) && orderData.items.length > 0 && typeof orderData.items[0] === 'object' && orderData.items[0] !== null) {
-        return orderData.items;
+        const normalized = orderData.items.map(normalizeItem);
+        const zeroPriceItems = normalized.filter(it => it.price === null || it.price === 0);
+        if (zeroPriceItems.length > 0 && totalOrderAmt > 0) {
+          const knownSum = normalized.reduce((acc, it) => acc + (it.price ? it.price * it.qty : 0), 0);
+          const remainingAmt = Math.max(0, totalOrderAmt - knownSum);
+          const zeroQtySum = zeroPriceItems.reduce((acc, it) => acc + it.qty, 0) || 1;
+          const fallbackUnit = remainingAmt / zeroQtySum;
+          for (const it of zeroPriceItems) {
+            it.price = Number(fallbackUnit.toFixed(2));
+          }
+        }
+        return normalized;
       }
       const rawChunks = typeof orderData.items === 'string'
         ? orderData.items.split(',').map(s => s.trim()).filter(Boolean)
         : (Array.isArray(orderData.items) ? orderData.items.filter(s => typeof s === 'string') : []);
       if (rawChunks.length === 0) return [];
-      const catalog = (typeof window !== 'undefined' && Array.isArray(window.menuItems)) ? window.menuItems : [];
       const parsed = rawChunks.map(chunk => {
         let name = chunk;
         let qty = 1;
@@ -968,7 +1039,6 @@ export const ThermalPrinterBridge = {
           gstRate: matched && matched.gstRate !== undefined ? matched.gstRate : undefined
         };
       });
-      const totalOrderAmt = Number(orderData.amount || (orderData.final_payable_paise ? orderData.final_payable_paise / 100 : 0)) || 0;
       const knownSum = parsed.reduce((acc, it) => acc + (it.price !== null ? it.price * it.qty : 0), 0);
       const unknownItems = parsed.filter(it => it.price === null);
       if (unknownItems.length > 0) {
@@ -1052,7 +1122,7 @@ export const ThermalPrinterBridge = {
         parts.push(new Uint8Array([0x0A])); // Linefeed
       }
 
-      const storeName = profile.name || data.shop_name || 'BILLNAW POS';
+      const storeName = profile.name || profile.shopName || data.shop_name || data.shopName || (typeof window !== 'undefined' && window.shopProfile && (window.shopProfile.name || window.shopProfile.shopName)) || 'BILLNAW POS';
       // Double Size + Bold
       parts.push(new Uint8Array([0x1D, 0x21, 0x11, 0x1B, 0x45, 0x01]));
       parts.push(encodeClean('\n'));
@@ -1063,22 +1133,26 @@ export const ThermalPrinterBridge = {
       // Normal Size + Bold Off
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
 
-      if (profile.address) {
-        const addrLines = wrapText(profile.address, cols);
+      const storeAddress = profile.address || data.shop_address || data.address || (typeof window !== 'undefined' && window.shopProfile && window.shopProfile.address) || '';
+      if (storeAddress) {
+        const addrLines = wrapText(storeAddress, cols);
         for (const al of addrLines) parts.push(encodeClean(`${al}\n`));
       }
-      if (profile.phone) {
-        const phoneLines = wrapText(`Tel: ${profile.phone}`, cols);
+      const storePhone = profile.phone || data.shop_phone || data.phone || (typeof window !== 'undefined' && window.shopProfile && window.shopProfile.phone) || '';
+      if (storePhone) {
+        const phoneLines = wrapText(`Tel: ${storePhone}`, cols);
         for (const pl of phoneLines) parts.push(encodeClean(`${pl}\n`));
       }
-      if (profile.fssai) {
-        const fssaiLines = wrapText(`FSSAI Lic. No.: ${profile.fssai}`, cols);
+      const storeFssai = profile.fssai || data.shop_fssai || data.fssai || (typeof window !== 'undefined' && window.shopProfile && window.shopProfile.fssai) || '';
+      if (storeFssai) {
+        const fssaiLines = wrapText(`FSSAI Lic. No.: ${storeFssai}`, cols);
         for (const fl of fssaiLines) parts.push(encodeClean(`${fl}\n`));
       }
-      const gstMode = data.gstMode || profile.gstMode || 'inclusive';
-      const isGstActive = gstMode !== 'none' && profile.gstMode !== 'none';
-      if (profile.gstin && isGstActive) {
-        const gstinLines = wrapText(`GSTIN: ${profile.gstin}`, cols);
+      const gstMode = data.gstMode || profile.gstMode || (typeof window !== 'undefined' && window.shopProfile && window.shopProfile.gstMode) || 'inclusive';
+      const isGstActive = gstMode !== 'none';
+      const storeGstin = profile.gstin || data.shop_gstin || data.gstin || (typeof window !== 'undefined' && window.shopProfile && window.shopProfile.gstin) || '';
+      if (storeGstin && isGstActive) {
+        const gstinLines = wrapText(`GSTIN: ${storeGstin}`, cols);
         for (const gl of gstinLines) parts.push(encodeClean(`${gl}\n`));
       }
 
@@ -1296,13 +1370,26 @@ export const ThermalPrinterBridge = {
       }
 
       // 2. Dynamic UPI QR Code (if available)
+      const effectiveUpi = profile.upiId || data.shop_upi || data.upiId || (typeof window !== 'undefined' && window.shopProfile && window.shopProfile.upiId) || '';
+      const shouldShowQr = (profile.showQr !== false) && Boolean(options.qrBytes || profile.showQr || data.showQr || (typeof window !== 'undefined' && window.shopProfile && window.shopProfile.showQr));
+
       if (options.qrBytes && options.qrBytes.length > 0) {
         parts.push(new Uint8Array([0x1B, 0x61, 0x01])); // Center
         parts.push(encodeClean("\nScan to Pay\n"));
         parts.push(options.qrBytes);
         parts.push(new Uint8Array([0x0A]));
-        if (profile.upiId) {
-          parts.push(encodeClean(`UPI: ${profile.upiId}\n\n`));
+        if (effectiveUpi) {
+          parts.push(encodeClean(`UPI: ${effectiveUpi}\n\n`));
+        }
+      } else if (shouldShowQr && effectiveUpi) {
+        const upiPayString = `upi://pay?pa=${effectiveUpi}&pn=${encodeURIComponent(storeName)}&am=${totalRupees}&cu=INR`;
+        const qrCmds = generateEscPosNativeQr(upiPayString, is80mm ? 7 : 5);
+        if (qrCmds && qrCmds.length > 0) {
+          parts.push(new Uint8Array([0x1B, 0x61, 0x01])); // Center
+          parts.push(encodeClean("\nScan to Pay\n"));
+          parts.push(qrCmds);
+          parts.push(new Uint8Array([0x0A]));
+          parts.push(encodeClean(`UPI: ${effectiveUpi}\n\n`));
         }
       }
 
@@ -1675,8 +1762,9 @@ export const ThermalPrinterBridge = {
     let qrBytes = options.qrBytes || jobPayload?.qrBytes || null;
 
     if (role === 'RECEIPT') {
-      if (!logoBytes && profile.logo && typeof window !== 'undefined' && typeof window.getLogoBytes === 'function') {
-        try { logoBytes = await window.getLogoBytes(profile.logo); } catch(e) {}
+      const targetLogo = profile.logo || jobPayload?.storeProfile?.logo || (typeof window !== 'undefined' && window.shopProfile && window.shopProfile.logo);
+      if (!logoBytes && targetLogo && typeof window !== 'undefined' && typeof window.getLogoBytes === 'function') {
+        try { logoBytes = await window.getLogoBytes(targetLogo); } catch(e) {}
       }
     } else {
       // Invariant: KOT slips never carry shop logo, payment QR, or store identity headers

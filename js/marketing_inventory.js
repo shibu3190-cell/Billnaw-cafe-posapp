@@ -5,7 +5,7 @@
 // --- 1. VOICE-TO-BILLING ENGINE WITH CONTEXTUAL RETENTION (STRICTLY LAST 2 ITEMS) ---
 let isVoiceListening = false;
 let speechRecognizer = null;
-let cachedVoiceBuffer = localStorage.getItem('bongbhoj_voice_buffer') || '';
+let cachedVoiceBuffer = localStorage.getItem('billnaw_voice_buffer') || localStorage.getItem('bongbhoj_voice_buffer') || '';
 
 // Persistent Voice Order History (strictly capped at 2 items)
 let voiceLogHistory = [];
@@ -109,6 +109,7 @@ function initVoiceEngine() {
                 if (spokenText) {
                     updateVoiceIndicatorUI(true, `Spoken: "${spokenText}"`);
                     cachedVoiceBuffer = spokenText;
+                    localStorage.setItem('billnaw_voice_buffer', spokenText);
                     localStorage.setItem('bongbhoj_voice_buffer', spokenText);
                 }
                 if (finalTranscript) {

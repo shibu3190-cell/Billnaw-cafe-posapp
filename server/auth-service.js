@@ -1071,9 +1071,9 @@ export function requestAdminPinResetOtp(ownerEmail, storeCode) {
 }
 
 /**
- * Verifies email OTP and securely updates the Master Admin PIN in store profile and Firestore.
+ * Verifies email OTP and securely updates the Master Admin PIN or selective Staff PIN in store profile and Firestore.
  */
-export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode) {
+export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode, staffId = null, staffName = null, role = null) {
   const normEmail = normalizeEmail(ownerEmail);
   const verifyRes = verifyOtp(normEmail, otp);
   if (verifyRes.status !== 200 || !verifyRes.data.success) {
@@ -1082,39 +1082,95 @@ export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode) {
 
   const cleanPin = String(newPin || '').trim();
   if (!/^\d{4}$/.test(cleanPin)) {
-    return { status: 400, data: { success: false, error: 'Admin PIN must be exactly 4 numeric digits.' } };
+    return { status: 400, data: { success: false, error: 'PIN must be exactly 4 numeric digits.' } };
   }
   if (/^(\d)\1{3}$/.test(cleanPin) || cleanPin === '1234' || cleanPin === '4321' || cleanPin === '1111' || cleanPin === '0000') {
     return { status: 400, data: { success: false, error: 'Please choose a non-trivial PIN (cannot be repetitive like 0000, 1111 or sequential like 1234, 4321).' } };
   }
 
   const pinHash = hashStringServer(cleanPin);
+  const pinSalt = crypto.randomBytes(16).toString('hex');
+  const saltedPinHash = crypto.createHash('sha256').update(`${cleanPin}:${pinSalt}:billnaw_pin_v2`).digest('hex');
   const code = storeCode || generateStoreCode('Default', normEmail);
   let shop = shopStore.get(code);
   if (!shop) {
     shop = createDefaultShopDocument(code, 'Billnaw Cafe', normEmail, 'user_' + normEmail, cleanPin);
     shopStore.set(code, shop);
-  } else {
-    if (!shop.profile) shop.profile = {};
-    shop.profile.adminPinHash = pinHash;
-    if (Array.isArray(shop.staff)) {
-      const adminStaff = shop.staff.find(s => s.role === 'Admin');
-      if (adminStaff) {
-        adminStaff.pin = cleanPin;
-        adminStaff.pin_hash = pinHash;
-        adminStaff.mustChangePin = false;
-      }
-    }
-    shop.updatedAt = new Date().toISOString();
   }
+  if (!shop.profile) shop.profile = {};
+  if (!Array.isArray(shop.staff)) shop.staff = [];
+
+  let targetStaff = null;
+  if (staffId !== null && staffId !== undefined && String(staffId).trim() !== '') {
+    targetStaff = shop.staff.find(s => String(s.id) === String(staffId));
+  }
+  if (!targetStaff && role) {
+    targetStaff = shop.staff.find(s => s.role === role && (!staffName || s.name === staffName));
+  }
+  if (!targetStaff && (!staffId && (!role || role === 'Admin'))) {
+    targetStaff = shop.staff.find(s => s.role === 'Admin');
+  }
+
+  const resolvedRole = (targetStaff && targetStaff.role) || role || 'Admin';
+  const stationProfile = resolvedRole === 'Kitchen Chef' ? 'KDS' :
+    (resolvedRole === 'Floor Server' ? 'WAITER_MOBILE' :
+    (resolvedRole === 'Admin' ? 'ADMIN_MASTER' : 'BILLING_COUNTER'));
+
+  if (!targetStaff) {
+    targetStaff = {
+      id: staffId || (resolvedRole === 'Admin' ? 1 : Date.now()),
+      name: staffName || (resolvedRole === 'Admin' ? 'Store Owner' : resolvedRole),
+      role: resolvedRole,
+      stationProfile,
+      status: 'Active',
+      pin_hash: saltedPinHash,
+      pin_salt: pinSalt,
+      pinSalt: pinSalt,
+      pinHash: saltedPinHash,
+      mustChangePin: false,
+      otpConsumed: true,
+      updatedAt: new Date().toISOString()
+    };
+    shop.staff.push(targetStaff);
+  } else {
+    targetStaff.role = resolvedRole;
+    targetStaff.stationProfile = targetStaff.stationProfile || stationProfile;
+    if (staffName && !targetStaff.name) targetStaff.name = staffName;
+    delete targetStaff.pin;
+    delete targetStaff.initialOtp;
+    delete targetStaff.otp;
+    targetStaff.otpHash = null;
+    targetStaff.pin_hash = saltedPinHash;
+    targetStaff.pin_salt = pinSalt;
+    targetStaff.pinSalt = pinSalt;
+    targetStaff.pinHash = saltedPinHash;
+    targetStaff.mustChangePin = false;
+    targetStaff.otpConsumed = true;
+    targetStaff.updatedAt = new Date().toISOString();
+  }
+
+  if (resolvedRole === 'Admin') {
+    shop.profile.adminPinHash = pinHash;
+    shop.profile.adminPinSalt = pinSalt;
+    shop.profile.adminSaltedPinHash = saltedPinHash;
+  }
+
+  shop.updatedAt = new Date().toISOString();
+  saveAuthStoreToDisk();
   syncShopToFirestore(code, shop);
 
   return {
     status: 200,
     data: {
       success: true,
-      message: 'Admin PIN reset successfully!',
-      adminPinHash: pinHash,
+      message: `${targetStaff.name} (${resolvedRole}) PIN reset successfully!`,
+      adminPinHash: resolvedRole === 'Admin' ? pinHash : (shop.profile.adminPinHash || pinHash),
+      pinSalt: pinSalt,
+      pinHash: saltedPinHash,
+      staffId: targetStaff.id,
+      staffName: targetStaff.name,
+      role: resolvedRole,
+      stationProfile: targetStaff.stationProfile,
       storeCode: code
     }
   };

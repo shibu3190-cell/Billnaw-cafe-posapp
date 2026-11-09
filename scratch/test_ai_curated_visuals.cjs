@@ -277,4 +277,5 @@ const html = fs.readFileSync(htmlPath, 'utf8');
   if (failed > 0) {
     process.exit(1);
   }
+  process.exit(0);
 })();

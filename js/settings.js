@@ -425,10 +425,34 @@ function saveSettings() {
 }
 window.saveSettings = saveSettings;
 
+function getCustomGeminiKey() {
+    if (typeof localStorage === 'undefined') return '';
+    return (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key') || '').trim();
+}
+function setCustomGeminiKey(key) {
+    if (typeof localStorage === 'undefined') return;
+    const cleanKey = (key || '').trim();
+    if (cleanKey.length > 0) {
+        localStorage.setItem('gemini_api_key', cleanKey);
+        localStorage.setItem('billnaw_gemini_api_key', cleanKey);
+    } else {
+        localStorage.removeItem('gemini_api_key');
+        localStorage.removeItem('billnaw_gemini_api_key');
+    }
+}
+window.getCustomGeminiKey = getCustomGeminiKey;
+window.setCustomGeminiKey = setCustomGeminiKey;
+
 async function refreshAiQuotaDisplay() {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     try {
-        const res = await fetch(`/api/ai/quota?clientId=${encodeURIComponent(myClientID || 'BONGBHOJ-TERMINAL')}`);
+        const customKey = getCustomGeminiKey();
+        const activeShopId = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || myClientID || 'SHOP-BILLNAW-01';
+        const headers = {};
+        if (customKey) headers['x-gemini-api-key'] = customKey;
+        if (activeShopId) headers['x-shop-id'] = activeShopId;
+
+        const res = await fetch(`/api/ai/quota?clientId=${encodeURIComponent(activeShopId)}`, { headers });
         if (!res.ok) return;
         const data = await res.json();
         
@@ -439,12 +463,14 @@ async function refreshAiQuotaDisplay() {
         const keyType = document.getElementById('aiQuotaKeyType');
 
         if (badge) badge.innerText = `${data.remaining}/${data.limit} SCANS LEFT`;
-        if (cycle) cycle.innerText = data.month;
+        if (cycle) cycle.innerText = data.month || data.resetMonth || '';
         if (used) used.innerText = data.used;
         if (limit) limit.innerText = data.limit;
         if (keyType) {
-            keyType.innerText = data.hasCustomKey ? `Dedicated Key (${data.keyMasked})` : "Global Server Key (Default)";
-            keyType.style.color = data.hasCustomKey ? "var(--success)" : "var(--primary)";
+            const hasCustom = Boolean(customKey || data.hasCustomKey);
+            const masked = customKey ? (customKey.length >= 12 ? `${customKey.substring(0, 7)}...${customKey.slice(-4)}` : 'Dedicated Key') : data.keyMasked;
+            keyType.innerText = hasCustom ? `Dedicated Key (${masked})` : "Global Server Key (Default)";
+            keyType.style.color = hasCustom ? "var(--success)" : "var(--primary)";
         }
     } catch (e) {
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
@@ -453,15 +479,76 @@ async function refreshAiQuotaDisplay() {
 }
 window.refreshAiQuotaDisplay = refreshAiQuotaDisplay;
 
+function checkFloorServerModalBlock(modalName) {
+    if (typeof isFloorServerRole === 'function' && isFloorServerRole()) {
+        if (typeof showToast === 'function') {
+            showToast('Access restricted: Only Admin or Manager can modify this setting.', 'error');
+        }
+        return true;
+    }
+    return false;
+}
+window.checkFloorServerModalBlock = checkFloorServerModalBlock;
+
+function applySettingsRoleRestrictions() {
+    const role = (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role) 
+        ? (typeof normalizeRole === 'function' ? normalizeRole(currentStaff.role) : currentStaff.role)
+        : 'Admin';
+    const isFloorServer = (role === 'Floor Server');
+
+    // 1. Profile header button ("Business & GST Settings")
+    const storeProfileBtn = document.querySelector('#settings .settings-profile-header-card button');
+    if (storeProfileBtn) {
+        storeProfileBtn.style.display = isFloorServer ? 'none' : 'inline-flex';
+    }
+
+    // 2. Subscription crown card
+    const subCrownCard = document.querySelector('.subscription-crown-card');
+    if (subCrownCard) {
+        subCrownCard.style.display = isFloorServer ? 'none' : 'block';
+    }
+
+    // 3. Settings tiles in .settings-tiles-grid
+    const tilesGrid = document.querySelector('.settings-tiles-grid');
+    if (tilesGrid) {
+        const tiles = tilesGrid.querySelectorAll('.setting-tile-card');
+        tiles.forEach(tile => {
+            const isPrinterTile = tile.id === 'settingTilePrinterConfig' || 
+                                  (tile.getAttribute('onclick') && tile.getAttribute('onclick').includes('openPrinterSettingsModal'));
+            if (isFloorServer) {
+                if (isPrinterTile) {
+                    tile.style.display = 'flex';
+                } else {
+                    tile.style.display = 'none';
+                }
+            } else {
+                tile.style.display = 'flex';
+            }
+        });
+    }
+
+    // 4. Reset & Clear All Data danger card
+    const dangerCards = document.querySelectorAll('#settings .card');
+    dangerCards.forEach(card => {
+        if (card.querySelector('button[onclick*="openClearAllDataModal"]') || (card.innerText && card.innerText.includes('Reset & Clear All Data'))) {
+            card.style.display = isFloorServer ? 'none' : 'block';
+        }
+    });
+}
+window.applySettingsRoleRestrictions = applySettingsRoleRestrictions;
+
 async function openClientQuotaModal() {
+    if (checkFloorServerModalBlock('clientQuotaModal')) return;
     const modal = document.getElementById('clientQuotaModal');
     if (!modal) return;
     
+    const activeShopId = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || myClientID || 'SHOP-BILLNAW-01';
+
     const quotaTargetClientId = document.getElementById('quotaTargetClientId');
-    if (quotaTargetClientId) quotaTargetClientId.value = myClientID || 'BONGBHOJ-TERMINAL';
+    if (quotaTargetClientId) quotaTargetClientId.value = activeShopId;
     
     const quotaMonthlyLimitInput = document.getElementById('quotaMonthlyLimitInput');
-    if (quotaMonthlyLimitInput) quotaMonthlyLimitInput.value = 10;
+    if (quotaMonthlyLimitInput) quotaMonthlyLimitInput.value = 15;
     
     const quotaCurrentUsageDisplay = document.getElementById('quotaCurrentUsageDisplay');
     if (quotaCurrentUsageDisplay) quotaCurrentUsageDisplay.value = 'Loading...';
@@ -470,18 +557,34 @@ async function openClientQuotaModal() {
     if (quotaRemainingInfo) quotaRemainingInfo.innerText = '';
     
     const quotaCustomKeyInput = document.getElementById('quotaCustomKeyInput');
-    if (quotaCustomKeyInput) quotaCustomKeyInput.value = '';
+    const localKey = getCustomGeminiKey();
+    if (quotaCustomKeyInput) quotaCustomKeyInput.value = localKey;
+
+    const keyBadge = document.getElementById('quotaKeyVerificationBadge');
+    if (keyBadge) {
+        if (localKey && localKey.length >= 15) {
+            keyBadge.innerText = 'Dedicated Key Active (Stored Locally)';
+            keyBadge.style.color = 'var(--success)';
+        } else {
+            keyBadge.innerText = 'Shared Server Key (Default)';
+            keyBadge.style.color = 'var(--text-muted)';
+        }
+    }
 
     modal.style.display = 'flex';
 
     try {
-        const res = await fetch(`/api/ai/quota?clientId=${encodeURIComponent(myClientID || 'BONGBHOJ-TERMINAL')}`);
+        const headers = {};
+        if (localKey) headers['x-gemini-api-key'] = localKey;
+        if (activeShopId) headers['x-shop-id'] = activeShopId;
+
+        const res = await fetch(`/api/ai/quota?clientId=${encodeURIComponent(activeShopId)}`, { headers });
         if (res.ok) {
             const data = await res.json();
-            if (quotaMonthlyLimitInput) quotaMonthlyLimitInput.value = data.limit;
-            if (quotaCurrentUsageDisplay) quotaCurrentUsageDisplay.value = `${data.used} used in ${data.month}`;
+            if (quotaMonthlyLimitInput) quotaMonthlyLimitInput.value = data.limit || 15;
+            if (quotaCurrentUsageDisplay) quotaCurrentUsageDisplay.value = `${data.used} used in ${data.month || data.resetMonth || ''}`;
             if (quotaRemainingInfo) quotaRemainingInfo.innerText = `${data.remaining} remaining this billing cycle`;
-            if (data.hasCustomKey && quotaCustomKeyInput) {
+            if (data.hasCustomKey && quotaCustomKeyInput && !localKey) {
                 quotaCustomKeyInput.placeholder = `Dedicated Key Active: ${data.keyMasked}`;
             }
         }
@@ -497,29 +600,95 @@ function closeClientQuotaModal() {
 }
 window.closeClientQuotaModal = closeClientQuotaModal;
 
+async function testGeminiApiKey() {
+    const keyInput = document.getElementById('quotaCustomKeyInput');
+    const keyVal = (keyInput ? keyInput.value : getCustomGeminiKey()).trim();
+    if (!keyVal || keyVal.length < 15) {
+        showToast("⚠️ Please enter a valid Gemini API key to test.", "warning");
+        return;
+    }
+
+    const badge = document.getElementById('quotaKeyVerificationBadge');
+    if (badge) {
+        badge.innerText = "Verifying Key...";
+        badge.style.color = "var(--primary)";
+    }
+
+    try {
+        const res = await fetch('/api/gemini/status', {
+            headers: { 'x-gemini-api-key': keyVal }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.operational) {
+            showToast("✅ Gemini API key is valid & operational!");
+            if (badge) {
+                badge.innerText = "Verified Operational";
+                badge.style.color = "var(--success)";
+            }
+        } else {
+            showToast("❌ Key verification failed. Check credentials.", "error");
+            if (badge) {
+                badge.innerText = "Invalid Key Credentials";
+                badge.style.color = "var(--danger)";
+            }
+        }
+    } catch (err) {
+        showToast("❌ Key verification request failed: " + err.message, "error");
+        if (badge) {
+            badge.innerText = "Verification Failed";
+            badge.style.color = "var(--danger)";
+        }
+    }
+}
+window.testGeminiApiKey = testGeminiApiKey;
+
+function toggleApiKeyVisibility() {
+    const input = document.getElementById('quotaCustomKeyInput');
+    if (!input) return;
+    const isPass = input.type === 'password';
+    input.type = isPass ? 'text' : 'password';
+    const icon = document.getElementById('apiKeyVisibilityIcon');
+    if (icon) {
+        icon.innerHTML = isPass
+            ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>'
+            : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+    }
+}
+window.toggleApiKeyVisibility = toggleApiKeyVisibility;
+
 async function saveClientQuotaSettings() {
-    const clientId = document.getElementById('quotaTargetClientId').value.trim() || myClientID || 'BONGBHOJ-TERMINAL';
+    const clientId = document.getElementById('quotaTargetClientId').value.trim() || myClientID || 'SHOP-BILLNAW-01';
     const limitVal = parseInt(document.getElementById('quotaMonthlyLimitInput').value, 10);
     const keyVal = document.getElementById('quotaCustomKeyInput').value.trim();
 
-    const payload = { clientId };
+    if (keyVal.length > 0 && keyVal.length < 15) {
+        alert("Please enter a valid Gemini API key (at least 15 characters).");
+        return;
+    }
+
+    setCustomGeminiKey(keyVal);
+
+    const payload = { clientId, shopId: clientId };
     if (!isNaN(limitVal)) payload.aiMonthlyLimit = limitVal;
     payload.customGeminiKey = keyVal;
 
     try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (keyVal) headers['x-gemini-api-key'] = keyVal;
+
         const res = await fetch('/api/admin/client-quota', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(payload)
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || "Failed to update quota");
 
         if (keyVal.length > 0) {
-            showToast("✅ Dedicated Gemini API key saved for this store!");
+            showToast("✅ Dedicated Gemini API key saved successfully!");
         } else {
-            showToast("✅ Using global default Gemini backend key!");
+            showToast("ℹ️ Custom key cleared. Using global shared Gemini key.");
         }
         closeClientQuotaModal();
         refreshAiQuotaDisplay();
@@ -530,6 +699,7 @@ async function saveClientQuotaSettings() {
 window.saveClientQuotaSettings = saveClientQuotaSettings;
 
 function openStoreProfileModal() {
+    if (checkFloorServerModalBlock('storeProfileModal')) return;
     const el = document.getElementById('storeProfileModal');
     if (el) {
         const nameInput = document.getElementById('shopNameInput');
@@ -571,6 +741,7 @@ function closeStoreProfileModal() {
 window.closeStoreProfileModal = closeStoreProfileModal;
 
 function openStaffManagementModal() {
+    if (checkFloorServerModalBlock('staffManagementDetailModal')) return;
     const el = document.getElementById('staffManagementDetailModal');
     if (el) {
         if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
@@ -631,9 +802,180 @@ function selectPricingTier(tierName, price) {
 }
 window.selectPricingTier = selectPricingTier;
 
+function refreshCurrentStoreSubscriptionUI() {
+    const code = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (localStorage.getItem('billnaw_store_code') || 'SHOP-BILLNAW-01');
+    const sub = window.currentSubscriptionState || null;
+
+    const codeEl = document.getElementById('subModalStoreCodeDisp');
+    if (codeEl) codeEl.innerText = code;
+
+    const badgeEl = document.getElementById('subModalStatusBadge');
+    const planEl = document.getElementById('subModalPlanDisp');
+    const termEl = document.getElementById('subModalTerminalsDisp');
+    const aiEl = document.getElementById('subModalAiScansDisp');
+
+    if (sub) {
+        const rawStatus = (sub.status || 'ACTIVE').toUpperCase();
+        if (badgeEl) {
+            badgeEl.innerText = rawStatus;
+            if (rawStatus === 'ACTIVE' || rawStatus === 'RESUMED') {
+                badgeEl.style.background = '#ECFDF5';
+                badgeEl.style.color = '#065F46';
+                badgeEl.style.border = '1px solid #A7F3D0';
+            } else if (rawStatus === 'PAUSED') {
+                badgeEl.style.background = '#FEF3C7';
+                badgeEl.style.color = '#92400E';
+                badgeEl.style.border = '1px solid #FCD34D';
+            } else {
+                badgeEl.style.background = '#FEE2E2';
+                badgeEl.style.color = '#991B1B';
+                badgeEl.style.border = '1px solid #FCA5A5';
+            }
+        }
+        if (planEl) planEl.innerText = sub.plan || 'billnaw Pro (Free Tier)';
+        if (termEl) termEl.innerText = `${sub.features?.maxTerminals || 10} Included`;
+        if (aiEl) aiEl.innerText = `${sub.features?.aiMenuScansPerMonth || 15}/mo`;
+    }
+}
+window.refreshCurrentStoreSubscriptionUI = refreshCurrentStoreSubscriptionUI;
+
+function prefillAdminSubTarget() {
+    const code = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : '';
+    const email = (window.shopProfile && window.shopProfile.email) || (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_shop_email') || localStorage.getItem('ownerEmail')) : '') || '';
+    const targetShopInput = document.getElementById('adminSubTargetShopId');
+    const targetEmailInput = document.getElementById('adminSubTargetEmail');
+    if (targetShopInput) targetShopInput.value = code;
+    if (targetEmailInput) targetEmailInput.value = email;
+    if (typeof showToast === 'function') showToast(`Pre-filled with active store: ${code}`);
+}
+window.prefillAdminSubTarget = prefillAdminSubTarget;
+
+async function lookupAdminClientSubscription() {
+    const shopId = (document.getElementById('adminSubTargetShopId')?.value || '').trim();
+    const email = (document.getElementById('adminSubTargetEmail')?.value || '').trim();
+
+    if (!shopId && !email) {
+        if (typeof showToast === 'function') showToast('Please enter a Shop ID or Email to look up.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnAdminSubLookup');
+    if (btn) { btn.disabled = true; btn.innerText = 'Searching...'; }
+
+    try {
+        const query = new URLSearchParams();
+        if (shopId) query.set('shopId', shopId);
+        if (email) query.set('email', email);
+
+        const res = await fetch(`/api/subscription/status?${query.toString()}`);
+        const data = await res.json();
+
+        if (res.ok && data.success && data.subscription) {
+            const sub = data.subscription;
+            const container = document.getElementById('adminSubResultContainer');
+            if (container) container.style.display = 'block';
+
+            const statusDisp = document.getElementById('adminSubFoundStatus');
+            if (statusDisp) {
+                statusDisp.innerText = sub.status || 'ACTIVE';
+                statusDisp.style.color = (sub.status === 'REVOKED') ? 'var(--danger)' : (sub.status === 'PAUSED' ? '#D97706' : 'var(--primary)');
+            }
+
+            const shopDisp = document.getElementById('adminSubFoundShop');
+            if (shopDisp) shopDisp.innerText = sub.shopId || shopId || 'N/A';
+
+            const emailDisp = document.getElementById('adminSubFoundEmail');
+            if (emailDisp) emailDisp.innerText = sub.shopEmail || email || 'N/A';
+
+            const actionSelect = document.getElementById('adminSubActionSelect');
+            if (actionSelect) actionSelect.value = sub.status || 'ACTIVE';
+
+            const planSelect = document.getElementById('adminSubPlanSelect');
+            if (planSelect) planSelect.value = sub.plan || 'billnaw Pro';
+
+            const reasonInput = document.getElementById('adminSubReasonInput');
+            if (reasonInput) reasonInput.value = sub.statusReason || '';
+
+            if (typeof showToast === 'function') showToast(`Found subscription: ${sub.shopId} (${sub.status})`, 'success');
+        } else {
+            if (typeof showToast === 'function') showToast(data.error || 'Shop subscription not found.', 'error');
+        }
+    } catch (err) {
+        if (typeof showToast === 'function') showToast('Network error querying subscription service.', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = 'Lookup Subscription'; }
+    }
+}
+window.lookupAdminClientSubscription = lookupAdminClientSubscription;
+
+async function submitAdminSubscriptionUpdate() {
+    const shopId = (document.getElementById('adminSubTargetShopId')?.value || '').trim();
+    const email = (document.getElementById('adminSubTargetEmail')?.value || '').trim();
+    const action = document.getElementById('adminSubActionSelect')?.value || 'ACTIVE';
+    const plan = document.getElementById('adminSubPlanSelect')?.value || 'billnaw Pro';
+    const reason = (document.getElementById('adminSubReasonInput')?.value || '').trim();
+
+    if (!shopId && !email) {
+        if (typeof showToast === 'function') showToast('Shop ID or Email is required.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnAdminSubSave');
+    if (btn) { btn.disabled = true; btn.innerText = 'Updating Cloud...'; }
+
+    try {
+        const payload = {
+            shopId: shopId || undefined,
+            shopEmail: email || undefined,
+            action,
+            reason,
+            plan,
+            updatedBy: (window.currentStaff && window.currentStaff.name) ? `${window.currentStaff.name} (Admin)` : 'Master Admin'
+        };
+
+        const res = await fetch('/api/subscription/manage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+            if (typeof showToast === 'function') {
+                showToast(`Subscription updated: ${action} for ${shopId || email}!`, 'success');
+            }
+            // If the updated shop is current shop, apply changes immediately
+            const myStore = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : '';
+            if (data.subscription && (shopId === myStore || (email && email === (window.shopProfile && window.shopProfile.email)))) {
+                if (typeof applySubscriptionStatus === 'function') {
+                    applySubscriptionStatus(data.subscription);
+                }
+                refreshCurrentStoreSubscriptionUI();
+            }
+            // Refresh lookup view
+            lookupAdminClientSubscription();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast(data.error || 'Failed to update subscription.', 'error');
+            }
+        }
+    } catch (err) {
+        if (typeof showToast === 'function') {
+            showToast('Network error saving subscription.', 'error');
+        }
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = 'Save & Update Cloud Subscription'; }
+    }
+}
+window.submitAdminSubscriptionUpdate = submitAdminSubscriptionUpdate;
+
 function openSubscriptionModal() {
+    if (checkFloorServerModalBlock('subscriptionDetailModal')) return;
     const el = document.getElementById('subscriptionDetailModal') || document.getElementById('subscriptionModal');
-    if (el) el.style.display = 'flex';
+    if (el) {
+        refreshCurrentStoreSubscriptionUI();
+        el.style.display = 'flex';
+    }
 }
 window.openSubscriptionModal = openSubscriptionModal;
 
@@ -644,6 +986,7 @@ function closeSubscriptionModal() {
 window.closeSubscriptionModal = closeSubscriptionModal;
 
 function openExpensesDetailModal() {
+    if (checkFloorServerModalBlock('expensesDetailModal')) return;
     const el = document.getElementById('expensesDetailModal');
     if (el) {
         if (typeof renderExpensesUI === 'function') renderExpensesUI();
@@ -666,6 +1009,7 @@ function closeExpensesDetailModal() {
 window.closeExpensesDetailModal = closeExpensesDetailModal;
 
 function openDiscountSettingsModal() {
+    if (checkFloorServerModalBlock('discountConfigModal')) return;
     const el = document.getElementById('discountConfigModal');
     if (el) {
         const enableInput = document.getElementById('settingDiscountsEnabled');
@@ -761,6 +1105,7 @@ function saveDiscountSettings() {
 window.saveDiscountSettings = saveDiscountSettings;
 
 function openGstConfigModal() {
+    if (checkFloorServerModalBlock('gstConfigModal')) return;
     const el = document.getElementById('gstConfigModal');
     if (el) {
         const modeSel = document.getElementById('gstPricingModeInput');
@@ -779,6 +1124,7 @@ function closeGstConfigModal() {
 window.closeGstConfigModal = closeGstConfigModal;
 
 function openPaymentConfigModal() {
+    if (checkFloorServerModalBlock('paymentConfigModal')) return;
     const el = document.getElementById('paymentConfigModal');
     if (el) {
         const upiInp = document.getElementById('upiIdInput');
@@ -804,6 +1150,7 @@ let draftTableCount = 5;
 let draftCustomNames = {};
 
 function openTableConfigModal() {
+    if (checkFloorServerModalBlock('tableConfigModal')) return;
     if (typeof openTableManagementModal === 'function') {
         openTableManagementModal();
     } else {
@@ -956,14 +1303,29 @@ window.applyTableNamingPreset = applyTableNamingPreset;
 
 
 function openCloudSyncDetailModal() {
+    if (checkFloorServerModalBlock('cloudSyncDetailModal')) return;
     const el = document.getElementById('cloudSyncDetailModal');
     if (el) {
         const codeEl = document.getElementById('settingsCurrentShopCode');
-        if (codeEl) codeEl.innerText = myClientID || 'BONGBHOJ-TERMINAL';
+        if (codeEl) codeEl.innerText = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (myClientID || 'SHOP-BILLNAW-01');
         el.style.display = 'flex';
     }
 }
 window.openCloudSyncDetailModal = openCloudSyncDetailModal;
+
+function copyStoreCode() {
+    const code = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (document.getElementById('settingsCurrentShopCode')?.innerText || 'SHOP-BILLNAW-01');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => {
+            if (typeof showToast === 'function') showToast('Store code copied: ' + code);
+        }).catch(() => {
+            if (typeof showToast === 'function') showToast('Store code: ' + code);
+        });
+    } else {
+        if (typeof showToast === 'function') showToast('Store code: ' + code);
+    }
+}
+window.copyStoreCode = copyStoreCode;
 
 function closeCloudSyncDetailModal() {
     const el = document.getElementById('cloudSyncDetailModal');
@@ -999,7 +1361,7 @@ function exportFullShopBackupJSON() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullBackup, null, 2));
     const a = document.createElement('a');
     a.setAttribute("href", dataStr);
-    a.setAttribute("download", `bongbhoj_backup_${getLocalISODate()}.json`);
+    a.setAttribute("download", `billnaw_backup_${getLocalISODate()}.json`);
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1134,6 +1496,7 @@ function switchTabDirect(tabId) {
         if (typeof renderKhataUI === 'function') renderKhataUI();
     }
     if (tabId === 'settings') {
+        if (typeof applySettingsRoleRestrictions === 'function') applySettingsRoleRestrictions();
         if (typeof refreshAiQuotaDisplay === 'function') refreshAiQuotaDisplay();
         if (typeof generateSettingsQRPreview === 'function') generateSettingsQRPreview();
         if (typeof renderSettingsProfileHeader === 'function') renderSettingsProfileHeader();
@@ -1158,6 +1521,7 @@ function factoryReset() {
 window.factoryReset = factoryReset;
 
 function openClearAllDataModal() {
+    if (checkFloorServerModalBlock('clearAllDataConfirmModal')) return;
     const modal = document.getElementById('clearAllDataConfirmModal');
     if (modal) modal.style.display = 'flex';
 }
@@ -1327,6 +1691,7 @@ window.skipOnboardingWizard = skipOnboardingWizard;
 // ============================================================
 
 function openAuthorizedDevicesModal(targetDeviceId = null) {
+    if (checkFloorServerModalBlock('authorizedDevicesModal')) return;
     if (typeof hasPermission === 'function' && typeof currentStaff !== 'undefined' && currentStaff) {
         if (!hasPermission(currentStaff, 'can_manage_devices') && (!currentStaff.role || currentStaff.role.toLowerCase() !== 'admin')) {
             showToast('Permission denied: Admin access required to manage devices.');
@@ -1466,6 +1831,29 @@ function renderAuthorizedDevicesHub() {
                 const isRevoked = (dev.status === 'REVOKED');
                 const profileBadge = dev.stationProfile || 'GENERAL_STATION';
                 const nameDisplay = typeof escapeHtml === 'function' ? escapeHtml(dev.deviceName || 'Terminal') : (dev.deviceName || 'Terminal');
+
+                // Cross-reference with active staff sessions to display current staff
+                const sessions = (typeof window !== 'undefined' && Array.isArray(window.activeStaffSessions)) ? window.activeStaffSessions : [];
+                const activeSessionForDev = sessions.find(s => (s.deviceId === dev.deviceId || s.deviceId === dev.id) && s.status !== 'REVOKED');
+                const staffInfoStr = activeSessionForDev ? ` • Staff: ${activeSessionForDev.staffName} (${activeSessionForDev.staffRole || 'Staff'})` : '';
+
+                // Activity / Last Seen Telemetry
+                const now = Date.now();
+                const lastSeenMs = dev.lastSeenAt ? new Date(dev.lastSeenAt).getTime() : 0;
+                const diffM = lastSeenMs ? Math.floor((now - lastSeenMs) / 60000) : 0;
+                const isOnline = !isRevoked && (isMaster || (lastSeenMs && (now - lastSeenMs) <= 15 * 60 * 1000));
+
+                let telemetryText = '';
+                if (isRevoked) {
+                    telemetryText = `Revoked ${dev.revokedAt ? new Date(dev.revokedAt).toLocaleTimeString() : 'by Admin'}`;
+                } else if (isOnline) {
+                    telemetryText = '🟢 Active now';
+                } else if (lastSeenMs) {
+                    telemetryText = diffM < 60 ? `⚪ Inactive for ${Math.max(1, diffM)}m` : `⚪ Inactive for ${Math.floor(diffM / 60)}h`;
+                } else {
+                    telemetryText = '⚪ Offline';
+                }
+
                 return `
                     <div class="auth-device-card" style="background: var(--bg-surface); border: 1px solid ${isRevoked ? '#FECACA' : 'var(--border)'}; border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
                         <div style="display: flex; align-items: center; gap: 12px;">
@@ -1481,7 +1869,7 @@ function renderAuthorizedDevicesHub() {
                                     <strong style="font-size: 14px; color: var(--text-dark);">${nameDisplay}</strong>
                                     ${isMaster ? '<span style="font-size: 10px; font-weight: 700; background: #DCFCE7; color: #15803D; padding: 2px 7px; border-radius: 10px;">Master Terminal</span>' : (isRevoked ? '<span style="font-size: 10px; font-weight: 700; background: #FEE2E2; color: #B91C1C; padding: 2px 7px; border-radius: 10px;">REVOKED</span>' : `<span style="font-size: 10px; font-weight: 700; background: #EFF6FF; color: #1D4ED8; padding: 2px 7px; border-radius: 10px;">${profileBadge}</span>`)}
                                 </div>
-                                <p style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; font-family: monospace;">ID: ${dev.deviceId} • ${isMaster ? 'Permanent' : (isRevoked ? `Revoked: ${dev.revokedAt ? new Date(dev.revokedAt).toLocaleTimeString() : 'Inactive'}` : `Approved: ${dev.approvedAt ? new Date(dev.approvedAt).toLocaleDateString() : 'Active'}`)}</p>
+                                <p style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; font-family: monospace;">ID: ${dev.deviceId} • ${telemetryText}${staffInfoStr}</p>
                             </div>
                         </div>
                         <div>
@@ -1775,7 +2163,7 @@ function openSwitchStoreModal() {
         modal.style.display = 'flex';
         const input = document.getElementById('targetStoreCodeInput');
         if (input) {
-            input.value = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || localStorage.getItem('bongbhoj_client_id') || '';
+            input.value = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || localStorage.getItem('billnaw_store_code') || localStorage.getItem('bongbhoj_client_id') || '';
             setTimeout(() => input.focus(), 60);
         }
     }

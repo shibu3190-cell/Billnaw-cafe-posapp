@@ -41,7 +41,7 @@ window.openSwitchStoreModal = function() {
         modal.style.display = 'flex';
         const input = document.getElementById('targetStoreCodeInput');
         if (input) {
-            input.value = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || localStorage.getItem('bongbhoj_client_id') || '';
+            input.value = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || localStorage.getItem('billnaw_store_code') || localStorage.getItem('bongbhoj_client_id') || '';
             setTimeout(() => input.focus(), 60);
         }
     }

@@ -512,17 +512,36 @@ function setStockQuick(amount) {
 window.setStockQuick = setStockQuick;
 
 function toggleStockUnlimited() {
-    if (!activeAdjustingItem) return;
+    if (!activeAdjustingItem) {
+        const idEl = document.getElementById('quickAdjustItemId');
+        if (idEl && idEl.value && Array.isArray(menuItems)) {
+            activeAdjustingItem = menuItems.find(i => String(i.id) === String(idEl.value));
+        }
+    }
+    if (!activeAdjustingItem) {
+        closeQuickAdjustStockModal();
+        return;
+    }
+    const itemName = activeAdjustingItem.name || 'Item';
     activeAdjustingItem.trackStock = false;
     persistMenu();
     renderMenuUI();
     closeQuickAdjustStockModal();
-    showToast(`${activeAdjustingItem.name} stock set to Unlimited.`, 'success');
+    showToast(`${itemName} stock set to Unlimited.`, 'success');
 }
 window.toggleStockUnlimited = toggleStockUnlimited;
 
 function saveQuickStockAdjustment() {
-    if (!activeAdjustingItem) return;
+    if (!activeAdjustingItem) {
+        const idEl = document.getElementById('quickAdjustItemId');
+        if (idEl && idEl.value && Array.isArray(menuItems)) {
+            activeAdjustingItem = menuItems.find(i => String(i.id) === String(idEl.value));
+        }
+    }
+    if (!activeAdjustingItem) {
+        closeQuickAdjustStockModal();
+        return;
+    }
     const inputEl = document.getElementById('quickAdjustStockInput');
     const newQty = parseInt(inputEl ? inputEl.value : '0', 10);
     
@@ -530,10 +549,13 @@ function saveQuickStockAdjustment() {
     activeAdjustingItem.stockQty = isNaN(newQty) ? 0 : Math.max(0, newQty);
     activeAdjustingItem.stock = activeAdjustingItem.stockQty;
 
+    const itemName = activeAdjustingItem.name || 'Item';
+    const finalQty = activeAdjustingItem.stockQty;
+
     persistMenu();
     renderMenuUI();
     closeQuickAdjustStockModal();
-    showToast(`Updated ${activeAdjustingItem.name} stock to ${activeAdjustingItem.stockQty}.`, 'success');
+    showToast(`Updated ${itemName} stock to ${finalQty}.`, 'success');
 }
 window.saveQuickStockAdjustment = saveQuickStockAdjustment;
 
@@ -1406,14 +1428,22 @@ async function processAIMenu(event) {
             });
         }
 
-        const payload = { base64Data, mimeType, clientId: myClientID, extractedText };
+        const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || '';
+        const activeShopId = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || myClientID || 'SHOP-BILLNAW-01';
+
+        const payload = { base64Data, mimeType, clientId: activeShopId, shopId: activeShopId, extractedText };
+        if (customKey) payload.apiKey = customKey;
         pendingUploadPayload = payload;
         lastUploadedMenuPreviewUrl = (base64Data && base64Data.startsWith('data:image')) ? base64Data : null;
 
         // Check Gemini AI Operational status
         let isGeminiReady = false;
         try {
-            const statusRes = await fetch(`/api/gemini/status?clientId=${encodeURIComponent(myClientID)}`);
+            const statusHeaders = {};
+            if (customKey) statusHeaders['x-gemini-api-key'] = customKey;
+            if (activeShopId) statusHeaders['x-shop-id'] = activeShopId;
+
+            const statusRes = await fetch(`/api/gemini/status?clientId=${encodeURIComponent(activeShopId)}`, { headers: statusHeaders });
             if (statusRes.ok) {
                 const statusData = await statusRes.json();
                 isGeminiReady = Boolean(statusData && statusData.operational);
@@ -1423,7 +1453,13 @@ async function processAIMenu(event) {
         }
 
         if (isGeminiReady) {
-            showToast("🤖 Converting menu with Google Gemini AI Vision (Primary Engine)...");
+            if (customKey) {
+                if (scanText) scanText.innerText = "Scanning menu using Dedicated Gemini API Key...";
+                showToast("🤖 Analyzing menu with Dedicated Gemini Key...");
+            } else {
+                if (scanText) scanText.innerText = "Uploading & analyzing menu document...";
+                showToast("🤖 Converting menu with Google Gemini AI Vision (Primary Engine)...");
+            }
             await executeMenuExtraction(payload, false);
         } else {
             showToast("📄 Parsing menu with Smart Layout Parser...");
@@ -1445,8 +1481,15 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
     if (!payload) return;
     const btn = document.getElementById('aiMenuBtn');
     if (btn) { btn.disabled = true; btn.innerText = "⏳ Extracting Menu..."; }
+
+    const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || payload.apiKey || '';
+    const activeShopId = payload.shopId || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || myClientID || 'SHOP-BILLNAW-01';
+    const activeShopEmail = (typeof shopProfile !== 'undefined' && shopProfile.email) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_shop_email') : null) || '';
+
     if (isExplicitFallback) {
         showToast("📄 Parsing menu layout with Smart Parser...");
+    } else if (customKey) {
+        showToast("🤖 Analyzing menu with Dedicated Gemini Key...");
     } else {
         showToast("🤖 Analyzing menu with Gemini AI...");
     }
@@ -1454,22 +1497,53 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
     try {
         let serverData = null;
         try {
-            const serverRes = await fetch('/api/extract-menu', {
+            const requestHeaders = { 'Content-Type': 'application/json' };
+            if (customKey) {
+                requestHeaders['x-gemini-api-key'] = customKey;
+                payload.apiKey = customKey;
+            }
+            if (activeShopId) {
+                requestHeaders['x-shop-id'] = activeShopId;
+                payload.shopId = activeShopId;
+            }
+            if (activeShopEmail) {
+                requestHeaders['x-shop-email'] = activeShopEmail;
+                payload.shopEmail = activeShopEmail;
+            }
+
+            let serverRes = await fetch('/api/ai/scan-menu', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: requestHeaders,
                 body: JSON.stringify(payload)
-            });
+            }).catch(() => null);
+
+            if (!serverRes || serverRes.status === 404) {
+                serverRes = await fetch('/api/extract-menu', {
+                    method: 'POST',
+                    headers: requestHeaders,
+                    body: JSON.stringify(payload)
+                });
+            }
 
             if (serverRes.ok) {
                 serverData = await serverRes.json();
             } else if (serverRes.status === 429) {
                 const errData = await serverRes.json().catch(() => ({}));
-                throw new Error(errData.error || "Monthly AI upload quota reached for this store.");
+                const quotaMsg = errData.error || "Monthly scan quota of 15 scans reached for this shop.";
+                showToast("⚠️ " + quotaMsg);
+                throw new Error(quotaMsg);
+            } else if (serverRes.status === 401 || serverRes.status === 403) {
+                const errData = await serverRes.json().catch(() => ({}));
+                const keyMsg = errData.error || "Invalid or unauthorized Gemini API key. Please check your key in Settings.";
+                showToast("❌ " + keyMsg);
+                throw new Error(keyMsg);
             } else {
                 console.warn(`Server extraction status: ${serverRes.status}, applying smart layout parser.`);
             }
         } catch (fetchErr) {
-            if (fetchErr.message && fetchErr.message.includes("quota")) throw fetchErr;
+            if (fetchErr.message && (fetchErr.message.includes("quota") || fetchErr.message.includes("Gemini API key") || fetchErr.message.includes("unauthorized"))) {
+                throw fetchErr;
+            }
             console.warn("Server connection failed or offline, switching to smart layout parser:", fetchErr);
         }
 
@@ -1482,6 +1556,8 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
             showToast("ℹ️ " + (serverData.warning || "Menu extracted using smart layout parser. Review items before import."));
         } else if (serverData.quota) {
             showToast(`🤖 AI Scanned! Quota remaining this month: ${serverData.quota.remaining}/${serverData.quota.limit}`);
+        } else if (customKey) {
+            showToast("✨ Menu digitized successfully using Dedicated Gemini Key!");
         }
 
         pendingAiItems = [];
@@ -1498,13 +1574,19 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
                         const hasImg = Boolean(item.image && typeof item.image === 'string' && (item.image.startsWith('data:image') || item.image.startsWith('http')));
                         const initialImg = hasImg ? item.image : (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(rawName, catName) : generateFallbackImage(rawName, catName));
 
+                        let isVeg = null;
+                        if (typeof item.isVeg === 'boolean') isVeg = item.isVeg;
+                        else if (typeof item.is_veg === 'boolean') isVeg = item.is_veg;
+                        else if (typeof item.veg === 'boolean') isVeg = item.veg;
+
                         pendingAiItems.push({
                             name: rawName,
                             price: rawPrice,
                             category: catName,
                             image: initialImg,
                             image_prompt: prompt,
-                            hasCustomImage: hasImg
+                            hasCustomImage: hasImg,
+                            isVeg: isVeg
                         });
                     });
                 }

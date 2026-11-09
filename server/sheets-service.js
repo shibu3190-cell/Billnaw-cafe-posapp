@@ -14,7 +14,7 @@ export async function relayGoogleSheetsAction({ action, clientId, data, customWe
 
   const payload = {
     action,
-    clientId: clientId || 'BONGBHOJ-TERMINAL',
+    clientId: clientId || 'SHOP-BILLNAW-01',
     data,
     timestamp: new Date().toISOString()
   };
