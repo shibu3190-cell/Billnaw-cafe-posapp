@@ -255,10 +255,10 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
 
   const staffToSubdoc = Array.isArray(finalStaffArray) ? finalStaffArray : (Array.isArray(payload.staff) ? payload.staff : []);
-  for (const s of staffToSubdoc) {
+  const staffPromises = staffToSubdoc.map(async (s) => {
     if (s && (s.id || s.staffId)) {
       const sId = String(s.id || s.staffId);
-      if (sId === deletedIdStr) continue;
+      if (sId === deletedIdStr) return;
       const subdocUrl = `${base}/${collection}/${encodeURIComponent(code)}/staff/${encodeURIComponent(sId)}`;
       try {
         await fetch(subdocUrl, {
@@ -268,11 +268,12 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
         }).catch(() => null);
       } catch (e) {}
     }
-  }
+  });
+  await Promise.allSettled(staffPromises);
 
   // 3. Sync Tables Subcollection (/{collection}/{storeCode}/tables/{tableId})
   if (payload.tables && typeof payload.tables === 'object') {
-    for (const [tId, tData] of Object.entries(payload.tables)) {
+    const tablePromises = Object.entries(payload.tables).map(async ([tId, tData]) => {
       if (tData) {
         const tableDocUrl = `${base}/${collection}/${encodeURIComponent(code)}/tables/${encodeURIComponent(tId)}`;
         try {
@@ -284,7 +285,8 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
           }).catch(() => null);
         } catch (e) {}
       }
-    }
+    });
+    await Promise.allSettled(tablePromises);
   }
 
   return {

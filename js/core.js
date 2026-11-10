@@ -2679,8 +2679,11 @@ async function persistAllToFirestore() {
         if (rawK) activeKots = JSON.parse(rawK);
     } catch(e) {}
 
+    const targetStoreCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (shopProfile?.storeCode || null);
     const safeProfile = JSON.parse(JSON.stringify(shopProfile || {}));
     const fullPayload = {
+        storeCode: targetStoreCode,
+        replaceStaff: true,
         profile: safeProfile,
         staff: staffList,
         menu: sanitizedMenu,
@@ -2708,16 +2711,19 @@ async function persistAllToFirestore() {
     }
 
     // Layer 2: High-Reliability Server REST Sync
+    let didSync = false;
     try {
         const synced = await dispatchBackendStoreSync(fullPayload, true);
         if (synced) {
             lastCloudSyncTime = Date.now();
             setCloudSyncStatus('synced', 'Real-Time Synced');
+            didSync = true;
         }
     } catch (err) {
         console.warn("Backend store sync error:", err.message);
         setCloudSyncStatus('offline', 'Local (IndexedDB)');
     }
+    return didSync;
 }
 window.persistAllToFirestore = persistAllToFirestore;
 
@@ -2985,11 +2991,15 @@ window.persistStaffToFirestore = persistStaffToFirestore;
 function forceCloudSyncNow() {
     setCloudSyncStatus('syncing', 'Force Syncing...');
     showToast("⚡ Uploading store database to Cloud...");
-    persistAllToFirestore().then(() => {
+    persistAllToFirestore().then((synced) => {
         const sCount = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList.length : 0;
         const tCount = (typeof tablesInfo !== 'undefined' && tablesInfo && typeof tablesInfo === 'object') ? Object.keys(tablesInfo).length : 0;
         const mCount = (typeof menuItems !== 'undefined' && Array.isArray(menuItems)) ? menuItems.length : 0;
-        showToast(`✅ Cloud synchronization complete! (${sCount} Staff, ${tCount} Tables, ${mCount} Menu items)`, 'success');
+        if (synced) {
+            showToast(`✅ Cloud synchronization complete! (${sCount} Staff, ${tCount} Tables, ${mCount} Menu items)`, 'success');
+        } else {
+            showToast(`⚠️ Saved locally (${sCount} Staff, ${tCount} Tables). Cloud sync queued.`, 'warning');
+        }
         
         try {
             const lastSyncEl = document.getElementById('settingsLastSyncTime');

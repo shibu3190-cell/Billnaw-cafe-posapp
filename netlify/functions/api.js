@@ -75,7 +75,7 @@ const CORS_HEADERS = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, x-shop-id, x-shop-email, x-store-code'
 };
 
 function jsonResponse(statusCode, data) {
