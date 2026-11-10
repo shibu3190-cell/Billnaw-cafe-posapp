@@ -1723,7 +1723,7 @@ function handleRemoteFirestoreUpdate(data) {
             });
             menuItems = Array.from(menuMap.values());
             if (typeof dispatchBackendStoreSync === 'function') {
-                dispatchBackendStoreSync({ menu: menuItems });
+                dispatchBackendStoreSync({ menu: menuItems }, true);
             }
         } else {
             menuItems = data.menu;

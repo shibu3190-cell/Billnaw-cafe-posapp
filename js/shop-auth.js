@@ -1456,7 +1456,7 @@
         const showToggle = document.getElementById('tblMgmtShowTables');
         const alertToggle = document.getElementById('tblMgmtUnpaidAlert');
 
-        const count = Math.max(1, Math.min(60, parseInt(countInput ? countInput.value : 5, 10) || 5));
+        const count = Math.max(1, Math.min(100, parseInt(countInput ? countInput.value : 5, 10) || 5));
         const showTables = showToggle ? showToggle.checked : true;
         const unpaidAlert = alertToggle ? alertToggle.checked : true;
 
