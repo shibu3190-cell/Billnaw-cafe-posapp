@@ -1689,7 +1689,7 @@ function handleRemoteFirestoreUpdate(data) {
             staffList.forEach(s => { if (s && s.id && !staffMap.has(String(s.id))) staffMap.set(String(s.id), s); });
             staffList = Array.from(staffMap.values());
             if (typeof dispatchBackendStoreSync === 'function') {
-                dispatchBackendStoreSync({ staff: staffList });
+                dispatchBackendStoreSync({ staff: staffList }, true);
             }
         } else {
             staffList = data.staff;
@@ -1756,6 +1756,7 @@ function handleRemoteFirestoreUpdate(data) {
         customersList = data.customers;
     }
     if (data.tables && typeof data.tables === 'object') {
+        const localTableCountBefore = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
         if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
         for (const [tId, tData] of Object.entries(data.tables)) {
             if (tData) {
@@ -1772,6 +1773,11 @@ function handleRemoteFirestoreUpdate(data) {
         }
         if (typeof renderTables === 'function') renderTables();
         if (typeof syncTableUI === 'function') syncTableUI();
+
+        // If local device has more tables than remote cloud snapshot, immediately push back full local tables
+        if (localTableCountBefore > Object.keys(data.tables).length && typeof dispatchBackendStoreSync === 'function') {
+            dispatchBackendStoreSync({ tables: tablesInfo }, true);
+        }
     }
     if (Array.isArray(data.history) || (data.history && typeof data.history === 'object')) {
         const remoteList = Array.isArray(data.history) ? data.history : Object.values(data.history);
@@ -2641,12 +2647,14 @@ async function reconcileExistingShopCloudSync() {
 
     if (hasData && typeof dispatchBackendStoreSync === 'function') {
         console.log(`[EXISTING SHOP SYNC] Reconciling shop data for ${storeCode}: ${sList.length} staff, ${Object.keys(tInfo).length} tables`);
-        dispatchBackendStoreSync({
+        await dispatchBackendStoreSync({
             storeCode,
             profile: (typeof shopProfile !== 'undefined' && shopProfile) ? shopProfile : undefined,
             staff: sList.length > 0 ? sList : undefined,
-            tables: Object.keys(tInfo).length > 0 ? tInfo : undefined
-        }, false);
+            tables: Object.keys(tInfo).length > 0 ? tInfo : undefined,
+            menu: (typeof menuItems !== 'undefined' && Array.isArray(menuItems) && menuItems.length > 0) ? menuItems : undefined,
+            categories: (typeof menuCategories !== 'undefined' && Array.isArray(menuCategories) && menuCategories.length > 0) ? menuCategories : undefined
+        }, true);
     }
 }
 window.reconcileExistingShopCloudSync = reconcileExistingShopCloudSync;
@@ -2978,9 +2986,23 @@ function forceCloudSyncNow() {
     setCloudSyncStatus('syncing', 'Force Syncing...');
     showToast("⚡ Uploading store database to Cloud...");
     persistAllToFirestore().then(() => {
-        showToast("✅ Cloud synchronization complete!");
+        const sCount = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList.length : 0;
+        const tCount = (typeof tablesInfo !== 'undefined' && tablesInfo && typeof tablesInfo === 'object') ? Object.keys(tablesInfo).length : 0;
+        const mCount = (typeof menuItems !== 'undefined' && Array.isArray(menuItems)) ? menuItems.length : 0;
+        showToast(`✅ Cloud synchronization complete! (${sCount} Staff, ${tCount} Tables, ${mCount} Menu items)`, 'success');
+        
+        try {
+            const lastSyncEl = document.getElementById('settingsLastSyncTime');
+            if (lastSyncEl) lastSyncEl.innerText = new Date().toLocaleTimeString();
+            const staffStat = document.getElementById('syncStatStaff');
+            if (staffStat) staffStat.innerText = `Staff: ${sCount}`;
+            const tableStat = document.getElementById('syncStatTables');
+            if (tableStat) tableStat.innerText = `Tables: ${tCount}`;
+            const menuStat = document.getElementById('syncStatMenu');
+            if (menuStat) menuStat.innerText = `Menu: ${mCount}`;
+        } catch(e) {}
     }).catch(e => {
-        showToast("⚠️ Cloud Sync issue: " + e.message);
+        showToast("⚠️ Cloud Sync issue: " + e.message, 'warning');
     });
 }
 window.forceCloudSyncNow = forceCloudSyncNow;
@@ -4255,7 +4277,7 @@ async function initDatabase() {
                 staff: staffList,
                 tables: tablesInfo,
                 storeCode: currentStoreCode
-            });
+            }, true);
         }
     }
 

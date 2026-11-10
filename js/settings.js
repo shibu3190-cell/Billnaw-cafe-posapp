@@ -1306,8 +1306,31 @@ function openCloudSyncDetailModal() {
     if (checkFloorServerModalBlock('cloudSyncDetailModal')) return;
     const el = document.getElementById('cloudSyncDetailModal');
     if (el) {
+        const storeCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (localStorage.getItem('billnaw_store_code') || 'N/A');
         const codeEl = document.getElementById('settingsCurrentShopCode');
-        if (codeEl) codeEl.innerText = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (localStorage.getItem('billnaw_store_code') || 'N/A');
+        if (codeEl) codeEl.innerText = storeCode;
+
+        const dbEl = document.getElementById('settingsFirestoreDbDisplay');
+        if (dbEl) dbEl.innerText = 'ai-studio-billnawcafepos-3ac17879-08c8-4e15-9a3d-a965f7d92fda';
+
+        const lastSyncEl = document.getElementById('settingsLastSyncTime');
+        if (lastSyncEl) {
+            lastSyncEl.innerText = (typeof lastCloudSyncTime !== 'undefined' && lastCloudSyncTime) 
+                ? new Date(lastCloudSyncTime).toLocaleTimeString() 
+                : 'Just now';
+        }
+
+        const sCount = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList.length : 0;
+        const tCount = (typeof tablesInfo !== 'undefined' && tablesInfo && typeof tablesInfo === 'object') ? Object.keys(tablesInfo).length : 0;
+        const mCount = (typeof menuItems !== 'undefined' && Array.isArray(menuItems)) ? menuItems.length : 0;
+
+        const staffStat = document.getElementById('syncStatStaff');
+        if (staffStat) staffStat.innerText = `Staff: ${sCount}`;
+        const tableStat = document.getElementById('syncStatTables');
+        if (tableStat) tableStat.innerText = `Tables: ${tCount}`;
+        const menuStat = document.getElementById('syncStatMenu');
+        if (menuStat) menuStat.innerText = `Menu: ${mCount}`;
+
         el.style.display = 'flex';
     }
 }
