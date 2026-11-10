@@ -82,13 +82,15 @@ export async function createKOT(kotData) {
 
     await batch.commit();
 
-    // Persist to local storage for instant KDS display & offline resilience
+    // Persist to local storage for instant KDS display & offline resilience (Retain 24hr in DB)
     if (typeof localStorage !== 'undefined') {
       try {
         const raw = localStorage.getItem('billnaw_active_kots');
         const list = raw ? JSON.parse(raw) : [];
         list.unshift(kotDoc);
-        localStorage.setItem('billnaw_active_kots', JSON.stringify(list.slice(0, 100)));
+        const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+        const retained = list.filter(k => new Date(k.created_at || 0).getTime() >= cutoff);
+        localStorage.setItem('billnaw_active_kots', JSON.stringify(retained.slice(0, 200)));
       } catch (e) {}
     }
     if (typeof window !== 'undefined') {
@@ -246,6 +248,11 @@ export function generateKotSlipPayload(kot) {
 export async function getActiveKOTs() {
   return safeExecute(async () => {
     let kots = [];
+    const now = Date.now();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+    const cutoff24h = now - TWENTY_FOUR_HOURS;
+    const todayStr = new Date(now).toDateString();
+
     if (typeof localStorage !== 'undefined') {
       try {
         const stored = localStorage.getItem('billnaw_active_kots');
@@ -255,20 +262,67 @@ export async function getActiveKOTs() {
       } catch (e) {}
     }
 
-    // Merge active table orders that contain kitchen items
-    if (typeof window !== 'undefined' && window.tablesInfo) {
-      const activeTables = window.tablesInfo;
+    // 1. Sliding 24-Hour DB Retention: Keep KOT details in database for 24 hours
+    kots = Array.isArray(kots) ? kots.filter(k => {
+      const createdTime = new Date(k.created_at || 0).getTime();
+      return createdTime >= cutoff24h;
+    }) : [];
+
+    // 2. Determine Active Tables status
+    const activeTables = (typeof window !== 'undefined' && window.tablesInfo) ? window.tablesInfo : null;
+    const allTablesClear = !activeTables || Object.values(activeTables).every(t => !t || !Array.isArray(t.items) || t.items.length === 0 || t.status === 'empty' || t.status === 'billed');
+
+    let storageChanged = false;
+
+    // 3. Mark settled / cleared / yesterday table tickets as SERVED
+    kots.forEach(k => {
+      if (k.status === 'CANCELLED' || k.status === 'SERVED') return;
+      
+      const isTableTicket = k.table_id && k.table_id !== 'TAKEAWAY';
+      const createdDate = new Date(k.created_at || 0).toDateString();
+      const isFromPreviousDay = createdDate !== todayStr;
+
+      if (isTableTicket) {
+        if (allTablesClear || isFromPreviousDay) {
+          // Next day rollover or all tables cleared: KDS screen should be clean
+          k.status = 'SERVED';
+          k.updated_at = new Date().toISOString();
+          storageChanged = true;
+        } else if (activeTables) {
+          // Check if specific table is currently occupied
+          const matchingKey = Object.keys(activeTables).find(key => {
+            const tName = typeof window.getTableName === 'function' ? window.getTableName(key) : `Table ${key}`;
+            return k.table_id === tName || k.table_id === `Table ${key}` || k.table_id === String(key) || k.kot_id === `KOT-TBL-${key}`;
+          });
+          const tInfo = matchingKey ? activeTables[matchingKey] : null;
+          if (!tInfo || !Array.isArray(tInfo.items) || tInfo.items.length === 0 || tInfo.status === 'empty' || tInfo.status === 'billed') {
+            // Table was cleared or checked out: remove from active kitchen
+            k.status = 'SERVED';
+            k.updated_at = new Date().toISOString();
+            storageChanged = true;
+          }
+        }
+      } else if (isFromPreviousDay && ['PENDING', 'PREPARING', 'READY'].includes(k.status)) {
+        // Stale takeaway ticket from previous day
+        k.status = 'SERVED';
+        k.updated_at = new Date().toISOString();
+        storageChanged = true;
+      }
+    });
+
+    // 4. Merge active in-memory table orders that contain kitchen items
+    if (activeTables && !allTablesClear) {
       Object.keys(activeTables).forEach(tableKey => {
         const tInfo = activeTables[tableKey];
         if (tInfo && Array.isArray(tInfo.items) && tInfo.items.length > 0 && tInfo.status !== 'billed' && tInfo.status !== 'empty') {
           const tableName = typeof window.getTableName === 'function' ? window.getTableName(tableKey) : `Table ${tableKey}`;
-          const existing = kots.find(k => (k.table_id === tableName || k.table_id === String(tableKey)) && k.status !== 'SERVED' && k.status !== 'CANCELLED');
+          const existing = kots.find(k => (k.table_id === tableName || k.table_id === `Table ${tableKey}` || k.table_id === String(tableKey) || k.kot_id === `KOT-TBL-${tableKey}`) && k.status !== 'SERVED' && k.status !== 'CANCELLED');
           if (!existing) {
-            kots.push({
+            kots.unshift({
               kot_id: `KOT-TBL-${tableKey}`,
               table_id: tableName,
               order_type: 'DINE_IN',
-              status: tInfo.status === 'kot' ? 'PENDING' : 'PENDING',
+              status: 'PENDING',
               items: tInfo.items.map(it => ({
                 name: it.name || 'Dish',
                 quantity: it.qty || it.quantity || 1,
@@ -278,6 +332,7 @@ export async function getActiveKOTs() {
               created_at: tInfo.savedTime ? new Date(tInfo.savedTime).toISOString() : new Date().toISOString(),
               updated_at: new Date().toISOString()
             });
+            storageChanged = true;
           }
         }
       });
@@ -295,11 +350,14 @@ export async function getActiveKOTs() {
             snap.docs.forEach(docSnap => {
               const d = docSnap.data();
               if (d && ['PENDING', 'PREPARING', 'READY'].includes(d.status)) {
-                const idx = kots.findIndex(k => k.kot_id === d.kot_id || k.id === docSnap.id);
-                if (idx >= 0) {
-                  kots[idx] = { id: docSnap.id, ...d };
-                } else {
-                  kots.unshift({ id: docSnap.id, ...d });
+                const createdTime = new Date(d.created_at || 0).getTime();
+                if (createdTime >= cutoff24h) {
+                  const idx = kots.findIndex(k => k.kot_id === d.kot_id || k.id === docSnap.id);
+                  if (idx >= 0) {
+                    kots[idx] = { id: docSnap.id, ...d };
+                  } else {
+                    kots.unshift({ id: docSnap.id, ...d });
+                  }
                 }
               }
             });
@@ -308,8 +366,20 @@ export async function getActiveKOTs() {
       }
     } catch (dbErr) {}
 
-    // Return only active preparation tickets (exclude SERVED and CANCELLED)
-    const activeTickets = kots.filter(k => ['PENDING', 'PREPARING', 'READY'].includes(k.status));
+    // Persist 24hr retained list in localStorage
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('billnaw_active_kots', JSON.stringify(kots.slice(0, 200)));
+      } catch (e) {}
+    }
+
+    // 5. Active Display Filtering: Return only active preparation tickets (exclude SERVED and CANCELLED)
+    let activeTickets = kots.filter(k => ['PENDING', 'PREPARING', 'READY'].includes(k.status));
+
+    // If all tables are clear, ensure no table tickets linger on screen
+    if (allTablesClear) {
+      activeTickets = activeTickets.filter(k => !k.table_id || k.table_id === 'TAKEAWAY');
+    }
     
     // Sort oldest first for kitchen workflow priority
     activeTickets.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));

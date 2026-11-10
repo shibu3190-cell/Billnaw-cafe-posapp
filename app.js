@@ -17,7 +17,7 @@ document.addEventListener('keydown', function(event) {
         if (!activeId) return;
         if (activeId === 'activationKeyInput' && typeof activateSoftware === 'function') { activateSoftware(); document.activeElement.blur(); }
         if (activeId === 'adminPinInput' && typeof loginAsAdmin === 'function') { loginAsAdmin(); document.activeElement.blur(); }
-        if (activeId === 'newCategoryName' && typeof addCategory === 'function') { addCategory(); }
+        if (activeId === 'newCategoryName' && typeof addCategory === 'function') { event.preventDefault(); addCategory(); }
         if (['newItemName', 'newItemPrice', 'newItemGst', 'newItemStock'].includes(activeId) && typeof addMenuItem === 'function') { 
             addMenuItem(); 
             const nameEl = document.getElementById('newItemName');

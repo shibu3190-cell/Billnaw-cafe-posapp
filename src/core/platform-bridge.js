@@ -1395,7 +1395,7 @@ export const ThermalPrinterBridge = {
 
       // Center Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x01]));
-      parts.push(encodeClean(`Thank You! Visit Again\n\n\n\n\n`));
+      parts.push(encodeClean(`Thank You! Visit Again\nPowered by Billnaw POS\n\n\n\n\n`));
     }
 
     // Paper Cut: GS V 66 0 ([0x1D, 0x56, 0x42, 0x00]) - STRICT TEST INVARIANT

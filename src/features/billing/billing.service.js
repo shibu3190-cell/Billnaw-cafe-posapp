@@ -610,7 +610,8 @@ export function generateReceiptPayload(invoice, cafeProfile = {}) {
       <div class="flex justify-between font-bold text-sm">
         <span>TOTAL:</span><span>INR ${invoice.final_payable_rupees || paiseToRupees(invoice.final_payable_paise)}</span>
       </div>
-      <div class="text-center text-xs mt-4">Thank You! Visit Again</div>
+      <div class="text-center text-xs mt-4 font-semibold">Thank you, visit again.</div>
+      <div class="text-center text-[10px] text-gray-500 font-medium">Powered by Billnaw POS</div>
     </div>
   `;
 

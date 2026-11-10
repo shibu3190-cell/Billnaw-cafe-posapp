@@ -255,7 +255,8 @@ function modifyQty(itemId, delta, event) {
     if (item) {
         if (delta > 0 && menuItem && menuItem.trackStock && (item.qty + delta) > menuItem.stockQty) return showToast(`Only ${menuItem.stockQty} left!`);
         item.qty += delta; 
-        if(item.qty <= 0) tInfo.items = tInfo.items.filter(i => i.id !== itemId); 
+        const isDishRemoved = item.qty <= 0;
+        if(isDishRemoved) tInfo.items = tInfo.items.filter(i => i.id !== itemId); 
         if(tInfo.items.length === 0 && tInfo.status !== 'booked') { 
             tInfo.status = 'empty'; 
             tInfo.savedTime = null; 
@@ -268,17 +269,99 @@ function modifyQty(itemId, delta, event) {
         syncTableUI(); 
         updateCartUI(); 
         if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+
+        // Sync Kitchen Order Tickets when dish quantity changes or dish is removed
+        try {
+            const currentTName = typeof getTableName === 'function' ? getTableName(activeTable) : `Table ${activeTable}`;
+            const rawKots = localStorage.getItem('billnaw_active_kots');
+            if (rawKots) {
+                const kotList = JSON.parse(rawKots);
+                let changed = false;
+                kotList.forEach(k => {
+                    const matches = (
+                        k.table_id === currentTName ||
+                        k.table_id === `Table ${activeTable}` ||
+                        k.table_id === String(activeTable) ||
+                        k.kot_id === `KOT-TBL-${activeTable}`
+                    );
+                    if (matches && ['PENDING', 'PREPARING', 'READY'].includes(k.status)) {
+                        if (tInfo.items.length === 0) {
+                            k.status = 'CANCELLED';
+                            k.cancellation_reason = 'All dishes removed';
+                            k.updated_at = new Date().toISOString();
+                            changed = true;
+                        } else if (isDishRemoved && Array.isArray(k.items)) {
+                            const activeNames = tInfo.items.map(it => it.name);
+                            k.items = k.items.filter(it => activeNames.includes(it.name));
+                            k.items.forEach(kIt => {
+                                const cartIt = tInfo.items.find(it => it.name === kIt.name);
+                                if (cartIt) kIt.quantity = cartIt.qty;
+                            });
+                            if (k.items.length === 0) {
+                                k.status = 'CANCELLED';
+                                k.cancellation_reason = 'Dishes removed from order';
+                            }
+                            k.updated_at = new Date().toISOString();
+                            changed = true;
+                        }
+                    }
+                });
+                if (changed) {
+                    localStorage.setItem('billnaw_active_kots', JSON.stringify(kotList));
+                    window.dispatchEvent(new CustomEvent('billnaw:kot-status-changed', { detail: { table: currentTName } }));
+                    if (window.kotUIInstance && typeof window.kotUIInstance.loadKots === 'function') {
+                        window.kotUIInstance.loadKots();
+                    }
+                }
+            }
+        } catch(kotErr) {}
     }
 }
 window.modifyQty = modifyQty;
 
 function clearTable() {
     if(confirm("Clear this entire order?")) {
+        const currentTName = typeof getTableName === 'function' ? getTableName(activeTable) : `Table ${activeTable}`;
         tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
         persistTables();
         syncTableUI();
         updateCartUI();
         if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+
+        // Immediately cancel/clear active KOTs for this table
+        try {
+            const rawKots = localStorage.getItem('billnaw_active_kots');
+            if (rawKots) {
+                const kotList = JSON.parse(rawKots);
+                let changed = false;
+                kotList.forEach(k => {
+                    const matches = (
+                        k.table_id === currentTName ||
+                        k.table_id === `Table ${activeTable}` ||
+                        k.table_id === String(activeTable) ||
+                        k.kot_id === `KOT-TBL-${activeTable}`
+                    );
+                    if (matches && ['PENDING', 'PREPARING', 'READY'].includes(k.status)) {
+                        k.status = 'CANCELLED';
+                        k.cancellation_reason = 'Table Cleared';
+                        k.updated_at = new Date().toISOString();
+                        changed = true;
+                    }
+                });
+                if (changed) {
+                    localStorage.setItem('billnaw_active_kots', JSON.stringify(kotList));
+                    window.dispatchEvent(new CustomEvent('billnaw:kot-status-changed', { detail: { table: currentTName, status: 'CANCELLED' } }));
+                }
+            }
+        } catch(kotErr) {}
+
+        if (window.kotUIInstance && typeof window.kotUIInstance.loadKots === 'function') {
+            window.kotUIInstance.loadKots();
+        }
+        if (typeof window.renderKdsUI === 'function') {
+            window.renderKdsUI();
+        }
+
         const drawer = document.getElementById('cartDrawer'); if (drawer) drawer.classList.remove('open');
         const overlay = document.getElementById('cartDrawerOverlay'); if (overlay) overlay.classList.remove('show');
     }
@@ -1523,16 +1606,24 @@ async function confirmCheckout() {
         tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null }; 
         persistTables(); 
 
-        // Mark any active KOT for this settled table as SERVED
+        // Mark any active KOT for this settled table as SERVED and clear from KDS
         try {
-            const currentTName = getTableName(activeTable);
+            const currentTName = typeof getTableName === 'function' ? getTableName(activeTable) : `Table ${activeTable}`;
             const rawKots = localStorage.getItem('billnaw_active_kots');
             if (rawKots) {
                 const kotList = JSON.parse(rawKots);
                 let changed = false;
                 kotList.forEach(k => {
-                    if ((k.table_id === currentTName || k.table_id === `Table ${activeTable}`) && k.status !== 'CANCELLED') {
+                    const matches = (
+                        k.table_id === currentTName ||
+                        k.table_id === `Table ${activeTable}` ||
+                        k.table_id === String(activeTable) ||
+                        k.kot_id === `KOT-TBL-${activeTable}` ||
+                        (k.table_id && String(k.table_id).toLowerCase() === String(currentTName).toLowerCase())
+                    );
+                    if (matches && k.status !== 'CANCELLED') {
                         k.status = 'SERVED';
+                        k.updated_at = new Date().toISOString();
                         changed = true;
                     }
                 });
@@ -1540,6 +1631,12 @@ async function confirmCheckout() {
                     localStorage.setItem('billnaw_active_kots', JSON.stringify(kotList));
                     window.dispatchEvent(new CustomEvent('billnaw:kot-status-changed', { detail: { table: currentTName, status: 'SERVED' } }));
                 }
+            }
+            if (window.kotUIInstance && typeof window.kotUIInstance.loadKots === 'function') {
+                window.kotUIInstance.loadKots();
+            }
+            if (typeof window.renderKdsUI === 'function') {
+                window.renderKdsUI();
             }
         } catch(kotErr) {} 
         
@@ -2491,7 +2588,7 @@ async function sendEscPosToPrinter(order) {
         }
     }
 
-    payloads.push(new TextEncoder().encode(ALIGN_CENTER + 'Thank You! Visit Again\n\x0A\x0A\x0A\x0A\x1D\x56\x42\x00'));
+    payloads.push(new TextEncoder().encode(ALIGN_CENTER + 'Thank you, visit again.\nPowered by Billnaw POS\n\x0A\x0A\x0A\x0A\x1D\x56\x42\x00'));
 
     let totalLength = payloads.reduce((sum, p) => sum + p.length, 0);
     let finalPayload = new Uint8Array(totalLength);

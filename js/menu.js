@@ -8,19 +8,56 @@ let pendingAiFallbackNotice = null;
 let pendingUploadPayload = null;
 let lastUploadedMenuPreviewUrl = null;
 
-function renderCategoryDropdown() {
+function renderCategoryDropdown(selectedCategory) {
     const select = document.getElementById('newItemCategory');
     if (select) {
-        select.innerHTML = menuCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        const currentVal = selectedCategory || select.value;
+        const validCats = (Array.isArray(menuCategories) ? menuCategories : []).filter(c => c !== 'All');
+        let html = validCats.map(c => `<option value="${escapeHtml(c)}" ${c === currentVal ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+        html += `<option value="__NEW_CATEGORY__">+ Add New Category...</option>`;
+        select.innerHTML = html;
+        if (currentVal && validCats.includes(currentVal)) {
+            select.value = currentVal;
+        } else if (validCats.length > 0 && (!select.value || select.value === '__NEW_CATEGORY__')) {
+            select.value = validCats[0];
+        }
     }
 }
 window.renderCategoryDropdown = renderCategoryDropdown;
+
+function promptAddNewCategoryFromModal() {
+    const cat = prompt("Enter new category name (e.g., Desserts, Soups, Specials):");
+    if (cat && cat.trim()) {
+        const cleanName = cat.trim();
+        const added = addCategory(cleanName);
+        if (added) {
+            renderCategoryDropdown(cleanName);
+            const select = document.getElementById('newItemCategory');
+            if (select) select.value = cleanName;
+        }
+    } else {
+        renderCategoryDropdown();
+    }
+}
+window.promptAddNewCategoryFromModal = promptAddNewCategoryFromModal;
+
+function handleItemCategorySelectChange(selectEl) {
+    if (selectEl && selectEl.value === '__NEW_CATEGORY__') {
+        promptAddNewCategoryFromModal();
+    }
+}
+window.handleItemCategorySelectChange = handleItemCategorySelectChange;
+
+function openAddDishModal() {
+    return openAddMenuItemModal();
+}
+window.openAddDishModal = openAddDishModal;
 
 function renderCategoryFilters() {
     const el = document.getElementById('categoryFiltersUI');
     if (!el) return;
     el.innerHTML = '';
-    menuCategories.forEach(cat => {
+    (Array.isArray(menuCategories) ? menuCategories : []).forEach(cat => {
         el.innerHTML += `<div class="cat-chip ${cat === activeCategory ? 'active' : ''}" onclick="filterMenu('${escapeHtml(cat)}')">${escapeHtml(cat)}</div>`;
     });
 }
@@ -28,8 +65,9 @@ window.renderCategoryFilters = renderCategoryFilters;
 
 function renderCategoryListUI() {
     const container = document.getElementById('categoryListUI');
+    const validCats = Array.isArray(menuCategories) ? menuCategories : [];
     if (container) {
-        container.innerHTML = menuCategories.map(c => `
+        container.innerHTML = validCats.map(c => `
             <span class="category-manage-chip">
                 <span>${escapeHtml(c)}</span>
                 ${c !== 'All' ? `<button type="button" class="del-btn" onclick="deleteCategory('${escapeHtml(c)}')" title="Delete Category ${escapeHtml(c)}" style="display:inline-flex;align-items:center;justify-content:center;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
@@ -38,37 +76,62 @@ function renderCategoryListUI() {
     }
     const catCountBadge = document.getElementById('categoryCountBadge');
     if (catCountBadge) {
-        const count = menuCategories.filter(c => c !== 'All').length;
+        const count = validCats.filter(c => c !== 'All').length;
         catCountBadge.innerText = `${count} Categor${count === 1 ? 'y' : 'ies'}`;
+    }
+    const menuCategoriesCount = document.getElementById('menuCategoriesCount');
+    if (menuCategoriesCount) {
+        menuCategoriesCount.innerText = validCats.filter(c => c !== 'All').length;
     }
 }
 window.renderCategoryListUI = renderCategoryListUI;
 
-function addCategory() {
+function addCategory(customName) {
     const catInput = document.getElementById('newCategoryName');
-    const cat = catInput ? catInput.value.trim() : '';
-    if(cat && !menuCategories.includes(cat)) {
-        menuCategories.push(cat);
-        if (catInput) catInput.value = '';
-        persistCategories();
-        renderCategoryDropdown();
-        renderCategoryFilters();
-        renderCategoryListUI();
-        showToast("Category added!");
-    } else if (menuCategories.includes(cat)) {
-        showToast("Category already exists.");
+    let cat = (customName && typeof customName === 'string') ? customName.trim() : (catInput ? catInput.value.trim() : '');
+    if (!cat) {
+        showToast("Please enter a category name.");
+        return false;
     }
+    if (cat.toLowerCase() === 'all') {
+        showToast("'All' is a reserved category filter.");
+        return false;
+    }
+    if (!Array.isArray(menuCategories)) {
+        menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
+    }
+    const exists = menuCategories.some(c => c.toLowerCase() === cat.toLowerCase());
+    if (exists) {
+        showToast(`Category "${cat}" already exists.`);
+        return false;
+    }
+
+    menuCategories.push(cat);
+    window.menuCategories = menuCategories;
+    if (catInput) catInput.value = '';
+
+    persistCategories();
+    renderCategoryDropdown(cat);
+    renderCategoryFilters();
+    renderCategoryListUI();
+    if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
+
+    showToast(`Category "${cat}" added!`);
+    return true;
 }
 window.addCategory = addCategory;
 
 function deleteCategory(cat) {
-    if(confirm(`Delete category "${cat}"?`)) {
-        menuCategories = menuCategories.filter(c => c !== cat);
-        if(activeCategory === cat) activeCategory = "All";
+    if (cat === 'All') return;
+    if (confirm(`Delete category "${cat}"?`)) {
+        menuCategories = (Array.isArray(menuCategories) ? menuCategories : []).filter(c => c !== cat);
+        window.menuCategories = menuCategories;
+        if (activeCategory === cat) activeCategory = "All";
         persistCategories();
         renderCategoryDropdown();
         renderCategoryFilters();
         renderCategoryListUI();
+        if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
         renderMenuUI();
         showToast("Category deleted.");
     }
@@ -236,11 +299,17 @@ function renderMenuCatalogUI() {
     // 2. Render Category Filter Chips
     const chipsContainer = document.getElementById('catalogCategoryChips');
     if (chipsContainer) {
-        chipsContainer.innerHTML = menuCategories.map(cat => `
+        const chipsHtml = (Array.isArray(menuCategories) ? menuCategories : []).map(cat => `
             <button type="button" class="btn btn-outline" onclick="filterCatalogByCategory('${escapeHtml(cat)}')" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; ${catalogActiveCategoryFilter === cat ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'color: #4B5563; background: #FFFFFF;'}">
                 ${escapeHtml(cat)}
             </button>
         `).join('');
+        const addBtnHtml = `
+            <button type="button" class="btn btn-outline" onclick="promptAddNewCategoryFromModal()" title="Add New Category" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; color: #143832; background: #E6F4EA; border: 1px dashed #34A853;">
+                + Category
+            </button>
+        `;
+        chipsContainer.innerHTML = chipsHtml + addBtnHtml;
     }
 
     // 3. Search and Category Filter
