@@ -8,6 +8,7 @@ import path from 'path';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { CONFIG } from './config.js';
+import { syncStoreToFirestoreREST } from './sync-service.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const AUTH_FILE = path.join(DATA_DIR, 'auth_store.json');
@@ -189,12 +190,32 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid,
 /**
  * Syncs shop document to Google Cloud Firestore REST API in background if online.
  */
-async function syncShopToFirestore(storeCode, shopData) {
+async function syncShopToFirestore(storeCode, shopData, syncDetails = false) {
   try {
     if (!CONFIG?.firebase?.projectId || !CONFIG?.firebase?.firestoreDatabaseId) return;
-    const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
-    const url = `${base}/shops/${encodeURIComponent(storeCode)}`;
+    const codeStr = String(storeCode || '');
+    const emailStr = String(shopData?.ownerEmail || '').toLowerCase();
+    // Skip synthetic startup self-test accounts from polluting live Cloud Firestore
+    if (
+      codeStr.startsWith('SHOP-AUDITSHO-') ||
+      codeStr.startsWith('SHOP-ALEXCAFE-') ||
+      emailStr.includes('selftest') ||
+      emailStr.includes('audit_') ||
+      (emailStr.startsWith('signup_') && emailStr.endsWith('@billnawcafe.com'))
+    ) {
+      return;
+    }
 
+    if (syncDetails) {
+      await syncStoreToFirestoreREST(codeStr, {
+        ownerEmail: shopData.ownerEmail || '',
+        profile: shopData.profile,
+        staff: shopData.staff
+      }).catch(() => null);
+      return;
+    }
+
+    const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
     const firestoreFields = {
       storeCode: { stringValue: storeCode },
       name: { stringValue: shopData.name || 'Billnaw Cafe' },
@@ -202,6 +223,10 @@ async function syncShopToFirestore(storeCode, shopData) {
       ownerUid: { stringValue: shopData.ownerUid || '' },
       updatedAt: { stringValue: new Date().toISOString() }
     };
+    const maskParams = Object.keys(firestoreFields)
+      .map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`)
+      .join('&');
+    const url = `${base}/shops/${encodeURIComponent(storeCode)}?${maskParams}`;
 
     await fetch(url, {
       method: 'PATCH',
@@ -592,7 +617,7 @@ export function verifyOtp(email, otp, shopName) {
       createdAt: new Date().toISOString()
     };
     userStore.set(normalizedEmail, user);
-  } else if (shopName && shopName.trim() && user.shopName !== shopName.trim()) {
+  } else if (!user.shopName && shopName && shopName.trim()) {
     user.shopName = shopName.trim();
   }
 
@@ -1157,7 +1182,7 @@ export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode, staffId
 
   shop.updatedAt = new Date().toISOString();
   saveAuthStoreToDisk();
-  syncShopToFirestore(code, shop);
+  syncShopToFirestore(code, shop, true);
 
   return {
     status: 200,
@@ -1335,9 +1360,12 @@ export function runAuthSelfTest() {
   otpStore.delete(normalizeEmail(testEmail));
   userStore.delete(normalizeEmail(testEmail));
   userStore.delete(normalizeEmail(signupEmail));
+  if (verifyRes?.data?.storeCode) shopStore.delete(verifyRes.data.storeCode);
+  if (signupRes?.data?.storeCode) shopStore.delete(signupRes.data.storeCode);
   sessionStore.delete(sessionToken);
   sessionStore.delete(signupRes.data.token);
   sessionStore.delete(loginRes.data.token);
+  saveAuthStoreToDisk();
 
   console.log('[AUTH ENGINE SELF-TEST] 🛡️ All 14 verification vectors verified successfully.');
 }

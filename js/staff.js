@@ -1678,7 +1678,12 @@ async function deleteStaffMember(id) {
         renderStaffManagementUI();
         renderLoginStaffPicker();
         if (typeof renderLiveSessionCards === 'function') renderLiveSessionCards();
+        if (typeof window !== 'undefined') window.staffList = staffList;
+        try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
         if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore();
+        if (typeof dispatchBackendStoreSync === 'function') {
+            dispatchBackendStoreSync({ staff: staffList, replaceStaff: true, deletedStaffId: String(id) }, true);
+        }
         showToast("Staff member removed.");
     }
 }
@@ -2146,7 +2151,9 @@ function openAdminForgotPinModal(targetStaffId = null) {
 
     const emailInput = document.getElementById('forgotPinEmailInput');
     const ownerEmail = (typeof shopProfile !== 'undefined' && (shopProfile?.ownerEmail || shopProfile?.email)) ||
-        localStorage.getItem('billnaw_owner_email') || '';
+        localStorage.getItem('billnaw_auth_email') ||
+        localStorage.getItem('billnaw_owner_email') ||
+        localStorage.getItem('billnaw_shop_email') || '';
     if (emailInput) {
         emailInput.value = ownerEmail;
         setTimeout(() => emailInput.focus(), 60);

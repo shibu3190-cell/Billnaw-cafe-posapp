@@ -317,6 +317,14 @@
                             localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
                             localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                         }
+
+                        // Multi-Account Device Isolation: check if tenant switched
+                        const prevStoreCode = localStorage.getItem('billnaw_store_code');
+                        if (prevStoreCode && data.storeCode && prevStoreCode !== data.storeCode) {
+                            console.log(`[AUTH] Switching store tenant: ${prevStoreCode} -> ${data.storeCode}. Purging previous tenant cache.`);
+                            await clearAllTenantLocalData();
+                        }
+
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
                         if (email) localStorage.setItem('billnaw_auth_email', email);
                         if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
@@ -328,15 +336,41 @@
                             user: data.user,
                             loginAt: Date.now()
                         }));
-                        if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
-                            if (!shopProfile.name || shopProfile.name === 'billnaw') {
-                                shopProfile.name = data.shop.name;
-                            }
-                            if (data.shop.phone && !shopProfile.phone) {
-                                shopProfile.phone = data.shop.phone;
-                            }
-                            try { localStorage.setItem('billnaw_shop_name', shopProfile.name); } catch(e) {}
+
+                        // Unconditionally update active shop profile with authenticated tenant credentials
+                        if (typeof shopProfile === 'undefined') shopProfile = {};
+                        if (data.shop && data.shop.name) {
+                            shopProfile.name = data.shop.name;
                         }
+                        if (data.storeCode) {
+                            shopProfile.storeCode = data.storeCode;
+                            myClientID = data.storeCode;
+                            window.myClientID = data.storeCode;
+                        }
+                        if (data.shop && data.shop.phone) {
+                            shopProfile.phone = data.shop.phone;
+                        }
+                        if (data.shop && data.shop.address) {
+                            shopProfile.address = data.shop.address;
+                        }
+                        const resolvedEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
+                        if (resolvedEmail) {
+                            shopProfile.ownerEmail = resolvedEmail;
+                            shopProfile.email = resolvedEmail;
+                        }
+                        window.shopProfile = shopProfile;
+                        try {
+                            if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
+                            if (shopProfile.storeCode) localStorage.setItem('billnaw_store_code', shopProfile.storeCode);
+                            if (resolvedEmail) {
+                                localStorage.setItem('billnaw_auth_email', resolvedEmail);
+                                localStorage.setItem('billnaw_owner_email', resolvedEmail);
+                                localStorage.setItem('billnaw_shop_email', resolvedEmail);
+                            }
+                            localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
+                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_profile', shopProfile);
+                        } catch(e) {}
+                        if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
                     } catch (e) {}
 
                     // Firebase Auth Custom Token Sign-in
@@ -436,6 +470,14 @@
                             localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
                             localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                         }
+
+                        // Multi-Account Device Isolation: check if tenant switched
+                        const prevStoreCode = localStorage.getItem('billnaw_store_code');
+                        if (prevStoreCode && data.storeCode && prevStoreCode !== data.storeCode) {
+                            console.log(`[AUTH] Switching store tenant: ${prevStoreCode} -> ${data.storeCode}. Purging previous tenant cache.`);
+                            await clearAllTenantLocalData();
+                        }
+
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
                         if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
                         localStorage.setItem('billnaw_shop_session', JSON.stringify({
@@ -446,15 +488,41 @@
                             user: data.user,
                             loginAt: Date.now()
                         }));
-                        if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
-                            if (!shopProfile.name || shopProfile.name === 'billnaw') {
-                                shopProfile.name = data.shop.name;
-                            }
-                            if (data.shop.phone && !shopProfile.phone) {
-                                shopProfile.phone = data.shop.phone;
-                            }
-                            try { localStorage.setItem('billnaw_shop_name', shopProfile.name); } catch(e) {}
+
+                        // Unconditionally update active shop profile with authenticated tenant credentials
+                        if (typeof shopProfile === 'undefined') shopProfile = {};
+                        if (data.shop && data.shop.name) {
+                            shopProfile.name = data.shop.name;
                         }
+                        if (data.storeCode) {
+                            shopProfile.storeCode = data.storeCode;
+                            myClientID = data.storeCode;
+                            window.myClientID = data.storeCode;
+                        }
+                        if (data.shop && data.shop.phone) {
+                            shopProfile.phone = data.shop.phone;
+                        }
+                        if (data.shop && data.shop.address) {
+                            shopProfile.address = data.shop.address;
+                        }
+                        const resolvedEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
+                        if (resolvedEmail) {
+                            shopProfile.ownerEmail = resolvedEmail;
+                            shopProfile.email = resolvedEmail;
+                        }
+                        window.shopProfile = shopProfile;
+                        try {
+                            if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
+                            if (shopProfile.storeCode) localStorage.setItem('billnaw_store_code', shopProfile.storeCode);
+                            if (resolvedEmail) {
+                                localStorage.setItem('billnaw_auth_email', resolvedEmail);
+                                localStorage.setItem('billnaw_owner_email', resolvedEmail);
+                                localStorage.setItem('billnaw_shop_email', resolvedEmail);
+                            }
+                            localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
+                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_profile', shopProfile);
+                        } catch(e) {}
+                        if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
                     } catch (e) {}
 
                     if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
@@ -1018,6 +1086,24 @@
             localStorage.removeItem('cafe_khata');
             localStorage.removeItem('billnaw_culinary_materials');
             localStorage.removeItem('billnaw_culinary_batches');
+            localStorage.removeItem('billnaw_shop_name');
+            localStorage.removeItem('billnaw_store_profile');
+            localStorage.removeItem('billnaw_shop_phone');
+            localStorage.removeItem('billnaw_shop_address');
+            localStorage.removeItem('billnaw_shop_logo');
+            localStorage.removeItem('billnaw_admin_pin_hash');
+            localStorage.removeItem('billnaw_shop_fssai');
+            localStorage.removeItem('billnaw_shop_gstin');
+            localStorage.removeItem('billnaw_shop_upi_id');
+            localStorage.removeItem('billnaw_store_staff');
+            localStorage.removeItem('billnaw_last_device_email');
+            localStorage.removeItem('billnaw_last_store_code');
+            localStorage.removeItem('cafeLicenseKey');
+            localStorage.removeItem('bongbhoj_client_id');
+            if (typeof shopProfile !== 'undefined') {
+                shopProfile = { name: '', storeCode: '' };
+                window.shopProfile = shopProfile;
+            }
             if (typeof sessionStorage !== 'undefined') {
                 sessionStorage.clear();
             }
@@ -1026,12 +1112,14 @@
         try {
             if (typeof idb !== 'undefined' && typeof idb.clear === 'function') {
                 await idb.clear('cafe_menu').catch(() => {});
+                await idb.clear('cafe_categories').catch(() => {});
                 await idb.clear('cafe_history').catch(() => {});
                 await idb.clear('cafe_tables').catch(() => {});
                 await idb.clear('cafe_customers').catch(() => {});
                 await idb.clear('cafe_expenses').catch(() => {});
                 await idb.clear('cafe_staff').catch(() => {});
                 await idb.clear('cafe_profile').catch(() => {});
+                await idb.clear('cafe_logo').catch(() => {});
                 await idb.clear('cafe_khata').catch(() => {});
                 await idb.clear('cafe_raw_materials').catch(() => {});
                 await idb.clear('cafe_sub_recipes').catch(() => {});
@@ -1174,7 +1262,7 @@
         if (!container) return;
 
         const activeToken = localStorage.getItem('billnaw_auth_token');
-        const storeCode = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || 'SHOP-BILLNAW-01';
+        const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || localStorage.getItem('billnaw_store_code') || '';
 
         try {
             const res = await fetch(`/api/auth/sessions?storeCode=${encodeURIComponent(storeCode)}`, {
@@ -1284,7 +1372,7 @@
 
     async function revokeAllOtherSessions() {
         const activeToken = localStorage.getItem('billnaw_auth_token');
-        const storeCode = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || 'SHOP-BILLNAW-01';
+        const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || localStorage.getItem('billnaw_store_code') || '';
         try {
             await fetch('/api/auth/sessions/revoke', {
                 method: 'POST',
@@ -1388,6 +1476,9 @@
 
         if (typeof persistProfile === 'function') persistProfile();
         if (typeof persistTables === 'function') persistTables();
+        if (typeof dispatchBackendStoreSync === 'function') {
+            dispatchBackendStoreSync({ tables: tablesInfo, profile: shopProfile }, true);
+        }
 
         toggleTablesVisibility(showTables);
         if (typeof renderTables === 'function') renderTables();

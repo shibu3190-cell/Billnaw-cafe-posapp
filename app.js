@@ -266,9 +266,24 @@ window.logoutShopCloudAccount = logoutShop;
 
 // App Bootstrap Initialization
 async function initApp() {
+    const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
+    const authMode = localStorage.getItem('billnaw_auth_mode');
+    const isAuth = activeToken && authMode === 'authenticated';
+    const activeShopName = localStorage.getItem('billnaw_shop_name') || 'Cafe';
+
+    if (isAuth && typeof showCloudSyncOverlay === 'function') {
+        showCloudSyncOverlay(`Loading ${activeShopName} • Syncing Database...`);
+    }
+
+    // Safety fallback timer: guarantee overlay disappears within 3.5s under spotty network
+    const safetyHideTimer = setTimeout(() => {
+        if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay();
+    }, 3500);
+
     try {
         if (typeof initDatabase === 'function') {
             await initDatabase();
+            if (typeof setCloudSyncProgress === 'function') setCloudSyncProgress(60, 'Menu & Tables Loaded');
         }
         if (typeof initStaffSystem === 'function') {
             initStaffSystem();
@@ -284,6 +299,10 @@ async function initApp() {
         }
         if (typeof updateAllUI === 'function') {
             updateAllUI();
+            if (typeof setCloudSyncProgress === 'function') setCloudSyncProgress(100, 'Cloud Environment Ready');
+        }
+        if (typeof reconcileExistingShopCloudSync === 'function') {
+            reconcileExistingShopCloudSync();
         }
         if (typeof renderVoiceHistoryChips === 'function') {
             renderVoiceHistoryChips();
@@ -291,6 +310,11 @@ async function initApp() {
         if (typeof renderInventoryTelemetryUI === 'function') {
             renderInventoryTelemetryUI();
         }
+
+        if (typeof hideCloudSyncOverlay === 'function') {
+            setTimeout(hideCloudSyncOverlay, 200);
+        }
+        clearTimeout(safetyHideTimer);
 
         // Mandatory First-Device Registration & Strict Auth Gate:
         const hasAuthLoginParam = window.location.search && window.location.search.includes('auth=login');

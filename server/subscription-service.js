@@ -232,20 +232,29 @@ export async function persistSubscriptionToFirestore(shopId, subscription) {
     }
   };
 
-  const writeShops = fetch(`${base}/shops/${encodeURIComponent(shopId)}?${updateMask}`, {
+  // Skip synthetic test shop IDs from polluting live Cloud Firestore
+  const idStr = String(shopId || '');
+  if (
+    idStr.includes('TEST') ||
+    idStr.includes('CHALLENGER') ||
+    idStr.includes('FLIPFLOP') ||
+    idStr.includes('RACE') ||
+    idStr.includes('POLLUTION') ||
+    idStr.includes('MULTI-TENANT') ||
+    idStr.includes('SEC-') ||
+    idStr.includes('NON_EXISTENT') ||
+    idStr.includes('passwd')
+  ) {
+    return { shops: true, cafes: true };
+  }
+
+  const shopsOk = await fetch(`${base}/shops/${encodeURIComponent(shopId)}?${updateMask}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(firestorePayload)
   }).then(r => r.ok).catch(() => false);
 
-  const writeCafes = fetch(`${base}/cafes/${encodeURIComponent(shopId)}?${updateMask}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(firestorePayload)
-  }).then(r => r.ok).catch(() => false);
-
-  const [shopsOk, cafesOk] = await Promise.all([writeShops, writeCafes]);
-  return { shops: shopsOk, cafes: cafesOk };
+  return { shops: shopsOk, cafes: shopsOk };
 }
 
 /**

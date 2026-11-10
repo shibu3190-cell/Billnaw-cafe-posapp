@@ -447,7 +447,7 @@ async function refreshAiQuotaDisplay() {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     try {
         const customKey = getCustomGeminiKey();
-        const activeShopId = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || myClientID || 'SHOP-BILLNAW-01';
+        const activeShopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || '';
         const headers = {};
         if (customKey) headers['x-gemini-api-key'] = customKey;
         if (activeShopId) headers['x-shop-id'] = activeShopId;
@@ -542,7 +542,7 @@ async function openClientQuotaModal() {
     const modal = document.getElementById('clientQuotaModal');
     if (!modal) return;
     
-    const activeShopId = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || myClientID || 'SHOP-BILLNAW-01';
+    const activeShopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || '';
 
     const quotaTargetClientId = document.getElementById('quotaTargetClientId');
     if (quotaTargetClientId) quotaTargetClientId.value = activeShopId;
@@ -657,7 +657,7 @@ function toggleApiKeyVisibility() {
 window.toggleApiKeyVisibility = toggleApiKeyVisibility;
 
 async function saveClientQuotaSettings() {
-    const clientId = document.getElementById('quotaTargetClientId').value.trim() || myClientID || 'SHOP-BILLNAW-01';
+    const clientId = document.getElementById('quotaTargetClientId').value.trim() || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : '') || '';
     const limitVal = parseInt(document.getElementById('quotaMonthlyLimitInput').value, 10);
     const keyVal = document.getElementById('quotaCustomKeyInput').value.trim();
 
@@ -709,11 +709,11 @@ function openStoreProfileModal() {
         }
         const emailInput = document.getElementById('shopEmailInput');
         if (emailInput) {
-            emailInput.value = shopProfile.ownerEmail || shopProfile.email || localStorage.getItem('billnaw_auth_email') || 'owner@cafe.com';
+            emailInput.value = shopProfile.ownerEmail || shopProfile.email || localStorage.getItem('billnaw_auth_email') || localStorage.getItem('billnaw_owner_email') || localStorage.getItem('billnaw_shop_email') || '';
         }
         const storeCodeInput = document.getElementById('shopStoreCodeInput');
         if (storeCodeInput) {
-            storeCodeInput.value = shopProfile.storeCode || localStorage.getItem('billnaw_store_code') || 'SHOP-DEFAULT';
+            storeCodeInput.value = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || shopProfile.storeCode || localStorage.getItem('billnaw_store_code') || '';
         }
         const phoneInput = document.getElementById('shopPhoneInput');
         if (phoneInput) {
@@ -803,7 +803,7 @@ function selectPricingTier(tierName, price) {
 window.selectPricingTier = selectPricingTier;
 
 function refreshCurrentStoreSubscriptionUI() {
-    const code = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (localStorage.getItem('billnaw_store_code') || 'SHOP-BILLNAW-01');
+    const code = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (localStorage.getItem('billnaw_store_code') || '');
     const sub = window.currentSubscriptionState || null;
 
     const codeEl = document.getElementById('subModalStoreCodeDisp');
@@ -1307,14 +1307,14 @@ function openCloudSyncDetailModal() {
     const el = document.getElementById('cloudSyncDetailModal');
     if (el) {
         const codeEl = document.getElementById('settingsCurrentShopCode');
-        if (codeEl) codeEl.innerText = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (myClientID || 'SHOP-BILLNAW-01');
+        if (codeEl) codeEl.innerText = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (localStorage.getItem('billnaw_store_code') || 'N/A');
         el.style.display = 'flex';
     }
 }
 window.openCloudSyncDetailModal = openCloudSyncDetailModal;
 
 function copyStoreCode() {
-    const code = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (document.getElementById('settingsCurrentShopCode')?.innerText || 'SHOP-BILLNAW-01');
+    const code = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (document.getElementById('settingsCurrentShopCode')?.innerText || '');
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(code).then(() => {
             if (typeof showToast === 'function') showToast('Store code copied: ' + code);

@@ -1543,7 +1543,6 @@ async function confirmCheckout() {
             }
         } catch(kotErr) {} 
         
-        if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addOrder', newOrder); 
         syncTableUI(); 
         updateCartUI(); 
         if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();

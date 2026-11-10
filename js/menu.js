@@ -1429,7 +1429,7 @@ async function processAIMenu(event) {
         }
 
         const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || '';
-        const activeShopId = (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || myClientID || 'SHOP-BILLNAW-01';
+        const activeShopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || null;
 
         const payload = { base64Data, mimeType, clientId: activeShopId, shopId: activeShopId, extractedText };
         if (customKey) payload.apiKey = customKey;
@@ -1483,7 +1483,7 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
     if (btn) { btn.disabled = true; btn.innerText = "⏳ Extracting Menu..."; }
 
     const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || payload.apiKey || '';
-    const activeShopId = payload.shopId || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || myClientID || 'SHOP-BILLNAW-01';
+    const activeShopId = payload.shopId || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || null;
     const activeShopEmail = (typeof shopProfile !== 'undefined' && shopProfile.email) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_shop_email') : null) || '';
 
     if (isExplicitFallback) {
@@ -1814,7 +1814,7 @@ async function generateAiItemPhoto(index) {
     const btn = document.getElementById(`ai-gen-btn-${index}`);
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg>⏳ Generating...`;
+        btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"></path></svg> Generating...`;
     }
     
     item._varIndex = (item._varIndex !== undefined) ? (item._varIndex + 1) : 1;
@@ -1891,8 +1891,19 @@ async function confirmAiImport() {
         }
 
         let itemsAdded = 0;
+        let itemsUpdated = 0;
         let newCategoriesAdded = 0;
         const { defaultRate } = getStoreGstConfig();
+
+        // If the menu currently only contains the pristine 4 default demo items,
+        // clear them so the shop owner's real menu replaces the template baseline.
+        const isDefaultDemoMenu = Array.isArray(menuItems) && menuItems.length === 4 &&
+            menuItems.every(m => [1, 2, 3, 4].includes(Number(m.id)) && ['Samosa', 'Tea', 'Chicken Curry', 'Masala Coke'].includes(m.name));
+
+        if (isDefaultDemoMenu) {
+            menuItems = [];
+            window.menuItems = menuItems;
+        }
 
         pendingAiItems.forEach((item, itemIndex) => {
             const rawName = String(item.name || "").trim();
@@ -1912,22 +1923,33 @@ async function confirmAiImport() {
             const itemRate = parseFloat(item.price) || 0;
             const finalImage = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(rawName, catName) : generateFallbackImage(rawName, catName));
 
-            const newItem = {
-                id: Date.now() + (itemIndex * 100) + Math.floor(Math.random() * 1000),
-                name: rawName,
-                category: catName,
-                price: itemRate,
-                gstRate: defaultRate,
-                trackStock: false,
-                stockQty: 0,
-                image: finalImage
-            };
+            // Intelligent Deduplication & Upsert: check if item with same name exists (case-insensitive)
+            const existingItemIndex = menuItems.findIndex(m => m.name && m.name.trim().toLowerCase() === rawName.toLowerCase());
 
-            menuItems.push(newItem);
-            itemsAdded++;
+            if (existingItemIndex >= 0) {
+                const existing = menuItems[existingItemIndex];
+                existing.price = itemRate;
+                existing.category = catName;
+                if (item.image) existing.image = item.image;
+                if (item.gstRate !== undefined) existing.gstRate = Number(item.gstRate);
+                itemsUpdated++;
+            } else {
+                const newItem = {
+                    id: Date.now() + (itemIndex * 100) + Math.floor(Math.random() * 1000),
+                    name: rawName,
+                    category: catName,
+                    price: itemRate,
+                    gstRate: defaultRate,
+                    trackStock: false,
+                    stockQty: 0,
+                    image: finalImage
+                };
+                menuItems.push(newItem);
+                itemsAdded++;
+            }
         });
 
-        if (itemsAdded === 0) {
+        if (itemsAdded === 0 && itemsUpdated === 0) {
             throw new Error("Please specify at least one valid item name.");
         }
 
@@ -1943,10 +1965,13 @@ async function confirmAiImport() {
         }
 
         closeAiPreviewModal();
-        showToast(`✅ Successfully imported ${itemsAdded} items to menu!`);
+        const toastMsg = itemsUpdated > 0
+            ? `Successfully imported ${itemsAdded} new items & updated ${itemsUpdated} existing items!`
+            : `Successfully imported ${itemsAdded} items to menu!`;
+        showToast(toastMsg, "success");
     } catch (error) {
         console.error(error);
-        showToast("❌ Import failed: " + error.message);
+        showToast("Import failed: " + error.message, "error");
     } finally {
         if (btn) { btn.disabled = false; btn.innerText = "Confirm & Import to Menu"; }
     }

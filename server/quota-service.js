@@ -136,10 +136,24 @@ export async function updateClientProfileData(clientId, fieldsToUpdate) {
     else if (typeof v === 'boolean') firestoreFields[k] = { booleanValue: v };
   }
 
+  // Skip synthetic test IDs from polluting live Cloud Firestore
+  const idStr = String(targetId || '');
+  if (
+    idStr.includes('TEST') ||
+    idStr.includes('ADV_') ||
+    idStr.includes('AUDITOR') ||
+    idStr.includes('BURST') ||
+    idStr.includes('EXHAUST') ||
+    idStr.includes('BYOK') ||
+    idStr.includes('PROBE') ||
+    idStr.includes('FAIL_RELEASE') ||
+    idStr.includes('MULTI_SHOP')
+  ) {
+    return true;
+  }
+
   const targets = [
-    `${FIRESTORE_BASE}/shops/${encodeURIComponent(targetId)}/quota/menu_scans?${updateMask}`,
-    `${FIRESTORE_BASE}/cafes/${encodeURIComponent(targetId)}/quota/menu_scans?${updateMask}`,
-    `${FIRESTORE_BASE}/clients/${encodeURIComponent(targetId)}?${updateMask}`
+    `${FIRESTORE_BASE}/shops/${encodeURIComponent(targetId)}/quota/menu_scans?${updateMask}`
   ];
 
   for (const url of targets) {

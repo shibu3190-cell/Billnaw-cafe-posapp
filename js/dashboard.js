@@ -32,7 +32,6 @@ function addExpense() {
             billerRole: bRole
         };
         dailyExpenses.unshift(newExpense); 
-        if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addExpense', newExpense); 
         if (typeof persistExpensesFirebase === 'function') persistExpensesFirebase(newExpense); 
         if (typeof saveToLocal === 'function') saveToLocal(); 
         nameEl.value = ''; 
@@ -135,6 +134,7 @@ function saveQuickExpense() {
         if (exp) {
             exp.name = name;
             exp.cost = cost;
+            if (typeof persistExpensesFirebase === 'function') persistExpensesFirebase(exp);
         }
         if (editIdEl) editIdEl.value = '';
         showToast("Expense updated.");
@@ -148,7 +148,6 @@ function saveQuickExpense() {
             cost: cost
         };
         dailyExpenses.unshift(newExpense);
-        if (typeof pushToGoogleSheetsQueue === 'function') pushToGoogleSheetsQueue('addExpense', newExpense);
         if (typeof persistExpensesFirebase === 'function') persistExpensesFirebase(newExpense);
         showToast(`Recorded expense: ${name} (₹ ${cost.toFixed(2)})`);
     }

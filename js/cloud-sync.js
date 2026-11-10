@@ -7,6 +7,7 @@
 
 function showCloudSyncOverlay(message = 'Syncing Shop Profile, Menu & Active Tables...') {
     let overlay = document.getElementById('cloudSyncOverlay');
+    const activeShopName = (typeof shopProfile !== 'undefined' && shopProfile?.name) || localStorage.getItem('billnaw_shop_name') || 'Billnaw POS';
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'cloudSyncOverlay';
@@ -17,7 +18,7 @@ function showCloudSyncOverlay(message = 'Syncing Shop Profile, Menu & Active Tab
                     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
                 </svg>
             </div>
-            <h2 style="font-size:22px;font-weight:800;margin:0 0 8px 0;letter-spacing:0.5px;">BillNaw Cafe Cloud Sync</h2>
+            <h2 style="font-size:22px;font-weight:800;margin:0 0 8px 0;letter-spacing:0.5px;">${activeShopName} Cloud Sync</h2>
             <p id="cloudSyncStatus" style="font-size:14px;color:rgba(255,255,255,0.78);margin:0 0 24px 0;max-width:320px;line-height:1.4;">${message}</p>
             <div style="width:240px;height:6px;background:rgba(255,255,255,0.12);border-radius:99px;overflow:hidden;position:relative;">
                 <div id="cloudSyncBar" style="height:100%;width:15%;background:linear-gradient(90deg,#E05A38,#FF7A59);border-radius:99px;transition:width 0.35s ease;"></div>
@@ -26,6 +27,8 @@ function showCloudSyncOverlay(message = 'Syncing Shop Profile, Menu & Active Tab
         `;
         document.body.appendChild(overlay);
     } else {
+        const titleEl = overlay.querySelector('h2');
+        if (titleEl) titleEl.innerText = `${activeShopName} Cloud Sync`;
         overlay.style.display = 'flex';
         setCloudSyncProgress(15, message);
     }

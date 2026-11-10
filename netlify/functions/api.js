@@ -23,6 +23,13 @@ import {
   validateSubscriptionTransition
 } from '../../server/subscription-service.js';
 import {
+  syncStoreToFirestoreREST,
+  deleteStaffFromFirestoreREST,
+  getStoreFromFirestoreREST,
+  getShopStatus,
+  getPublicClientConfig
+} from '../../server/sync-service.js';
+import {
   getRawMaterials,
   addRawMaterial,
   updateRawMaterialStock,
@@ -85,6 +92,23 @@ function normalizeEmail(email) {
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function sanitizeTenantStoreCode(event, body) {
+  const headers = event.headers || {};
+  const query = event.queryStringParameters || {};
+  const raw = body?.storeCode ||
+              body?.shopId ||
+              query.storeCode ||
+              query.shopId ||
+              headers['x-shop-id'] ||
+              headers['X-Shop-Id'] ||
+              '';
+  const clean = String(raw || '').trim();
+  if (!clean || !/^[A-Za-z0-9_-]{3,64}$/.test(clean)) {
+    return null;
+  }
+  return clean;
 }
 
 // -------------------------------------------------------------
@@ -264,7 +288,14 @@ export async function handler(event, context) {
   if (event.httpMethod === 'GET' && (cleanPath === '/gemini/status' || cleanPath.endsWith('/gemini/status'))) {
     const headerKey = headers['x-gemini-api-key'] || headers['x-api-key'];
     const customKey = (headerKey || event.queryStringParameters?.apiKey || '').trim();
-    const shopId = (headers['x-shop-id'] || event.queryStringParameters?.shopId || event.queryStringParameters?.clientId || 'SHOP-BILLNAW-01').trim();
+    const shopId = sanitizeTenantStoreCode(event, body);
+    if (!shopId) {
+      return jsonResponse(200, {
+        operational: false,
+        keyAvailable: false,
+        error: 'Tenant isolation error: valid shopId or storeCode required'
+      });
+    }
     let keyCheck = null;
     try {
       keyCheck = await checkAiQuotaAndKey({ shopId, customApiKey: customKey, reserveSlot: false });
@@ -310,7 +341,10 @@ export async function handler(event, context) {
   // Route: /ai/quota (Client AI Quota Telemetry)
   // -----------------------------------------------------------
   if (event.httpMethod === 'GET' && (cleanPath === '/ai/quota' || cleanPath.endsWith('/ai/quota'))) {
-    const clientId = (headers['x-shop-id'] || event.queryStringParameters?.shopId || event.queryStringParameters?.clientId || 'SHOP-BILLNAW-01').trim();
+    const clientId = sanitizeTenantStoreCode(event, body);
+    if (!clientId) {
+      return jsonResponse(400, { error: 'Tenant isolation error: valid shopId or storeCode required.' });
+    }
     try {
       const quota = await getClientQuotaInfo(clientId);
       return jsonResponse(200, {
@@ -371,7 +405,10 @@ export async function handler(event, context) {
     const { base64Data, mimeType, extractedText } = body;
     const customHeaderKey = headers['x-gemini-api-key'] || headers['x-api-key'];
     const customKey = (customHeaderKey || body.apiKey || body.customGeminiKey || '').trim();
-    const shopId = (headers['x-shop-id'] || body.shopId || event.queryStringParameters?.shopId || body.clientId || event.queryStringParameters?.clientId || 'SHOP-BILLNAW-01').trim();
+    const shopId = sanitizeTenantStoreCode(event, body);
+    if (!shopId) {
+      return jsonResponse(400, { error: 'Tenant isolation error: valid shopId or storeCode required for menu scan' });
+    }
 
     let keyCheck = null;
     let slotReserved = false;
@@ -452,6 +489,85 @@ export async function handler(event, context) {
         slotReserved = false;
       }
       return jsonResponse(500, { error: err.message });
+    }
+  }
+
+  // ===========================================================
+  // CLOUD STORE & STAFF SYNC ENDPOINTS (Multi-Tenant Isolated)
+  // ===========================================================
+
+  // Route: /sync/store-data (GET)
+  if (event.httpMethod === 'GET' && (cleanPath === '/sync/store-data' || cleanPath.endsWith('/sync/store-data'))) {
+    const storeCode = sanitizeTenantStoreCode(event, body);
+    if (!storeCode) {
+      return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    try {
+      const result = await getStoreFromFirestoreREST(storeCode);
+      const status = result.status || (result.success ? 200 : 500);
+      return jsonResponse(status, result);
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Fetch failed' });
+    }
+  }
+
+  // Route: /sync/store-data (POST)
+  if (event.httpMethod === 'POST' && (cleanPath === '/sync/store-data' || cleanPath.endsWith('/sync/store-data'))) {
+    const storeCode = sanitizeTenantStoreCode(event, body);
+    if (!storeCode) {
+      return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Cross-tenant data injection prevented.' });
+    }
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots } = body || {};
+    const normalizedEmail = (ownerEmail || profile?.ownerEmail || profile?.email || headers['x-shop-email'] || headers['X-Shop-Email'] || '').trim().toLowerCase();
+
+    try {
+      const result = await syncStoreToFirestoreREST(storeCode, {
+        ownerEmail: normalizedEmail || undefined,
+        profile: profile ? { ...profile, ownerEmail: normalizedEmail || profile.ownerEmail } : undefined,
+        staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots
+      });
+      return jsonResponse(result.success ? 200 : 500, result);
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Sync failed' });
+    }
+  }
+
+  // Route: /sync/staff (POST)
+  if (event.httpMethod === 'POST' && (cleanPath === '/sync/staff' || cleanPath.endsWith('/sync/staff'))) {
+    const storeCode = sanitizeTenantStoreCode(event, body);
+    if (!storeCode) {
+      return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const { staff, replaceStaff, deletedStaffId } = body || {};
+    try {
+      const result = await syncStoreToFirestoreREST(storeCode, { staff, replaceStaff, deletedStaffId });
+      return jsonResponse(result.success ? 200 : 500, result);
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Staff sync failed' });
+    }
+  }
+
+  // Route: /sync/staff/delete (POST)
+  if (event.httpMethod === 'POST' && (cleanPath === '/sync/staff/delete' || cleanPath.endsWith('/sync/staff/delete'))) {
+    const storeCode = sanitizeTenantStoreCode(event, body);
+    if (!storeCode) {
+      return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const { staffId, staff } = body || {};
+    try {
+      const result = await deleteStaffFromFirestoreREST(storeCode, staffId, staff);
+      return jsonResponse(result.success ? 200 : 500, result);
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Staff deletion sync failed' });
+    }
+  }
+
+  // Route: /sync/status (GET)
+  if (event.httpMethod === 'GET' && (cleanPath === '/sync/status' || cleanPath.endsWith('/sync/status'))) {
+    try {
+      return jsonResponse(200, getShopStatus());
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message });
     }
   }
 

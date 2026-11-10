@@ -25,7 +25,7 @@ import {
   checkFoodImageRateLimit
 } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
-import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle } from './server/sync-service.js';
+import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle, syncStoreToFirestoreREST, getStoreFromFirestoreREST, deleteStaffFromFirestoreREST } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
 import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData, requestAdminPinResetOtp, resetAdminPinWithOtp, normalizeEmail, isValidEmail } from './server/auth-service.js';
@@ -172,7 +172,10 @@ app.get('/api/config/client', (req, res) => {
 // Client AI Quota Info: Returns current month usage, limit, and quota remaining
 app.get('/api/ai/quota', async (req, res) => {
   try {
-    const shopId = (req.headers['x-shop-id'] || req.query.shopId || req.query.clientId || 'SHOP-BILLNAW-01').trim();
+    const shopId = sanitizeTenantStoreCode(req) || (req.query?.shopId || req.query?.clientId || req.headers['x-shop-id'] || '').trim();
+    if (!shopId || !/^[A-Za-z0-9_-]{3,64}$/.test(shopId)) {
+      return res.status(400).json({ error: 'Tenant isolation error: valid shopId or storeCode required.' });
+    }
     const quota = await getClientQuotaInfo(shopId);
     res.json(quota);
   } catch (err) {
@@ -322,7 +325,10 @@ app.post('/api/print/network', (req, res) => {
 app.get('/api/gemini/status', async (req, res) => {
   const headerKey = req.headers['x-gemini-api-key'] || req.headers['x-api-key'];
   const customKey = (headerKey || req.query.apiKey || '').trim();
-  const shopId = (req.headers['x-shop-id'] || req.query.shopId || req.query.clientId || 'SHOP-BILLNAW-01').trim();
+  const shopId = sanitizeTenantStoreCode(req) || (req.query?.shopId || req.query?.clientId || req.headers['x-shop-id'] || '').trim();
+  if (!shopId || !/^[A-Za-z0-9_-]{3,64}$/.test(shopId)) {
+    return res.json({ operational: false, hasKey: false, error: 'Tenant isolation error: valid shopId or storeCode required' });
+  }
 
   try {
     let keyCheck = null;
@@ -366,7 +372,10 @@ app.get('/api/gemini/status', async (req, res) => {
 const handleMenuScanRequest = async (req, res) => {
   const customHeaderKey = req.headers['x-gemini-api-key'] || req.headers['x-api-key'];
   const customKey = (customHeaderKey || req.body?.apiKey || req.body?.customGeminiKey || '').trim();
-  const shopId = (req.headers['x-shop-id'] || req.body?.shopId || req.query?.shopId || req.body?.clientId || req.query?.clientId || 'SHOP-BILLNAW-01').trim();
+  const shopId = sanitizeTenantStoreCode(req) || (req.body?.shopId || req.query?.shopId || req.body?.clientId || req.query?.clientId || '').trim();
+  if (!shopId || !/^[A-Za-z0-9_-]{3,64}$/.test(shopId)) {
+    return res.status(400).json({ error: 'Tenant isolation error: valid shopId or storeCode required for menu scan' });
+  }
   const shopEmail = (req.headers['x-shop-email'] || req.body?.shopEmail || req.query?.shopEmail || '').trim();
   const { base64Data, mimeType, extractedText } = req.body || {};
   let keyCheck = null;
@@ -1146,6 +1155,79 @@ app.post('/api/store/reset-data', (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to reset store data' });
+  }
+});
+
+// Strict Multi-Tenant Store Code Validator & Injection Gate
+function sanitizeTenantStoreCode(req) {
+  const raw = req.body?.storeCode || req.query?.storeCode || req.headers['x-shop-id'] || req.headers['x-store-code'];
+  if (!raw || typeof raw !== 'string') return null;
+  const clean = raw.trim();
+  if (!/^[A-Za-z0-9_-]{3,64}$/.test(clean)) return null;
+  return clean;
+}
+
+// 6B2. High-Reliability Store Data & Staff Dual-Sync API (Multi-Tenant Isolated)
+app.get('/api/sync/store-data', async (req, res) => {
+  try {
+    const storeCode = sanitizeTenantStoreCode(req);
+    if (!storeCode) {
+      return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const result = await getStoreFromFirestoreREST(storeCode);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Fetch failed' });
+  }
+});
+
+app.post('/api/sync/store-data', async (req, res) => {
+  try {
+    const code = sanitizeTenantStoreCode(req);
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'A valid storeCode is required. Cross-tenant data injection prevented.' });
+    }
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots } = req.body || {};
+    
+    // Normalize and link ownerEmail with shop profile
+    const normalizedEmail = (ownerEmail || profile?.ownerEmail || profile?.email || req.headers['x-shop-email'] || '').trim().toLowerCase();
+
+    const result = await syncStoreToFirestoreREST(code, {
+      ownerEmail: normalizedEmail || undefined,
+      profile: profile ? { ...profile, ownerEmail: normalizedEmail || profile.ownerEmail } : undefined,
+      staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Sync failed' });
+  }
+});
+
+app.post('/api/sync/staff', async (req, res) => {
+  try {
+    const code = sanitizeTenantStoreCode(req);
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const { staff, replaceStaff, deletedStaffId } = req.body || {};
+    const result = await syncStoreToFirestoreREST(code, { staff, replaceStaff, deletedStaffId });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Staff sync failed' });
+  }
+});
+
+app.post('/api/sync/staff/delete', async (req, res) => {
+  try {
+    const code = sanitizeTenantStoreCode(req);
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const { staffId, staff } = req.body || {};
+    const result = await deleteStaffFromFirestoreREST(code, staffId, staff);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Staff deletion sync failed' });
   }
 });
 

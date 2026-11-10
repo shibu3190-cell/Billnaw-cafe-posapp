@@ -183,7 +183,7 @@ let selectedLoginStaffId = 1;
 let firestoreUnsubscribe = null;
 let lastCloudSyncTime = null;
 
-let myClientID = localStorage.getItem('billnaw_store_code') || localStorage.getItem('cafeLicenseKey') || 'SHOP-BILLNAW-01';
+let myClientID = localStorage.getItem('billnaw_store_code') || localStorage.getItem('cafeLicenseKey') || null;
 let currentRole = null;
 let activeTable = 1;
 let activeCategory = "All";
@@ -1635,7 +1635,14 @@ function handleRemoteFirestoreUpdate(data) {
     if (data.profile) {
         const existingPinHash = shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash');
         const existingLogo = shopProfile?.logo || localStorage.getItem('billnaw_shop_logo');
+        const existingTableCount = shopProfile?.tableCount || 0;
+        const existingTablesLen = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
+        const maxTables = Math.max(existingTableCount, existingTablesLen, data.profile.tableCount || 0);
+
         shopProfile = { ...shopProfile, ...data.profile };
+        if (maxTables > (shopProfile.tableCount || 0)) {
+            shopProfile.tableCount = maxTables;
+        }
         if (!shopProfile.logo && existingLogo) shopProfile.logo = existingLogo;
         if (!shopProfile.adminPinHash && existingPinHash) {
             shopProfile.adminPinHash = existingPinHash;
@@ -1675,7 +1682,18 @@ function handleRemoteFirestoreUpdate(data) {
                 }
             }
         }
-        staffList = data.staff;
+        if (Array.isArray(staffList) && staffList.length > data.staff.length) {
+            // Local device has newer/more staff members: union merge so local additions are never wiped
+            const staffMap = new Map();
+            data.staff.forEach(s => { if (s && s.id) staffMap.set(String(s.id), s); });
+            staffList.forEach(s => { if (s && s.id && !staffMap.has(String(s.id))) staffMap.set(String(s.id), s); });
+            staffList = Array.from(staffMap.values());
+            if (typeof dispatchBackendStoreSync === 'function') {
+                dispatchBackendStoreSync({ staff: staffList });
+            }
+        } else {
+            staffList = data.staff;
+        }
         window.staffList = staffList;
         try {
             idb.set('cafe_staff', staffList);
@@ -1692,14 +1710,29 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
         if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
     }
-    const isLegacyRemoteMock = Array.isArray(data.menu) && (
-        data.menu.some(i => i.name === 'Steam Rice' || i.name === 'Espresso Coffee' || i.name === 'Chicken Roll' || i.name === 'Masala Chai' || i.name === 'Club Sandwich') ||
-        (data.menu.length >= 30)
-    );
-
-    if (Array.isArray(data.menu) && data.menu.length > 0 && !isLegacyRemoteMock) {
-        menuItems = data.menu;
-    } else if (isLegacyRemoteMock || !Array.isArray(menuItems) || menuItems.length === 0) {
+    if (Array.isArray(data.menu) && data.menu.length > 0) {
+        if (Array.isArray(menuItems) && menuItems.length > data.menu.length) {
+            // Local store has more items (e.g. 200 items vs 25 items from older cloud snapshot)
+            // Union merge by item name (case-insensitive) to prevent cloud downgrade
+            const menuMap = new Map();
+            data.menu.forEach(m => { if (m && m.name) menuMap.set(m.name.trim().toLowerCase(), m); });
+            menuItems.forEach(m => {
+                if (m && m.name && !menuMap.has(m.name.trim().toLowerCase())) {
+                    menuMap.set(m.name.trim().toLowerCase(), m);
+                }
+            });
+            menuItems = Array.from(menuMap.values());
+            if (typeof dispatchBackendStoreSync === 'function') {
+                dispatchBackendStoreSync({ menu: menuItems });
+            }
+        } else {
+            menuItems = data.menu;
+        }
+        window.menuItems = menuItems;
+        if (typeof idb !== 'undefined' && idb.set) {
+            idb.set('cafe_menu', menuItems);
+        }
+    } else if (!Array.isArray(menuItems) || menuItems.length === 0) {
         const cleanDefaultMenu = [
             { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
             { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
@@ -1708,19 +1741,37 @@ function handleRemoteFirestoreUpdate(data) {
         ];
         menuItems = cleanDefaultMenu;
         window.menuItems = menuItems;
-        if (isLegacyRemoteMock) {
-            console.log("⚡ Sanitized legacy mock menu from remote store; persisting pristine 4-item baseline to cloud");
-            setTimeout(() => persistAllToFirestore(), 400);
-        }
     }
-    if (Array.isArray(data.categories) && data.categories.length > 0 && !isLegacyRemoteMock) {
+    if (Array.isArray(data.categories) && data.categories.length > 0) {
         menuCategories = data.categories;
-    } else if (isLegacyRemoteMock) {
+        window.menuCategories = menuCategories;
+        if (typeof idb !== 'undefined' && idb.set) {
+            idb.set('cafe_categories', menuCategories);
+        }
+    } else if (!Array.isArray(menuCategories) || menuCategories.length === 0) {
         menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
         window.menuCategories = menuCategories;
     }
     if (Array.isArray(data.customers) && data.customers.length > 0) {
         customersList = data.customers;
+    }
+    if (data.tables && typeof data.tables === 'object') {
+        if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
+        for (const [tId, tData] of Object.entries(data.tables)) {
+            if (tData) {
+                if (!tablesInfo[tId]) {
+                    tablesInfo[tId] = tData;
+                } else {
+                    tablesInfo[tId] = { ...tablesInfo[tId], ...tData };
+                }
+            }
+        }
+        window.tablesInfo = tablesInfo;
+        if (typeof idb !== 'undefined' && idb.set) {
+            idb.set('cafe_tables', tablesInfo);
+        }
+        if (typeof renderTables === 'function') renderTables();
+        if (typeof syncTableUI === 'function') syncTableUI();
     }
     if (Array.isArray(data.history) || (data.history && typeof data.history === 'object')) {
         const remoteList = Array.isArray(data.history) ? data.history : Object.values(data.history);
@@ -1786,9 +1837,6 @@ function handleRemoteFirestoreUpdate(data) {
             if(fetchedTables[i]) { 
                 tablesInfo[i] = fetchedTables[i]; 
                 if(!tablesInfo[i].items) tablesInfo[i].items = []; 
-                if (isLegacyRemoteMock || tablesInfo[i].items.some(it => it.name === 'Steam Rice' || it.name === 'Espresso Coffee' || it.name === 'Masala Chai')) {
-                    tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
-                }
             } else { 
                 if (!tablesInfo[i]) tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null }; 
             }
@@ -1823,11 +1871,28 @@ window.handleRemoteFirestoreUpdate = handleRemoteFirestoreUpdate;
 
 // Firestore Store Resolution & Sync Integration (Dual-path: /shops/{storeCode} and /cafes/{cafeId} with /clients/{clientId} fallback)
 function getActiveStoreIdentifier() {
-    const code = localStorage.getItem('billnaw_store_code') || 
-                 localStorage.getItem('bongbhoj_client_id') ||
-                 localStorage.getItem('cafeLicenseKey') || 
-                 myClientID || 
-                 'SHOP-BILLNAW-01';
+    const raw = localStorage.getItem('billnaw_store_code') || 
+                localStorage.getItem('billnaw_shop_code') ||
+                localStorage.getItem('bongbhoj_client_id') ||
+                localStorage.getItem('cafeLicenseKey') || 
+                (shopProfile && (shopProfile.storeCode || shopProfile.id)) ||
+                (typeof myClientID === 'string' && myClientID ? myClientID : null) || 
+                null;
+    let code = (typeof raw === 'string' && raw.trim().length >= 3) ? raw.trim() : null;
+
+    // Intelligent Legacy & Named Store Fallback:
+    // If no explicit storeCode was stored yet, resolve from shopProfile.name or local shop name (e.g. "AMBER & OAK" -> "AMBER___OAK")
+    if (!code) {
+        const nameRaw = (typeof shopProfile !== 'undefined' && shopProfile?.name) ||
+                        (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_shop_name') : null);
+        if (nameRaw && typeof nameRaw === 'string' && nameRaw.trim().length >= 2) {
+            const derived = nameRaw.trim().replace(/[^A-Za-z0-9_-]/g, '_').toUpperCase();
+            if (derived && derived.length >= 3) {
+                code = derived;
+            }
+        }
+    }
+
     if (typeof localStorage !== 'undefined' && !localStorage.getItem('billnaw_store_code') && code) {
         try { localStorage.setItem('billnaw_store_code', code); } catch(e) {}
     }
@@ -2260,7 +2325,9 @@ async function syncSessionRecordToCloud(sessionRecord, targetStoreCode = null) {
 window.syncSessionRecordToCloud = syncSessionRecordToCloud;
 
 async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
-    if (!staffRecord || !staffRecord.id) return;
+    if (!staffRecord || (!staffRecord.id && !staffRecord.staffId)) return;
+    const storeCode = targetStoreCode || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (shopProfile && shopProfile.storeCode) || null;
+    if (!storeCode) return;
     try {
         if (typeof idb !== 'undefined' && idb.set) {
             try {
@@ -2270,7 +2337,7 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
             }
         }
         if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-            const subdocRef = getStoreSubdocRef('staff', String(staffRecord.id), targetStoreCode);
+            const subdocRef = getStoreSubdocRef('staff', String(staffRecord.id || staffRecord.staffId), storeCode);
             if (subdocRef) {
                 await window.firestoreSetDoc(subdocRef, {
                     ...staffRecord,
@@ -2281,6 +2348,15 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
     } catch (e) {
         console.warn('syncStaffRecordToCloud offline fallback:', e.message);
     }
+
+    // High-Reliability Dual Layer: Server REST Sync
+    try {
+        await fetch('/api/sync/staff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-shop-id': storeCode },
+            body: JSON.stringify({ storeCode, staff: [staffRecord] })
+        }).catch(() => {});
+    } catch (e) {}
 }
 window.syncStaffRecordToCloud = syncStaffRecordToCloud;
 
@@ -2288,10 +2364,11 @@ let lastSubscribedStoreCode = null;
 
 function attachFirestoreListener(targetStoreCode = null) {
     if (targetStoreCode && typeof targetStoreCode === 'string') {
-        if (targetStoreCode.startsWith('SHOP-') || targetStoreCode.startsWith('cafe_')) {
-            try { localStorage.setItem('billnaw_store_code', targetStoreCode); } catch(e) {}
+        const cleanTargetCode = targetStoreCode.trim();
+        if (cleanTargetCode && !cleanTargetCode.startsWith('..') && !cleanTargetCode.includes('/')) {
+            try { localStorage.setItem('billnaw_store_code', cleanTargetCode); } catch(e) {}
         }
-        myClientID = targetStoreCode;
+        myClientID = cleanTargetCode;
         window.myClientID = myClientID;
     }
 
@@ -2442,45 +2519,195 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports.syncDeviceRecordToCloud = syncDeviceRecordToCloud;
     module.exports.syncSessionRecordToCloud = syncSessionRecordToCloud;
     module.exports.syncStaffRecordToCloud = syncStaffRecordToCloud;
+    module.exports.dispatchBackendStoreSync = dispatchBackendStoreSync;
     module.exports.pruneClientTransactionalCache = pruneClientTransactionalCache;
     module.exports.subscribeInvoicesCloudListener = subscribeInvoicesCloudListener;
 }
 
-async function persistAllToFirestore() {
-    if (!window.firestoreDB || !window.firestoreDoc || !window.firestoreSetDoc) return;
-    setCloudSyncStatus('syncing', 'Backing up to Cloud...');
-    try {
-        const storeDocRef = getStoreDocRef();
-        if (!storeDocRef) return;
-        const sanitizedMenu = Array.isArray(menuItems) ? menuItems.map(item => sanitizeMenuItemForStorage(item)) : menuItems;
-        let activeKots = [];
-        try {
-            const rawK = localStorage.getItem('billnaw_active_kots');
-            if (rawK) activeKots = JSON.parse(rawK);
-        } catch(e) {}
+let backendSyncTimeout = null;
+let pendingBackendSyncPayload = {};
 
-        const safeProfile = JSON.parse(JSON.stringify(shopProfile || {}));
-        await window.firestoreSetDoc(storeDocRef, {
-            profile: safeProfile,
-            staff: staffList,
-            menu: sanitizedMenu,
-            categories: menuCategories,
-            customers: customersList,
-            history: orderHistory,
-            expenses: dailyExpenses,
-            tables: tablesInfo,
-            kots: Array.isArray(activeKots) ? activeKots.slice(0, 50) : [],
-            updatedAt: new Date().toISOString()
-        }, { merge: true });
-        lastCloudSyncTime = Date.now();
-        setCloudSyncStatus('synced', 'Real-Time Synced');
-    } catch (e) {
-        const isPermission = e && (e.code === 'permission-denied' || (e.message && e.message.toLowerCase().includes('permission')));
-        if (isPermission) {
-            console.info("⚡ Cloud store saved to Local IndexedDB (Cloud permissions require Service Account).");
-        } else {
-            console.warn("Cloud backup error:", e);
+async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) {
+    if (!partialPayload || typeof partialPayload !== 'object') return false;
+    const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+                      localStorage.getItem('billnaw_store_code') ||
+                      localStorage.getItem('billnaw_shop_code') ||
+                      (shopProfile && (shopProfile.storeCode || shopProfile.id)) ||
+                      null;
+
+    if (!storeCode) {
+        console.warn('[BACKEND SYNC] No active storeCode found. Deferring sync to prevent cross-tenant contamination.');
+        return false;
+    }
+
+    Object.assign(pendingBackendSyncPayload, partialPayload);
+    pendingBackendSyncPayload.storeCode = storeCode;
+    const activeOwnerEmail = (typeof shopProfile !== 'undefined' && (shopProfile?.ownerEmail || shopProfile?.email)) ||
+                             localStorage.getItem('billnaw_auth_email') ||
+                             localStorage.getItem('billnaw_owner_email') ||
+                             localStorage.getItem('billnaw_shop_email') || '';
+    if (activeOwnerEmail && !pendingBackendSyncPayload.ownerEmail) {
+        pendingBackendSyncPayload.ownerEmail = activeOwnerEmail.trim().toLowerCase();
+    }
+
+    const doSync = async () => {
+        const payloadToSend = { ...pendingBackendSyncPayload };
+        pendingBackendSyncPayload = {};
+        if (backendSyncTimeout) {
+            clearTimeout(backendSyncTimeout);
+            backendSyncTimeout = null;
         }
+
+        let timeoutId = null;
+        let signal = undefined;
+        if (typeof AbortController !== 'undefined') {
+            const controller = new AbortController();
+            timeoutId = setTimeout(() => controller.abort(), 10000); // 10s low-network timeout
+            signal = controller.signal;
+        }
+
+        try {
+            const res = await fetch('/api/sync/store-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-shop-id': storeCode,
+                    'x-shop-email': payloadToSend.ownerEmail || ''
+                },
+                body: JSON.stringify(payloadToSend),
+                signal
+            });
+            if (timeoutId) clearTimeout(timeoutId);
+            if (res.ok) {
+                lastCloudSyncTime = Date.now();
+                setCloudSyncStatus('synced', 'Real-Time Synced');
+                try { localStorage.removeItem('billnaw_offline_sync_queue'); } catch(e) {}
+                return true;
+            } else {
+                throw new Error(`Sync HTTP ${res.status}`);
+            }
+        } catch (err) {
+            if (timeoutId) clearTimeout(timeoutId);
+            console.warn('[BACKEND SYNC] Network defer / offline:', err.message);
+            try {
+                const existingQueue = JSON.parse(localStorage.getItem('billnaw_offline_sync_queue') || '{}');
+                const mergedQueue = { ...existingQueue, ...payloadToSend };
+                localStorage.setItem('billnaw_offline_sync_queue', JSON.stringify(mergedQueue));
+            } catch(e) {}
+            setCloudSyncStatus('offline', 'Offline (Saved Locally)');
+        }
+        return false;
+    };
+
+    if (immediate) {
+        return await doSync();
+    } else {
+        if (backendSyncTimeout) clearTimeout(backendSyncTimeout);
+        backendSyncTimeout = setTimeout(doSync, 350);
+        return true;
+    }
+}
+window.dispatchBackendStoreSync = dispatchBackendStoreSync;
+
+async function flushOfflineSyncQueue() {
+    try {
+        const rawQueue = localStorage.getItem('billnaw_offline_sync_queue');
+        if (!rawQueue) return;
+        const queue = JSON.parse(rawQueue);
+        if (queue && typeof queue === 'object' && Object.keys(queue).length > 0) {
+            console.info('[OFFLINE SYNC] Resuming connectivity: flushing queued changes to cloud...');
+            localStorage.removeItem('billnaw_offline_sync_queue');
+            await dispatchBackendStoreSync(queue, true);
+        }
+    } catch(e) {}
+}
+window.flushOfflineSyncQueue = flushOfflineSyncQueue;
+
+// Proactively reconcile and sync forward existing shop data to Cloud (Netlify & Server)
+async function reconcileExistingShopCloudSync() {
+    const storeCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : null;
+    if (!storeCode) return;
+
+    // 1. Flush any offline sync queue pending from previous disconnected sessions
+    if (typeof flushOfflineSyncQueue === 'function') {
+        try { await flushOfflineSyncQueue(); } catch(e) {}
+    }
+
+    // 2. If the local client has existing staff or tables (e.g. Amber & Oak with 9 staff, 24 tables),
+    // proactively ensure they are synchronized to Cloud Firestore
+    const sList = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList : [];
+    const tInfo = (typeof tablesInfo !== 'undefined' && tablesInfo && typeof tablesInfo === 'object') ? tablesInfo : {};
+    const hasData = sList.length > 0 || Object.keys(tInfo).length > 0;
+
+    if (hasData && typeof dispatchBackendStoreSync === 'function') {
+        console.log(`[EXISTING SHOP SYNC] Reconciling shop data for ${storeCode}: ${sList.length} staff, ${Object.keys(tInfo).length} tables`);
+        dispatchBackendStoreSync({
+            storeCode,
+            profile: (typeof shopProfile !== 'undefined' && shopProfile) ? shopProfile : undefined,
+            staff: sList.length > 0 ? sList : undefined,
+            tables: Object.keys(tInfo).length > 0 ? tInfo : undefined
+        }, false);
+    }
+}
+window.reconcileExistingShopCloudSync = reconcileExistingShopCloudSync;
+
+// Smooth Multi-Device Network Recovery Listeners
+if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+        setCloudSyncStatus('syncing', 'Reconnected • Syncing...');
+        flushOfflineSyncQueue();
+    });
+    window.addEventListener('offline', () => {
+        setCloudSyncStatus('offline', 'Offline (Saved Locally)');
+    });
+}
+
+async function persistAllToFirestore() {
+    setCloudSyncStatus('syncing', 'Backing up to Cloud...');
+    const sanitizedMenu = Array.isArray(menuItems) ? menuItems.map(item => sanitizeMenuItemForStorage(item)) : menuItems;
+    let activeKots = [];
+    try {
+        const rawK = localStorage.getItem('billnaw_active_kots');
+        if (rawK) activeKots = JSON.parse(rawK);
+    } catch(e) {}
+
+    const safeProfile = JSON.parse(JSON.stringify(shopProfile || {}));
+    const fullPayload = {
+        profile: safeProfile,
+        staff: staffList,
+        menu: sanitizedMenu,
+        categories: menuCategories,
+        customers: customersList,
+        history: orderHistory,
+        expenses: dailyExpenses,
+        tables: tablesInfo,
+        kots: Array.isArray(activeKots) ? activeKots.slice(0, 50) : [],
+        updatedAt: new Date().toISOString()
+    };
+
+    // Layer 1: Client SDK (if connected and authorized)
+    if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+        try {
+            const storeDocRef = getStoreDocRef();
+            if (storeDocRef) {
+                await window.firestoreSetDoc(storeDocRef, fullPayload, { merge: true });
+                lastCloudSyncTime = Date.now();
+                setCloudSyncStatus('synced', 'Real-Time Synced');
+            }
+        } catch (e) {
+            console.info("⚡ Client SDK write fallback to backend REST sync:", e.message);
+        }
+    }
+
+    // Layer 2: High-Reliability Server REST Sync
+    try {
+        const synced = await dispatchBackendStoreSync(fullPayload, true);
+        if (synced) {
+            lastCloudSyncTime = Date.now();
+            setCloudSyncStatus('synced', 'Real-Time Synced');
+        }
+    } catch (err) {
+        console.warn("Backend store sync error:", err.message);
         setCloudSyncStatus('offline', 'Local (IndexedDB)');
     }
 }
@@ -2493,6 +2720,9 @@ function persistTables() {
         if (storeDocRef) {
             window.firestoreSetDoc(storeDocRef, { tables: tablesInfo, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
+    }
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ tables: tablesInfo, profile: shopProfile }, true);
     }
 }
 window.persistTables = persistTables;
@@ -2508,6 +2738,9 @@ function persistMenu() {
             window.firestoreSetDoc(storeDocRef, { menu: sanitizedMenu, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
     }
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ menu: sanitizedMenu }, true);
+    }
 }
 window.persistMenu = persistMenu;
 
@@ -2519,11 +2752,27 @@ function persistCategories() {
             window.firestoreSetDoc(storeDocRef, { categories: menuCategories, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
     }
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ categories: menuCategories }, true);
+    }
 }
 window.persistCategories = persistCategories;
 
 async function ensureShopProfileHydrated() {
     if (!shopProfile) shopProfile = {};
+    // 0. Supreme Authority: Authenticated session identity
+    try {
+        const sessionRaw = localStorage.getItem('billnaw_shop_session');
+        if (sessionRaw) {
+            const session = JSON.parse(sessionRaw);
+            if (session && session.shop && session.shop.name) {
+                shopProfile.name = session.shop.name;
+            }
+            if (session && session.storeCode) {
+                shopProfile.storeCode = session.storeCode;
+            }
+        }
+    } catch(e) {}
     // 1. Recover from JSON snapshot in localStorage if fields are missing
     try {
         const lsRaw = localStorage.getItem('billnaw_store_profile');
@@ -2650,6 +2899,9 @@ function persistProfile() {
             });
         }
     }
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ profile: shopProfile });
+    }
 }
 window.persistProfile = persistProfile;
 
@@ -2660,6 +2912,9 @@ function persistCustomersFirebase(newCust = null) {
         if (storeDocRef) {
             window.firestoreSetDoc(storeDocRef, { customers: customersList, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
+    }
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ customers: customersList });
     }
 }
 window.persistCustomersFirebase = persistCustomersFirebase;
@@ -2675,6 +2930,9 @@ function persistHistoryFirebase(newOrder = null) {
             window.firestoreSetDoc(storeDocRef, { history: orderHistory, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
     }
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ history: orderHistory });
+    }
 }
 window.persistHistoryFirebase = persistHistoryFirebase;
 
@@ -2685,6 +2943,9 @@ function persistExpensesFirebase(newExp = null) {
         if (storeDocRef) {
             window.firestoreSetDoc(storeDocRef, { expenses: dailyExpenses, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
+    }
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ expenses: dailyExpenses });
     }
 }
 window.persistExpensesFirebase = persistExpensesFirebase;
@@ -2706,6 +2967,9 @@ function persistStaffToFirestore(newStaff = null) {
                 }
             });
         }
+    }
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ staff: staffList }, true);
     }
 }
 window.persistStaffToFirestore = persistStaffToFirestore;
@@ -3214,18 +3478,39 @@ async function runBackgroundHealthCheck(silent = true) {
     _isBgSyncRunning = true;
     try {
         const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (window.shopProfile && window.shopProfile.id);
-        if (!storeCode || !window.firestoreDB || !window.firestoreDoc || !window.firestoreGetDoc) return;
+        if (!storeCode) return;
 
-        const collectionName = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
-        const docRef = window.firestoreDoc(window.firestoreDB, collectionName, storeCode);
-        const snap = await window.firestoreGetDoc(docRef);
+        // Flush any offline queued changes first before pulling remote changes
+        if (typeof flushOfflineSyncQueue === 'function') {
+            try { await flushOfflineSyncQueue(); } catch(e) {}
+        }
 
-        if (snap && snap.exists()) {
-            const data = snap.data();
-            if (data && typeof handleRemoteFirestoreUpdate === 'function') {
-                handleRemoteFirestoreUpdate(data);
-                if (!silent) console.info("[BackgroundSync] Store data silently reconciled from cloud.");
+        let data = null;
+        if (window.firestoreDB && window.firestoreDoc && window.firestoreGetDoc) {
+            try {
+                const collectionName = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
+                const docRef = window.firestoreDoc(window.firestoreDB, collectionName, storeCode);
+                const snap = await window.firestoreGetDoc(docRef);
+                if (snap && snap.exists()) {
+                    data = snap.data();
+                }
+            } catch (sdkErr) {
+                // Client SDK unauthenticated / permission error -> fall through to REST
             }
+        }
+
+        if (!data) {
+            try {
+                const res = await fetch('/api/sync/store-data?storeCode=' + encodeURIComponent(storeCode));
+                if (res.ok) {
+                    data = await res.json();
+                }
+            } catch (restErr) {}
+        }
+
+        if (data && typeof handleRemoteFirestoreUpdate === 'function') {
+            handleRemoteFirestoreUpdate(data);
+            if (!silent) console.info("[BackgroundSync] Store data silently reconciled from cloud.");
         }
     } catch (err) {
         if (!silent) console.warn("[BackgroundSync] Health check defer:", err.message);
@@ -3772,8 +4057,11 @@ async function initDatabase() {
     try {
         const currentEmail = localStorage.getItem('billnaw_auth_email') || '';
         const lastDeviceEmail = localStorage.getItem('billnaw_last_device_email') || '';
-        if (lastDeviceEmail && currentEmail && lastDeviceEmail.toLowerCase().trim() !== currentEmail.toLowerCase().trim()) {
-            console.log(`[AUTH ISOLATION] Account switch detected (${lastDeviceEmail} -> ${currentEmail}). Wiping device local storage.`);
+        const currentStoreCode = localStorage.getItem('billnaw_store_code') || '';
+        const lastStoreCode = localStorage.getItem('billnaw_last_store_code') || '';
+        if ((lastDeviceEmail && currentEmail && lastDeviceEmail.toLowerCase().trim() !== currentEmail.toLowerCase().trim()) ||
+            (lastStoreCode && currentStoreCode && lastStoreCode !== currentStoreCode)) {
+            console.log(`[AUTH ISOLATION] Account switch detected (${lastDeviceEmail}/${lastStoreCode} -> ${currentEmail}/${currentStoreCode}). Wiping device local storage.`);
             if (typeof idb !== 'undefined' && idb.clear) {
                 await idb.clear('cafe_menu');
                 await idb.clear('cafe_history');
@@ -3782,10 +4070,22 @@ async function initDatabase() {
                 await idb.clear('cafe_expenses');
                 await idb.clear('cafe_staff');
                 await idb.clear('cafe_categories');
+                await idb.clear('cafe_profile');
             }
+            localStorage.removeItem('billnaw_shop_name');
+            localStorage.removeItem('billnaw_store_profile');
+            localStorage.removeItem('billnaw_shop_phone');
+            localStorage.removeItem('billnaw_shop_address');
+            localStorage.removeItem('billnaw_shop_logo');
+            localStorage.removeItem('billnaw_admin_pin_hash');
+            localStorage.removeItem('billnaw_store_staff');
+            shopProfile = { name: '', storeCode: currentStoreCode };
         }
         if (currentEmail) {
             localStorage.setItem('billnaw_last_device_email', currentEmail.toLowerCase().trim());
+        }
+        if (currentStoreCode) {
+            localStorage.setItem('billnaw_last_store_code', currentStoreCode);
         }
     } catch(err) {
         console.warn('Device isolation error:', err);
@@ -3797,11 +4097,12 @@ async function initDatabase() {
         const sessionRaw = localStorage.getItem('billnaw_shop_session');
         if (authMode === 'authenticated' && sessionRaw) {
             const session = JSON.parse(sessionRaw);
-            if (session && session.shop && session.shop.name && (shopProfile.name === 'billnaw' || !shopProfile.name)) {
+            if (session && session.shop && session.shop.name) {
                 shopProfile.name = session.shop.name;
                 window.shopProfile = shopProfile;
             }
             if (session && session.storeCode) {
+                shopProfile.storeCode = session.storeCode;
                 myClientID = session.storeCode;
                 window.myClientID = myClientID;
             }
@@ -3817,7 +4118,13 @@ async function initDatabase() {
                     if (snap && snap.exists && snap.exists()) {
                         const rData = snap.data();
                         if (rData && rData.profile) {
+                            const existingTableCount = shopProfile?.tableCount || 0;
+                            const existingTablesLen = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
+                            const maxTables = Math.max(existingTableCount, existingTablesLen, rData.profile.tableCount || 0);
                             shopProfile = { ...shopProfile, ...rData.profile };
+                            if (maxTables > (shopProfile.tableCount || 0)) {
+                                shopProfile.tableCount = maxTables;
+                            }
                             window.shopProfile = shopProfile;
                             idb.set('cafe_profile', shopProfile);
                             if (shopProfile.logo) {
@@ -3848,11 +4155,7 @@ async function initDatabase() {
         { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
         { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
     ];
-    const isLegacyMockMenu = storedMenu && Array.isArray(storedMenu) && (
-        storedMenu.some(i => i.name === 'Steam Rice' || i.name === 'Espresso Coffee' || i.name === 'Chicken Roll' || i.name === 'Masala Chai') ||
-        (storedMenu.length >= 30) // old 36-item mock list
-    );
-    if (storedMenu && Array.isArray(storedMenu) && storedMenu.length >= 4 && !isLegacyMockMenu) {
+    if (storedMenu && Array.isArray(storedMenu) && storedMenu.length > 0) {
         menuItems = storedMenu;
         window.menuItems = menuItems;
     } else {
@@ -3861,8 +4164,7 @@ async function initDatabase() {
         await idb.set('cafe_menu', menuItems);
     }
     const storedCats = await idb.get('cafe_categories');
-    const hasLegacyCats = storedCats && Array.isArray(storedCats) && storedCats.some(c => c === 'Tea/Coffee' || c === 'Food' || c === 'Cigarettes');
-    if (storedCats && Array.isArray(storedCats) && storedCats.length > 0 && !isLegacyMockMenu && !hasLegacyCats) {
+    if (storedCats && Array.isArray(storedCats) && storedCats.length > 0) {
         menuCategories = storedCats;
         window.menuCategories = menuCategories;
     } else {
@@ -3891,12 +4193,9 @@ async function initDatabase() {
         window.tablesInfo = tablesInfo;
     }
     for (let i = 1; i <= (shopProfile.tableCount || 10); i++) {
-        if (!tablesInfo[i] || (tablesInfo[i].items && tablesInfo[i].items.some(it => it.name === 'Steam Rice' || it.name === 'Espresso Coffee'))) {
+        if (!tablesInfo[i]) {
             tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
         }
-    }
-    if (isLegacyMockMenu) {
-        await idb.set('cafe_tables', tablesInfo);
     }
     const storedCustomers = await idb.get('cafe_customers');
     if (storedCustomers && Array.isArray(storedCustomers)) {
@@ -3943,6 +4242,20 @@ async function initDatabase() {
             window.staffList = staffList;
             await idb.set('cafe_staff', staffList);
             try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
+        }
+    }
+
+    // Auto-reconcile with Cloud Firestore: if local device has staff, tables, or profile,
+    // sync to Cloud Firestore via backend REST bridge so cloud stays 100% up-to-date.
+    if (typeof dispatchBackendStoreSync === 'function') {
+        const currentStoreCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (shopProfile?.storeCode || null);
+        if (currentStoreCode) {
+            dispatchBackendStoreSync({
+                profile: shopProfile,
+                staff: staffList,
+                tables: tablesInfo,
+                storeCode: currentStoreCode
+            });
         }
     }
 
