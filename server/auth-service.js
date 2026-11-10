@@ -18,6 +18,153 @@ const otpStore = new Map();
 const userStore = new Map();
 const shopStore = new Map();
 const sessionStore = new Map();
+const rateLimitStore = new Map();
+
+// Periodic prune to prevent memory leaks in sliding window rate limiter
+try {
+  const pruneTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of rateLimitStore.entries()) {
+      if (!v || !v.timestamps || v.timestamps.length === 0) {
+        rateLimitStore.delete(k);
+      } else {
+        const active = v.timestamps.filter(t => (now - t) < 3600000);
+        if (active.length === 0) rateLimitStore.delete(k);
+        else v.timestamps = active;
+      }
+    }
+  }, 300000);
+  if (pruneTimer && typeof pruneTimer.unref === 'function') {
+    pruneTimer.unref();
+  }
+} catch (e) {}
+
+/**
+ * Sliding Window In-Memory Rate Limiter.
+ * Enforces burst and sustained request limits per client IP or store tenant.
+ */
+export function checkRateLimit({ key, limit = 60, windowSeconds = 60, message }) {
+  if (!key) return { allowed: true };
+  const now = Date.now();
+  const windowMs = windowSeconds * 1000;
+  let entry = rateLimitStore.get(key);
+  if (!entry) {
+    entry = { timestamps: [] };
+    rateLimitStore.set(key, entry);
+  }
+
+  // Filter timestamps within sliding window
+  entry.timestamps = entry.timestamps.filter(t => (now - t) < windowMs);
+
+  if (entry.timestamps.length >= limit) {
+    const oldest = entry.timestamps[0];
+    const retryAfter = Math.max(1, Math.ceil((windowMs - (now - oldest)) / 1000));
+    return {
+      allowed: false,
+      status: 429,
+      retryAfter,
+      error: message || `Rate limit exceeded. Too many requests. Please wait ${retryAfter}s.`
+    };
+  }
+
+  entry.timestamps.push(now);
+  return {
+    allowed: true,
+    remaining: limit - entry.timestamps.length
+  };
+}
+
+/**
+ * Authoritative Backend RBAC Permissions Matrix.
+ */
+const BACKEND_ROLE_PERMISSIONS = {
+  Owner: [
+    'take_orders', 'settle_bills', 'apply_discount', 'void_invoice',
+    'manage_menu', 'view_reports', 'view_expenses', 'change_settings',
+    'manage_devices', 'manage_staff', 'manage_subscription', 'manage_inventory',
+    'admin_quota', 'view_kds', 'update_prep_status', 'dispatch_kot', 'view_tables'
+  ],
+  SuperAdmin: [
+    'take_orders', 'settle_bills', 'apply_discount', 'void_invoice',
+    'manage_menu', 'view_reports', 'view_expenses', 'change_settings',
+    'manage_devices', 'manage_staff', 'manage_subscription', 'manage_inventory',
+    'admin_quota', 'view_kds', 'update_prep_status', 'dispatch_kot', 'view_tables'
+  ],
+  Admin: [
+    'take_orders', 'settle_bills', 'apply_discount', 'void_invoice',
+    'manage_menu', 'view_reports', 'view_expenses', 'change_settings',
+    'manage_devices', 'manage_staff', 'manage_subscription', 'manage_inventory',
+    'admin_quota', 'view_kds', 'update_prep_status', 'dispatch_kot', 'view_tables'
+  ],
+  Manager: [
+    'take_orders', 'settle_bills', 'apply_discount', 'void_invoice',
+    'manage_menu', 'view_reports', 'manage_inventory', 'dispatch_kot', 'view_tables'
+  ],
+  Cashier: [
+    'take_orders', 'settle_bills', 'view_tables'
+  ],
+  'Floor Server': [
+    'take_orders', 'dispatch_kot', 'view_tables'
+  ],
+  Server: [
+    'take_orders', 'dispatch_kot', 'view_tables'
+  ],
+  Waiter: [
+    'take_orders', 'dispatch_kot', 'view_tables'
+  ],
+  'Kitchen Chef': [
+    'view_kds', 'update_prep_status'
+  ],
+  Chef: [
+    'view_kds', 'update_prep_status'
+  ]
+};
+
+export function normalizeBackendRole(role) {
+  if (!role || typeof role !== 'string') return 'Cashier';
+  const clean = role.trim().toLowerCase();
+  if (clean === 'owner') return 'Owner';
+  if (clean === 'admin') return 'Admin';
+  if (clean === 'superadmin') return 'SuperAdmin';
+  if (clean === 'manager') return 'Manager';
+  if (clean === 'cashier') return 'Cashier';
+  if (clean === 'floor server' || clean === 'server' || clean === 'waiter' || clean === 'waiters' || clean === 'floor_server') return 'Floor Server';
+  if (clean === 'kitchen chef' || clean === 'chef' || clean === 'kitchen') return 'Kitchen Chef';
+  return 'Cashier';
+}
+
+export function hasRolePermission(role, permission) {
+  if (!role || !permission) return false;
+  const normRole = normalizeBackendRole(role);
+  const allowed = BACKEND_ROLE_PERMISSIONS[normRole] || [];
+  return allowed.includes(permission);
+}
+
+export function verifyEndpointAccess({ authResult, eventOrReq, requiredPermission }) {
+  if (!requiredPermission) return { allowed: true };
+
+  // Resolve role from authResult token claims or headers
+  let role = authResult?.user?.role || 'Owner';
+
+  let staffRoleHeader = '';
+  if (eventOrReq) {
+    const headers = eventOrReq.headers || {};
+    staffRoleHeader = headers['x-staff-role'] || headers['X-Staff-Role'] || '';
+  }
+
+  // If a delegated staff member is operating on the terminal, validate their role permissions
+  const effectiveRole = staffRoleHeader || role;
+
+  if (!hasRolePermission(effectiveRole, requiredPermission)) {
+    return {
+      allowed: false,
+      status: 403,
+      error: `Access denied: Role [${effectiveRole}] is not authorized to perform [${requiredPermission}].`
+    };
+  }
+
+  return { allowed: true, role: effectiveRole };
+}
 
 export function saveAuthStoreToDisk() {
   try {

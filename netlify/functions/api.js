@@ -58,7 +58,10 @@ import {
 import {
   createSignedAuthToken,
   verifySignedAuthToken,
-  verifyTenantAuthorization
+  verifyTenantAuthorization,
+  hasRolePermission,
+  verifyEndpointAccess,
+  checkRateLimit
 } from '../../server/auth-service.js';
 import { CONFIG } from '../../server/config.js';
 
@@ -578,6 +581,10 @@ export async function handler(event, context) {
     if (!auth.authorized) {
       return jsonResponse(auth.status || 401, { success: false, error: auth.error });
     }
+    const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'manage_staff' });
+    if (!rbac.allowed) {
+      return jsonResponse(rbac.status || 403, { success: false, error: rbac.error });
+    }
     const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
 
     const { staff, replaceStaff, deletedStaffId } = body || {};
@@ -599,6 +606,10 @@ export async function handler(event, context) {
     const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
     if (!auth.authorized) {
       return jsonResponse(auth.status || 401, { success: false, error: auth.error });
+    }
+    const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'manage_staff' });
+    if (!rbac.allowed) {
+      return jsonResponse(rbac.status || 403, { success: false, error: rbac.error });
     }
     const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
 
@@ -640,7 +651,18 @@ export async function handler(event, context) {
   // -----------------------------------------------------------
   if (event.httpMethod === 'POST' && (cleanPath === '/subscription/manage' || cleanPath.endsWith('/subscription/manage'))) {
     const email = (body.email || body.shopEmail || headers['x-shop-email'] || '').trim();
-    const shopId = (body.shopId || headers['x-shop-id'] || '').trim();
+    const shopId = (body.shopId || headers['x-shop-id'] || body.storeCode || '').trim();
+    const token = extractAuthToken(event, body);
+    if (shopId) {
+      const auth = verifyTenantAuthorization({ token, targetStoreCode: shopId, allowGracefulMigration: true });
+      if (!auth.authorized) {
+        return jsonResponse(auth.status || 401, { success: false, error: auth.error });
+      }
+      const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'manage_subscription' });
+      if (!rbac.allowed) {
+        return jsonResponse(rbac.status || 403, { success: false, error: rbac.error });
+      }
+    }
     const action = String(body.action || '').trim().toUpperCase();
     const reason = String(body.reason || '').trim();
     const updatedBy = String(body.updatedBy || 'admin').trim();
@@ -957,6 +979,17 @@ export async function handler(event, context) {
   // Route: /auth/send-otp (Passwordless Login & Signup OTP)
   // -----------------------------------------------------------
   if (event.httpMethod === 'POST' && (cleanPath === '/auth/send-otp' || cleanPath.endsWith('/send-otp'))) {
+    const clientIp = headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || 'client';
+    const rateCheck = checkRateLimit({
+      key: `otp_req_${clientIp}`,
+      limit: 10,
+      windowSeconds: 600,
+      message: 'Too many verification code requests from this device. Please wait 10 minutes.'
+    });
+    if (!rateCheck.allowed) {
+      return jsonResponse(429, { success: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
+    }
+
     const email = normalizeEmail(body.email);
     const purpose = body.purpose || 'login';
 
@@ -1017,6 +1050,17 @@ export async function handler(event, context) {
   // Route: /auth/verify-otp (Validates OTP & Mints Session)
   // -----------------------------------------------------------
   if (event.httpMethod === 'POST' && (cleanPath === '/auth/verify-otp' || cleanPath.endsWith('/verify-otp'))) {
+    const clientIp = headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || 'client';
+    const rateCheck = checkRateLimit({
+      key: `verify_req_${clientIp}`,
+      limit: 20,
+      windowSeconds: 300,
+      message: 'Too many verification attempts from this connection. Please wait 5 minutes.'
+    });
+    if (!rateCheck.allowed) {
+      return jsonResponse(429, { success: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
+    }
+
     const email = normalizeEmail(body.email);
     const submittedOtp = (body.otp !== undefined && body.otp !== null) ? String(body.otp).trim() : '';
     const shopName = body.shopName ? String(body.shopName).trim() : '';

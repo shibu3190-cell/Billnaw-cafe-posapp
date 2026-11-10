@@ -46,7 +46,10 @@ import {
   isValidEmail,
   createSignedAuthToken,
   verifySignedAuthToken,
-  verifyTenantAuthorization
+  verifyTenantAuthorization,
+  hasRolePermission,
+  verifyEndpointAccess,
+  checkRateLimit
 } from './server/auth-service.js';
 import { getShopSubscription, updateShopSubscription, validateSubscriptionTransition } from './server/subscription-service.js';
 import { executeValidateDeviceAndLogin } from './database/server-functions/device-security.js';
@@ -1253,6 +1256,10 @@ app.post('/api/sync/staff', async (req, res) => {
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
+    const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'manage_staff' });
+    if (!rbac.allowed) {
+      return res.status(rbac.status || 403).json({ success: false, error: rbac.error });
+    }
     const { staff, replaceStaff, deletedStaffId } = req.body || {};
     const result = await syncStoreToFirestoreREST(code, { staff, replaceStaff, deletedStaffId });
     res.json(result);
@@ -1270,6 +1277,10 @@ app.post('/api/sync/staff/delete', async (req, res) => {
     const auth = checkTenantAuth(req, res, code, true);
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
+    }
+    const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'manage_staff' });
+    if (!rbac.allowed) {
+      return res.status(rbac.status || 403).json({ success: false, error: rbac.error });
     }
     const { staffId, staff } = req.body || {};
     const result = await deleteStaffFromFirestoreREST(code, staffId, staff);

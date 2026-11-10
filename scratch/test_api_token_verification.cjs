@@ -265,6 +265,92 @@ async function runTestSuite() {
     assert(coreJs.includes('x-refreshed-token'), 'Interceptor must capture x-refreshed-token');
   });
 
+  console.log('\n📍 SUITE 6: GRANULAR ROLE-BASED ACCESS CONTROL (RBAC)');
+
+  const { hasRolePermission, verifyEndpointAccess } = authService;
+
+  test('RBAC-01: Owner and Admin have manage_staff, manage_subscription, and inventory permissions', () => {
+    assert(typeof hasRolePermission === 'function', 'hasRolePermission must be exported');
+    assert.strictEqual(hasRolePermission('Owner', 'manage_staff'), true);
+    assert.strictEqual(hasRolePermission('Admin', 'manage_staff'), true);
+    assert.strictEqual(hasRolePermission('Owner', 'manage_subscription'), true);
+    assert.strictEqual(hasRolePermission('Admin', 'manage_subscription'), true);
+  });
+
+  test('RBAC-02: Cashier is permitted to take orders and settle bills, but blocked from staff management', () => {
+    assert.strictEqual(hasRolePermission('Cashier', 'take_orders'), true);
+    assert.strictEqual(hasRolePermission('Cashier', 'settle_bills'), true);
+    assert.strictEqual(hasRolePermission('Cashier', 'manage_staff'), false);
+    assert.strictEqual(hasRolePermission('Cashier', 'manage_subscription'), false);
+  });
+
+  test('RBAC-03: Floor Server / Waiter is blocked from managing staff and settling bills', () => {
+    assert.strictEqual(hasRolePermission('Floor Server', 'take_orders'), true);
+    assert.strictEqual(hasRolePermission('Floor Server', 'settle_bills'), false);
+    assert.strictEqual(hasRolePermission('Floor Server', 'manage_staff'), false);
+    assert.strictEqual(hasRolePermission('Waiter', 'manage_staff'), false);
+    assert.strictEqual(hasRolePermission('Kitchen Chef', 'manage_staff'), false);
+  });
+
+  test('RBAC-04: verifyEndpointAccess blocks Cashier / Waiter from staff management with 403', () => {
+    const waiterToken = createSignedAuthToken({ storeCode: 'SHOP_RBAC_01', email: 'waiter@pos.com', role: 'Floor Server' });
+    const auth = verifyTenantAuthorization({ token: waiterToken, targetStoreCode: 'SHOP_RBAC_01' });
+
+    const check = verifyEndpointAccess({
+      authResult: auth,
+      requiredPermission: 'manage_staff'
+    });
+
+    assert.strictEqual(check.allowed, false, 'Floor Server cannot manage staff');
+    assert.strictEqual(check.status, 403, 'Must return 403 Forbidden');
+    assert(check.error.toLowerCase().includes('not authorized'));
+  });
+
+  console.log('\n📍 SUITE 7: SLIDING WINDOW RATE LIMITER ENGINE');
+
+  const { checkRateLimit } = authService;
+
+  test('RATE-01: checkRateLimit permits requests below limit', () => {
+    assert(typeof checkRateLimit === 'function', 'checkRateLimit must be exported');
+    const key = 'test_ip_allow_' + Date.now();
+    for (let i = 0; i < 5; i++) {
+      const res = checkRateLimit({ key, limit: 5, windowSeconds: 10 });
+      assert.strictEqual(res.allowed, true, `Request ${i+1} should be allowed`);
+    }
+  });
+
+  test('RATE-02: checkRateLimit blocks excess requests with 429 and retryAfter', () => {
+    const key = 'test_ip_block_' + Date.now();
+    for (let i = 0; i < 3; i++) {
+      checkRateLimit({ key, limit: 3, windowSeconds: 60 });
+    }
+    const blocked = checkRateLimit({ key, limit: 3, windowSeconds: 60, message: 'Too many requests' });
+    assert.strictEqual(blocked.allowed, false, '4th request must be blocked');
+    assert.strictEqual(blocked.status, 429, 'Must return HTTP 429');
+    assert(blocked.retryAfter > 0, 'Must provide retryAfter in seconds');
+  });
+
+  await asyncTest('RATE-03: Netlify handler blocks staff mutations for Waiter role with 403', async () => {
+    const waiterToken = createSignedAuthToken({
+      storeCode: 'SHOP_WAITER_01',
+      email: 'waiter@test.com',
+      role: 'Floor Server'
+    });
+
+    const response = await netlifyApi.handler({
+      httpMethod: 'POST',
+      path: '/api/sync/staff',
+      body: JSON.stringify({ storeCode: 'SHOP_WAITER_01', staff: [] }),
+      headers: {
+        authorization: `Bearer ${waiterToken}`,
+        'x-staff-role': 'Floor Server',
+        'content-type': 'application/json'
+      }
+    });
+
+    assert.strictEqual(response.statusCode, 403, 'Floor Server should be blocked with 403 from staff sync');
+  });
+
   console.log('\n====================================================');
   console.log(`🎯 TOTAL SUITE RESULTS: ${passed} PASSED, ${failed} FAILED (TOTAL: ${passed + failed})`);
   console.log('====================================================\n');

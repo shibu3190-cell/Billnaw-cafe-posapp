@@ -109,6 +109,20 @@ document.addEventListener('click', function(e) {
                 if (!headers.has('x-store-code')) headers.set('x-store-code', storeCode);
             }
 
+            // Attach active staff role headers for granular RBAC if present
+            try {
+                const activeStaffRaw = localStorage.getItem('billnaw_active_staff') || sessionStorage.getItem('billnaw_active_staff');
+                if (activeStaffRaw) {
+                    const activeStaff = JSON.parse(activeStaffRaw);
+                    if (activeStaff && activeStaff.role && !headers.has('x-staff-role')) {
+                        headers.set('x-staff-role', activeStaff.role);
+                    }
+                    if (activeStaff && activeStaff.id && !headers.has('x-staff-id')) {
+                        headers.set('x-staff-id', String(activeStaff.id));
+                    }
+                }
+            } catch (e) {}
+
             const modifiedInit = { ...init, headers };
 
             try {
