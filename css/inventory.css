@@ -121,7 +121,7 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .inv-batch-card:hover {
@@ -150,7 +150,7 @@
     color: #FFFFFF;
     border: none;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     width: 100%;
 }
 
@@ -190,7 +190,7 @@
     border-radius: 14px;
     padding: 16px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .inv-recipe-card:hover {
@@ -653,7 +653,7 @@
         opacity: 0 !important;
         visibility: hidden !important;
         padding-top: 0 !important;
-        transition: all 0.25s ease !important;
+        transition: transform 0.25s ease !important, opacity 0.25s ease !important, background-color 0.25s ease !important, border-color 0.25s ease !important, color 0.25s ease !important, box-shadow 0.25s ease !important;
     }
 
     .inv-stock-card.expanded .inv-row-drawer {

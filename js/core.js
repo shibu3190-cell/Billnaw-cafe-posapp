@@ -50,6 +50,16 @@ function closeModal(modalId) {
 window.openModal = openModal;
 window.closeModal = closeModal;
 
+// Global Backdrop Dismissal for Bottom Sheets & Modals (Tap outside to close non-locked modals)
+document.addEventListener('click', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+        const lockedModals = ['loginOverlay', 'terminalLockOverlay', 'deviceRevokedOverlay', 'deviceLockedOverlay', 'subscriptionRevokedOverlay', 'activationOverlay'];
+        if (!lockedModals.includes(e.target.id)) {
+            closeModal(e.target.id);
+        }
+    }
+});
+
 function getLocalISOMonth(dateObj = new Date()) {
     const yyyy = dateObj.getFullYear();
     const mm = String(dateObj.getMonth() + 1).padStart(2, '0');

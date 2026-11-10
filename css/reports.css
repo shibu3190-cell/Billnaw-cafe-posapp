@@ -6,7 +6,7 @@
 @media (max-width: 500px) {
     .kpi-grid { grid-template-columns: 1fr; }
 }
-.kpi-card { background: var(--bg-surface); padding: 18px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-xs); transition: all 0.2s ease; cursor: pointer; position: relative; overflow: hidden; }
+.kpi-card { background: var(--bg-surface); padding: 18px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-xs); transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease; cursor: pointer; position: relative; overflow: hidden; }
 .kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); border-color: var(--accent); }
 .kpi-card.active-filter, .kpi-card.kpi-selected { border-color: var(--primary); background: #FAF7F4; box-shadow: 0 0 0 2px var(--milk-choc); }
 .kpi-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
@@ -60,7 +60,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .action-dropdown-btn:hover {
     border-color: var(--primary);
@@ -214,7 +214,7 @@
 
 /* FILTER CHIPS BAR */
 .filter-pills-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
-.filter-pill { padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: #FFFFFF; color: var(--text-dark); cursor: pointer; transition: all 0.15s ease; }
+.filter-pill { padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: #FFFFFF; color: var(--text-dark); cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; }
 .filter-pill:hover { border-color: var(--milk-choc); }
 .filter-pill.active { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
 
@@ -229,7 +229,7 @@
     align-items: center;
     justify-content: space-between;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: var(--shadow-xs);
 }
 .setting-tile-card:hover {
@@ -274,7 +274,7 @@
     border-radius: 14px;
     background: #FFFFFF;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .upload-choice-tile:hover {
     border-color: #143832;
@@ -323,7 +323,7 @@
     margin-bottom: 16px;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(245, 158, 11, 0.12);
-    transition: all 0.18s ease;
+    transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 .subscription-crown-card:hover {
     border-color: #F59E0B;
@@ -364,7 +364,7 @@
     border-radius: 14px;
     padding: 14px 16px;
     margin-bottom: 10px;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .for-you-feature-card:hover {
     border-color: #8B5CF6;
@@ -588,7 +588,7 @@
     background: #FFFFFF;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .filter-pill.donut-pill:hover {
@@ -617,7 +617,7 @@
     color: var(--primary);
     cursor: pointer;
     box-shadow: var(--shadow-xs);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .report-action-pill:hover {
     border-color: var(--primary);
@@ -654,7 +654,7 @@
     color: var(--text-dark);
     cursor: pointer;
     text-align: left;
-    transition: all 0.12s ease;
+    transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
 }
 .popover-item:hover {
     background: #FAF7F4;
@@ -676,7 +676,7 @@
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .report-export-close-btn:hover {
     background: var(--bg-body);
@@ -859,7 +859,7 @@
     background: #FFFFFF;
     border: 1.5px solid var(--border);
     border-radius: 12px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     gap: 12px;
 }
 .session-card:hover {
@@ -948,7 +948,7 @@
     align-items: center;
     gap: 5px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
 }
 .session-remote-lock-btn:hover {

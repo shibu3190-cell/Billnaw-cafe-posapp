@@ -38,8 +38,20 @@
     display: inline-flex; 
     align-items: center; 
     justify-content: center; 
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
     flex-shrink: 0;
+    position: relative;
+}
+.modal-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 .modal-close-btn:hover { background: var(--bg-body); color: var(--text-dark); }
 .more-close-btn { 
@@ -56,7 +68,7 @@
     display: flex; 
     align-items: center; 
     justify-content: center; 
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
     flex-shrink: 0;
     box-sizing: border-box;
 }
@@ -102,7 +114,7 @@
 
 .huge-total { font-size: 38px; font-weight: 800; color: var(--primary); text-align: center; margin: 12px 0; letter-spacing: -1px; }
 
-.key-input, .pin-input { width: 100%; padding: 14px; font-size: 18px; text-align: center; letter-spacing: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px; background: var(--bg-body); color: var(--text-dark); font-family: monospace; font-weight: 700; transition: all 0.2s ease; }
+.key-input, .pin-input { width: 100%; padding: 14px; font-size: 18px; text-align: center; letter-spacing: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px; background: var(--bg-body); color: var(--text-dark); font-family: monospace; font-weight: 700; transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease; }
 .key-input:focus, .pin-input:focus { border-color: var(--milk-choc); box-shadow: 0 0 0 3px rgba(125, 79, 66, 0.18); background: #fff;}
 .pin-input { letter-spacing: 12px; font-size: 24px; font-weight: 800; }
 
@@ -123,12 +135,13 @@
     border: 1.5px solid var(--border);
     border-radius: 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     user-select: none;
     touch-action: manipulation;
+    min-height: 48px;
 }
 .pin-numpad-btn:hover {
     background: #F0EAE1;
@@ -233,8 +246,20 @@
     border-radius: 10px;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
     flex-shrink: 0;
+    position: relative;
+}
+.shop-auth-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 
 .shop-auth-close-btn:hover {
@@ -275,11 +300,12 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 9px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 7px;
+    min-height: 44px;
 }
 
 .auth-tab-btn:hover:not(.active) {
@@ -326,7 +352,7 @@
     font-weight: 600;
     color: var(--text-dark);
     background: #FAF7F4;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
     box-sizing: border-box;
 }
 
@@ -375,8 +401,9 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: all 0.18s ease;
+    transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
     box-shadow: 0 4px 14px rgba(43, 28, 21, 0.22);
+    min-height: 44px;
 }
 
 .btn-emerald:hover {
@@ -428,7 +455,7 @@
     background: #FFFFFF;
     border: 2px solid var(--border);
     border-radius: 12px;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
     outline: none;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
@@ -463,9 +490,10 @@
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-    padding: 4px 6px;
+    padding: 6px 8px;
     border-radius: 6px;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    min-height: 36px;
 }
 
 .btn-resend-link:hover:not(:disabled) {
@@ -495,9 +523,10 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 10px;
+    padding: 8px 12px;
     border-radius: 8px;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    min-height: 40px;
 }
 
 .auth-link-btn:hover {
@@ -527,7 +556,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
 }
 
@@ -584,7 +613,7 @@
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .cloud-auth-pill:hover {
@@ -694,14 +723,27 @@
     justify-content: center;
     color: var(--text-dark);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    position: relative;
+}
+.tbl-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 .tbl-close-btn:hover {
     background: #EBE6DF;
     color: var(--primary);
 }
 .table-preset-chip {
-    padding: 4px 10px;
+    padding: 6px 12px;
+    min-height: 36px;
     border-radius: 14px;
     background: #FAF7F4;
     border: 1px solid var(--border);
@@ -709,7 +751,7 @@
     font-weight: 700;
     color: var(--primary);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .table-preset-chip:hover {
     background: #143832;
@@ -729,7 +771,19 @@
     justify-content: center;
     color: var(--text-dark);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    position: relative;
+}
+.session-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 .session-close-btn:hover {
     background: #EBE6DF;
@@ -755,10 +809,11 @@
     color: var(--text-dark);
     cursor: pointer;
     white-space: nowrap;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-height: 40px;
 }
 .inv-subnav-btn:hover {
     background: #F3ECE2;
@@ -778,13 +833,15 @@
     background: transparent;
     border: none;
     cursor: pointer;
-    padding: 6px;
+    padding: 10px;
     border-radius: 50%;
     color: var(--text-muted);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    min-width: 44px;
+    min-height: 44px;
 }
 .rtr_close_btn:hover {
     background: #FEE2E2;
@@ -813,7 +870,7 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 12px;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .rtr-staple-row:hover {
     border-color: #CBD5E1;
@@ -841,7 +898,7 @@
     flex-wrap: wrap;
     gap: 12px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 .rtr-dish-card:hover {
     border-color: #143832;

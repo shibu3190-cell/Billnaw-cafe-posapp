@@ -9,7 +9,7 @@
     padding: 20px 8px 16px 8px; 
     z-index: 100; 
     box-shadow: 1px 0 12px rgba(43, 28, 21, 0.04); 
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); 
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1); 
     border-right: 1px solid var(--border); 
     align-items: center; 
 }
@@ -87,7 +87,7 @@
     justify-content: center;
     vertical-align: middle;
     flex-shrink: 0;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Inactive Icon State: Outlined stroke with WCAG 3:1+ inactive contrast (#64748B / #52796F) */
@@ -106,7 +106,7 @@ svg.nav-icon, svg.btn-icon, svg.action-icon, svg.hub-icon, svg.state-icon,
     stroke: currentColor;
     fill: none;
     stroke-width: 1.8px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* Active Icon State: Filled accent with increased weight (2.2px) */
@@ -169,7 +169,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     color: var(--success);
     cursor: pointer;
     box-shadow: var(--shadow-xs);
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .sync-pill-btn:hover {
     background: #F9F7F5;
@@ -215,7 +215,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 12px;
     color: var(--text-dark);
     font-weight: 600;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     box-shadow: var(--shadow-xs);
     flex-shrink: 0 !important;
     white-space: nowrap !important;
@@ -262,7 +262,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     gap: 6px;
     box-shadow: var(--shadow-xs);
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .staff-pill-btn:hover { background: #F9F7F5; border-color: var(--primary-light); }
 
@@ -292,7 +292,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     justify-content: center;
     cursor: pointer;
     color: var(--text-dark);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     flex-shrink: 0;
     box-shadow: var(--shadow-xs);
     box-sizing: border-box;
@@ -398,7 +398,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     text-align: center;
     font-weight: 700;
     font-size: 14px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -572,7 +572,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FFFFFF;
     color: var(--text-dark);
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .floor-pill:hover {
     border-color: var(--primary);
@@ -596,7 +596,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 /* CATEGORY BAR */
 .category-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; flex-shrink: 0; white-space: nowrap; }
-.cat-chip { padding: 8px 16px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-dark); transition: all 0.15s ease; box-shadow: var(--shadow-xs); }
+.cat-chip { padding: 8px 16px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-dark); transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; box-shadow: var(--shadow-xs); }
 .cat-chip:hover { border-color: var(--milk-choc); color: var(--milk-choc); }
 .cat-chip.active { background: var(--milk-choc); color: #FFFFFF; border-color: var(--milk-choc); font-weight: 700; box-shadow: 0 2px 8px rgba(125, 79, 66, 0.25); }
 
@@ -604,7 +604,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 .search-container { position: relative; width: 100%; display: flex; align-items: center; }
 .search-icon { position: absolute; left: 14px; font-size: 15px; color: var(--text-muted); opacity: 0.7; }
 .mic-icon { position: absolute; right: 14px; font-size: 15px; color: var(--text-muted); opacity: 0.7; cursor: pointer; }
-.search-bar { width: 100%; padding: 11px 40px; border: 1px solid var(--border); border-radius: 24px; font-size: 13px; font-weight: 500; background: var(--bg-surface); box-shadow: var(--shadow-xs); transition: all 0.2s ease; color: var(--text-dark); }
+.search-bar { width: 100%; padding: 11px 40px; border: 1px solid var(--border); border-radius: 24px; font-size: 13px; font-weight: 500; background: var(--bg-surface); box-shadow: var(--shadow-xs); transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease; color: var(--text-dark); }
 .search-bar:focus { border-color: var(--milk-choc); box-shadow: 0 0 0 3px rgba(125, 79, 66, 0.15); outline: none; }
 
 /* Uniform Enclosed Icon Containers */
@@ -644,7 +644,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 /* MENU CARDS */
 .menu-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-content: start; padding-bottom: 24px; }
-.menu-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; display: flex; flex-direction: column; position: relative; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-xs); text-align: left; min-height: 175px; overflow: hidden; }
+.menu-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; display: flex; flex-direction: column; position: relative; transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-xs); text-align: left; min-height: 175px; overflow: hidden; }
 .menu-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-2px); }
 .menu-card:active { transform: scale(0.98); }
 
@@ -729,7 +729,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 .card-bottom-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 6px; width: 100%; }
 .menu-card .price { font-weight: 800; color: var(--primary); font-size: 15px; letter-spacing: -0.3px; }
 
-.menu-card .add-btn { background: var(--milk-choc); color: #FFFFFF; border: none; border-radius: 20px; padding: 5px 14px; font-weight: 700; font-size: 11px; cursor: pointer; box-shadow: 0 2px 6px rgba(120, 72, 59, 0.28); transition: all 0.15s ease; }
+.menu-card .add-btn { background: var(--milk-choc); color: #FFFFFF; border: none; border-radius: 20px; padding: 5px 14px; font-weight: 700; font-size: 11px; cursor: pointer; box-shadow: 0 2px 6px rgba(120, 72, 59, 0.28); transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; }
 .menu-card:hover .add-btn { background: var(--primary); transform: translateY(-1px); }
 .menu-card:active .add-btn { transform: translateY(0); }
 
@@ -762,7 +762,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center; 
     justify-content: center; 
     border-radius: 50%; 
-    transition: all 0.12s ease; 
+    transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease; 
     padding: 0;
     line-height: 1;
     position: relative;
@@ -871,7 +871,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 15px !important;
     font-weight: 800 !important;
     color: var(--primary) !important;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .item-meta-rate input:focus {
     border-color: var(--primary) !important;
@@ -929,7 +929,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-radius: 10px;
     cursor: pointer;
     box-shadow: var(--shadow-xs);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
     box-sizing: border-box;
 }
@@ -1078,7 +1078,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 600;
     cursor: pointer;
     text-align: left;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     width: 100%;
     box-sizing: border-box;
 }
@@ -1168,7 +1168,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FFFFFF;
     color: var(--text-dark);
     cursor: pointer;
-    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1203,7 +1203,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 600;
     color: var(--text-dark);
     box-shadow: var(--shadow-xs);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .category-manage-chip:hover {
     border-color: var(--milk-choc);
@@ -1221,7 +1221,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     cursor: pointer;
     font-size: 12px;
     font-weight: 800;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .category-manage-chip .del-btn:hover {
     background: var(--danger);
@@ -1293,7 +1293,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     color: var(--text-muted);
 }
 .catalog-action-btn:hover {
@@ -1329,7 +1329,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     cursor: pointer;
     font-size: 11px;
     font-weight: 700;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .media-source-btn:hover {
     border-color: var(--milk-choc);
@@ -1362,7 +1362,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 500;
     background: #FFFFFF;
     color: var(--text-dark);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .catalog-search-wrap input:focus {
     border-color: var(--milk-choc);
@@ -1422,7 +1422,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     padding: 12px 8px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: var(--shadow-xs);
     position: relative;
     user-select: none;
@@ -1462,7 +1462,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: rgba(120, 72, 59, 0.05);
     border: 1px dashed rgba(120, 72, 59, 0.25);
     border-radius: 14px;
-    transition: all 0.18s ease;
+    transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 .quick-login-card:hover {
     background: rgba(120, 72, 59, 0.09);
@@ -1545,7 +1545,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .menu-segment-tab:hover {
     color: #1F2937;
@@ -1569,7 +1569,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     cursor: pointer;
     margin-bottom: 14px;
     position: relative;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .bulk-upload-dashed-card:hover {
     border-color: #143832;
@@ -1627,7 +1627,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: space-between;
     gap: 14px;
-    transition: all 0.18s ease;
+    transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
     position: relative;
     z-index: 1;
 }
@@ -1735,7 +1735,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     flex-shrink: 0;
 }
 .clean-item-more-btn:hover,
@@ -1771,7 +1771,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border: 1.5px solid #CBD5E1;
     background: #FFFFFF;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .adjust-stock-btn:hover {
     border-color: #143832;
@@ -1788,7 +1788,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .clean-item-action-btn:hover {
     border-color: #9CA3AF;
@@ -1829,7 +1829,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     cursor: pointer;
     position: relative;
     box-shadow: var(--shadow-xs);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-sizing: border-box;
     padding: 0;
 }
