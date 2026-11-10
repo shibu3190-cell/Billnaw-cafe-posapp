@@ -60,6 +60,78 @@ document.addEventListener('click', function(e) {
     }
 });
 
+// ============================================================
+// 🔒 AUTHORITATIVE API TOKEN & TENANT AUTH INTERCEPTOR
+// Transparently attaches Bearer token, x-auth-token, and x-shop-id / x-store-code
+// to all outgoing /api/* and /.netlify/functions/api/* requests,
+// and captures rolling renewed tokens from x-refreshed-token header.
+// ============================================================
+(function initGlobalApiInterceptor() {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+    if (window._billnawFetchInterceptorInstalled) return;
+    window._billnawFetchInterceptorInstalled = true;
+
+    const originalFetch = window.fetch;
+    window.fetch = async function billnawFetch(input, init = {}) {
+        let url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+        const isApiRequest = typeof url === 'string' && (url.includes('/api/') || url.includes('/.netlify/functions/api/'));
+
+        if (isApiRequest) {
+            const token = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
+            const storeCode = (typeof shopProfile !== 'undefined' && shopProfile?.storeCode) ||
+                              localStorage.getItem('billnaw_store_code') ||
+                              sessionStorage.getItem('billnaw_store_code') ||
+                              '';
+
+            // Clone or construct Headers
+            let headers;
+            if (init && init.headers instanceof Headers) {
+                headers = new Headers(init.headers);
+            } else if (init && Array.isArray(init.headers)) {
+                headers = new Headers(init.headers);
+            } else if (init && init.headers && typeof init.headers === 'object') {
+                headers = new Headers(init.headers);
+            } else {
+                headers = new Headers();
+            }
+
+            // Attach Bearer Authorization header if token exists and not already set
+            if (token && !headers.has('Authorization')) {
+                headers.set('Authorization', `Bearer ${token}`);
+            }
+            if (token && !headers.has('x-auth-token')) {
+                headers.set('x-auth-token', token);
+            }
+
+            // Attach tenant isolation headers if storeCode exists and not set
+            if (storeCode) {
+                if (!headers.has('x-shop-id')) headers.set('x-shop-id', storeCode);
+                if (!headers.has('x-store-code')) headers.set('x-store-code', storeCode);
+            }
+
+            const modifiedInit = { ...init, headers };
+
+            try {
+                const response = await originalFetch(input, modifiedInit);
+
+                // Automatically capture rolling refreshed token from server
+                const refreshedToken = response.headers ? response.headers.get('x-refreshed-token') : null;
+                if (refreshedToken && refreshedToken.length > 20) {
+                    try {
+                        localStorage.setItem('billnaw_auth_token', refreshedToken);
+                    } catch (e) {}
+                }
+
+                return response;
+            } catch (err) {
+                throw err;
+            }
+        }
+
+        return originalFetch(input, init);
+    };
+})();
+
 function getLocalISOMonth(dateObj = new Date()) {
     const yyyy = dateObj.getFullYear();
     const mm = String(dateObj.getMonth() + 1).padStart(2, '0');

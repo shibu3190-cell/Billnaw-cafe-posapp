@@ -296,14 +296,20 @@ check('SYNC-02: Staff session switch (cloud-sync.js & staff.js) hydrates shopPro
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n📍 SECTION 4: SERVICE WORKER CACHE BUSTING & OFFLINE RESILIENCE');
 
-check('SW-01: service-worker.js bumped to v3.5.0 with skipWaiting() and Network-First for code assets', () => {
-  assert.ok(swJs.includes("CACHE_VERSION = 'billnaw-pos-shell-v3.5.0'"), 'CACHE_VERSION not bumped to v3.5.0');
+check('SW-01: service-worker.js bumped to v3.5.0+ with skipWaiting() and Network-First for code assets', () => {
+  const versionMatch = swJs.match(/CACHE_VERSION\s*=\s*['"]billnaw-pos-shell-v([0-9.]+)/);
+  assert.ok(versionMatch, 'CACHE_VERSION not found');
+  const v = parseFloat(versionMatch[1]);
+  assert.ok(v >= 3.5, `CACHE_VERSION ${versionMatch[1]} is less than 3.5.0`);
   assert.ok(swJs.includes('self.skipWaiting()'), 'skipWaiting() missing in install listener');
   assert.ok(swJs.includes('if (isCodeAsset)'), 'Network-First for code assets missing in service-worker.js');
 });
 
-check('SW-02: index.html scripts bumped to ?v=2900', () => {
-  assert.ok(indexHtml.includes('js/pos.js?v=2900') && indexHtml.includes('js/settings.js?v=2900'), 'index.html scripts not bumped to ?v=2900');
+check('SW-02: index.html scripts bumped to ?v=2900+', () => {
+  const posMatch = indexHtml.match(/js\/pos\.js\?v=([0-9]+)/);
+  const setMatch = indexHtml.match(/js\/settings\.js\?v=([0-9]+)/);
+  assert.ok(posMatch && parseInt(posMatch[1], 10) >= 2900, 'pos.js script not bumped to >= ?v=2900');
+  assert.ok(setMatch && parseInt(setMatch[1], 10) >= 2900, 'settings.js script not bumped to >= ?v=2900');
 });
 
 check('OFFLINE-01: refreshAiQuotaDisplay guards against offline fetch (navigator.onLine === false)', () => {

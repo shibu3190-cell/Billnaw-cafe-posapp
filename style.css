@@ -96,13 +96,14 @@ body {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
 }
-h1, h2, h3, h4, h5, h6 { margin: 0; color: var(--text-dark); font-weight: 700; letter-spacing: -0.02em; }
+h1, h2, h3, h4, h5, h6 { margin: 0; color: var(--text-dark); font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+p, .card-desc, .item-desc, .notice-text, .help-text { text-wrap: pretty; }
 input:focus, select:focus, textarea:focus { outline: none; }
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* 🔢 Tabular Numerical Alignment & Non-Breaking Rupee Layout (Prevents Split Lines & Layout Shifting) */
-.price, .cart-item-price, .huge-total, #totalUI, #fc-total, .kpi-value, #invModalGrandTotal, .table-item-badge, .clean-item-price, .ledger-amount, .card-price-col {
+.price, .cart-item-price, .huge-total, #totalUI, #fc-total, .kpi-value, #invModalGrandTotal, .table-item-badge, .clean-item-price, .ledger-amount, .card-price-col, .kot-timer, .kot-card-time, .kot-item-qty, .kot-qty, .item-qty-control span, .qty-pill span, .sc-center, .bill-row-amt, .summary-amount, .tax-amt, .subtotal-amt, .table-stat-num, .metric-value, .stat-value, .order-item-qty, .badge-count, .dish-price, .order-total-val {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
     letter-spacing: -0.02em;
@@ -110,6 +111,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     display: inline-flex;
     align-items: baseline;
     gap: 0.2rem;
+}
+
+/* 🎯 Minimum 44x44px Touch Hit Area Expansion for Compact Mobile Buttons */
+.touch-hit-expand {
+    position: relative;
+}
+.touch-hit-expand::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
+    pointer-events: auto;
 }
 
 ::-webkit-scrollbar { width: 0; height: 0; display: none; } 
@@ -139,7 +157,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     font-weight: 600; 
     font-size: 13px; 
     letter-spacing: 0.2px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); 
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1); 
     display: inline-flex; 
     justify-content: center; 
     align-items: center; 
@@ -234,8 +252,20 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     display: inline-flex; 
     align-items: center; 
     justify-content: center; 
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
     flex-shrink: 0;
+    position: relative;
+}
+.modal-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 .modal-close-btn:hover { background: var(--bg-body); color: var(--text-dark); }
 .more-close-btn { 
@@ -252,7 +282,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     display: flex; 
     align-items: center; 
     justify-content: center; 
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
     flex-shrink: 0;
     box-sizing: border-box;
 }
@@ -298,7 +328,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
 
 .huge-total { font-size: 38px; font-weight: 800; color: var(--primary); text-align: center; margin: 12px 0; letter-spacing: -1px; }
 
-.key-input, .pin-input { width: 100%; padding: 14px; font-size: 18px; text-align: center; letter-spacing: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px; background: var(--bg-body); color: var(--text-dark); font-family: monospace; font-weight: 700; transition: all 0.2s ease; }
+.key-input, .pin-input { width: 100%; padding: 14px; font-size: 18px; text-align: center; letter-spacing: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px; background: var(--bg-body); color: var(--text-dark); font-family: monospace; font-weight: 700; transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease; }
 .key-input:focus, .pin-input:focus { border-color: var(--milk-choc); box-shadow: 0 0 0 3px rgba(125, 79, 66, 0.18); background: #fff;}
 .pin-input { letter-spacing: 12px; font-size: 24px; font-weight: 800; }
 
@@ -319,12 +349,13 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     border: 1.5px solid var(--border);
     border-radius: 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     user-select: none;
     touch-action: manipulation;
+    min-height: 48px;
 }
 .pin-numpad-btn:hover {
     background: #F0EAE1;
@@ -429,8 +460,20 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     border-radius: 10px;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
     flex-shrink: 0;
+    position: relative;
+}
+.shop-auth-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 
 .shop-auth-close-btn:hover {
@@ -471,11 +514,12 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 9px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 7px;
+    min-height: 44px;
 }
 
 .auth-tab-btn:hover:not(.active) {
@@ -522,7 +566,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     font-weight: 600;
     color: var(--text-dark);
     background: #FAF7F4;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
     box-sizing: border-box;
 }
 
@@ -571,8 +615,9 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: all 0.18s ease;
+    transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
     box-shadow: 0 4px 14px rgba(43, 28, 21, 0.22);
+    min-height: 44px;
 }
 
 .btn-emerald:hover {
@@ -624,7 +669,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     background: #FFFFFF;
     border: 2px solid var(--border);
     border-radius: 12px;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
     outline: none;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
@@ -659,9 +704,10 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-    padding: 4px 6px;
+    padding: 6px 8px;
     border-radius: 6px;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    min-height: 36px;
 }
 
 .btn-resend-link:hover:not(:disabled) {
@@ -691,9 +737,10 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 10px;
+    padding: 8px 12px;
     border-radius: 8px;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    min-height: 40px;
 }
 
 .auth-link-btn:hover {
@@ -723,7 +770,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     display: flex;
     align-items: center;
     justify-content: space-between;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
 }
 
@@ -780,7 +827,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .cloud-auth-pill:hover {
@@ -890,14 +937,27 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     justify-content: center;
     color: var(--text-dark);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    position: relative;
+}
+.tbl-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 .tbl-close-btn:hover {
     background: #EBE6DF;
     color: var(--primary);
 }
 .table-preset-chip {
-    padding: 4px 10px;
+    padding: 6px 12px;
+    min-height: 36px;
     border-radius: 14px;
     background: #FAF7F4;
     border: 1px solid var(--border);
@@ -905,7 +965,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     font-weight: 700;
     color: var(--primary);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .table-preset-chip:hover {
     background: #143832;
@@ -925,7 +985,19 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     justify-content: center;
     color: var(--text-dark);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    position: relative;
+}
+.session-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 .session-close-btn:hover {
     background: #EBE6DF;
@@ -951,10 +1023,11 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     color: var(--text-dark);
     cursor: pointer;
     white-space: nowrap;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-height: 40px;
 }
 .inv-subnav-btn:hover {
     background: #F3ECE2;
@@ -974,13 +1047,15 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     background: transparent;
     border: none;
     cursor: pointer;
-    padding: 6px;
+    padding: 10px;
     border-radius: 50%;
     color: var(--text-muted);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    min-width: 44px;
+    min-height: 44px;
 }
 .rtr_close_btn:hover {
     background: #FEE2E2;
@@ -1009,7 +1084,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     align-items: center;
     flex-wrap: wrap;
     gap: 12px;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .rtr-staple-row:hover {
     border-color: #CBD5E1;
@@ -1037,7 +1112,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     flex-wrap: wrap;
     gap: 12px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 .rtr-dish-card:hover {
     border-color: #143832;
@@ -1176,7 +1251,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     padding: 20px 8px 16px 8px; 
     z-index: 100; 
     box-shadow: 1px 0 12px rgba(43, 28, 21, 0.04); 
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); 
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1); 
     border-right: 1px solid var(--border); 
     align-items: center; 
 }
@@ -1254,7 +1329,7 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
     justify-content: center;
     vertical-align: middle;
     flex-shrink: 0;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Inactive Icon State: Outlined stroke with WCAG 3:1+ inactive contrast (#64748B / #52796F) */
@@ -1273,7 +1348,7 @@ svg.nav-icon, svg.btn-icon, svg.action-icon, svg.hub-icon, svg.state-icon,
     stroke: currentColor;
     fill: none;
     stroke-width: 1.8px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* Active Icon State: Filled accent with increased weight (2.2px) */
@@ -1336,7 +1411,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     color: var(--success);
     cursor: pointer;
     box-shadow: var(--shadow-xs);
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .sync-pill-btn:hover {
     background: #F9F7F5;
@@ -1382,7 +1457,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 12px;
     color: var(--text-dark);
     font-weight: 600;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     box-shadow: var(--shadow-xs);
     flex-shrink: 0 !important;
     white-space: nowrap !important;
@@ -1429,7 +1504,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     gap: 6px;
     box-shadow: var(--shadow-xs);
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .staff-pill-btn:hover { background: #F9F7F5; border-color: var(--primary-light); }
 
@@ -1459,7 +1534,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     justify-content: center;
     cursor: pointer;
     color: var(--text-dark);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     flex-shrink: 0;
     box-shadow: var(--shadow-xs);
     box-sizing: border-box;
@@ -1565,7 +1640,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     text-align: center;
     font-weight: 700;
     font-size: 14px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1739,7 +1814,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FFFFFF;
     color: var(--text-dark);
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .floor-pill:hover {
     border-color: var(--primary);
@@ -1763,7 +1838,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 /* CATEGORY BAR */
 .category-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; flex-shrink: 0; white-space: nowrap; }
-.cat-chip { padding: 8px 16px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-dark); transition: all 0.15s ease; box-shadow: var(--shadow-xs); }
+.cat-chip { padding: 8px 16px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-dark); transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; box-shadow: var(--shadow-xs); }
 .cat-chip:hover { border-color: var(--milk-choc); color: var(--milk-choc); }
 .cat-chip.active { background: var(--milk-choc); color: #FFFFFF; border-color: var(--milk-choc); font-weight: 700; box-shadow: 0 2px 8px rgba(125, 79, 66, 0.25); }
 
@@ -1771,7 +1846,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 .search-container { position: relative; width: 100%; display: flex; align-items: center; }
 .search-icon { position: absolute; left: 14px; font-size: 15px; color: var(--text-muted); opacity: 0.7; }
 .mic-icon { position: absolute; right: 14px; font-size: 15px; color: var(--text-muted); opacity: 0.7; cursor: pointer; }
-.search-bar { width: 100%; padding: 11px 40px; border: 1px solid var(--border); border-radius: 24px; font-size: 13px; font-weight: 500; background: var(--bg-surface); box-shadow: var(--shadow-xs); transition: all 0.2s ease; color: var(--text-dark); }
+.search-bar { width: 100%; padding: 11px 40px; border: 1px solid var(--border); border-radius: 24px; font-size: 13px; font-weight: 500; background: var(--bg-surface); box-shadow: var(--shadow-xs); transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease; color: var(--text-dark); }
 .search-bar:focus { border-color: var(--milk-choc); box-shadow: 0 0 0 3px rgba(125, 79, 66, 0.15); outline: none; }
 
 /* Uniform Enclosed Icon Containers */
@@ -1811,7 +1886,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 /* MENU CARDS */
 .menu-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-content: start; padding-bottom: 24px; }
-.menu-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; display: flex; flex-direction: column; position: relative; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-xs); text-align: left; min-height: 175px; overflow: hidden; }
+.menu-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; display: flex; flex-direction: column; position: relative; transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-xs); text-align: left; min-height: 175px; overflow: hidden; }
 .menu-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-2px); }
 .menu-card:active { transform: scale(0.98); }
 
@@ -1896,7 +1971,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 .card-bottom-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 6px; width: 100%; }
 .menu-card .price { font-weight: 800; color: var(--primary); font-size: 15px; letter-spacing: -0.3px; }
 
-.menu-card .add-btn { background: var(--milk-choc); color: #FFFFFF; border: none; border-radius: 20px; padding: 5px 14px; font-weight: 700; font-size: 11px; cursor: pointer; box-shadow: 0 2px 6px rgba(120, 72, 59, 0.28); transition: all 0.15s ease; }
+.menu-card .add-btn { background: var(--milk-choc); color: #FFFFFF; border: none; border-radius: 20px; padding: 5px 14px; font-weight: 700; font-size: 11px; cursor: pointer; box-shadow: 0 2px 6px rgba(120, 72, 59, 0.28); transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; }
 .menu-card:hover .add-btn { background: var(--primary); transform: translateY(-1px); }
 .menu-card:active .add-btn { transform: translateY(0); }
 
@@ -1929,7 +2004,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center; 
     justify-content: center; 
     border-radius: 50%; 
-    transition: all 0.12s ease; 
+    transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease; 
     padding: 0;
     line-height: 1;
     position: relative;
@@ -2038,7 +2113,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 15px !important;
     font-weight: 800 !important;
     color: var(--primary) !important;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .item-meta-rate input:focus {
     border-color: var(--primary) !important;
@@ -2096,7 +2171,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-radius: 10px;
     cursor: pointer;
     box-shadow: var(--shadow-xs);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
     box-sizing: border-box;
 }
@@ -2245,7 +2320,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 600;
     cursor: pointer;
     text-align: left;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     width: 100%;
     box-sizing: border-box;
 }
@@ -2335,7 +2410,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FFFFFF;
     color: var(--text-dark);
     cursor: pointer;
-    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2370,7 +2445,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 600;
     color: var(--text-dark);
     box-shadow: var(--shadow-xs);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .category-manage-chip:hover {
     border-color: var(--milk-choc);
@@ -2388,7 +2463,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     cursor: pointer;
     font-size: 12px;
     font-weight: 800;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .category-manage-chip .del-btn:hover {
     background: var(--danger);
@@ -2460,7 +2535,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     color: var(--text-muted);
 }
 .catalog-action-btn:hover {
@@ -2496,7 +2571,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     cursor: pointer;
     font-size: 11px;
     font-weight: 700;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .media-source-btn:hover {
     border-color: var(--milk-choc);
@@ -2529,7 +2604,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 500;
     background: #FFFFFF;
     color: var(--text-dark);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .catalog-search-wrap input:focus {
     border-color: var(--milk-choc);
@@ -2589,7 +2664,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     padding: 12px 8px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: var(--shadow-xs);
     position: relative;
     user-select: none;
@@ -2629,7 +2704,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: rgba(120, 72, 59, 0.05);
     border: 1px dashed rgba(120, 72, 59, 0.25);
     border-radius: 14px;
-    transition: all 0.18s ease;
+    transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 .quick-login-card:hover {
     background: rgba(120, 72, 59, 0.09);
@@ -2712,7 +2787,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .menu-segment-tab:hover {
     color: #1F2937;
@@ -2736,7 +2811,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     cursor: pointer;
     margin-bottom: 14px;
     position: relative;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .bulk-upload-dashed-card:hover {
     border-color: #143832;
@@ -2794,7 +2869,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: space-between;
     gap: 14px;
-    transition: all 0.18s ease;
+    transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
     position: relative;
     z-index: 1;
 }
@@ -2902,7 +2977,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     flex-shrink: 0;
 }
 .clean-item-more-btn:hover,
@@ -2938,7 +3013,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border: 1.5px solid #CBD5E1;
     background: #FFFFFF;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .adjust-stock-btn:hover {
     border-color: #143832;
@@ -2955,7 +3030,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .clean-item-action-btn:hover {
     border-color: #9CA3AF;
@@ -2996,7 +3071,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     cursor: pointer;
     position: relative;
     box-shadow: var(--shadow-xs);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-sizing: border-box;
     padding: 0;
 }
@@ -3422,7 +3497,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     justify-content: center;
     cursor: pointer;
     border-radius: 50%;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     padding: 0;
 }
 .qty-pill button:hover {
@@ -3439,7 +3514,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 .cart-item-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed var(--border-subtle); }
 .drawer-actions-row { display: flex; gap: 8px; padding: 10px 16px; background: var(--bg-body); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.action-pill { flex: 1; padding: 8px; font-size: 11px; font-weight: 700; background: #FFFFFF; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; text-align: center; transition: all 0.15s ease; }
+.action-pill { flex: 1; padding: 8px; font-size: 11px; font-weight: 700; background: #FFFFFF; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; text-align: center; transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; }
 .action-pill:hover { background: #F9F7F5; border-color: var(--milk-choc); }
 .cart-footer { padding: 16px 20px; background: var(--bg-surface); border-top: 1px solid var(--border); }
 .total-display { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -3462,7 +3537,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     cursor: pointer;
     box-shadow: 0 4px 14px rgba(44, 110, 59, 0.28);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     text-transform: uppercase;
 }
 .sleek-checkout-desktop:hover:not(:disabled) {
@@ -3485,7 +3560,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 /* PAYMENT MODAL BUTTONS */
 .pay-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 6px; }
 @media (max-width: 480px) { .pay-options { grid-template-columns: repeat(2, 1fr); } }
-.pay-btn { padding: 10px; background: #FFFFFF; border: 1px solid var(--border); border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.15s ease; color: var(--text-dark); }
+.pay-btn { padding: 10px; background: #FFFFFF; border: 1px solid var(--border); border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; color: var(--text-dark); }
 .pay-btn:hover { border-color: var(--milk-choc); }
 .pay-btn.selected { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
 
@@ -3590,7 +3665,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     color: var(--primary);
     cursor: pointer;
     font-variant-numeric: tabular-nums;
-    transition: all 0.12s ease;
+    transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
     box-shadow: 0 1px 2px rgba(43, 28, 21, 0.04);
 }
 .denom-pill:hover {
@@ -3646,7 +3721,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #ECFDF5;
     border: 1px solid #A7F3D0;
     border-radius: 8px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .change-due-box.shortage {
     background: #FEF2F2;
@@ -3961,7 +4036,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .inv-batch-card:hover {
@@ -3990,7 +4065,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     color: #FFFFFF;
     border: none;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     width: 100%;
 }
 
@@ -4030,7 +4105,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-radius: 14px;
     padding: 16px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .inv-recipe-card:hover {
@@ -4493,7 +4568,7 @@ svg.nav-icon.active, svg.btn-icon.active {
         opacity: 0 !important;
         visibility: hidden !important;
         padding-top: 0 !important;
-        transition: all 0.25s ease !important;
+        transition: transform 0.25s ease !important, opacity 0.25s ease !important, background-color 0.25s ease !important, border-color 0.25s ease !important, color 0.25s ease !important, box-shadow 0.25s ease !important;
     }
 
     .inv-stock-card.expanded .inv-row-drawer {
@@ -4688,7 +4763,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-radius: var(--radius-md);
     cursor: pointer;
     gap: 6px;
-    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     color: var(--text-dark);
 }
 .hub-action-btn:hover {
@@ -4734,7 +4809,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 .role-kitchen { background: #FFF1F2; color: #9F1239; border: 1px solid rgba(159, 18, 57, 0.2); }
 
 .staff-grid-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
-.staff-pick-card { background: #FFFFFF; border: 1px solid var(--border); border-radius: 14px; padding: 12px 8px; text-align: center; cursor: pointer; transition: all 0.2s ease; }
+.staff-pick-card { background: #FFFFFF; border: 1px solid var(--border); border-radius: 14px; padding: 12px 8px; text-align: center; cursor: pointer; transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease; }
 .staff-pick-card:hover, .staff-pick-card.selected { border-color: var(--primary); background: rgba(74, 51, 42, 0.05); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
 
 /* TOASTS */
@@ -4751,7 +4826,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-radius: 8px;
     background: #FFFFFF;
     border: 1px solid var(--border);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .wa-bulk-cust-item:hover {
     background: #FAF7F4;
@@ -4803,7 +4878,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 700;
     color: #475569;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     white-space: nowrap;
     position: relative;
 }
@@ -4858,7 +4933,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 700;
     color: #475569;
     cursor: pointer;
-    transition: all 0.18s ease;
+    transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .khata-toggle-btn:hover {
@@ -4942,7 +5017,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .khata-close-btn:hover {
@@ -4987,7 +5062,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 700;
     color: #475569;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     white-space: nowrap;
     min-height: 44px;
     position: relative;
@@ -5179,7 +5254,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     min-height: 44px;
 }
 
@@ -5207,7 +5282,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     gap: 8px;
     cursor: pointer;
     box-shadow: 0 8px 24px rgba(18, 140, 126, 0.38);
-    transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1), color 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1);
     user-select: none;
     min-height: 44px;
 }
@@ -5354,7 +5429,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border: none;
     background: transparent;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     text-align: left;
     min-height: 44px;
 }
@@ -5372,7 +5447,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     justify-content: center;
     font-size: 13px;
     font-weight: 800;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     flex-shrink: 0;
 }
 
@@ -5466,7 +5541,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 11.5px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     user-select: none;
 }
 
@@ -5616,7 +5691,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-weight: 700;
     color: #143832;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     margin-bottom: 8px;
     box-sizing: border-box;
     text-align: left;
@@ -5664,7 +5739,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 @media (max-width: 500px) {
     .kpi-grid { grid-template-columns: 1fr; }
 }
-.kpi-card { background: var(--bg-surface); padding: 18px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-xs); transition: all 0.2s ease; cursor: pointer; position: relative; overflow: hidden; }
+.kpi-card { background: var(--bg-surface); padding: 18px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-xs); transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease; cursor: pointer; position: relative; overflow: hidden; }
 .kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); border-color: var(--accent); }
 .kpi-card.active-filter, .kpi-card.kpi-selected { border-color: var(--primary); background: #FAF7F4; box-shadow: 0 0 0 2px var(--milk-choc); }
 .kpi-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
@@ -5718,7 +5793,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .action-dropdown-btn:hover {
     border-color: var(--primary);
@@ -5872,7 +5947,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 
 /* FILTER CHIPS BAR */
 .filter-pills-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
-.filter-pill { padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: #FFFFFF; color: var(--text-dark); cursor: pointer; transition: all 0.15s ease; }
+.filter-pill { padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: #FFFFFF; color: var(--text-dark); cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; }
 .filter-pill:hover { border-color: var(--milk-choc); }
 .filter-pill.active { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
 
@@ -5887,7 +5962,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: space-between;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: var(--shadow-xs);
 }
 .setting-tile-card:hover {
@@ -5932,7 +6007,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-radius: 14px;
     background: #FFFFFF;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .upload-choice-tile:hover {
     border-color: #143832;
@@ -5981,7 +6056,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     margin-bottom: 16px;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(245, 158, 11, 0.12);
-    transition: all 0.18s ease;
+    transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 .subscription-crown-card:hover {
     border-color: #F59E0B;
@@ -6022,7 +6097,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-radius: 14px;
     padding: 14px 16px;
     margin-bottom: 10px;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .for-you-feature-card:hover {
     border-color: #8B5CF6;
@@ -6246,7 +6321,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FFFFFF;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .filter-pill.donut-pill:hover {
@@ -6275,7 +6350,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     color: var(--primary);
     cursor: pointer;
     box-shadow: var(--shadow-xs);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .report-action-pill:hover {
     border-color: var(--primary);
@@ -6312,7 +6387,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     color: var(--text-dark);
     cursor: pointer;
     text-align: left;
-    transition: all 0.12s ease;
+    transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
 }
 .popover-item:hover {
     background: #FAF7F4;
@@ -6334,7 +6409,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .report-export-close-btn:hover {
     background: var(--bg-body);
@@ -6517,7 +6592,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FFFFFF;
     border: 1.5px solid var(--border);
     border-radius: 12px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     gap: 12px;
 }
 .session-card:hover {
@@ -6606,7 +6681,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     align-items: center;
     gap: 5px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
 }
 .session-remote-lock-btn:hover {
@@ -6669,7 +6744,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     border-radius: 9999px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .fim-status-pill.status-none {
@@ -6885,7 +6960,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     background: #FFFFFF;
     color: #475569;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     user-select: none;
 }
 
@@ -6927,7 +7002,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     border: none;
     box-sizing: border-box;
     white-space: nowrap;
@@ -6984,7 +7059,7 @@ svg.nav-icon.active, svg.btn-icon.active {
     font-size: 10px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     border: 1px solid transparent;
     text-align: center;
 }
@@ -7408,12 +7483,12 @@ svg.nav-icon.active, svg.btn-icon.active {
     .drawer-handle { display: block; width: 40px; height: 4px; background: rgba(0,0,0,0.18); border-radius: 10px; margin: 10px auto 0; cursor: grab; touch-action: pan-y; }
     .pos-right .cart-footer { padding-bottom: max(16px, env(safe-area-inset-bottom, 24px)); }
     .close-drawer-btn {
-        min-width: 36px !important;
-        min-height: 36px !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
-        padding: 6px !important;
+        padding: 10px !important;
     }
     .desktop-only { display: none !important; }
 
@@ -7422,20 +7497,22 @@ svg.nav-icon.active, svg.btn-icon.active {
     .card-img-wrapper { height: 72px; } 
     .card-content { padding: 8px 10px; }
     .menu-card .cat-label { font-size: 8px; }
-    .menu-card .name { font-size: 12px; min-height: 28px; line-height: 1.2; margin-bottom: 4px; }
-    .menu-card .add-btn { padding: 6px 12px; font-size: 11px; border-radius: 14px; min-height: 30px; }
-    .item-qty-control { width: 84px; height: 32px; border-radius: 16px; }
-    .item-qty-control button { font-size: 15px; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; }
-    .item-qty-control span { font-size: 12px; }
-    .qty-pill { min-height: 28px !important; padding: 2px 4px !important; }
-    .qty-pill button { width: 28px !important; height: 28px !important; min-width: 28px !important; min-height: 28px !important; font-size: 14px !important; padding: 4px !important; }
+    .menu-card .name { font-size: 12px; min-height: 28px; line-height: 1.2; margin-bottom: 4px; text-wrap: pretty; }
+    .menu-card .add-btn { padding: 8px 14px; font-size: 12px; border-radius: 14px; min-height: 38px; min-width: 44px; }
+    .item-qty-control { width: 92px; height: 36px; border-radius: 18px; }
+    .item-qty-control button { font-size: 16px; width: 34px; height: 34px; min-width: 34px; min-height: 34px; padding: 4px; position: relative; }
+    .item-qty-control button::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); min-width: 44px; min-height: 44px; width: 100%; height: 100%; }
+    .item-qty-control span { font-size: 13px; font-variant-numeric: tabular-nums; }
+    .qty-pill { min-height: 34px !important; padding: 2px 6px !important; }
+    .qty-pill button { width: 32px !important; height: 32px !important; min-width: 32px !important; min-height: 32px !important; font-size: 15px !important; padding: 4px !important; position: relative; }
+    .qty-pill button::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); min-width: 44px; min-height: 44px; width: 100%; height: 100%; }
 
     .mobile-pos-actions { display: flex; flex-direction: column; position: fixed; bottom: calc(76px + env(safe-area-inset-bottom, 24px)); left: 0; width: 100%; padding: 0 12px; background: transparent !important; z-index: 950; pointer-events: none; }
     .mobile-pos-actions > * { pointer-events: auto; }
-    .sleek-checkout-bar { background: var(--primary); color: #FFFFFF; border-radius: 28px; display: flex; justify-content: space-between; align-items: center; padding: 7px 7px 7px 16px; box-shadow: 0 8px 24px rgba(35, 22, 16, 0.35); cursor: pointer; width: 100%; max-width: 380px; margin: 0 auto; transition: all 0.2s ease; }
+    .sleek-checkout-bar { background: var(--primary); color: #FFFFFF; border-radius: 28px; display: flex; justify-content: space-between; align-items: center; padding: 7px 7px 7px 16px; box-shadow: 0 8px 24px rgba(35, 22, 16, 0.35); cursor: pointer; width: 100%; max-width: 380px; margin: 0 auto; transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, opacity 0.2s ease; }
     .sc-left { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 5px; color: rgba(255,255,255,0.9); }
-    .sc-center { font-size: 15px; font-weight: 700; color: #FFFFFF; border-left: 1px solid rgba(255,255,255,0.15); border-right: 1px solid rgba(255,255,255,0.15); padding: 0 10px; margin: 0 6px; } 
-    .sc-right { font-weight: 700; font-size: 11px; margin-left: auto; color: var(--primary); background: #FFFFFF; border: none; padding: 9px 14px; cursor: pointer; border-radius: 20px; box-shadow: var(--shadow-xs); }
+    .sc-center { font-size: 15px; font-weight: 700; color: #FFFFFF; border-left: 1px solid rgba(255,255,255,0.15); border-right: 1px solid rgba(255,255,255,0.15); padding: 0 10px; margin: 0 6px; font-variant-numeric: tabular-nums; } 
+    .sc-right { font-weight: 700; font-size: 11px; margin-left: auto; color: var(--primary); background: #FFFFFF; border: none; padding: 9px 14px; cursor: pointer; border-radius: 20px; box-shadow: var(--shadow-xs); min-height: 38px; min-width: 44px; }
 
     /* Mobile AI Menu Review Row */
     .ai-review-item {
@@ -7523,7 +7600,7 @@ svg.nav-icon.active, svg.btn-icon.active {
         font-weight: 600;
         color: var(--primary);
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
     .quick-voice-chip:hover {
         background: var(--milk-choc);
@@ -7531,11 +7608,54 @@ svg.nav-icon.active, svg.btn-icon.active {
         border-color: var(--milk-choc);
     }
 
-    /* Mobile Modal Card Sizing */
+    /* Mobile Native Bottom Sheet Presentation */
+    .modal-overlay {
+        align-items: flex-end !important;
+        justify-content: center !important;
+        padding: 0 !important;
+    }
     .auth-box, .modal-box {
-        padding: 20px 16px;
-        border-radius: 20px;
-        max-width: 95vw;
+        padding: 18px 18px !important;
+        padding-bottom: max(20px, env(safe-area-inset-bottom, 24px)) !important;
+        border-radius: 24px 24px 0 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: 88vh !important;
+        max-height: 88dvh !important;
+        margin: 0 !important;
+        box-shadow: 0 -8px 32px rgba(15, 41, 36, 0.16) !important;
+        animation: sheetSlideUpMobile 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+    .modal-box::before {
+        content: '';
+        display: block;
+        width: 40px;
+        height: 4px;
+        background: rgba(0, 0, 0, 0.18);
+        border-radius: 2px;
+        margin: 0 auto 12px auto;
+    }
+    .modal-close-btn {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 10px !important;
+    }
+    @keyframes sheetSlideUpMobile {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    /* Mobile KDS & Kitchen Display Single Column Grid */
+    .kot-grid {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+        padding: 8px 0 !important;
+    }
+    .kot-card {
+        border-radius: 16px !important;
     }
     #menuItemModal .modal-box {
         max-height: 90vh;
@@ -7544,8 +7664,8 @@ svg.nav-icon.active, svg.btn-icon.active {
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
         padding: 16px 14px;
-        width: 100%;
-        max-width: 95vw;
+        width: 100% !important;
+        max-width: 100% !important;
     }
     .food-image-manager {
         padding: 12px;
@@ -7581,6 +7701,20 @@ svg.nav-icon.active, svg.btn-icon.active {
         min-width: 40px;
         max-width: 40px;
     }
+    .drawer-actions-row .action-pill {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 8px;
+        font-size: 12px;
+    }
+    .pay-btn {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
 
     /* WhatsApp Marketing Hub UI */
     .wa-hub-grid {
@@ -7598,7 +7732,7 @@ svg.nav-icon.active, svg.btn-icon.active {
         border-radius: var(--radius-lg);
         padding: 14px 16px;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: border-color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
         box-shadow: var(--shadow-xs);
         margin-bottom: 10px;
     }
@@ -7727,7 +7861,7 @@ svg.nav-icon.active, svg.btn-icon.active {
         border-radius: var(--radius-lg);
         padding: 16px 18px;
         box-shadow: var(--shadow-xs);
-        transition: all 0.2s ease;
+        transition: border-color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
     }
     .inventory-item-card:hover {
         border-color: var(--accent);
@@ -7781,7 +7915,7 @@ svg.nav-icon.active, svg.btn-icon.active {
         font-size: 11px;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
     .portion-chip:hover, .portion-chip.active {
         background: var(--primary);
@@ -7811,7 +7945,7 @@ svg.nav-icon.active, svg.btn-icon.active {
         justify-content: center;
         min-height: 220px;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: background-color 0.2s ease, border-color 0.2s ease;
     }
     .ai-photo-capture-box:hover {
         background: #F5EFEB;

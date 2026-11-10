@@ -28,7 +28,26 @@ import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle, syncStoreToFirestoreREST, getStoreFromFirestoreREST, deleteStaffFromFirestoreREST } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
-import { sendOtp, verifyOtp, registerUser, loginWithPassword, verifySession, logoutSession, listActiveSessions, revokeSession, revokeSessionsForStore, revokeSessionsForUser, resetStoreCloudData, requestAdminPinResetOtp, resetAdminPinWithOtp, normalizeEmail, isValidEmail } from './server/auth-service.js';
+import {
+  sendOtp,
+  verifyOtp,
+  registerUser,
+  loginWithPassword,
+  verifySession,
+  logoutSession,
+  listActiveSessions,
+  revokeSession,
+  revokeSessionsForStore,
+  revokeSessionsForUser,
+  resetStoreCloudData,
+  requestAdminPinResetOtp,
+  resetAdminPinWithOtp,
+  normalizeEmail,
+  isValidEmail,
+  createSignedAuthToken,
+  verifySignedAuthToken,
+  verifyTenantAuthorization
+} from './server/auth-service.js';
 import { getShopSubscription, updateShopSubscription, validateSubscriptionTransition } from './server/subscription-service.js';
 import { executeValidateDeviceAndLogin } from './database/server-functions/device-security.js';
 import { getDbClient } from './src/core/db-client.js';
@@ -1167,12 +1186,29 @@ function sanitizeTenantStoreCode(req) {
   return clean;
 }
 
+// Authoritative Tenant Auth Gate Middleware / Helper
+function checkTenantAuth(req, res, targetStoreCode, allowGracefulMigration = true) {
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.toLowerCase().startsWith('bearer ')
+    ? authHeader.slice(7).trim()
+    : (req.headers['x-auth-token'] || req.query?.token || req.body?.token || '');
+  const auth = verifyTenantAuthorization({ token, targetStoreCode, allowGracefulMigration });
+  if (auth.refreshedToken) {
+    res.setHeader('x-refreshed-token', auth.refreshedToken);
+  }
+  return auth;
+}
+
 // 6B2. High-Reliability Store Data & Staff Dual-Sync API (Multi-Tenant Isolated)
 app.get('/api/sync/store-data', async (req, res) => {
   try {
     const storeCode = sanitizeTenantStoreCode(req);
     if (!storeCode) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const auth = checkTenantAuth(req, res, storeCode, true);
+    if (!auth.authorized) {
+      return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
     const result = await getStoreFromFirestoreREST(storeCode);
     res.json(result);
@@ -1186,6 +1222,10 @@ app.post('/api/sync/store-data', async (req, res) => {
     const code = sanitizeTenantStoreCode(req);
     if (!code) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Cross-tenant data injection prevented.' });
+    }
+    const auth = checkTenantAuth(req, res, code, true);
+    if (!auth.authorized) {
+      return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
     const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots } = req.body || {};
     
@@ -1209,6 +1249,10 @@ app.post('/api/sync/staff', async (req, res) => {
     if (!code) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
+    const auth = checkTenantAuth(req, res, code, true);
+    if (!auth.authorized) {
+      return res.status(auth.status || 401).json({ success: false, error: auth.error });
+    }
     const { staff, replaceStaff, deletedStaffId } = req.body || {};
     const result = await syncStoreToFirestoreREST(code, { staff, replaceStaff, deletedStaffId });
     res.json(result);
@@ -1222,6 +1266,10 @@ app.post('/api/sync/staff/delete', async (req, res) => {
     const code = sanitizeTenantStoreCode(req);
     if (!code) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const auth = checkTenantAuth(req, res, code, true);
+    if (!auth.authorized) {
+      return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
     const { staffId, staff } = req.body || {};
     const result = await deleteStaffFromFirestoreREST(code, staffId, staff);

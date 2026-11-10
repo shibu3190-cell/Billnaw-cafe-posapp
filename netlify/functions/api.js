@@ -55,6 +55,11 @@ import {
   getRestockExpenses,
   deductOrderInventory
 } from '../../server/inventory-service.js';
+import {
+  createSignedAuthToken,
+  verifySignedAuthToken,
+  verifyTenantAuthorization
+} from '../../server/auth-service.js';
 import { CONFIG } from '../../server/config.js';
 
 // Firebase & SMTP Configuration with Production Environment Variables & Resilient Fallbacks
@@ -75,15 +80,32 @@ const CORS_HEADERS = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, x-shop-id, x-shop-email, x-store-code'
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, x-shop-id, x-shop-email, x-store-code, x-auth-token',
+  'Access-Control-Expose-Headers': 'x-refreshed-token, Authorization, Content-Type'
 };
 
-function jsonResponse(statusCode, data) {
+function jsonResponse(statusCode, data, extraHeaders = {}) {
   return {
     statusCode,
-    headers: CORS_HEADERS,
+    headers: { ...CORS_HEADERS, ...extraHeaders },
     body: JSON.stringify(data)
   };
+}
+
+function extractAuthToken(event, body) {
+  const headers = event.headers || {};
+  const query = event.queryStringParameters || {};
+  const authHeader = headers['authorization'] || headers['Authorization'] || '';
+  if (authHeader.toLowerCase().startsWith('bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  return (
+    headers['x-auth-token'] ||
+    headers['X-Auth-Token'] ||
+    query.token ||
+    body?.token ||
+    ''
+  );
 }
 
 function normalizeEmail(email) {
@@ -502,12 +524,18 @@ export async function handler(event, context) {
     if (!storeCode) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
+    const token = extractAuthToken(event, body);
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    if (!auth.authorized) {
+      return jsonResponse(auth.status || 401, { success: false, error: auth.error });
+    }
+    const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
     try {
       const result = await getStoreFromFirestoreREST(storeCode);
       const status = result.status || (result.success ? 200 : 500);
-      return jsonResponse(status, result);
+      return jsonResponse(status, result, extraHeaders);
     } catch (err) {
-      return jsonResponse(500, { success: false, error: err.message || 'Fetch failed' });
+      return jsonResponse(500, { success: false, error: err.message || 'Fetch failed' }, extraHeaders);
     }
   }
 
@@ -517,6 +545,13 @@ export async function handler(event, context) {
     if (!storeCode) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Cross-tenant data injection prevented.' });
     }
+    const token = extractAuthToken(event, body);
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    if (!auth.authorized) {
+      return jsonResponse(auth.status || 401, { success: false, error: auth.error });
+    }
+    const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
+
     const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots } = body || {};
     const normalizedEmail = (ownerEmail || profile?.ownerEmail || profile?.email || headers['x-shop-email'] || headers['X-Shop-Email'] || '').trim().toLowerCase();
 
@@ -526,9 +561,9 @@ export async function handler(event, context) {
         profile: profile ? { ...profile, ownerEmail: normalizedEmail || profile.ownerEmail } : undefined,
         staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots
       });
-      return jsonResponse(result.success ? 200 : 500, result);
+      return jsonResponse(result.success ? 200 : 500, result, extraHeaders);
     } catch (err) {
-      return jsonResponse(500, { success: false, error: err.message || 'Sync failed' });
+      return jsonResponse(500, { success: false, error: err.message || 'Sync failed' }, extraHeaders);
     }
   }
 
@@ -538,12 +573,19 @@ export async function handler(event, context) {
     if (!storeCode) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
+    const token = extractAuthToken(event, body);
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    if (!auth.authorized) {
+      return jsonResponse(auth.status || 401, { success: false, error: auth.error });
+    }
+    const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
+
     const { staff, replaceStaff, deletedStaffId } = body || {};
     try {
       const result = await syncStoreToFirestoreREST(storeCode, { staff, replaceStaff, deletedStaffId });
-      return jsonResponse(result.success ? 200 : 500, result);
+      return jsonResponse(result.success ? 200 : 500, result, extraHeaders);
     } catch (err) {
-      return jsonResponse(500, { success: false, error: err.message || 'Staff sync failed' });
+      return jsonResponse(500, { success: false, error: err.message || 'Staff sync failed' }, extraHeaders);
     }
   }
 
@@ -553,12 +595,19 @@ export async function handler(event, context) {
     if (!storeCode) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
+    const token = extractAuthToken(event, body);
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    if (!auth.authorized) {
+      return jsonResponse(auth.status || 401, { success: false, error: auth.error });
+    }
+    const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
+
     const { staffId, staff } = body || {};
     try {
       const result = await deleteStaffFromFirestoreREST(storeCode, staffId, staff);
-      return jsonResponse(result.success ? 200 : 500, result);
+      return jsonResponse(result.success ? 200 : 500, result, extraHeaders);
     } catch (err) {
-      return jsonResponse(500, { success: false, error: err.message || 'Staff deletion sync failed' });
+      return jsonResponse(500, { success: false, error: err.message || 'Staff deletion sync failed' }, extraHeaders);
     }
   }
 
@@ -1021,7 +1070,8 @@ export async function handler(event, context) {
     let cleanStoreCode = (body.storeCode && typeof body.storeCode === 'string' && body.storeCode.trim())
       ? body.storeCode.trim()
       : (shopName ? shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16) : 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 12));
-    const token = 'billnaw_' + crypto.randomBytes(24).toString('hex');
+    const token = createSignedAuthToken({ email, storeCode: cleanStoreCode, role: 'owner' });
+    const sessionToken = 'billnaw_' + crypto.randomBytes(24).toString('hex');
 
     let existingShop = null;
     try {
@@ -1037,6 +1087,8 @@ export async function handler(event, context) {
     return jsonResponse(200, {
       success: true,
       token,
+      sessionToken,
+      customToken: token,
       storeCode: cleanStoreCode,
       isOwner: true,
       user: {
@@ -1149,11 +1201,12 @@ export async function handler(event, context) {
     if (!email || !password) {
       return jsonResponse(400, { success: false, error: 'Email and password required.' });
     }
-    const token = 'billnaw_' + crypto.randomBytes(24).toString('hex');
     let storeCode = body.storeCode || '';
     if (!storeCode) {
       storeCode = 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 12);
     }
+    const token = createSignedAuthToken({ email, storeCode, role: 'owner' });
+    const sessionToken = 'billnaw_' + crypto.randomBytes(24).toString('hex');
     let existingShop = null;
     try {
       existingShop = await getStoreFromFirestoreREST(storeCode);
@@ -1162,6 +1215,8 @@ export async function handler(event, context) {
     return jsonResponse(200, {
       success: true,
       token,
+      sessionToken,
+      customToken: token,
       storeCode,
       isOwner: true,
       user: { email, role: 'owner', isOwner: true },
@@ -1186,7 +1241,8 @@ export async function handler(event, context) {
     const email = normalizeEmail(body.email);
     const shopName = String(body.shopName || '').trim() || ('Shop ' + email.split('@')[0]);
     const storeCode = shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16);
-    const token = 'billnaw_' + crypto.randomBytes(24).toString('hex');
+    const token = createSignedAuthToken({ email, storeCode, role: 'owner' });
+    const sessionToken = 'billnaw_' + crypto.randomBytes(24).toString('hex');
 
     // Automatically seed shop into Firestore with full profile, staff, tables, menu, categories & subcollections
     try {
@@ -1225,6 +1281,8 @@ export async function handler(event, context) {
     return jsonResponse(200, {
       success: true,
       token,
+      sessionToken,
+      customToken: token,
       storeCode,
       isOwner: true,
       user: { email, role: 'owner', isOwner: true },

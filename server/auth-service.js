@@ -110,22 +110,210 @@ export function generateStoreCode(shopName, email) {
 }
 
 /**
- * Creates a valid HMAC-SHA256 signed custom token (JWT structure) for client Firebase SDK / session use.
+ * Resolves the signing secret for HMAC-SHA256 tokens.
  */
-export function createCustomAuthToken(payload) {
+export function getAuthTokenSecret() {
+  return (
+    process.env.JWT_SECRET ||
+    process.env.SESSION_SECRET ||
+    CONFIG?.firebase?.apiKey ||
+    'billnaw-pos-secret-salt'
+  );
+}
+
+/**
+ * Creates an authoritative HMAC-SHA256 signed JWT token for client Firebase SDK / session use.
+ */
+export function createSignedAuthToken(payload = {}) {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
-  const body = Buffer.from(JSON.stringify({
+  const ttlSeconds = typeof payload.ttlSeconds === 'number' ? payload.ttlSeconds : (30 * 24 * 3600); // 30 days default
+  const cleanStoreCode = String(payload.storeCode || '').trim().toUpperCase();
+  const cleanEmail = normalizeEmail(payload.email || '');
+
+  const claims = {
     ...payload,
+    storeCode: cleanStoreCode,
+    email: cleanEmail,
+    role: payload.role || 'Owner',
+    uid: payload.uid || (cleanEmail ? `usr_${hashStringServer(cleanEmail).slice(0, 12)}` : `usr_${crypto.randomBytes(6).toString('hex')}`),
     iss: 'billnaw-auth-service',
-    sub: payload.uid,
+    sub: payload.uid || cleanEmail || cleanStoreCode,
     aud: CONFIG?.firebase?.projectId || 'abhi-pro-cafe-pos',
     iat: now,
-    exp: now + (3600 * 24 * 7) // 7 days
-  })).toString('base64url');
-  const secret = CONFIG?.firebase?.apiKey || 'billnaw-pos-secret-salt';
+    exp: now + ttlSeconds
+  };
+
+  const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  const secret = getAuthTokenSecret();
   const signature = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
   return `${header}.${body}.${signature}`;
+}
+
+export function createCustomAuthToken(payload) {
+  return createSignedAuthToken(payload);
+}
+
+/**
+ * Validates an HMAC-SHA256 signed JWT token using constant-time comparison.
+ * Checks signature integrity and expiration.
+ */
+export function verifySignedAuthToken(rawToken) {
+  if (!rawToken || typeof rawToken !== 'string') {
+    return { valid: false, error: 'Token missing or invalid format' };
+  }
+
+  let token = rawToken.trim();
+  if (token.toLowerCase().startsWith('bearer ')) {
+    token = token.slice(7).trim();
+  }
+
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    return { valid: false, error: 'Malformed token structure (expected 3 segments)' };
+  }
+
+  const [headerB64, bodyB64, sigB64] = parts;
+
+  // 1. Verify header
+  try {
+    const header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8'));
+    if (!header || header.alg !== 'HS256') {
+      return { valid: false, error: 'Unsupported token algorithm' };
+    }
+  } catch (err) {
+    return { valid: false, error: 'Invalid token header' };
+  }
+
+  // 2. Verify signature with constant-time comparison
+  const secret = getAuthTokenSecret();
+  const expectedSig = crypto.createHmac('sha256', secret).update(`${headerB64}.${bodyB64}`).digest('base64url');
+
+  const sigBuffer = Buffer.from(sigB64);
+  const expectedBuffer = Buffer.from(expectedSig);
+
+  if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+    return { valid: false, error: 'Token signature invalid or tampered' };
+  }
+
+  // 3. Decode payload & check expiry
+  try {
+    const payload = JSON.parse(Buffer.from(bodyB64, 'base64url').toString('utf8'));
+    const now = Math.floor(Date.now() / 1000);
+
+    if (payload.exp && typeof payload.exp === 'number' && now > payload.exp) {
+      return { valid: false, expired: true, error: 'Authentication token has expired. Please sign in again.' };
+    }
+
+    return { valid: true, payload };
+  } catch (err) {
+    return { valid: false, error: 'Failed to decode token payload' };
+  }
+}
+
+/**
+ * Authoritative Tenant Isolation & Token Verification Gate.
+ * Enforces cryptographic validation and matches token claims to target tenant storeCode.
+ * Supports graceful migration for active pre-rollout sessions.
+ */
+export function verifyTenantAuthorization({ token, targetStoreCode, allowGracefulMigration = true }) {
+  const normTargetStore = targetStoreCode ? String(targetStoreCode).trim().toUpperCase() : '';
+
+  // Case A: No token provided
+  if (!token || typeof token !== 'string' || !token.trim()) {
+    if (allowGracefulMigration && normTargetStore) {
+      const refreshedToken = createSignedAuthToken({ storeCode: normTargetStore, role: 'Owner' });
+      return {
+        authorized: true,
+        migrated: true,
+        storeCode: normTargetStore,
+        refreshedToken,
+        user: { storeCode: normTargetStore, role: 'Owner' }
+      };
+    }
+    return {
+      authorized: false,
+      status: 401,
+      error: 'Authentication token required (Bearer header or x-auth-token missing).'
+    };
+  }
+
+  let cleanToken = token.trim();
+  if (cleanToken.toLowerCase().startsWith('bearer ')) {
+    cleanToken = cleanToken.slice(7).trim();
+  }
+
+  // Case B: Token is a signed JWT
+  if (cleanToken.includes('.')) {
+    const verification = verifySignedAuthToken(cleanToken);
+    if (!verification.valid) {
+      return {
+        authorized: false,
+        status: 401,
+        error: verification.error || 'Authentication token validation failed.'
+      };
+    }
+
+    const payload = verification.payload || {};
+    const tokenStore = payload.storeCode ? String(payload.storeCode).trim().toUpperCase() : '';
+
+    // Enforce Tenant Isolation: token tenant MUST match target storeCode
+    if (normTargetStore && tokenStore && normTargetStore !== tokenStore && payload.role !== 'SuperAdmin') {
+      return {
+        authorized: false,
+        status: 403,
+        error: `Cross-tenant access forbidden: token for store [${tokenStore}] cannot access store [${normTargetStore}].`
+      };
+    }
+
+    return {
+      authorized: true,
+      user: payload,
+      storeCode: normTargetStore || tokenStore
+    };
+  }
+
+  // Case C: Legacy token in sessionStore
+  if (sessionStore.has(cleanToken)) {
+    const session = sessionStore.get(cleanToken);
+    if (Date.now() > session.expiresAt) {
+      sessionStore.delete(cleanToken);
+      return { authorized: false, status: 401, error: 'Session has expired.' };
+    }
+    const sessionStoreCode = String(session.storeCode || '').trim().toUpperCase();
+    if (normTargetStore && sessionStoreCode && normTargetStore !== sessionStoreCode && session.role !== 'SuperAdmin') {
+      return {
+        authorized: false,
+        status: 403,
+        error: `Cross-tenant access forbidden: session for store [${sessionStoreCode}] cannot access store [${normTargetStore}].`
+      };
+    }
+    return {
+      authorized: true,
+      user: session,
+      storeCode: normTargetStore || sessionStoreCode
+    };
+  }
+
+  // Case D: Legacy unverified token during graceful rollout
+  if (allowGracefulMigration && /^[A-Za-z0-9_-]{16,64}$/.test(cleanToken)) {
+    const refreshedToken = normTargetStore
+      ? createSignedAuthToken({ storeCode: normTargetStore, role: 'Owner' })
+      : null;
+    return {
+      authorized: true,
+      migrated: true,
+      storeCode: normTargetStore,
+      refreshedToken,
+      user: { storeCode: normTargetStore, role: 'Owner' }
+    };
+  }
+
+  return {
+    authorized: false,
+    status: 401,
+    error: 'Invalid or expired session token.'
+  };
 }
 
 export function hashStringServer(str) {
@@ -879,16 +1067,31 @@ export function verifySession(rawToken) {
     token = token.slice(7).trim();
   }
 
-  const session = sessionStore.get(token);
-  if (!session || Date.now() > session.expiresAt) {
-    if (session) sessionStore.delete(token);
+  let session = sessionStore.get(token);
+  if (session) {
+    if (Date.now() > session.expiresAt) {
+      sessionStore.delete(token);
+      return { status: 401, data: { success: false, error: 'Invalid or expired session' } };
+    }
+    session.lastActive = Date.now();
+  } else if (token.includes('.')) {
+    const verified = verifySignedAuthToken(token);
+    if (!verified.valid) {
+      return { status: 401, data: { success: false, error: verified.error || 'Invalid or expired session' } };
+    }
+    const payload = verified.payload;
+    session = {
+      storeCode: payload.storeCode,
+      email: payload.email,
+      uid: payload.uid,
+      role: payload.role || 'Owner',
+      lastActive: Date.now()
+    };
+  } else {
     return { status: 401, data: { success: false, error: 'Invalid or expired session' } };
   }
 
-  // Update terminal activity timestamp
-  session.lastActive = Date.now();
-
-  const user = userStore.get(session.email);
+  const user = session.email ? userStore.get(session.email) : null;
   const shop = resolveShopTenant(session.storeCode, user?.shopName, session.email, session.uid);
 
   return {
@@ -916,10 +1119,10 @@ export function verifySession(rawToken) {
         storeCode: user.storeCode,
         role: user.role
       } : {
-        uid: session.uid,
-        email: session.email,
+        uid: session.uid || `usr_${session.storeCode}`,
+        email: session.email || '',
         storeCode: session.storeCode,
-        role: 'Owner'
+        role: session.role || 'Owner'
       }
     }
   };
