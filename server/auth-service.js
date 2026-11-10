@@ -189,11 +189,12 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid,
 
 /**
  * Syncs shop document to Google Cloud Firestore REST API in background if online.
+ * Always persists full root document (profile, staff, tables, menu, categories) and subcollections.
  */
-async function syncShopToFirestore(storeCode, shopData, syncDetails = false) {
+async function syncShopToFirestore(storeCode, shopData) {
   try {
     if (!CONFIG?.firebase?.projectId || !CONFIG?.firebase?.firestoreDatabaseId) return;
-    const codeStr = String(storeCode || '');
+    const codeStr = String(storeCode || '').trim();
     const emailStr = String(shopData?.ownerEmail || '').toLowerCase();
     // Skip synthetic startup self-test accounts from polluting live Cloud Firestore
     if (
@@ -206,32 +207,24 @@ async function syncShopToFirestore(storeCode, shopData, syncDetails = false) {
       return;
     }
 
-    if (syncDetails) {
-      await syncStoreToFirestoreREST(codeStr, {
-        ownerEmail: shopData.ownerEmail || '',
-        profile: shopData.profile,
-        staff: shopData.staff
-      }).catch(() => null);
-      return;
+    // Ensure default tables are populated if empty
+    let tablesPayload = shopData.tables;
+    if (!tablesPayload || typeof tablesPayload !== 'object' || Object.keys(tablesPayload).length === 0) {
+      const count = shopData.profile?.tableCount || 10;
+      tablesPayload = {};
+      for (let i = 1; i <= count; i++) {
+        tablesPayload[String(i)] = { id: String(i), name: `Table ${i}`, status: 'available' };
+      }
+      shopData.tables = tablesPayload;
     }
 
-    const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
-    const firestoreFields = {
-      storeCode: { stringValue: storeCode },
-      name: { stringValue: shopData.name || 'Billnaw Cafe' },
-      ownerEmail: { stringValue: shopData.ownerEmail || '' },
-      ownerUid: { stringValue: shopData.ownerUid || '' },
-      updatedAt: { stringValue: new Date().toISOString() }
-    };
-    const maskParams = Object.keys(firestoreFields)
-      .map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`)
-      .join('&');
-    const url = `${base}/shops/${encodeURIComponent(storeCode)}?${maskParams}`;
-
-    await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: firestoreFields })
+    await syncStoreToFirestoreREST(codeStr, {
+      ownerEmail: shopData.ownerEmail || '',
+      profile: shopData.profile,
+      staff: shopData.staff,
+      tables: tablesPayload,
+      menu: shopData.menu,
+      categories: shopData.categories
     }).catch(() => null);
   } catch (err) {
     // Offline resilience: silent fallback to local repository

@@ -1129,14 +1129,30 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'Email and password required.' });
     }
     const token = 'billnaw_' + crypto.randomBytes(24).toString('hex');
-    const storeCode = 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 12);
+    let storeCode = body.storeCode || '';
+    if (!storeCode) {
+      storeCode = 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 12);
+    }
+    let existingShop = null;
+    try {
+      existingShop = await getStoreFromFirestoreREST(storeCode);
+    } catch(e) {}
+
     return jsonResponse(200, {
       success: true,
       token,
       storeCode,
       isOwner: true,
       user: { email, role: 'owner', isOwner: true },
-      shop: { name: 'My Cafe', storeCode }
+      shop: existingShop ? {
+        storeCode,
+        name: existingShop.profile?.name || existingShop.name || 'My Cafe',
+        profile: existingShop.profile,
+        staff: existingShop.staff,
+        tables: existingShop.tables,
+        menu: existingShop.menu,
+        categories: existingShop.categories
+      } : { name: 'My Cafe', storeCode }
     });
   }
 
@@ -1148,6 +1164,41 @@ export async function handler(event, context) {
     const shopName = String(body.shopName || 'My Cafe').trim();
     const storeCode = shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16);
     const token = 'billnaw_' + crypto.randomBytes(24).toString('hex');
+
+    // Automatically seed shop into Firestore with full profile, staff, tables, menu, categories & subcollections
+    try {
+      const defaultPin = '1234';
+      const pinHash = crypto.createHash('sha256').update(defaultPin).digest('hex');
+      const defaultTables = {};
+      for (let i = 1; i <= 10; i++) {
+        defaultTables[String(i)] = { id: String(i), name: `Table ${i}`, status: 'available' };
+      }
+      await syncStoreToFirestoreREST(storeCode, {
+        ownerEmail: email,
+        profile: {
+          name: shopName,
+          tableCount: 10,
+          phone: body.phone || '9876543210',
+          adminPinHash: pinHash,
+          gstMode: 'inclusive',
+          defaultGstRate: 5
+        },
+        staff: [
+          { id: 1, name: 'Store Owner', role: 'Admin', status: 'Active', phone: body.phone || '9876543210' }
+        ],
+        tables: defaultTables,
+        categories: ['All', 'Snacks', 'Beverages', 'Main Course'],
+        menu: [
+          { id: 1, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
+          { id: 2, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
+          { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5 },
+          { id: 4, name: 'Masala Coke', category: 'Beverages', price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5 }
+        ]
+      });
+    } catch (seedErr) {
+      console.warn('[NETLIFY SIGNUP] Auto-seed note:', seedErr.message);
+    }
+
     return jsonResponse(200, {
       success: true,
       token,
