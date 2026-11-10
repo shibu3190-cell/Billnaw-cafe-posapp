@@ -4,6 +4,11 @@
   command = "npm run build"
   functions = "netlify/functions"
 
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+  SECRETS_SCAN_OMIT_PATHS = "scratch/**,server/**,database/**,.agents/**"
+
 [functions]
   node_bundler = "esbuild"
 

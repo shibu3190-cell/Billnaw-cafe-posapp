@@ -64,7 +64,7 @@ const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465';
 const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || 'shibu3190@gmail.com';
-const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || 'aurgocpkzydyzoie').trim().replace(/\s+/g, '');
+const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || '').trim().replace(/\s+/g, '');
 const SMTP_FROM = process.env.SMTP_FROM || `"Billnaw POS" <${SMTP_USER}>`;
 
 // In-memory cache for fast single-container hits

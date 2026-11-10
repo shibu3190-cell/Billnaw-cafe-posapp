@@ -7,7 +7,7 @@ async function testSmtp() {
     secure: false,
     auth: {
       user: 'shibu3190@gmail.com',
-      pass: 'aurgocpkzydyzoie'
+      pass: process.env.SMTP_PASS || process.env.EMAIL_PASS || ''
     }
   });
 

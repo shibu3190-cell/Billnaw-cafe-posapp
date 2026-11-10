@@ -23,7 +23,7 @@ export const CONFIG = {
         process.env.API_KEY ||
         process.env.GOOGLE_API_KEY ||
         process.env.GOOGLE_GENAI_API_KEY ||
-        Buffer.from('QVEuQWI4Uk42TEYtZXkybEJ6eE0wRXBBS3ZrZEV3a3d1cG1aUjU3MWlSMDdhem9TS0ZyWFE=', 'base64').toString('utf8')
+        ''
       ).trim();
       return (k && k.length > 15) ? k : '';
     },
@@ -50,7 +50,7 @@ export const CONFIG = {
     get secure() { return process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465'; },
     get user() { return process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || 'shibu3190@gmail.com'; },
     get pass() { 
-      const raw = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || 'aurgocpkzydyzoie';
+      const raw = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || '';
       return raw ? raw.trim().replace(/\s+/g, '') : '';
     },
     get from() { return process.env.SMTP_FROM || process.env.EMAIL_FROM || (this.user ? `"Billnaw POS" <${this.user}>` : '"Billnaw POS" <shibu3190@gmail.com>'); },
