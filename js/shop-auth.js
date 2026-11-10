@@ -339,7 +339,7 @@
 
                         // Unconditionally update active shop profile with authenticated tenant credentials
                         if (typeof shopProfile === 'undefined') shopProfile = {};
-                        if (data.shop && data.shop.name) {
+                        if (data.shop && data.shop.name && data.shop.name !== 'billnaw' && data.shop.name !== 'My Cafe') {
                             shopProfile.name = data.shop.name;
                         }
                         if (data.storeCode) {
@@ -347,11 +347,33 @@
                             myClientID = data.storeCode;
                             window.myClientID = data.storeCode;
                         }
+                        if (data.shop && data.shop.logo && !shopProfile.logo) {
+                            shopProfile.logo = data.shop.logo;
+                        }
                         if (data.shop && data.shop.phone) {
                             shopProfile.phone = data.shop.phone;
                         }
                         if (data.shop && data.shop.address) {
                             shopProfile.address = data.shop.address;
+                        }
+                        if (data.shop && data.shop.profile && typeof data.shop.profile === 'object') {
+                            const sp = data.shop.profile;
+                            if (sp.logo && !shopProfile.logo) shopProfile.logo = sp.logo;
+                            if (sp.name && sp.name !== 'billnaw' && sp.name !== 'My Cafe' && (!shopProfile.name || shopProfile.name === 'billnaw' || shopProfile.name === 'My Cafe')) {
+                                shopProfile.name = sp.name;
+                            }
+                            if (sp.address && !shopProfile.address) shopProfile.address = sp.address;
+                            if (sp.phone && !shopProfile.phone) shopProfile.phone = sp.phone;
+                        }
+                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0) {
+                            menuItems = data.shop.menu;
+                            window.menuItems = menuItems;
+                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
+                        }
+                        if (Array.isArray(data.shop?.categories) && data.shop.categories.length > 0) {
+                            menuCategories = data.shop.categories;
+                            window.menuCategories = menuCategories;
+                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_categories', menuCategories);
                         }
                         const resolvedEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
                         if (resolvedEmail) {
@@ -360,15 +382,19 @@
                         }
                         window.shopProfile = shopProfile;
                         try {
-                            if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
+                            if (shopProfile.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') localStorage.setItem('billnaw_shop_name', shopProfile.name);
                             if (shopProfile.storeCode) localStorage.setItem('billnaw_store_code', shopProfile.storeCode);
+                            if (shopProfile.logo && shopProfile.logo.length < 2000000) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
                             if (resolvedEmail) {
                                 localStorage.setItem('billnaw_auth_email', resolvedEmail);
                                 localStorage.setItem('billnaw_owner_email', resolvedEmail);
                                 localStorage.setItem('billnaw_shop_email', resolvedEmail);
                             }
                             localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
-                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_profile', shopProfile);
+                            if (typeof idb !== 'undefined' && idb.set) {
+                                idb.set('cafe_profile', shopProfile);
+                                if (shopProfile.logo) idb.set('cafe_logo', shopProfile.logo);
+                            }
                         } catch(e) {}
                         if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
                     } catch (e) {}
@@ -491,7 +517,7 @@
 
                         // Unconditionally update active shop profile with authenticated tenant credentials
                         if (typeof shopProfile === 'undefined') shopProfile = {};
-                        if (data.shop && data.shop.name) {
+                        if (data.shop && data.shop.name && data.shop.name !== 'billnaw' && data.shop.name !== 'My Cafe') {
                             shopProfile.name = data.shop.name;
                         }
                         if (data.storeCode) {
@@ -499,11 +525,33 @@
                             myClientID = data.storeCode;
                             window.myClientID = data.storeCode;
                         }
+                        if (data.shop && data.shop.logo && !shopProfile.logo) {
+                            shopProfile.logo = data.shop.logo;
+                        }
                         if (data.shop && data.shop.phone) {
                             shopProfile.phone = data.shop.phone;
                         }
                         if (data.shop && data.shop.address) {
                             shopProfile.address = data.shop.address;
+                        }
+                        if (data.shop && data.shop.profile && typeof data.shop.profile === 'object') {
+                            const sp = data.shop.profile;
+                            if (sp.logo && !shopProfile.logo) shopProfile.logo = sp.logo;
+                            if (sp.name && sp.name !== 'billnaw' && sp.name !== 'My Cafe' && (!shopProfile.name || shopProfile.name === 'billnaw' || shopProfile.name === 'My Cafe')) {
+                                shopProfile.name = sp.name;
+                            }
+                            if (sp.address && !shopProfile.address) shopProfile.address = sp.address;
+                            if (sp.phone && !shopProfile.phone) shopProfile.phone = sp.phone;
+                        }
+                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0) {
+                            menuItems = data.shop.menu;
+                            window.menuItems = menuItems;
+                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
+                        }
+                        if (Array.isArray(data.shop?.categories) && data.shop.categories.length > 0) {
+                            menuCategories = data.shop.categories;
+                            window.menuCategories = menuCategories;
+                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_categories', menuCategories);
                         }
                         const resolvedEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
                         if (resolvedEmail) {
@@ -512,15 +560,19 @@
                         }
                         window.shopProfile = shopProfile;
                         try {
-                            if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
+                            if (shopProfile.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') localStorage.setItem('billnaw_shop_name', shopProfile.name);
                             if (shopProfile.storeCode) localStorage.setItem('billnaw_store_code', shopProfile.storeCode);
+                            if (shopProfile.logo && shopProfile.logo.length < 2000000) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
                             if (resolvedEmail) {
                                 localStorage.setItem('billnaw_auth_email', resolvedEmail);
                                 localStorage.setItem('billnaw_owner_email', resolvedEmail);
                                 localStorage.setItem('billnaw_shop_email', resolvedEmail);
                             }
                             localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
-                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_profile', shopProfile);
+                            if (typeof idb !== 'undefined' && idb.set) {
+                                idb.set('cafe_profile', shopProfile);
+                                if (shopProfile.logo) idb.set('cafe_logo', shopProfile.logo);
+                            }
                         } catch(e) {}
                         if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
                     } catch (e) {}

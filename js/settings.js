@@ -3,7 +3,63 @@
 // ============================================================
 
 function updateProfileVisuals() {
-    const currentName = shopProfile.name || "billnaw";
+    let currentName = (shopProfile && shopProfile.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') 
+        ? shopProfile.name 
+        : null;
+
+    if (!currentName) {
+        try {
+            const sessRaw = localStorage.getItem('billnaw_shop_session');
+            if (sessRaw) {
+                const s = JSON.parse(sessRaw);
+                if (s?.shop?.name && s.shop.name !== 'billnaw' && s.shop.name !== 'My Cafe') {
+                    currentName = s.shop.name;
+                    if (shopProfile) shopProfile.name = currentName;
+                } else if (s?.shop?.profile?.name && s.shop.profile.name !== 'billnaw' && s.shop.profile.name !== 'My Cafe') {
+                    currentName = s.shop.profile.name;
+                    if (shopProfile) shopProfile.name = currentName;
+                }
+            }
+        } catch(e) {}
+    }
+    if (!currentName) {
+        const saved = localStorage.getItem('billnaw_shop_name');
+        if (saved && saved !== 'billnaw' && saved !== 'My Cafe') {
+            currentName = saved;
+            if (shopProfile) shopProfile.name = currentName;
+        }
+    }
+    if (!currentName) {
+        try {
+            const profRaw = localStorage.getItem('billnaw_store_profile');
+            if (profRaw) {
+                const p = JSON.parse(profRaw);
+                if (p?.name && p.name !== 'billnaw' && p.name !== 'My Cafe') {
+                    currentName = p.name;
+                    if (shopProfile) shopProfile.name = currentName;
+                }
+            }
+        } catch(e) {}
+    }
+    if (!currentName) {
+        currentName = (shopProfile && shopProfile.name) || "billnaw";
+    }
+
+    if (!shopProfile.logo) {
+        try {
+            const savedLogo = localStorage.getItem('billnaw_shop_logo');
+            if (savedLogo) shopProfile.logo = savedLogo;
+            else {
+                const sessRaw = localStorage.getItem('billnaw_shop_session');
+                if (sessRaw) {
+                    const s = JSON.parse(sessRaw);
+                    if (s?.shop?.logo) shopProfile.logo = s.shop.logo;
+                    else if (s?.shop?.profile?.logo) shopProfile.logo = s.shop.profile.logo;
+                }
+            }
+        } catch(e) {}
+    }
+
     const isGstActive = shopProfile.gstMode !== 'none';
     const docTitle = isGstActive ? 'TAX INVOICE' : 'RETAIL INVOICE';
     

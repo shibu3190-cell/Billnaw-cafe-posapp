@@ -93,10 +93,33 @@ function updateCloudStoreTopbar(ownerEmailOrShopName = null, isOnline = null, mo
         const activeStoreCode = localStorage.getItem('billnaw_store_code');
 
         if (topbarShopName) {
-            if (typeof shopProfile !== 'undefined' && shopProfile.name && shopProfile.name !== 'billnaw') {
-                topbarShopName.innerText = shopProfile.name;
-            } else if (ownerEmailOrShopName && !ownerEmailOrShopName.includes('@')) {
-                topbarShopName.innerText = ownerEmailOrShopName;
+            let nameToDisplay = null;
+            if (typeof shopProfile !== 'undefined' && shopProfile.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') {
+                nameToDisplay = shopProfile.name;
+            } else {
+                try {
+                    const sessRaw = localStorage.getItem('billnaw_shop_session');
+                    if (sessRaw) {
+                        const s = JSON.parse(sessRaw);
+                        if (s?.shop?.name && s.shop.name !== 'billnaw' && s.shop.name !== 'My Cafe') {
+                            nameToDisplay = s.shop.name;
+                        } else if (s?.shop?.profile?.name && s.shop.profile.name !== 'billnaw' && s.shop.profile.name !== 'My Cafe') {
+                            nameToDisplay = s.shop.profile.name;
+                        }
+                    }
+                } catch(e) {}
+                if (!nameToDisplay) {
+                    const sName = localStorage.getItem('billnaw_shop_name');
+                    if (sName && sName !== 'billnaw' && sName !== 'My Cafe') {
+                        nameToDisplay = sName;
+                    }
+                }
+            }
+            if (!nameToDisplay && ownerEmailOrShopName && !ownerEmailOrShopName.includes('@') && ownerEmailOrShopName !== 'My Cafe' && ownerEmailOrShopName !== 'billnaw') {
+                nameToDisplay = ownerEmailOrShopName;
+            }
+            if (nameToDisplay) {
+                topbarShopName.innerText = nameToDisplay;
             }
         }
 
@@ -140,8 +163,29 @@ function restoreShopSession() {
                     localStorage.setItem('billnaw_store_code', session.storeCode);
                     if (typeof myClientID !== 'undefined') myClientID = session.storeCode;
                 }
-                if (session.shop && session.shop.name && typeof shopProfile !== 'undefined') {
-                    shopProfile.name = session.shop.name;
+                if (typeof shopProfile !== 'undefined') {
+                    if (session.shop && session.shop.name && session.shop.name !== 'billnaw' && session.shop.name !== 'My Cafe') {
+                        shopProfile.name = session.shop.name;
+                    }
+                    if (session.shop && session.shop.logo && !shopProfile.logo) {
+                        shopProfile.logo = session.shop.logo;
+                    }
+                    if (session.shop && session.shop.address && !shopProfile.address) {
+                        shopProfile.address = session.shop.address;
+                    }
+                    if (session.shop && session.shop.phone && !shopProfile.phone) {
+                        shopProfile.phone = session.shop.phone;
+                    }
+                    if (session.shop && session.shop.profile && typeof session.shop.profile === 'object') {
+                        const sp = session.shop.profile;
+                        if (!shopProfile.logo && sp.logo) shopProfile.logo = sp.logo;
+                        if ((!shopProfile.name || shopProfile.name === 'billnaw' || shopProfile.name === 'My Cafe') && sp.name && sp.name !== 'billnaw' && sp.name !== 'My Cafe') {
+                            shopProfile.name = sp.name;
+                        }
+                    }
+                    if (typeof updateProfileVisuals === 'function') {
+                        updateProfileVisuals();
+                    }
                 }
                 // Re-authenticate Firebase Custom Token if window.auth is ready and token is signed by Google Service Account (RS256)
                 if (session.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {

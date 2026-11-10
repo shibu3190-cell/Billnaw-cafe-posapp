@@ -155,6 +155,65 @@ let shopProfile = {
 };
 window.shopProfile = shopProfile;
 
+// Immediate synchronous profile & tenant hydration from localStorage to prevent refresh flicker
+try {
+    const rawLocalProfile = localStorage.getItem('billnaw_store_profile');
+    if (rawLocalProfile) {
+        const parsed = JSON.parse(rawLocalProfile);
+        if (parsed && typeof parsed === 'object') {
+            shopProfile = { ...shopProfile, ...parsed };
+        }
+    }
+    const sessionRaw = localStorage.getItem('billnaw_shop_session');
+    if (sessionRaw) {
+        const session = JSON.parse(sessionRaw);
+        if (session && session.shop) {
+            if (session.shop.name && session.shop.name !== 'billnaw' && session.shop.name !== 'My Cafe') {
+                shopProfile.name = session.shop.name;
+            }
+            if (session.shop.profile && typeof session.shop.profile === 'object') {
+                const sp = session.shop.profile;
+                if (sp.name && sp.name !== 'billnaw' && sp.name !== 'My Cafe') shopProfile.name = sp.name;
+                if (sp.logo && !shopProfile.logo) shopProfile.logo = sp.logo;
+                if (sp.address && !shopProfile.address) shopProfile.address = sp.address;
+                if (sp.phone && !shopProfile.phone) shopProfile.phone = sp.phone;
+            }
+            if (session.shop.logo && !shopProfile.logo) {
+                shopProfile.logo = session.shop.logo;
+            }
+            if (session.shop.address && !shopProfile.address) {
+                shopProfile.address = session.shop.address;
+            }
+            if (session.shop.phone && !shopProfile.phone) {
+                shopProfile.phone = session.shop.phone;
+            }
+        }
+        if (session && session.storeCode) {
+            shopProfile.storeCode = session.storeCode;
+            myClientID = session.storeCode;
+            window.myClientID = myClientID;
+        }
+    }
+    const savedName = localStorage.getItem('billnaw_shop_name');
+    if (savedName && savedName !== 'billnaw' && savedName !== 'My Cafe') {
+        shopProfile.name = savedName;
+    }
+    const savedLogo = localStorage.getItem('billnaw_shop_logo');
+    if (savedLogo && !shopProfile.logo) {
+        shopProfile.logo = savedLogo;
+    }
+    const savedPhone = localStorage.getItem('billnaw_shop_phone') || localStorage.getItem('billnaw_auth_phone');
+    if (savedPhone && !shopProfile.phone) {
+        shopProfile.phone = savedPhone;
+        shopProfile.ownerPhone = savedPhone;
+    }
+    const savedAddr = localStorage.getItem('billnaw_shop_address');
+    if (savedAddr && !shopProfile.address) {
+        shopProfile.address = savedAddr;
+    }
+    window.shopProfile = shopProfile;
+} catch(e) {}
+
 function getTableName(tableId) {
     if (!tableId && tableId !== 0) return 'Table 1';
     const id = parseInt(tableId, 10) || tableId;
@@ -975,14 +1034,49 @@ const defaultMenu = [
 ];
 window.defaultMenu = defaultMenu;
 
-// Immediate baseline seeding if empty
-if (!menuItems || menuItems.length === 0) {
-    menuItems = [...defaultMenu];
-    window.menuItems = menuItems;
+function isDefaultTemplateMenu(items) {
+    if (!Array.isArray(items) || items.length === 0 || items.length > 4) return false;
+    const defaultNames = new Set(['samosa', 'tea', 'chicken curry', 'masala coke']);
+    return items.every(m => m && m.name && defaultNames.has(String(m.name).trim().toLowerCase()));
 }
-if (!menuCategories || menuCategories.includes("Tea/Coffee") || menuCategories.includes("Food")) {
-    menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
-    window.menuCategories = menuCategories;
+window.isDefaultTemplateMenu = isDefaultTemplateMenu;
+
+// Baseline seeding: strictly restricted to unauthenticated demo sessions
+const isAuthStoreSession = (function() {
+    try {
+        return Boolean(
+            localStorage.getItem('billnaw_auth_token') ||
+            localStorage.getItem('billnaw_shop_session') ||
+            localStorage.getItem('billnaw_auth_mode') === 'authenticated'
+        );
+    } catch(e) { return false; }
+})();
+
+if (!isAuthStoreSession) {
+    if (!menuItems || menuItems.length === 0) {
+        menuItems = [...defaultMenu];
+        window.menuItems = menuItems;
+    }
+    if (!menuCategories || menuCategories.length === 0) {
+        menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
+        window.menuCategories = menuCategories;
+    }
+} else {
+    // Authenticated store: preserve empty menu or rehydrate from saved session snapshot
+    try {
+        const sessRaw = localStorage.getItem('billnaw_shop_session');
+        if (sessRaw) {
+            const sess = JSON.parse(sessRaw);
+            if (Array.isArray(sess?.shop?.menu) && sess.shop.menu.length > 0 && (!menuItems || menuItems.length === 0 || isDefaultTemplateMenu(menuItems))) {
+                menuItems = sess.shop.menu;
+                window.menuItems = menuItems;
+            }
+            if (Array.isArray(sess?.shop?.categories) && sess.shop.categories.length > 0 && (!menuCategories || menuCategories.length === 0)) {
+                menuCategories = sess.shop.categories;
+                window.menuCategories = menuCategories;
+            }
+        }
+    } catch(e) {}
 }
 
 async function compressImageFile(file, maxWidth = 360, maxHeight = 360, quality = 0.75) {
@@ -1635,6 +1729,9 @@ function handleRemoteFirestoreUpdate(data) {
     if (data.profile) {
         const existingPinHash = shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash');
         const existingLogo = shopProfile?.logo || localStorage.getItem('billnaw_shop_logo');
+        const existingName = (shopProfile?.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') 
+            ? shopProfile.name 
+            : (localStorage.getItem('billnaw_shop_name') && localStorage.getItem('billnaw_shop_name') !== 'billnaw' && localStorage.getItem('billnaw_shop_name') !== 'My Cafe' ? localStorage.getItem('billnaw_shop_name') : null);
         const existingTableCount = shopProfile?.tableCount || 0;
         const existingTablesLen = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
         const maxTables = Math.max(existingTableCount, existingTablesLen, data.profile.tableCount || 0);
@@ -1644,6 +1741,9 @@ function handleRemoteFirestoreUpdate(data) {
             shopProfile.tableCount = maxTables;
         }
         if (!shopProfile.logo && existingLogo) shopProfile.logo = existingLogo;
+        if (existingName && (!data.profile.name || data.profile.name === 'My Cafe' || data.profile.name === 'billnaw')) {
+            shopProfile.name = existingName;
+        }
         if (!shopProfile.adminPinHash && existingPinHash) {
             shopProfile.adminPinHash = existingPinHash;
         } else if (!shopProfile.adminPinHash) {
@@ -1711,14 +1811,20 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
     }
     if (Array.isArray(data.menu) && data.menu.length > 0) {
-        if (Array.isArray(menuItems) && menuItems.length > data.menu.length) {
-            // Local store has more items (e.g. 200 items vs 25 items from older cloud snapshot)
-            // Union merge by item name (case-insensitive) to prevent cloud downgrade
+        if (typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(menuItems)) {
+            // Local store only held the default 4-item baseline: replace cleanly with authentic cloud catalog
+            menuItems = data.menu;
+        } else if (Array.isArray(menuItems) && menuItems.length > data.menu.length) {
+            // Local store has more items: union merge by item name, excluding template defaults
+            const defaultNames = new Set(['samosa', 'tea', 'chicken curry', 'masala coke']);
             const menuMap = new Map();
             data.menu.forEach(m => { if (m && m.name) menuMap.set(m.name.trim().toLowerCase(), m); });
             menuItems.forEach(m => {
-                if (m && m.name && !menuMap.has(m.name.trim().toLowerCase())) {
-                    menuMap.set(m.name.trim().toLowerCase(), m);
+                if (m && m.name) {
+                    const key = m.name.trim().toLowerCase();
+                    if (!menuMap.has(key) && !defaultNames.has(key)) {
+                        menuMap.set(key, m);
+                    }
                 }
             });
             menuItems = Array.from(menuMap.values());
@@ -1732,15 +1838,20 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_menu', menuItems);
         }
-    } else if (!Array.isArray(menuItems) || menuItems.length === 0) {
-        const cleanDefaultMenu = [
-            { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
-            { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
-            { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
-            { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
-        ];
-        menuItems = cleanDefaultMenu;
-        window.menuItems = menuItems;
+    } else {
+        const isAuthMode = (typeof isStoreAuthenticated === 'function')
+            ? isStoreAuthenticated()
+            : Boolean(localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_shop_session') || localStorage.getItem('billnaw_auth_mode') === 'authenticated');
+        if (!isAuthMode && (!Array.isArray(menuItems) || menuItems.length === 0)) {
+            const cleanDefaultMenu = [
+                { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
+                { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
+                { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
+                { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
+            ];
+            menuItems = cleanDefaultMenu;
+            window.menuItems = menuItems;
+        }
     }
     if (Array.isArray(data.categories) && data.categories.length > 0) {
         menuCategories = data.categories;
@@ -1877,7 +1988,19 @@ window.handleRemoteFirestoreUpdate = handleRemoteFirestoreUpdate;
 
 // Firestore Store Resolution & Sync Integration (Dual-path: /shops/{storeCode} and /cafes/{cafeId} with /clients/{clientId} fallback)
 function getActiveStoreIdentifier() {
-    const raw = localStorage.getItem('billnaw_store_code') || 
+    let sessionStoreCode = null;
+    try {
+        const sessRaw = localStorage.getItem('billnaw_shop_session');
+        if (sessRaw) {
+            const sess = JSON.parse(sessRaw);
+            if (sess && sess.storeCode && typeof sess.storeCode === 'string' && sess.storeCode.trim().length >= 3) {
+                sessionStoreCode = sess.storeCode.trim();
+            }
+        }
+    } catch(e) {}
+
+    const raw = sessionStoreCode ||
+                localStorage.getItem('billnaw_store_code') || 
                 localStorage.getItem('billnaw_shop_code') ||
                 localStorage.getItem('bongbhoj_client_id') ||
                 localStorage.getItem('cafeLicenseKey') || 
@@ -1889,9 +2012,9 @@ function getActiveStoreIdentifier() {
     // Intelligent Legacy & Named Store Fallback:
     // If no explicit storeCode was stored yet, resolve from shopProfile.name or local shop name (e.g. "AMBER & OAK" -> "AMBER___OAK")
     if (!code) {
-        const nameRaw = (typeof shopProfile !== 'undefined' && shopProfile?.name) ||
+        const nameRaw = (typeof shopProfile !== 'undefined' && shopProfile?.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') ? shopProfile.name :
                         (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_shop_name') : null);
-        if (nameRaw && typeof nameRaw === 'string' && nameRaw.trim().length >= 2) {
+        if (nameRaw && typeof nameRaw === 'string' && nameRaw.trim().length >= 2 && nameRaw.trim() !== 'billnaw' && nameRaw.trim() !== 'My Cafe') {
             const derived = nameRaw.trim().replace(/[^A-Za-z0-9_-]/g, '_').toUpperCase();
             if (derived && derived.length >= 3) {
                 code = derived;
@@ -2644,6 +2767,11 @@ async function reconcileExistingShopCloudSync() {
     const sList = (typeof staffList !== 'undefined' && Array.isArray(staffList)) ? staffList : [];
     const tInfo = (typeof tablesInfo !== 'undefined' && tablesInfo && typeof tablesInfo === 'object') ? tablesInfo : {};
     const hasData = sList.length > 0 || Object.keys(tInfo).length > 0;
+    const isAuth = (typeof isStoreAuthenticated === 'function') 
+        ? isStoreAuthenticated() 
+        : Boolean(localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_shop_session') || localStorage.getItem('billnaw_auth_mode') === 'authenticated');
+    const isTemplateMenu = typeof isDefaultTemplateMenu === 'function' ? isDefaultTemplateMenu(menuItems) : false;
+    const safeMenuToSend = (Array.isArray(menuItems) && menuItems.length > 0 && (!isAuth || !isTemplateMenu)) ? menuItems : undefined;
 
     if (hasData && typeof dispatchBackendStoreSync === 'function') {
         console.log(`[EXISTING SHOP SYNC] Reconciling shop data for ${storeCode}: ${sList.length} staff, ${Object.keys(tInfo).length} tables`);
@@ -2652,7 +2780,7 @@ async function reconcileExistingShopCloudSync() {
             profile: (typeof shopProfile !== 'undefined' && shopProfile) ? shopProfile : undefined,
             staff: sList.length > 0 ? sList : undefined,
             tables: Object.keys(tInfo).length > 0 ? tInfo : undefined,
-            menu: (typeof menuItems !== 'undefined' && Array.isArray(menuItems) && menuItems.length > 0) ? menuItems : undefined,
+            menu: safeMenuToSend,
             categories: (typeof menuCategories !== 'undefined' && Array.isArray(menuCategories) && menuCategories.length > 0) ? menuCategories : undefined
         }, true);
     }
@@ -2779,8 +2907,26 @@ async function ensureShopProfileHydrated() {
         const sessionRaw = localStorage.getItem('billnaw_shop_session');
         if (sessionRaw) {
             const session = JSON.parse(sessionRaw);
-            if (session && session.shop && session.shop.name) {
-                shopProfile.name = session.shop.name;
+            if (session && session.shop) {
+                if (session.shop.name && session.shop.name !== 'billnaw' && session.shop.name !== 'My Cafe') {
+                    shopProfile.name = session.shop.name;
+                }
+                if (session.shop.logo && !shopProfile.logo) {
+                    shopProfile.logo = session.shop.logo;
+                }
+                if (session.shop.address && !shopProfile.address) {
+                    shopProfile.address = session.shop.address;
+                }
+                if (session.shop.phone && !shopProfile.phone) {
+                    shopProfile.phone = session.shop.phone;
+                }
+                if (session.shop.profile && typeof session.shop.profile === 'object') {
+                    const sp = session.shop.profile;
+                    if (sp.name && sp.name !== 'billnaw' && sp.name !== 'My Cafe') shopProfile.name = sp.name;
+                    if (sp.logo && !shopProfile.logo) shopProfile.logo = sp.logo;
+                    if (sp.address && !shopProfile.address) shopProfile.address = sp.address;
+                    if (sp.phone && !shopProfile.phone) shopProfile.phone = sp.phone;
+                }
             }
             if (session && session.storeCode) {
                 shopProfile.storeCode = session.storeCode;
@@ -2793,7 +2939,7 @@ async function ensureShopProfileHydrated() {
         if (lsRaw) {
             const parsed = JSON.parse(lsRaw);
             if (parsed && typeof parsed === 'object') {
-                if ((!shopProfile.name || shopProfile.name === 'billnaw') && parsed.name && parsed.name !== 'billnaw') shopProfile.name = parsed.name;
+                if ((!shopProfile.name || shopProfile.name === 'billnaw' || shopProfile.name === 'My Cafe') && parsed.name && parsed.name !== 'billnaw' && parsed.name !== 'My Cafe') shopProfile.name = parsed.name;
                 if (!shopProfile.address && parsed.address) shopProfile.address = parsed.address;
                 if (!shopProfile.phone && parsed.phone) shopProfile.phone = parsed.phone;
                 if (!shopProfile.fssai && parsed.fssai) shopProfile.fssai = parsed.fssai;
@@ -2813,7 +2959,7 @@ async function ensureShopProfileHydrated() {
     // 2. Recover from discrete localStorage keys
     try {
         const dName = localStorage.getItem('billnaw_shop_name');
-        if ((!shopProfile.name || shopProfile.name === 'billnaw') && dName && dName !== 'billnaw') shopProfile.name = dName;
+        if ((!shopProfile.name || shopProfile.name === 'billnaw' || shopProfile.name === 'My Cafe') && dName && dName !== 'billnaw' && dName !== 'My Cafe') shopProfile.name = dName;
         const dAddr = localStorage.getItem('billnaw_shop_address');
         if (!shopProfile.address && dAddr) shopProfile.address = dAddr;
         const dPhone = localStorage.getItem('billnaw_shop_phone');
@@ -2845,7 +2991,7 @@ async function ensureShopProfileHydrated() {
             }
             const idbProf = await idb.get('cafe_profile');
             if (idbProf && typeof idbProf === 'object') {
-                if ((!shopProfile.name || shopProfile.name === 'billnaw') && idbProf.name && idbProf.name !== 'billnaw') shopProfile.name = idbProf.name;
+                if ((!shopProfile.name || shopProfile.name === 'billnaw' || shopProfile.name === 'My Cafe') && idbProf.name && idbProf.name !== 'billnaw' && idbProf.name !== 'My Cafe') shopProfile.name = idbProf.name;
                 if (!shopProfile.address && idbProf.address) shopProfile.address = idbProf.address;
                 if (!shopProfile.phone && idbProf.phone) shopProfile.phone = idbProf.phone;
                 if (!shopProfile.fssai && idbProf.fssai) shopProfile.fssai = idbProf.fssai;
@@ -2898,6 +3044,23 @@ function persistProfile() {
     try {
         if (shopProfile.logo && shopProfile.logo.length < 2000000) {
             localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
+        }
+    } catch(e) {}
+
+    // Keep active authenticated shop session in sync with fresh profile changes
+    try {
+        const sessRaw = localStorage.getItem('billnaw_shop_session');
+        if (sessRaw) {
+            const sess = JSON.parse(sessRaw);
+            if (sess && typeof sess === 'object') {
+                if (!sess.shop) sess.shop = {};
+                if (shopProfile.name) sess.shop.name = shopProfile.name;
+                if (shopProfile.logo) sess.shop.logo = shopProfile.logo;
+                if (shopProfile.address) sess.shop.address = shopProfile.address;
+                if (shopProfile.phone) sess.shop.phone = shopProfile.phone;
+                sess.shop.profile = { ...(sess.shop.profile || {}), ...shopProfile };
+                localStorage.setItem('billnaw_shop_session', JSON.stringify(sess));
+            }
         }
     } catch(e) {}
 
@@ -4020,12 +4183,51 @@ window.updateAllUI = updateAllUI;
 async function initDatabase() {
     await idb.init();
 
+    // 0. Supreme Authority: Authenticated Cloud Shop Session
+    try {
+        const authMode = localStorage.getItem('billnaw_auth_mode');
+        const sessionRaw = localStorage.getItem('billnaw_shop_session');
+        if (sessionRaw) {
+            const session = JSON.parse(sessionRaw);
+            if (session && session.shop) {
+                if (session.shop.name && session.shop.name !== 'billnaw' && session.shop.name !== 'My Cafe') {
+                    shopProfile.name = session.shop.name;
+                }
+                if (session.shop.profile && typeof session.shop.profile === 'object') {
+                    const sp = session.shop.profile;
+                    if (sp.name && sp.name !== 'billnaw' && sp.name !== 'My Cafe') shopProfile.name = sp.name;
+                    if (sp.logo && !shopProfile.logo) shopProfile.logo = sp.logo;
+                    if (sp.address && !shopProfile.address) shopProfile.address = sp.address;
+                    if (sp.phone && !shopProfile.phone) shopProfile.phone = sp.phone;
+                }
+                if (session.shop.logo && !shopProfile.logo) {
+                    shopProfile.logo = session.shop.logo;
+                }
+                if (session.shop.address && !shopProfile.address) {
+                    shopProfile.address = session.shop.address;
+                }
+                if (session.shop.phone && !shopProfile.phone) {
+                    shopProfile.phone = session.shop.phone;
+                }
+            }
+            if (session && session.storeCode) {
+                shopProfile.storeCode = session.storeCode;
+                myClientID = session.storeCode;
+                window.myClientID = myClientID;
+                try { localStorage.setItem('billnaw_store_code', session.storeCode); } catch(e) {}
+            }
+        }
+    } catch(e) {}
+
     // 1. Recover from LocalStorage Redundant Snapshot (survives IDB reset/cache clear)
     try {
         const rawLocalProfile = localStorage.getItem('billnaw_store_profile');
         if (rawLocalProfile) {
             const parsed = JSON.parse(rawLocalProfile);
             if (parsed && typeof parsed === 'object') {
+                if (parsed.name && parsed.name !== 'billnaw' && parsed.name !== 'My Cafe') {
+                    shopProfile.name = parsed.name;
+                }
                 shopProfile = { ...shopProfile, ...parsed };
             }
         }
@@ -4034,7 +4236,7 @@ async function initDatabase() {
     // 2. Recover from Discrete Backup Keys (survives partial storage eviction)
     try {
         const savedName = localStorage.getItem('billnaw_shop_name');
-        if (savedName && (!shopProfile.name || shopProfile.name === 'billnaw')) shopProfile.name = savedName;
+        if (savedName && savedName !== 'billnaw' && savedName !== 'My Cafe') shopProfile.name = savedName;
         const savedPhone = localStorage.getItem('billnaw_shop_phone') || localStorage.getItem('billnaw_auth_phone');
         if (savedPhone) { shopProfile.phone = savedPhone; shopProfile.ownerPhone = savedPhone; }
         const savedAddr = localStorage.getItem('billnaw_shop_address');
@@ -4060,8 +4262,10 @@ async function initDatabase() {
     // 3. Load from IndexedDB
     const storedProfile = await idb.get('cafe_profile');
     if (storedProfile && typeof storedProfile === 'object') {
-        if (storedProfile.name === 'The Bong Bhoj Terminal' || storedProfile.name === 'The Bong Bhoj' || storedProfile.name === 'Billnaw Cafe' || !storedProfile.name) {
-            storedProfile.name = 'billnaw';
+        const pName = storedProfile.name;
+        const isLegacyOrPlaceholder = !pName || pName === 'The Bong Bhoj Terminal' || pName === 'The Bong Bhoj' || pName === 'Billnaw Cafe' || pName === 'My Cafe' || pName === 'billnaw';
+        if (isLegacyOrPlaceholder) {
+            delete storedProfile.name;
         }
         shopProfile = { ...shopProfile, ...storedProfile };
     }
@@ -4084,16 +4288,28 @@ async function initDatabase() {
     try {
         idb.set('cafe_profile', shopProfile);
         localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
+        if (shopProfile.logo) {
+            idb.set('cafe_logo', shopProfile.logo);
+            if (shopProfile.logo.length < 2000000) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
+        }
+        if (shopProfile.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') {
+            localStorage.setItem('billnaw_shop_name', shopProfile.name);
+        }
     } catch(e) {}
-    // Multi-Account Device Isolation: Clear device cache when a different email logs in
+
+    // Multi-Account Device Isolation: Clear device cache ONLY when an authentic different account logs in
     try {
-        const currentEmail = localStorage.getItem('billnaw_auth_email') || '';
-        const lastDeviceEmail = localStorage.getItem('billnaw_last_device_email') || '';
-        const currentStoreCode = localStorage.getItem('billnaw_store_code') || '';
-        const lastStoreCode = localStorage.getItem('billnaw_last_store_code') || '';
-        if ((lastDeviceEmail && currentEmail && lastDeviceEmail.toLowerCase().trim() !== currentEmail.toLowerCase().trim()) ||
-            (lastStoreCode && currentStoreCode && lastStoreCode !== currentStoreCode)) {
-            console.log(`[AUTH ISOLATION] Account switch detected (${lastDeviceEmail}/${lastStoreCode} -> ${currentEmail}/${currentStoreCode}). Wiping device local storage.`);
+        let currentEmail = (localStorage.getItem('billnaw_auth_email') || '').toLowerCase().trim();
+        let lastDeviceEmail = (localStorage.getItem('billnaw_last_device_email') || '').toLowerCase().trim();
+        let currentStoreCode = (localStorage.getItem('billnaw_store_code') || (shopProfile && shopProfile.storeCode) || '').toUpperCase().trim();
+        let lastStoreCode = (localStorage.getItem('billnaw_last_store_code') || '').toUpperCase().trim();
+        
+        const isPlaceholder = (c) => !c || c === 'BILLNAW' || c === 'DEFAULT_SHOP' || c === 'CAFE';
+        const isGenuineEmailSwitch = Boolean(lastDeviceEmail && currentEmail && lastDeviceEmail !== currentEmail);
+        const isGenuineStoreSwitch = Boolean(!isPlaceholder(lastStoreCode) && !isPlaceholder(currentStoreCode) && lastStoreCode !== currentStoreCode);
+
+        if (isGenuineEmailSwitch || isGenuineStoreSwitch) {
+            console.log(`[AUTH ISOLATION] Account switch detected (${lastDeviceEmail}/${lastStoreCode} -> ${currentEmail}/${currentStoreCode}). Wiping previous tenant cache.`);
             if (typeof idb !== 'undefined' && idb.clear) {
                 await idb.clear('cafe_menu');
                 await idb.clear('cafe_history');
@@ -4103,6 +4319,7 @@ async function initDatabase() {
                 await idb.clear('cafe_staff');
                 await idb.clear('cafe_categories');
                 await idb.clear('cafe_profile');
+                await idb.clear('cafe_logo');
             }
             localStorage.removeItem('billnaw_shop_name');
             localStorage.removeItem('billnaw_store_profile');
@@ -4114,32 +4331,14 @@ async function initDatabase() {
             shopProfile = { name: '', storeCode: currentStoreCode };
         }
         if (currentEmail) {
-            localStorage.setItem('billnaw_last_device_email', currentEmail.toLowerCase().trim());
+            localStorage.setItem('billnaw_last_device_email', currentEmail);
         }
-        if (currentStoreCode) {
+        if (currentStoreCode && !isPlaceholder(currentStoreCode)) {
             localStorage.setItem('billnaw_last_store_code', currentStoreCode);
         }
     } catch(err) {
         console.warn('Device isolation error:', err);
     }
-
-    // Restore authenticated store profile if saved in session
-    try {
-        const authMode = localStorage.getItem('billnaw_auth_mode');
-        const sessionRaw = localStorage.getItem('billnaw_shop_session');
-        if (authMode === 'authenticated' && sessionRaw) {
-            const session = JSON.parse(sessionRaw);
-            if (session && session.shop && session.shop.name) {
-                shopProfile.name = session.shop.name;
-                window.shopProfile = shopProfile;
-            }
-            if (session && session.storeCode) {
-                shopProfile.storeCode = session.storeCode;
-                myClientID = session.storeCode;
-                window.myClientID = myClientID;
-            }
-        }
-    } catch(e) {}
 
     // 4. Proactive Cloud Rehydration: Reconcile latest store identity from Firestore
     try {
@@ -4150,13 +4349,25 @@ async function initDatabase() {
                     if (snap && snap.exists && snap.exists()) {
                         const rData = snap.data();
                         if (rData && rData.profile) {
+                            const existingPinHash = shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash');
+                            const existingLogo = shopProfile?.logo || localStorage.getItem('billnaw_shop_logo');
+                            const existingName = (shopProfile?.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') 
+                                ? shopProfile.name 
+                                : (localStorage.getItem('billnaw_shop_name') && localStorage.getItem('billnaw_shop_name') !== 'billnaw' && localStorage.getItem('billnaw_shop_name') !== 'My Cafe' ? localStorage.getItem('billnaw_shop_name') : null);
                             const existingTableCount = shopProfile?.tableCount || 0;
                             const existingTablesLen = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
                             const maxTables = Math.max(existingTableCount, existingTablesLen, rData.profile.tableCount || 0);
+
                             shopProfile = { ...shopProfile, ...rData.profile };
                             if (maxTables > (shopProfile.tableCount || 0)) {
                                 shopProfile.tableCount = maxTables;
                             }
+                            if (!shopProfile.logo && existingLogo) shopProfile.logo = existingLogo;
+                            if (existingName && (!rData.profile.name || rData.profile.name === 'My Cafe' || rData.profile.name === 'billnaw')) {
+                                shopProfile.name = existingName;
+                            }
+                            if (!shopProfile.adminPinHash && existingPinHash) shopProfile.adminPinHash = existingPinHash;
+
                             window.shopProfile = shopProfile;
                             idb.set('cafe_profile', shopProfile);
                             if (shopProfile.logo) {
@@ -4180,25 +4391,63 @@ async function initDatabase() {
             }
         }
     } catch(e) {}
+
     const storedMenu = await idb.get('cafe_menu');
-    const defaultMenu = [
-        { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
-        { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
-        { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
-        { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
-    ];
+    const isAuth = (typeof isStoreAuthenticated === 'function') 
+        ? isStoreAuthenticated() 
+        : Boolean(localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_shop_session') || localStorage.getItem('billnaw_auth_mode') === 'authenticated');
+
     if (storedMenu && Array.isArray(storedMenu) && storedMenu.length > 0) {
         menuItems = storedMenu;
         window.menuItems = menuItems;
+    } else if (isAuth) {
+        // Authenticated shop: check if menu was saved in shop session before defaulting
+        let sessionMenu = null;
+        try {
+            const raw = localStorage.getItem('billnaw_shop_session');
+            if (raw) {
+                const s = JSON.parse(raw);
+                if (Array.isArray(s?.shop?.menu) && s.shop.menu.length > 0) sessionMenu = s.shop.menu;
+            }
+        } catch(e) {}
+        if (sessionMenu) {
+            menuItems = sessionMenu;
+            window.menuItems = menuItems;
+            await idb.set('cafe_menu', menuItems);
+        } else {
+            // Keep existing menu if non-empty, else empty array while cloud sync hydrates. NEVER inject default template!
+            if (!Array.isArray(menuItems) || isDefaultTemplateMenu(menuItems)) {
+                menuItems = [];
+                window.menuItems = menuItems;
+            }
+        }
     } else {
         menuItems = defaultMenu;
         window.menuItems = menuItems;
         await idb.set('cafe_menu', menuItems);
     }
+
     const storedCats = await idb.get('cafe_categories');
     if (storedCats && Array.isArray(storedCats) && storedCats.length > 0) {
         menuCategories = storedCats;
         window.menuCategories = menuCategories;
+    } else if (isAuth) {
+        let sessionCats = null;
+        try {
+            const raw = localStorage.getItem('billnaw_shop_session');
+            if (raw) {
+                const s = JSON.parse(raw);
+                if (Array.isArray(s?.shop?.categories) && s.shop.categories.length > 0) sessionCats = s.shop.categories;
+            }
+        } catch(e) {}
+        if (sessionCats) {
+            menuCategories = sessionCats;
+            window.menuCategories = menuCategories;
+            await idb.set('cafe_categories', menuCategories);
+        } else if (!Array.isArray(menuCategories) || menuCategories.length === 0) {
+            menuCategories = ["All"];
+            window.menuCategories = menuCategories;
+        }
     } else {
         menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
         window.menuCategories = menuCategories;

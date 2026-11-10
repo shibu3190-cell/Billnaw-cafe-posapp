@@ -1018,8 +1018,21 @@ export async function handler(event, context) {
     await removeOtpFromFirestore(email);
 
     // Generate authenticated token & store tenant code
-    const cleanStoreCode = (shopName ? shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16) : 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 12));
+    let cleanStoreCode = (body.storeCode && typeof body.storeCode === 'string' && body.storeCode.trim())
+      ? body.storeCode.trim()
+      : (shopName ? shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16) : 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 12));
     const token = 'billnaw_' + crypto.randomBytes(24).toString('hex');
+
+    let existingShop = null;
+    try {
+      existingShop = await getStoreFromFirestoreREST(cleanStoreCode);
+    } catch(e) {}
+
+    const resolvedShopName = (shopName && shopName.trim() && shopName !== 'My Cafe')
+      ? shopName.trim()
+      : ((existingShop?.profile?.name && existingShop.profile.name !== 'My Cafe' && existingShop.profile.name !== 'billnaw')
+          ? existingShop.profile.name
+          : ((existingShop?.name && existingShop.name !== 'My Cafe') ? existingShop.name : (shopName || cleanStoreCode)));
 
     return jsonResponse(200, {
       success: true,
@@ -1031,8 +1044,16 @@ export async function handler(event, context) {
         role: 'owner',
         isOwner: true
       },
-      shop: {
-        name: shopName || 'My Cafe',
+      shop: existingShop ? {
+        storeCode: cleanStoreCode,
+        name: resolvedShopName,
+        profile: existingShop.profile,
+        staff: existingShop.staff,
+        tables: existingShop.tables,
+        menu: existingShop.menu,
+        categories: existingShop.categories
+      } : {
+        name: resolvedShopName,
         storeCode: cleanStoreCode
       },
       message: 'Email verified successfully!'
@@ -1146,13 +1167,15 @@ export async function handler(event, context) {
       user: { email, role: 'owner', isOwner: true },
       shop: existingShop ? {
         storeCode,
-        name: existingShop.profile?.name || existingShop.name || 'My Cafe',
+        name: (existingShop.profile?.name && existingShop.profile.name !== 'My Cafe' && existingShop.profile.name !== 'billnaw') 
+          ? existingShop.profile.name 
+          : (existingShop.name && existingShop.name !== 'My Cafe' ? existingShop.name : (body.shopName || storeCode)),
         profile: existingShop.profile,
         staff: existingShop.staff,
         tables: existingShop.tables,
         menu: existingShop.menu,
         categories: existingShop.categories
-      } : { name: 'My Cafe', storeCode }
+      } : { name: body.shopName || storeCode, storeCode }
     });
   }
 
@@ -1161,7 +1184,7 @@ export async function handler(event, context) {
   // -----------------------------------------------------------
   if (event.httpMethod === 'POST' && cleanPath === '/auth/signup') {
     const email = normalizeEmail(body.email);
-    const shopName = String(body.shopName || 'My Cafe').trim();
+    const shopName = String(body.shopName || '').trim() || ('Shop ' + email.split('@')[0]);
     const storeCode = shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16);
     const token = 'billnaw_' + crypto.randomBytes(24).toString('hex');
 

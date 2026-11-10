@@ -8,20 +8,20 @@ async function testNetlifyAdaptation() {
 
   const { handler } = await import('../netlify/functions/api.js');
 
-  // TEST 1: Read existing shop AMBER___OAK via Netlify API handler
-  console.log('[TEST 1] Invoking Netlify handler: GET /api/sync/store-data?storeCode=AMBER___OAK...');
+  // TEST 1: Read existing shop SHOP_BAPI92HALDER via Netlify API handler
+  console.log('[TEST 1] Invoking Netlify handler: GET /api/sync/store-data?storeCode=SHOP_BAPI92HALDER...');
   const res1 = await handler({
     httpMethod: 'GET',
     path: '/api/sync/store-data',
-    queryStringParameters: { storeCode: 'AMBER___OAK' },
+    queryStringParameters: { storeCode: 'SHOP_BAPI92HALDER' },
     headers: {}
   }, {});
 
   assert.strictEqual(res1.statusCode, 200, `Expected 200, got ${res1.statusCode}`);
   const data1 = JSON.parse(res1.body);
   assert.strictEqual(data1.success, true);
-  assert.strictEqual(data1.storeCode, 'AMBER___OAK');
-  console.log(`  ✅ Passed: AMBER___OAK loaded successfully via Netlify handler.`);
+  assert.strictEqual(data1.storeCode, 'SHOP_BAPI92HALDER');
+  console.log(`  ✅ Passed: SHOP_BAPI92HALDER loaded successfully via Netlify handler.`);
   console.log(`     Shop Name: ${data1.profile?.name}, Tables: ${data1.profile?.tableCount || Object.keys(data1.tables || {}).length}`);
 
   // TEST 2: Reject cross-tenant injection or missing storeCode on Netlify
