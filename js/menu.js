@@ -1147,12 +1147,19 @@ function openAddMenuItemModal() {
     renderCategoryDropdown();
     document.getElementById('menuFormTitle').innerText = "Add New Menu Item"; 
     document.getElementById('addMenuBtn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg><span>Save Item</span>';
-    document.getElementById('newItemName').value = ''; 
-    document.getElementById('newItemPrice').value = ''; 
-    document.getElementById('newItemGst').value = '0';
-    document.getElementById('newItemTrackStock').checked = false; 
-    document.getElementById('newItemStock').style.display = 'none'; 
-    document.getElementById('newItemStock').value = '';
+    const nameEl = document.getElementById('newItemName');
+    if (nameEl) nameEl.value = ''; 
+    const priceEl = document.getElementById('newItemPrice');
+    if (priceEl) priceEl.value = ''; 
+    const gstEl = document.getElementById('newItemGst');
+    if (gstEl) gstEl.value = '0';
+    const trackStockEl = document.getElementById('newItemTrackStock');
+    if (trackStockEl) trackStockEl.checked = false; 
+    const stockEl = document.getElementById('newItemStock');
+    if (stockEl) {
+        stockEl.style.display = 'none'; 
+        stockEl.value = '';
+    }
 
     // Reset Food Image Manager state to clean initial state
     currentItemImageBase64 = ""; 
@@ -1201,13 +1208,21 @@ function editMenuItem(id) {
     const item = menuItems.find(i => i.id === id);
     if(item) {
         renderCategoryDropdown();
-        document.getElementById('newItemName').value = item.name; 
-        document.getElementById('newItemCategory').value = item.category;
-        document.getElementById('newItemPrice').value = item.price; 
-        document.getElementById('newItemGst').value = item.gstRate || 0;
-        document.getElementById('newItemTrackStock').checked = item.trackStock || false; 
-        document.getElementById('newItemStock').style.display = item.trackStock ? 'block' : 'none'; 
-        document.getElementById('newItemStock').value = item.stockQty || '';
+        const nameEl = document.getElementById('newItemName');
+        if (nameEl) nameEl.value = item.name || ''; 
+        const catEl = document.getElementById('newItemCategory');
+        if (catEl) catEl.value = item.category || '';
+        const priceEl = document.getElementById('newItemPrice');
+        if (priceEl) priceEl.value = item.price ?? ''; 
+        const gstEl = document.getElementById('newItemGst');
+        if (gstEl) gstEl.value = item.gstRate || 0;
+        const trackStockEl = document.getElementById('newItemTrackStock');
+        if (trackStockEl) trackStockEl.checked = item.trackStock || false; 
+        const stockEl = document.getElementById('newItemStock');
+        if (stockEl) {
+            stockEl.style.display = item.trackStock ? 'block' : 'none'; 
+            stockEl.value = item.stockQty || '';
+        }
 
         // Context fields
         const cuisineInput = document.getElementById('newItemCuisine');
@@ -1270,12 +1285,12 @@ function editMenuItem(id) {
 window.editMenuItem = editMenuItem;
 
 function addMenuItem() {
-    const name = document.getElementById('newItemName').value.trim(); 
-    const price = parseFloat(document.getElementById('newItemPrice').value); 
-    const category = document.getElementById('newItemCategory').value; 
-    const gstRate = parseFloat(document.getElementById('newItemGst').value) || 0; 
-    const trackStock = document.getElementById('newItemTrackStock').checked; 
-    const stockQty = parseInt(document.getElementById('newItemStock').value) || 0;
+    const name = document.getElementById('newItemName')?.value?.trim() || ''; 
+    const price = parseFloat(document.getElementById('newItemPrice')?.value); 
+    const category = document.getElementById('newItemCategory')?.value || ''; 
+    const gstRate = parseFloat(document.getElementById('newItemGst')?.value) || 0; 
+    const trackStock = Boolean(document.getElementById('newItemTrackStock')?.checked); 
+    const stockQty = parseInt(document.getElementById('newItemStock')?.value) || 0;
     const cuisine = document.getElementById('newItemCuisine')?.value.trim() || '';
     const servingStyle = document.getElementById('newItemServingStyle')?.value.trim() || '';
     const dietary = getSelectedDietaryTags();

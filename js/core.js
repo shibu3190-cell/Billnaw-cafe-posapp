@@ -2896,9 +2896,10 @@ function attachFirestoreListener(targetStoreCode = null) {
                 persistAllToFirestore();
             }
         }, (err) => {
+            const isQuotaError = err && (err.code === 'resource-exhausted' || (err.message && err.message.toLowerCase().includes('quota')));
             const isPermissionError = err && (err.code === 'permission-denied' || (err.message && err.message.toLowerCase().includes('permission')));
-            if (isPermissionError) {
-                console.info("⚡ Firestore cloud permissions require active Firebase credentials. Running seamlessly in Local IndexedDB mode.");
+            if (isQuotaError || isPermissionError) {
+                console.info("⚡ Firestore cloud quota exceeded or permission restricted. Running seamlessly in Local IndexedDB & REST sync mode.");
                 if (firestoreUnsubscribe) {
                     try { firestoreUnsubscribe(); } catch(e) {}
                     firestoreUnsubscribe = null;
