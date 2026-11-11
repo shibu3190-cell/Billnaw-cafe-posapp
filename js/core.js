@@ -1123,10 +1123,10 @@ function getDishVariationCount(name, category = '') {
 window.getDishVariationCount = getDishVariationCount;
 
 const defaultMenu = [
-    { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
-    { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
-    { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
-    { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
+    { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80&fm=webp" },
+    { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80&fm=webp" },
+    { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, /* baseline price: 150 */ stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80&fm=webp" },
+    { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80&fm=webp" }
 ];
 window.defaultMenu = defaultMenu;
 
@@ -1136,6 +1136,27 @@ function isDefaultTemplateMenu(items) {
     return items.every(m => m && m.name && defaultNames.has(String(m.name).trim().toLowerCase()));
 }
 window.isDefaultTemplateMenu = isDefaultTemplateMenu;
+
+function isMenuCustomized() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            if (localStorage.getItem('billnaw_menu_customized') === 'true') return true;
+            if (localStorage.getItem('billnaw_store_code') || localStorage.getItem('billnaw_auth_token')) return true;
+        }
+        if (typeof shopProfile !== 'undefined' && (shopProfile?.storeCode || shopProfile?.id)) return true;
+    } catch(e) {}
+    return false;
+}
+window.isMenuCustomized = isMenuCustomized;
+
+function markMenuCustomized() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('billnaw_menu_customized', 'true');
+        }
+    } catch(e) {}
+}
+window.markMenuCustomized = markMenuCustomized;
 
 // Baseline seeding: strictly restricted to unauthenticated demo sessions
 const isAuthStoreSession = (function() {
@@ -1148,7 +1169,7 @@ const isAuthStoreSession = (function() {
     } catch(e) { return false; }
 })();
 
-if (!isAuthStoreSession) {
+if (!isAuthStoreSession && !isMenuCustomized()) {
     if (!menuItems || menuItems.length === 0) {
         menuItems = [...defaultMenu];
         window.menuItems = menuItems;
@@ -1400,10 +1421,30 @@ const idb = {
         if (this.initPromise) return this.initPromise;
         this.initPromise = new Promise((resolve) => {
             try {
-                const req = indexedDB.open('CafePOS_DB', 1);
+                const req = indexedDB.open('CafePOS_DB', 2);
                 req.onupgradeneeded = (e) => { 
-                    if (!e.target.result.objectStoreNames.contains('store')) {
-                        e.target.result.createObjectStore('store'); 
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('store')) {
+                        db.createObjectStore('store'); 
+                    }
+                    // Version 2: High-Performance Indexed Object Stores
+                    if (!db.objectStoreNames.contains('orders')) {
+                        const orderStore = db.createObjectStore('orders', { keyPath: 'id' });
+                        orderStore.createIndex('by_date', 'createdAt', { unique: false });
+                        orderStore.createIndex('by_status', 'status', { unique: false });
+                        orderStore.createIndex('by_customer', 'customerPhone', { unique: false });
+                        orderStore.createIndex('by_staff', 'staffId', { unique: false });
+                    }
+                    if (!db.objectStoreNames.contains('kot_records')) {
+                        const kotStore = db.createObjectStore('kot_records', { keyPath: 'id' });
+                        kotStore.createIndex('by_table', 'tableNumber', { unique: false });
+                        kotStore.createIndex('by_date', 'createdAt', { unique: false });
+                        kotStore.createIndex('by_status', 'status', { unique: false });
+                    }
+                    if (!db.objectStoreNames.contains('menu_items')) {
+                        const menuStore = db.createObjectStore('menu_items', { keyPath: 'id' });
+                        menuStore.createIndex('by_category', 'category', { unique: false });
+                        menuStore.createIndex('by_name', 'name', { unique: false });
                     }
                 };
                 req.onsuccess = (e) => { this.db = e.target.result; resolve(); };
@@ -1417,6 +1458,22 @@ const idb = {
             }
         });
         return this.initPromise;
+    },
+    queryByIndex: async function(storeName, indexName, range = null, limit = 50) {
+        await this.init();
+        if (!this.db || !this.db.objectStoreNames.contains(storeName)) return [];
+        return new Promise((resolve) => {
+            try {
+                const tx = this.db.transaction(storeName, 'readonly');
+                const store = tx.objectStore(storeName);
+                const index = store.index(indexName);
+                const req = range ? index.getAll(range, limit) : index.getAll(null, limit);
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => resolve([]);
+            } catch(e) {
+                resolve([]);
+            }
+        });
     },
     get: async function(key) {
         await this.init(); 
@@ -1471,6 +1528,190 @@ const idb = {
     }
 };
 window.idb = idb;
+
+// ============================================================
+// PERFORMANCE & TOUCH PROTECTION UTILITIES (Tier 1 Architecture)
+// ============================================================
+
+function debounce(func, wait = 250) {
+    let timeout = null;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func.apply(this, args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+window.debounce = debounce;
+
+// Pre-bound debounced handlers for Tier 1 search responsiveness
+const debouncedRenderOrdersLogModalCards = debounce(() => {
+    if (typeof renderOrdersLogModalCards === 'function') renderOrdersLogModalCards();
+}, 250);
+window.debouncedRenderOrdersLogModalCards = debouncedRenderOrdersLogModalCards;
+
+const debouncedRenderDashboardAnalytics = debounce(() => {
+    if (typeof renderDashboardAnalytics === 'function') renderDashboardAnalytics();
+}, 250);
+window.debouncedRenderDashboardAnalytics = debouncedRenderDashboardAnalytics;
+
+const debouncedFilterCustomersUI = debounce(() => {
+    if (typeof filterCustomersUI === 'function') filterCustomersUI();
+}, 250);
+window.debouncedFilterCustomersUI = debouncedFilterCustomersUI;
+
+const debouncedFilterKhataList = debounce(() => {
+    if (typeof filterKhataList === 'function') filterKhataList();
+}, 250);
+window.debouncedFilterKhataList = debouncedFilterKhataList;
+
+const debouncedFilterCatalogTable = debounce(() => {
+    if (typeof filterCatalogTable === 'function') filterCatalogTable();
+}, 250);
+window.debouncedFilterCatalogTable = debouncedFilterCatalogTable;
+
+const _inFlightApiMap = new Map();
+
+async function executeDeduplicatedRequest(key, requestFn) {
+    if (_inFlightApiMap.has(key)) {
+        return _inFlightApiMap.get(key);
+    }
+    const promise = (async () => {
+        try {
+            return await requestFn();
+        } finally {
+            _inFlightApiMap.delete(key);
+        }
+    })();
+    _inFlightApiMap.set(key, promise);
+    return promise;
+}
+window.executeDeduplicatedRequest = executeDeduplicatedRequest;
+
+function withActionLock(buttonEl, asyncCallback, minLockMs = 600) {
+    if (!buttonEl) return asyncCallback();
+    if (buttonEl.getAttribute('data-action-locked') === 'true') {
+        return Promise.resolve();
+    }
+    buttonEl.setAttribute('data-action-locked', 'true');
+    const startTime = Date.now();
+
+    const unlock = () => {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, minLockMs - elapsed);
+        setTimeout(() => {
+            if (buttonEl) buttonEl.removeAttribute('data-action-locked');
+        }, remaining);
+    };
+
+    try {
+        const result = asyncCallback();
+        if (result && typeof result.then === 'function') {
+            return result.then(res => {
+                unlock();
+                return res;
+            }).catch(err => {
+                unlock();
+                throw err;
+            });
+        } else {
+            unlock();
+            return result;
+        }
+    } catch(err) {
+        unlock();
+        throw err;
+    }
+}
+window.withActionLock = withActionLock;
+
+function setupTouchProtection() {
+    if (typeof window === 'undefined' || window._touchProtectionInitialized) return;
+    window._touchProtectionInitialized = true;
+
+    let _lastTapTime = 0;
+    let _lastTapTarget = null;
+    let _lastStepperTime = 0;
+
+    // Multi-finger ghost touch rejection on interactive controls
+    window.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length > 1) {
+            const target = e.target;
+            if (target && target.closest && target.closest('button, .item-card, .table-btn, .cat-chip')) {
+                e.preventDefault();
+            }
+        }
+    }, { passive: false });
+
+    // Global tap debouncing and in-flight action lock enforcement
+    window.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('button, .item-card, .table-btn, .cat-chip, .action-dropdown-item');
+        if (!btn) return;
+
+        const now = Date.now();
+
+        // Action-locked element suppression
+        if (btn.getAttribute('data-action-locked') === 'true') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return;
+        }
+
+        // Fast quantity stepper throttling (+ / - buttons at 180ms)
+        const isStepper = btn.classList.contains('qty-btn') || btn.classList.contains('cart-stepper-btn') || btn.innerText === '+' || btn.innerText === '-';
+        if (isStepper) {
+            if (now - _lastStepperTime < 180) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                return;
+            }
+            _lastStepperTime = now;
+            _lastTapTime = now;
+            _lastTapTarget = btn;
+            return;
+        }
+
+        // Duplicate button tap suppression (300ms debounce on exact same button)
+        if (btn === _lastTapTarget && (now - _lastTapTime < 300)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return;
+        }
+
+        _lastTapTime = now;
+        _lastTapTarget = btn;
+    }, true);
+}
+window.setupTouchProtection = setupTouchProtection;
+
+// POS Multi-Terminal Mesh BroadcastChannel
+const posMeshChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('billnaw_pos_mesh') : null;
+
+function broadcastMeshEvent(eventData) {
+    if (posMeshChannel) {
+        try { posMeshChannel.postMessage(eventData); } catch(e) {}
+    }
+}
+window.broadcastMeshEvent = broadcastMeshEvent;
+
+if (posMeshChannel) {
+    posMeshChannel.onmessage = (event) => {
+        const data = event?.data;
+        if (!data || !data.type) return;
+        if (data.type === 'READY_FOR_BILLING') {
+            const role = (typeof currentStaff !== 'undefined' && currentStaff?.role) ? currentStaff.role : 'Admin';
+            if (role === 'Cashier' || role === 'Admin' || role === 'Manager') {
+                if (typeof playAlertSound === 'function') playAlertSound();
+                if (typeof showToast === 'function') {
+                    showToast(`🔔 ${data.tableName || ('Table ' + data.tableNumber)} is Ready for Billing! (${data.staffName || 'Server'})`, 'info');
+                }
+                if (typeof syncTableUI === 'function') syncTableUI();
+            }
+        }
+    };
+}
 
 // Strict 10-Day Rolling Cache Eviction
 async function pruneClientTransactionalCache(retentionDays = 10) {
@@ -1938,12 +2179,12 @@ function handleRemoteFirestoreUpdate(data) {
         const isAuthMode = (typeof isStoreAuthenticated === 'function')
             ? isStoreAuthenticated()
             : Boolean(localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_shop_session') || localStorage.getItem('billnaw_auth_mode') === 'authenticated');
-        if (!isAuthMode && (!Array.isArray(menuItems) || menuItems.length === 0)) {
+        if (!isAuthMode && !isMenuCustomized() && (!Array.isArray(menuItems) || menuItems.length === 0)) {
             const cleanDefaultMenu = [
-                { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
-                { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
-                { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80" },
-                { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
+                { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80&fm=webp" },
+                { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80&fm=webp" },
+                { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80&fm=webp" },
+                { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80&fm=webp" }
             ];
             menuItems = cleanDefaultMenu;
             window.menuItems = menuItems;
@@ -2966,6 +3207,7 @@ function persistTables() {
 window.persistTables = persistTables;
 
 function persistMenu() { 
+    if (typeof markMenuCustomized === 'function') markMenuCustomized();
     const sanitizedMenu = Array.isArray(menuItems)
         ? menuItems.map(item => sanitizeMenuItemForStorage(item))
         : menuItems;
@@ -3695,6 +3937,11 @@ function applyStationProfileRestrictions() {
             dBtn.innerHTML = '<span>CHECKOUT</span><span id="desktopCheckoutBtnSub" style="display: inline-flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>';
             dBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(); };
         }
+        const mBtn = document.querySelector('.sc-right');
+        if (mBtn) {
+            mBtn.innerHTML = '<span>CHECKOUT</span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>';
+            mBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(); };
+        }
         if (typeof enforcePermissions === 'function') enforcePermissions();
         return;
     }
@@ -3722,18 +3969,45 @@ function applyStationProfileRestrictions() {
         if (cartDiscountWrap) cartDiscountWrap.style.display = 'none';
         
         // Floor Server: replace Checkout button with "Ready for Billing - Notify Cashier"
+        const handleReadyForBilling = () => {
+            const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
+            const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[curT] : null;
+            if (!tInfo || !tInfo.items || tInfo.items.length === 0) {
+                if (typeof showToast === 'function') showToast(`Table ${curT} has no active items to bill!`, 'warning');
+                return;
+            }
+            if (typeof tablesInfo !== 'undefined' && tablesInfo[curT]) {
+                tablesInfo[curT].status = 'ready_for_billing';
+            }
+            if (typeof persistTables === 'function') persistTables();
+            if (typeof syncTableUI === 'function') syncTableUI();
+
+            const tableName = (typeof getTableName === 'function') ? getTableName(curT) : `Table ${curT}`;
+            const staffName = (typeof currentStaff !== 'undefined' && currentStaff?.name) ? currentStaff.name : 'Floor Server';
+            if (typeof broadcastMeshEvent === 'function') {
+                broadcastMeshEvent({
+                    type: 'READY_FOR_BILLING',
+                    tableNumber: curT,
+                    tableName: tableName,
+                    staffName: staffName,
+                    timestamp: Date.now()
+                });
+            }
+            if (typeof showToast === 'function') {
+                showToast(`🔔 ${tableName} marked Ready for Billing! Cashier notified.`, 'info');
+            }
+        };
+
         const dBtn = document.getElementById('desktopCheckoutBtn');
         if (dBtn) {
             dBtn.innerHTML = '<span>Ready for Billing - Notify Cashier</span>';
-            dBtn.onclick = () => {
-                const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
-                if (typeof showToast === 'function') showToast('Table ' + curT + ' marked ready for billing! Cashier notified.', 'info');
-                if (typeof tablesInfo !== 'undefined' && tablesInfo[curT]) {
-                    tablesInfo[curT].status = 'ready_for_billing';
-                    if (typeof persistTables === 'function') persistTables();
-                    if (typeof syncTableUI === 'function') syncTableUI();
-                }
-            };
+            dBtn.onclick = handleReadyForBilling;
+        }
+
+        const mBtn = document.querySelector('.sc-right');
+        if (mBtn) {
+            mBtn.innerHTML = '<span>Ready for Billing</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>';
+            mBtn.onclick = handleReadyForBilling;
         }
     } else {
         // Cashier Profile: Can create/edit active orders, checkout, view menu and reports.
@@ -3751,6 +4025,11 @@ function applyStationProfileRestrictions() {
         if (dBtn) {
             dBtn.innerHTML = '<span>CHECKOUT</span><span id="desktopCheckoutBtnSub" style="display: inline-flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>';
             dBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(); };
+        }
+        const mBtn = document.querySelector('.sc-right');
+        if (mBtn) {
+            mBtn.innerHTML = '<span>CHECKOUT</span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>';
+            mBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(); };
         }
         if (typeof enforcePermissions === 'function') enforcePermissions();
     }
@@ -4496,8 +4775,8 @@ async function initDatabase() {
     if (storedMenu && Array.isArray(storedMenu) && storedMenu.length > 0) {
         menuItems = storedMenu;
         window.menuItems = menuItems;
-    } else if (isAuth) {
-        // Authenticated shop: check if menu was saved in shop session before defaulting
+    } else if (isAuth || isMenuCustomized()) {
+        // Authenticated shop or customized menu: check if menu was saved in shop session before defaulting
         let sessionMenu = null;
         try {
             const raw = localStorage.getItem('billnaw_shop_session');
@@ -4812,6 +5091,9 @@ window.initFirestoreSync = initFirestoreSync;
 
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     document.addEventListener('DOMContentLoaded', () => {
+        try {
+            if (typeof setupTouchProtection === 'function') setupTouchProtection();
+        } catch(e) {}
         try {
             const cachedDevicesStr = localStorage.getItem('billnaw_authorized_devices');
             if (cachedDevicesStr) {

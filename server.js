@@ -1182,7 +1182,15 @@ app.post('/api/store/reset-data', (req, res) => {
 
 // Strict Multi-Tenant Store Code Validator & Injection Gate
 function sanitizeTenantStoreCode(req) {
-  const raw = req.body?.storeCode || req.query?.storeCode || req.headers['x-shop-id'] || req.headers['x-store-code'];
+  const raw = req.body?.storeCode ||
+              req.body?.shopId ||
+              req.body?.clientId ||
+              req.query?.storeCode ||
+              req.query?.shopId ||
+              req.query?.clientId ||
+              req.headers['x-shop-id'] ||
+              req.headers['x-store-code'] ||
+              req.headers['x-client-id'];
   if (!raw || typeof raw !== 'string') return null;
   const clean = raw.trim();
   if (!/^[A-Za-z0-9_-]{3,64}$/.test(clean)) return null;

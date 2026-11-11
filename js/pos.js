@@ -11,7 +11,82 @@ function switchFloor(floorName, btnEl) {
 }
 window.switchFloor = switchFloor;
 
+let _lastStaleTableCheckTime = 0;
+
+function checkAndRolloverStaleTables(options = {}) {
+    if (typeof tablesInfo === 'undefined' || !tablesInfo) return;
+    const now = Date.now();
+    // Throttle automatic checks to at most once every 5 minutes unless forced
+    if (!options.force && (now - _lastStaleTableCheckTime < 300000)) return;
+    _lastStaleTableCheckTime = now;
+
+    const STALE_THRESHOLD_MS = 14 * 60 * 60 * 1000; // 14 hours
+    const todayDateStr = new Date(now).toDateString();
+    let rolledOverCount = 0;
+    const archivedOrders = [];
+
+    for (const [tableNum, tInfo] of Object.entries(tablesInfo)) {
+        if (!tInfo) continue;
+        const hasItems = Array.isArray(tInfo.items) && tInfo.items.length > 0;
+        if (!hasItems) continue;
+
+        const savedTime = tInfo.savedTime ? Number(tInfo.savedTime) : null;
+        let isStale = false;
+        if (savedTime) {
+            const tableDateStr = new Date(savedTime).toDateString();
+            const elapsed = now - savedTime;
+            // Stale if from prior calendar date or older than 14 hours
+            if (tableDateStr !== todayDateStr || elapsed >= STALE_THRESHOLD_MS) {
+                isStale = true;
+            }
+        }
+
+        if (isStale) {
+            rolledOverCount++;
+            const tNumInt = Number(tableNum);
+            const archiveRecord = {
+                id: `archived_tbl_${tableNum}_${savedTime || now}`,
+                tableNumber: tNumInt,
+                tableName: (typeof getTableName === 'function') ? getTableName(tNumInt) : `Table ${tNumInt}`,
+                items: [...tInfo.items],
+                savedTime: savedTime,
+                archivedAt: now,
+                archivedDate: todayDateStr,
+                cartDiscount: tInfo.cartDiscount || 0,
+                customer: tInfo.customer || null,
+                reason: 'PRIOR_DAY_UNBILLED_ROLLOVER'
+            };
+            archivedOrders.push(archiveRecord);
+
+            // Clean physical table so it is ready for today
+            tInfo.status = 'empty';
+            tInfo.items = [];
+            tInfo.savedTime = null;
+            tInfo.cartDiscount = 0;
+            tInfo.customer = null;
+        }
+    }
+
+    if (rolledOverCount > 0) {
+        if (typeof persistTables === 'function') persistTables();
+        if (typeof syncTableUI === 'function') syncTableUI();
+        if (typeof updateCartUI === 'function') updateCartUI();
+        if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+        if (typeof idb !== 'undefined' && idb.get && idb.set) {
+            idb.get('cafe_unsettled_orders').then(existing => {
+                const list = Array.isArray(existing) ? existing : [];
+                idb.set('cafe_unsettled_orders', list.concat(archivedOrders));
+            }).catch(() => {});
+        }
+        if (typeof showToast === 'function') {
+            showToast(`ℹ️ Archived ${rolledOverCount} unpaid table(s) from yesterday to Reports. Physical tables are now clear.`, 'info');
+        }
+    }
+}
+window.checkAndRolloverStaleTables = checkAndRolloverStaleTables;
+
 function renderTables() {
+    checkAndRolloverStaleTables();
     const grid = document.getElementById('tableGridUI');
     if (!grid) return;
     grid.innerHTML = '';
@@ -44,7 +119,10 @@ function renderTables() {
         let statusTag = 'VACANT';
         const hasItems = tInfo && tInfo.items && tInfo.items.length > 0;
         if (hasItems) {
-            if (tInfo.status === 'billed' || tInfo.status === 'served') {
+            if (tInfo.status === 'ready_for_billing') {
+                classes += ' ready-billing';
+                statusTag = 'BILL READY';
+            } else if (tInfo.status === 'billed' || tInfo.status === 'served') {
                 classes += ' billed';
                 statusTag = 'BILLED';
             } else {
@@ -57,7 +135,16 @@ function renderTables() {
                 const elapsedMinutes = tInfo.savedTime 
                     ? Math.max(1, Math.floor((Date.now() - tInfo.savedTime) / 60000)) 
                     : 1;
-                statusTag = `${elapsedMinutes}m`;
+                let formattedTimer = `${elapsedMinutes}m`;
+                if (elapsedMinutes >= 1440) {
+                    formattedTimer = 'Yesterday';
+                    classes += ' stale-table';
+                } else if (elapsedMinutes >= 60) {
+                    const hrs = Math.floor(elapsedMinutes / 60);
+                    const mins = elapsedMinutes % 60;
+                    formattedTimer = `${hrs}h ${mins}m`;
+                }
+                statusTag = formattedTimer;
             }
         } else {
             classes += ' empty';
@@ -103,7 +190,10 @@ function syncTableUI() {
             let classes = 'table-btn';
             let statusTag = 'VACANT';
             if (hasItems) {
-                if (tInfo.status === 'billed' || tInfo.status === 'served') {
+                if (tInfo.status === 'ready_for_billing') {
+                    classes += ' ready-billing';
+                    statusTag = 'BILL READY';
+                } else if (tInfo.status === 'billed' || tInfo.status === 'served') {
                     classes += ' billed';
                     statusTag = 'BILLED';
                 } else {
@@ -116,7 +206,16 @@ function syncTableUI() {
                     const elapsedMinutes = tInfo.savedTime 
                         ? Math.max(1, Math.floor((Date.now() - tInfo.savedTime) / 60000)) 
                         : 1;
-                    statusTag = `${elapsedMinutes}m`;
+                    let formattedTimer = `${elapsedMinutes}m`;
+                    if (elapsedMinutes >= 1440) {
+                        formattedTimer = 'Yesterday';
+                        classes += ' stale-table';
+                    } else if (elapsedMinutes >= 60) {
+                        const hrs = Math.floor(elapsedMinutes / 60);
+                        const mins = elapsedMinutes % 60;
+                        formattedTimer = `${hrs}h ${mins}m`;
+                    }
+                    statusTag = formattedTimer;
                 }
             } else {
                 classes += ' empty';

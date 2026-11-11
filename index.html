@@ -10,13 +10,15 @@
     <meta name="description" content="billnaw point-of-sale terminal with billing, customer loyalty directory, AI-driven WhatsApp marketing, table management, KOT, expense tracking, and reporting.">
     <meta property="og:title" content="billnaw POS">
     <meta property="og:description" content="billnaw point-of-sale terminal with billing, customer loyalty directory, AI-driven WhatsApp marketing, table management, KOT, expense tracking, and reporting.">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#F5EFEB">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
     <script src="js/defensive-stubs.js?v=2922"></script>
     <link rel="stylesheet" href="style.css?v=2922">
 </head>
@@ -1543,7 +1545,7 @@
                     <span id="ordersModalAmountBadge" style="font-size: 13px; font-weight: 800; color: var(--success); font-family: monospace;">₹ 0.00</span>
                 </div>
                 <div style="position: relative; width: 260px;">
-                    <input type="text" id="ordersModalSearchInput" placeholder="Search bill #, customer, item..." oninput="renderOrdersLogModalCards()" style="width: 100%; padding: 7px 12px; font-size: 12px; border-radius: 10px; border: 1px solid var(--border);">
+                    <input type="text" id="ordersModalSearchInput" placeholder="Search bill #, customer, item..." oninput="debouncedRenderOrdersLogModalCards()" style="width: 100%; padding: 7px 12px; font-size: 12px; border-radius: 10px; border: 1px solid var(--border);">
                 </div>
             </div>
 
@@ -3954,7 +3956,7 @@
                                 </button>
                             </div>
                             <div style="position: relative; width: 200px;">
-                                <input type="text" id="dashSearchInput" placeholder="Filter by bill, customer, item..." oninput="renderDashboardAnalytics()" style="width: 100%; padding: 7px 12px; font-size: 12px; border-radius: 12px; border: 1px solid var(--border);">
+                                <input type="text" id="dashSearchInput" placeholder="Filter by bill, customer, item..." oninput="debouncedRenderDashboardAnalytics()" style="width: 100%; padding: 7px 12px; font-size: 12px; border-radius: 12px; border: 1px solid var(--border);">
                             </div>
                         </div>
                     </div>
@@ -4090,7 +4092,7 @@
 
                     <div class="search-container" style="margin-bottom: 16px;">
                         <span class="search-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
-                        <input type="text" id="customerSearchInput" class="search-bar" placeholder="Search by customer name, phone number, or preferences..." oninput="filterCustomersUI()">
+                        <input type="text" id="customerSearchInput" class="search-bar" placeholder="Search by customer name, phone number, or preferences..." oninput="debouncedFilterCustomersUI()">
                     </div>
 
                     <div class="table-responsive">
@@ -4512,7 +4514,7 @@
                             </button>
                         </div>
                         <div style="position: relative; min-width: 220px;">
-                            <input type="text" id="khataSearchInput" placeholder="Search by name, phone, bill..." class="form-control" style="padding-left: 32px; font-size: 12px; border-radius: 20px; height: 34px;" oninput="filterKhataList()">
+                            <input type="text" id="khataSearchInput" placeholder="Search by name, phone, bill..." class="form-control" style="padding-left: 32px; font-size: 12px; border-radius: 20px; height: 34px;" oninput="debouncedFilterKhataList()">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position: absolute; left: 11px; top: 10px; color: var(--text-muted);"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                         </div>
                     </div>
@@ -4968,7 +4970,7 @@
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                         <div class="catalog-search-wrap" style="flex: 1; min-width: 240px;">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                            <input type="text" id="catalogSearchInput" placeholder="Search by item name or category..." oninput="filterCatalogTable()">
+                            <input type="text" id="catalogSearchInput" placeholder="Search by item name or category..." oninput="debouncedFilterCatalogTable()">
                         </div>
                         <div id="catalogCategoryChips" style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;"></div>
                     </div>

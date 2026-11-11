@@ -91,14 +91,13 @@ export async function isGeminiKeyOperational(apiKey = null) {
   return looksValid;
 }
 
-export const CANDIDATE_TIMEOUT_MS = 7000;
+export const CANDIDATE_TIMEOUT_MS = 25000;
 
 export const CANDIDATE_MODELS = [
-  'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
+  'gemini-2.5-flash',
   'gemini-flash-latest',
   'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
   'gemini-3.5-flash',
   CONFIG.gemini.model || 'gemini-3.8-flash'
 ];
@@ -363,10 +362,7 @@ Schema:
           model: modelName,
           contents: [{ role: 'user', parts: promptParts }],
           config: {
-            responseMimeType: 'application/json',
-            thinkingConfig: {
-              thinkingBudget: 0
-            }
+            responseMimeType: 'application/json'
           }
         });
       }, CANDIDATE_TIMEOUT_MS, `Model '${modelName}' request exceeded ${CANDIDATE_TIMEOUT_MS}ms timeout`);

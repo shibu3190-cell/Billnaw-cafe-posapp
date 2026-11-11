@@ -1661,7 +1661,16 @@ function filterKhataByStatus(status) {
 }
 window.filterKhataByStatus = filterKhataByStatus;
 
+let khataCurrentLimit = 25;
+
+function loadMoreKhataItems() {
+    khataCurrentLimit += 25;
+    renderKhataUI();
+}
+window.loadMoreKhataItems = loadMoreKhataItems;
+
 function filterKhataList() {
+    khataCurrentLimit = 25;
     renderKhataUI();
 }
 window.filterKhataList = filterKhataList;
@@ -1720,7 +1729,10 @@ function renderKhataUI() {
         return;
     }
 
-    tbody.innerHTML = displayList.map(item => {
+    const totalCount = displayList.length;
+    const paged = displayList.slice(0, khataCurrentLimit);
+
+    let rowsHtml = paged.map(item => {
         const status = getKhataStatus(item);
         const initials = getInitials(item.name);
         const phoneDisplay = item.phone 
@@ -1784,6 +1796,19 @@ function renderKhataUI() {
             </tr>
         `;
     }).join('');
+
+    if (totalCount > khataCurrentLimit) {
+        rowsHtml += `
+            <tr id="khataLoadMoreRow">
+                <td colspan="7" style="text-align: center; padding: 14px; background: var(--bg-surface);">
+                    <button type="button" class="btn btn-secondary" onclick="loadMoreKhataItems()" style="padding: 7px 20px; font-size: 12px; font-weight: 700; border-radius: 20px;">
+                        Load More (${totalCount - khataCurrentLimit} remaining)
+                    </button>
+                </td>
+            </tr>`;
+    }
+
+    tbody.innerHTML = rowsHtml;
 }
 window.renderKhataUI = renderKhataUI;
 

@@ -124,10 +124,16 @@ function sanitizeTenantStoreCode(event, body) {
   const query = event.queryStringParameters || {};
   const raw = body?.storeCode ||
               body?.shopId ||
+              body?.clientId ||
               query.storeCode ||
               query.shopId ||
+              query.clientId ||
               headers['x-shop-id'] ||
               headers['X-Shop-Id'] ||
+              headers['x-store-code'] ||
+              headers['X-Store-Code'] ||
+              headers['x-client-id'] ||
+              headers['X-Client-Id'] ||
               '';
   const clean = String(raw || '').trim();
   if (!clean || !/^[A-Za-z0-9_-]{3,64}$/.test(clean)) {

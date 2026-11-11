@@ -469,6 +469,102 @@ svg.nav-icon.active, svg.btn-icon.active {
     100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); transform: translateY(-1px); }
 }
 
+.table-btn.ready-billing {
+    background: #FFF7ED !important;
+    border-color: #F97316 !important;
+    color: #C2410C !important;
+    animation: pulseBilling 1.6s infinite ease-in-out;
+}
+.table-btn.ready-billing .table-status-dot {
+    background: #F97316 !important;
+    box-shadow: 0 0 8px #F97316;
+}
+.table-btn.ready-billing .table-status-tag {
+    background: #F97316 !important;
+    color: #FFFFFF !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.5px;
+}
+
+@keyframes pulseBilling {
+    0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.5); transform: translateY(-1px); }
+    50% { box-shadow: 0 0 0 7px rgba(249, 115, 22, 0); transform: translateY(-2px); }
+    100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); transform: translateY(-1px); }
+}
+
+.table-btn.stale-table .table-status-tag {
+    background: #78350F !important;
+    color: #FEF3C7 !important;
+}
+
+/* ============================================================
+   SKELETON LOADING SHIMMER STYLES (Tier 1 Performance)
+   ============================================================ */
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.skeleton {
+    background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite ease-in-out;
+    border-radius: var(--radius-sm, 8px);
+    display: inline-block;
+}
+
+.skeleton-card {
+    background: #FFFFFF;
+    border: 1px solid var(--border, #E2E8F0);
+    border-radius: var(--radius-md, 12px);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+}
+
+.skeleton-line {
+    height: 12px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite ease-in-out;
+}
+
+.skeleton-line.w-full { width: 100%; }
+.skeleton-line.w-3-4 { width: 75%; }
+.skeleton-line.w-1-2 { width: 50%; }
+.skeleton-line.w-1-4 { width: 25%; }
+.skeleton-line.h-title { height: 18px; }
+.skeleton-line.h-subtitle { height: 14px; }
+
+.skeleton-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite ease-in-out;
+}
+
+.skeleton-image {
+    width: 100%;
+    height: 110px;
+    border-radius: var(--radius-sm, 8px);
+    background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite ease-in-out;
+}
+
+/* Mistouch / Action Locking State */
+[data-action-locked="true"] {
+    pointer-events: none !important;
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+    transition: opacity 0.15s ease;
+}
+
 .table-btn.selected {
     background: var(--primary) !important;
     color: #FFFFFF !important;

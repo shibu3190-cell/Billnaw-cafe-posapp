@@ -213,7 +213,7 @@ function renderMenuUI() {
         }
 
         const thumbSrc = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
-        const imageHtml = `<img src="${thumbSrc}" class="card-img" alt="${escapeHtml(item.name)}" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">`;
+        const imageHtml = `<img src="${thumbSrc}" class="card-img" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">`;
 
         posGrid.innerHTML += `
         <div class="menu-card" onclick="addToCart(${item.id}, event)">
@@ -376,7 +376,7 @@ function renderMenuCatalogUI() {
                 return `
                 <div class="clean-item-card">
                     <div class="clean-item-left">
-                        <img src="${thumbSrc}" class="clean-item-thumb" alt="${escapeHtml(item.name)}" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">
+                        <img src="${thumbSrc}" class="clean-item-thumb" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">
                         <div class="clean-item-info">
                             <div class="clean-item-title-row">
                                 <span class="clean-item-name">${escapeHtml(item.name)}</span>
@@ -702,6 +702,43 @@ function setFimActionDockVisible(visible) {
 }
 window.setFimActionDockVisible = setFimActionDockVisible;
 
+async function compressImageToWebP(file, maxDim = 600, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                let w = img.width, h = img.height;
+                if (w > h && w > maxDim) {
+                    h *= maxDim / w;
+                    w = maxDim;
+                } else if (h > maxDim) {
+                    w *= maxDim / h;
+                    h = maxDim;
+                }
+                canvas.width = Math.round(w);
+                canvas.height = Math.round(h);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                let webpData = '';
+                try {
+                    webpData = canvas.toDataURL('image/webp', quality);
+                } catch(err) {}
+                if (!webpData || !webpData.startsWith('data:image/webp')) {
+                    webpData = canvas.toDataURL('image/jpeg', quality);
+                }
+                resolve(webpData);
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+window.compressImageToWebP = compressImageToWebP;
+
 async function handleItemImageUpload(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
@@ -719,85 +756,68 @@ async function handleItemImageUpload(event) {
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const img = new Image();
-        img.onload = async () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const MAX_DIM = 800;
-            let w = img.width, h = img.height;
-            if (w > h && w > MAX_DIM) {
-                h *= MAX_DIM / w;
-                w = MAX_DIM;
-            } else if (h > MAX_DIM) {
-                w *= MAX_DIM / h;
-                h = MAX_DIM;
-            }
-            canvas.width = Math.round(w);
-            canvas.height = Math.round(h);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+    try {
+        const compressedBase64 = await compressImageToWebP(file, 600, 0.82);
+        const mimeType = compressedBase64.startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg';
 
-            const preview = document.getElementById('newItemImagePreview');
-            const placeholder = document.getElementById('fimPlaceholder');
-            if (preview) {
-                preview.src = compressedBase64;
-                preview.style.display = 'block';
-                preview.style.opacity = '1';
-            }
-            if (placeholder) placeholder.style.display = 'none';
+        const preview = document.getElementById('newItemImagePreview');
+        const placeholder = document.getElementById('fimPlaceholder');
+        if (preview) {
+            preview.src = compressedBase64;
+            preview.style.display = 'block';
+            preview.style.opacity = '1';
+        }
+        if (placeholder) placeholder.style.display = 'none';
 
-            const dishId = editingMenuItemId ? String(editingMenuItemId) : ('dish_' + Date.now());
+        const dishId = editingMenuItemId ? String(editingMenuItemId) : ('dish_' + Date.now());
 
-            // Attempt server upload
-            try {
-                const uploadResp = await fetch('/api/food-images/upload', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        dishId,
-                        base64Data: compressedBase64,
-                        mimeType: 'image/jpeg',
-                        filename: file.name
-                    })
-                });
-                if (uploadResp.ok) {
-                    const uploadData = await uploadResp.json();
-                    if (uploadData.success && uploadData.image) {
-                        currentItemImageBase64 = uploadData.image.url;
-                        window.currentItemImageBase64 = currentItemImageBase64;
-                        currentItemImageMetadata = uploadData.image;
-                        window.currentItemImageMetadata = currentItemImageMetadata;
-                        if (preview) preview.src = currentItemImageBase64;
-                        updateFimStatusPill("Device Upload", "status-upload");
-                        setFimActionDockVisible(true);
-                        showToast("✅ Image uploaded & saved to server!");
-                        return;
-                    }
+        // Attempt server upload
+        try {
+            const uploadResp = await fetch('/api/food-images/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dishId,
+                    base64Data: compressedBase64,
+                    mimeType: mimeType,
+                    filename: file.name
+                })
+            });
+            if (uploadResp.ok) {
+                const uploadData = await uploadResp.json();
+                if (uploadData.success && uploadData.image) {
+                    currentItemImageBase64 = uploadData.image.url;
+                    window.currentItemImageBase64 = currentItemImageBase64;
+                    currentItemImageMetadata = uploadData.image;
+                    window.currentItemImageMetadata = currentItemImageMetadata;
+                    if (preview) preview.src = currentItemImageBase64;
+                    updateFimStatusPill("Device Upload (WebP)", "status-upload");
+                    setFimActionDockVisible(true);
+                    showToast("✅ Image optimized (WebP) & saved!");
+                    return;
                 }
-            } catch (uploadErr) {
-                console.warn("[FoodImageManager] Upload endpoint unreachable, retaining local copy:", uploadErr.message);
             }
+        } catch (uploadErr) {
+            console.warn("[FoodImageManager] Upload endpoint unreachable, retaining local copy:", uploadErr.message);
+        }
 
-            // Local fallback if offline or server unreachable
-            currentItemImageBase64 = compressedBase64;
-            window.currentItemImageBase64 = currentItemImageBase64;
-            currentItemImageMetadata = {
-                id: 'img_upload_' + Date.now(),
-                url: compressedBase64,
-                source: 'upload',
-                approved: true,
-                createdAt: new Date().toISOString()
-            };
-            window.currentItemImageMetadata = currentItemImageMetadata;
-            updateFimStatusPill("Device Upload", "status-upload");
-            setFimActionDockVisible(true);
-            showToast("✅ Photo loaded from device!");
+        // Local fallback if offline or server unreachable
+        currentItemImageBase64 = compressedBase64;
+        window.currentItemImageBase64 = currentItemImageBase64;
+        currentItemImageMetadata = {
+            id: 'img_upload_' + Date.now(),
+            url: compressedBase64,
+            source: 'upload',
+            approved: true,
+            createdAt: new Date().toISOString()
         };
-        img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+        window.currentItemImageMetadata = currentItemImageMetadata;
+        updateFimStatusPill("Device Upload (WebP)", "status-upload");
+        setFimActionDockVisible(true);
+        showToast("✅ Photo optimized (WebP) & loaded!");
+    } catch(err) {
+        showToast("⚠️ Could not process image.");
+    }
 }
 window.handleItemImageUpload = handleItemImageUpload;
 
@@ -1313,6 +1333,11 @@ function addMenuItem() {
             }); 
             showToast("✅ Item added!"); 
         }
+        if (typeof markMenuCustomized === 'function') {
+            markMenuCustomized();
+        } else if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('billnaw_menu_customized', 'true');
+        }
         persistMenu(); 
         renderMenuUI(); 
         if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
@@ -1346,6 +1371,11 @@ function deleteMenuItem(id, bypassRoleCheck = false) {
     }
     if(confirm("Delete this item permanently?")) { 
         menuItems = menuItems.filter(item => item.id !== id); 
+        if (typeof markMenuCustomized === 'function') {
+            markMenuCustomized();
+        } else if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('billnaw_menu_customized', 'true');
+        }
         persistMenu(); 
         renderMenuUI(); 
         showToast("Deleted."); 
@@ -1510,9 +1540,13 @@ async function processAIMenu(event) {
         try {
             const statusHeaders = {};
             if (customKey) statusHeaders['x-gemini-api-key'] = customKey;
-            if (activeShopId) statusHeaders['x-shop-id'] = activeShopId;
+            if (activeShopId) {
+                statusHeaders['x-shop-id'] = activeShopId;
+                statusHeaders['x-store-code'] = activeShopId;
+                statusHeaders['x-client-id'] = activeShopId;
+            }
 
-            const statusRes = await fetch(`/api/gemini/status?clientId=${encodeURIComponent(activeShopId)}`, { headers: statusHeaders });
+            const statusRes = await fetch(`/api/gemini/status?clientId=${encodeURIComponent(activeShopId || '')}&storeCode=${encodeURIComponent(activeShopId || '')}&shopId=${encodeURIComponent(activeShopId || '')}`, { headers: statusHeaders });
             if (statusRes.ok) {
                 const statusData = await statusRes.json();
                 isGeminiReady = Boolean(statusData && statusData.operational);
@@ -1573,7 +1607,11 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
             }
             if (activeShopId) {
                 requestHeaders['x-shop-id'] = activeShopId;
+                requestHeaders['x-store-code'] = activeShopId;
+                requestHeaders['x-client-id'] = activeShopId;
                 payload.shopId = activeShopId;
+                payload.storeCode = activeShopId;
+                payload.clientId = activeShopId;
             }
             if (activeShopEmail) {
                 requestHeaders['x-shop-email'] = activeShopEmail;
@@ -1783,7 +1821,7 @@ function renderAiPreviewModal() {
         html += `
         <div class="ai-review-item" id="ai-item-row-${index}">
             <div class="ai-item-thumb" onclick="triggerAiItemImageUpload(${index})" title="Click to upload or replace dish photo">
-                <img id="ai-item-img-${index}" src="${imgDisplay}" alt="${safeName}" onerror="this.onerror=null; this.src=generateFallbackImage('${safeName}', '${safeCat}');">
+                <img id="ai-item-img-${index}" src="${imgDisplay}" alt="${safeName}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src=generateFallbackImage('${safeName}', '${safeCat}');">
                 <div class="ai-thumb-badge" title="Upload dish photo"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></div>
             </div>
 

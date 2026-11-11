@@ -604,6 +604,9 @@ function unlockTerminal(staff, showWelcomeToast = true) {
     if (typeof applyStationProfileRestrictions === 'function') {
         applyStationProfileRestrictions();
     }
+    if (typeof checkAndRolloverStaleTables === 'function') {
+        checkAndRolloverStaleTables({ force: true });
+    }
 
     if (showWelcomeToast && typeof showToast === 'function') {
         showToast(`Welcome, ${currentStaff.name}! (${currentStaff.role || 'Staff'})`);
