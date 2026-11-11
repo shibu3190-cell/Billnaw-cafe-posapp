@@ -2388,6 +2388,7 @@ window.getStoreCollectionName = getStoreCollectionName;
 function getStoreDocRef(explicitCode = null, explicitCollection = null) {
     if (!window.firestoreDB || !window.firestoreDoc) return null;
     const code = explicitCode || getActiveStoreIdentifier();
+    if (!code) return null;
     const collectionName = explicitCollection || getStoreCollectionName(code);
     return window.firestoreDoc(window.firestoreDB, collectionName, code);
 }
@@ -2396,6 +2397,7 @@ window.getStoreDocRef = getStoreDocRef;
 function getStoreSubcollectionRef(subcollection, explicitCode = null, explicitCollection = null) {
     if (!window.firestoreDB || !window.firestoreCollection) return null;
     const code = explicitCode || getActiveStoreIdentifier();
+    if (!code) return null;
     const collectionName = explicitCollection || getStoreCollectionName(code);
     return window.firestoreCollection(window.firestoreDB, collectionName, code, subcollection);
 }
@@ -2404,6 +2406,7 @@ window.getStoreSubcollectionRef = getStoreSubcollectionRef;
 function getStoreSubdocRef(subcollection, docId, explicitCode = null, explicitCollection = null) {
     if (!window.firestoreDB || !window.firestoreDoc) return null;
     const code = explicitCode || getActiveStoreIdentifier();
+    if (!code) return null;
     const collectionName = explicitCollection || getStoreCollectionName(code);
     return window.firestoreDoc(window.firestoreDB, collectionName, code, subcollection, String(docId));
 }

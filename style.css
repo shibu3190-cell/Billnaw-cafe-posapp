@@ -3332,7 +3332,7 @@ svg.nav-icon.active, svg.btn-icon.active {
 /* ==========================================================================
    KDS & TABLES STYLING (MILICORE M3)
    ========================================================================== */
-.kds-grid-wrap, .tables-grid-wrap {
+.kds-grid-wrap {
   width: 100%;
   box-sizing: border-box;
 }

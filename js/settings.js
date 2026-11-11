@@ -1521,11 +1521,12 @@ function switchTab(tabId) {
 }
 
 function switchTabDirect(tabId) {
+    if (tabId === 'tables') tabId = 'pos';
     document.querySelectorAll('.nav-btn, .tab-btn').forEach(btn => btn.classList.remove('active')); 
     document.querySelectorAll('.view, .tab-content').forEach(c => c.classList.remove('active')); 
     
     const targetNavBtn = document.getElementById(`nav-${tabId}`) || document.getElementById(`tab-${tabId}`);
-    if (['customers', 'settings', 'whatsapp', 'tables'].includes(tabId)) {
+    if (['customers', 'settings', 'whatsapp'].includes(tabId)) {
         const moreNavBtn = document.getElementById('nav-more');
         if (moreNavBtn) moreNavBtn.classList.add('active');
     }
@@ -1582,9 +1583,6 @@ function switchTabDirect(tabId) {
     }
     if (tabId === 'kds') {
         if (typeof renderKdsUI === 'function') renderKdsUI();
-    }
-    if (tabId === 'tables') {
-        if (typeof renderTablesFloorUI === 'function') renderTablesFloorUI();
     }
 }
 window.switchTab = switchTab;

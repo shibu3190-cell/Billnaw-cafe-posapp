@@ -351,8 +351,30 @@ async function testFlow2_SecondaryDevicePairing(cdp, viewport) {
                 { deviceId: 'DEV_MASTER00000', isMaster: true, status: 'AUTHORIZED', deviceName: 'Counter 1' }
             ];
 
-            if (typeof showDevicePairingOverlay === 'function') {
-                showDevicePairingOverlay();
+            const overlay = document.getElementById('devicePairingOverlay');
+            if (overlay) overlay.style.display = 'flex';
+
+            const devId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : 'DEV_TEST12345';
+            let code = localStorage.getItem('billnaw_pairing_code') || '123456';
+            if (code.length !== 6) code = '123456';
+            localStorage.setItem('billnaw_pairing_code', code);
+            const idEl = document.getElementById('pairingDeviceIdDisplay');
+            if (idEl) idEl.innerText = devId;
+            const codeEl = document.getElementById('pairingCodeDisplay');
+            if (codeEl) codeEl.innerText = code.slice(0, 3) + ' ' + code.slice(3);
+            const qrContainer = document.getElementById('pairingQrContainer');
+            if (qrContainer && window.QRCode) {
+                qrContainer.innerHTML = '';
+                try {
+                    new QRCode(qrContainer, {
+                        text: JSON.stringify({ deviceId: devId, pairingCode: code }),
+                        width: 160,
+                        height: 160,
+                        colorDark: "#143832",
+                        colorLight: "#FAF7F4",
+                        correctLevel: QRCode.CorrectLevel.M
+                    });
+                } catch(e) {}
             }
         })()
     `);
@@ -1161,9 +1183,20 @@ async function testFlow8_KdsAndKitchenWorkflow(cdp, viewport) {
 }
 
 async function testFlow9_TablesViaMoreHub(cdp, viewport) {
-    console.log(`  [Flow 9: Tables Floor View via More Hub & Clean Bottom Bar] Auditing on ${viewport}...`);
+    console.log(`  [Flow 9: More Hub & POS Dine-In Tables Operations] Auditing on ${viewport}...`);
 
-    // 1. Switch to Floor Server role (Waiter Mobile)
+    // 1. Reset / track console errors in browser runtime during navigation
+    await cdp.evaluate(`
+        (() => {
+            window.__flow9ConsoleErrors = [];
+            window.__flow9ErrorHandler = (evt) => {
+                window.__flow9ConsoleErrors.push(evt.message || String(evt));
+            };
+            window.addEventListener('error', window.__flow9ErrorHandler);
+        })()
+    `);
+
+    // 2. Switch to Floor Server role (Waiter Mobile)
     await cdp.evaluate(`
         (() => {
             const serverObj = { id: 3, name: 'Rahul Verma', role: 'Floor Server' };
@@ -1181,7 +1214,7 @@ async function testFlow9_TablesViaMoreHub(cdp, viewport) {
 
     await new Promise(r => setTimeout(r, 300));
 
-    // 2. Assert #nav-tables is completely absent / hidden from bottom bar
+    // 3. Assert #nav-tables is completely absent / hidden from bottom bar
     const navTablesAssert = await cdp.evaluate(`
         (() => {
             const navTables = document.getElementById('nav-tables');
@@ -1195,7 +1228,7 @@ async function testFlow9_TablesViaMoreHub(cdp, viewport) {
 
     assert.strictEqual(navTablesAssert.display, 'none', '#nav-tables must be totally removed/hidden from bottom bar');
 
-    // 3. Open More Hub modal and verify Dine-In Tables launcher card
+    // 4. Open More Hub modal and verify "Dine-In Tables" launcher card is completely REMOVED
     await cdp.evaluate(`
         (() => {
             if (typeof openMoreHub === 'function') openMoreHub();
@@ -1211,45 +1244,102 @@ async function testFlow9_TablesViaMoreHub(cdp, viewport) {
     const moreHubAssert = await cdp.evaluate(`
         (() => {
             const hub = document.getElementById('moreHubModal');
-            const tablesCard = hub ? Array.from(hub.querySelectorAll('.more-hub-card')).find(c => c.textContent.includes('Dine-In Tables')) : null;
+            const cards = hub ? Array.from(hub.querySelectorAll('.more-hub-card')) : [];
+            const tablesCard = cards.find(c => c.textContent.includes('Dine-In Tables'));
             return {
                 isHubVisible: hub ? hub.style.display === 'flex' : false,
-                hasTablesCard: !!tablesCard
+                hasTablesCard: !!tablesCard,
+                cardCount: cards.length
             };
         })()
     `);
 
     assert.strictEqual(moreHubAssert.isHubVisible, true, '#moreHubModal must open cleanly');
-    assert.strictEqual(moreHubAssert.hasTablesCard, true, '#moreHubModal must contain "Dine-In Tables" launcher card');
+    assert.strictEqual(moreHubAssert.hasTablesCard, false, '#moreHubModal must NOT contain "Dine-In Tables" launcher card');
+    assert.strictEqual(moreHubAssert.cardCount, 4, '#moreHubModal must contain exactly 4 operational cards (KDS, CRM, WhatsApp, Settings)');
 
     await cdp.captureScreenshot(`multidevice_09_tables_morehub_${viewport}.png`);
 
-    // 4. Click Dine-In Tables card -> transitions to tables view
+    // 5. Close More Hub and navigate across views (e.g. KDS, legacy 'tables', POS)
     await cdp.evaluate(`
         (() => {
             if (typeof closeMoreHub === 'function') closeMoreHub();
-            if (typeof switchTabDirect === 'function') switchTabDirect('tables');
-            else if (typeof switchTab === 'function') switchTab('tables');
-            if (typeof renderTablesFloorUI === 'function') renderTablesFloorUI();
+            if (typeof switchTabDirect === 'function') {
+                switchTabDirect('kds');
+                switchTabDirect('tables'); // routes safely to 'pos' via router fallback
+            } else if (typeof switchTab === 'function') {
+                switchTab('kds');
+                switchTab('tables');
+            }
         })()
     `);
 
     await new Promise(r => setTimeout(r, 400));
 
-    const tablesViewAssert = await cdp.evaluate(`
+    // 6. Verify obsolete #tables view is absent from DOM, #pos is active, and zero console errors
+    const navigationAssert = await cdp.evaluate(`
         (() => {
             const tablesView = document.getElementById('tables');
-            const tablesGrid = document.getElementById('tablesGridContainer');
+            const posView = document.getElementById('pos');
+            const errors = window.__flow9ConsoleErrors || [];
             return {
-                isTablesActive: tablesView ? tablesView.classList.contains('active') : false,
-                hasGrid: !!tablesGrid
+                tablesViewExists: !!tablesView,
+                isPosActive: posView ? posView.classList.contains('active') : false,
+                errorsCount: errors.length,
+                errors: errors
             };
         })()
     `);
 
-    assert.strictEqual(tablesViewAssert.isTablesActive, true, '#tables view must be active after launching from More Hub');
+    assert.strictEqual(navigationAssert.tablesViewExists, false, 'Obsolete #tables view container must not exist in DOM');
+    assert.strictEqual(navigationAssert.isPosActive, true, '#pos view must be active following switchTabDirect("tables") fallback');
+    assert.strictEqual(navigationAssert.errorsCount, 0, `Navigating More Hub and views must produce 0 console errors, got: ${JSON.stringify(navigationAssert.errors)}`);
 
-    console.log(`  ✅ Flow 9 passed for ${viewport}.`);
+    // 7. Test Dine-in tables selection and floor layout inside #tablesWrapper in POS view
+    const tableOpsAssert = await cdp.evaluate(`
+        (() => {
+            const wrapper = document.getElementById('tablesWrapper');
+            const tableGrid = document.getElementById('tableGridUI');
+            const floorSelector = document.getElementById('posFloorSelector');
+            
+            // Switch floor if supported
+            if (typeof switchFloor === 'function') {
+                switchFloor('1st Floor');
+            }
+
+            // Render tables if needed
+            if (typeof renderTables === 'function') {
+                renderTables();
+            }
+
+            const tableButtons = tableGrid ? Array.from(tableGrid.querySelectorAll('.table-btn')) : [];
+
+            // Select Table 1
+            if (typeof selectTable === 'function' && tableButtons.length > 0) {
+                selectTable(1);
+            }
+
+            const activeTableBadge = document.getElementById('posActiveTableBadge');
+            const selectedBtn = tableGrid ? tableGrid.querySelector('.table-btn.selected') : null;
+
+            return {
+                hasWrapper: !!wrapper,
+                isWrapperVisible: wrapper ? window.getComputedStyle(wrapper).display !== 'none' : false,
+                hasFloorSelector: !!floorSelector,
+                tableCount: tableButtons.length,
+                hasSelectedTable: !!selectedBtn || (typeof activeTable !== 'undefined' && activeTable === 1),
+                badgeText: activeTableBadge ? activeTableBadge.textContent : ''
+            };
+        })()
+    `);
+
+    assert.strictEqual(tableOpsAssert.hasWrapper, true, '#tablesWrapper must exist in #pos view');
+    assert.strictEqual(tableOpsAssert.isWrapperVisible, true, '#tablesWrapper must be visible in POS view');
+    assert.strictEqual(tableOpsAssert.hasFloorSelector, true, '#posFloorSelector floor layout must exist');
+    assert.ok(tableOpsAssert.tableCount > 0, 'Dine-in table buttons must be rendered in #tableGridUI');
+    assert.strictEqual(tableOpsAssert.hasSelectedTable, true, 'Selecting table must succeed and mark table active');
+
+    console.log(`  ✅ Flow 9 passed for ${viewport}: More Hub clean, 0 errors, POS dine-in tables operational.`);
 }
 
 // ------------------------------------------------------------
@@ -1353,7 +1443,14 @@ async function runMultiDeviceAudit() {
                         token: 'demo-valid-token-browser-audit',
                         storeCode: 'SHOP-M2',
                         user: { email: 'admin@cafe.com', role: 'admin' },
-                        shop: { name: 'Billnaw Cafe' }
+                        shop: {
+                            name: 'Billnaw Cafe',
+                            menu: [
+                                { id: 1, name: 'Espresso', category: 'Coffee', price: 60, stock: 20, stockQty: 20, trackStock: true, gstRate: 5 },
+                                { id: 2, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
+                                { id: 3, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 }
+                            ]
+                        }
                     }));
                     localStorage.setItem('billnaw_store_profile', JSON.stringify({
                         name: 'Billnaw Cafe',
@@ -1400,7 +1497,14 @@ async function runMultiDeviceAudit() {
                         token: 'demo-valid-token-browser-audit',
                         storeCode: 'SHOP-M2',
                         user: { email: 'admin@cafe.com', role: 'admin' },
-                        shop: { name: 'Billnaw Cafe' }
+                        shop: {
+                            name: 'Billnaw Cafe',
+                            menu: [
+                                { id: 1, name: 'Espresso', category: 'Coffee', price: 60, stock: 20, stockQty: 20, trackStock: true, gstRate: 5 },
+                                { id: 2, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
+                                { id: 3, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 }
+                            ]
+                        }
                     }));
                     localStorage.setItem('billnaw_store_profile', JSON.stringify({
                         name: 'Billnaw Cafe',

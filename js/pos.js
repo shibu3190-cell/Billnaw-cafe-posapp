@@ -6,7 +6,11 @@ function switchFloor(floorName, btnEl) {
     if (typeof shopProfile !== 'undefined') shopProfile.activeFloor = floorName;
     const pills = document.querySelectorAll('#posFloorSelector .floor-pill');
     pills.forEach(p => p.classList.remove('active'));
-    if (btnEl) btnEl.classList.add('active');
+    let targetPill = btnEl;
+    if (!targetPill && pills.length > 0) {
+        targetPill = Array.from(pills).find(p => p.textContent.trim().toLowerCase() === String(floorName).trim().toLowerCase());
+    }
+    if (targetPill) targetPill.classList.add('active');
     if (typeof showToast === 'function') showToast(`Floor switched: ${floorName}`);
 }
 window.switchFloor = switchFloor;
@@ -305,33 +309,43 @@ function selectTable(num) {
 window.selectTable = selectTable;
 
 function bookTable() { 
-        let tInfo = tablesInfo[activeTable];
-    const currentTableName = getTableName(activeTable);
+    let tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[activeTable] : null;
+    if (!tInfo) return;
+    const currentTableName = (typeof getTableName === 'function') ? getTableName(activeTable) : `Table ${activeTable}`;
 
-    const delta = computeKotDelta(activeTable);
-    if (!delta.hasNewItems) {
-        showToast("KOT already sent for all items.", "info");
-        const kotModal = document.getElementById('kotModal');
-        if (kotModal) kotModal.style.display = 'none';
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg><span class="btn-text">KOT Sent &#10003;</span>';
+    // If table has items, booking/sending KOT updates delta and marks status to 'kot'
+    if (Array.isArray(tInfo.items) && tInfo.items.length > 0) {
+        const delta = (typeof computeKotDelta === 'function') ? computeKotDelta(activeTable) : { hasNewItems: true };
+        if (delta.hasNewItems) {
+            tInfo.items.forEach(item => {
+                item.qtyKotPrinted = Number(item.qty || item.quantity || 0);
+            });
+            tInfo.status = 'kot';
+            persistTables();
+            syncTableUI();
+            if (typeof showToast === 'function') showToast(`Table ${currentTableName} KOT sent to Kitchen!`, 'success');
+            return;
+        } else {
+            if (typeof showToast === 'function') showToast("KOT already sent for all items.", "info");
+            return;
         }
-        return;
-    } 
-    if(tInfo && tInfo.items.length > 0) return showToast("Cannot reserve active table!"); 
-    if (tInfo) { 
-        tInfo.status = tInfo.status === 'booked' ? 'empty' : 'booked'; 
-        persistTables(); 
-        syncTableUI(); 
-    } 
+    }
+
+    // Otherwise, empty table reservation toggle
+    tInfo.status = tInfo.status === 'booked' ? 'empty' : 'booked'; 
+    persistTables(); 
+    syncTableUI(); 
+    if (typeof showToast === 'function') {
+        showToast(tInfo.status === 'booked' ? `Table ${currentTableName} reserved!` : `Table ${currentTableName} reservation cleared!`);
+    }
 }
 window.bookTable = bookTable;
 
 function addToCart(itemId, event) {
     if (event) event.stopPropagation();
-    let tInfo = tablesInfo[activeTable]; 
-    const menuItem = menuItems.find(m => m.id === itemId); 
+    let tInfo = (typeof tablesInfo !== 'undefined' && tablesInfo[activeTable]) ? tablesInfo[activeTable] : (window.tablesInfo ? window.tablesInfo[activeTable] : null); 
+    const itemsPool = (typeof menuItems !== 'undefined' && Array.isArray(menuItems) && menuItems.length > 0) ? menuItems : (window.menuItems || []);
+    const menuItem = itemsPool.find(m => m.id === itemId); 
     if(!menuItem || !tInfo) return;
     const existing = tInfo.items.find(i => i.id === itemId);
     if (menuItem.trackStock && (existing ? existing.qty + 1 : 1) > menuItem.stockQty) return showToast(`Only ${menuItem.stockQty} left!`);
@@ -347,10 +361,11 @@ window.addToCart = addToCart;
 
 function modifyQty(itemId, delta, event) {
     if (event) event.stopPropagation();
-    let tInfo = tablesInfo[activeTable]; 
+    let tInfo = (typeof tablesInfo !== 'undefined' && tablesInfo[activeTable]) ? tablesInfo[activeTable] : (window.tablesInfo ? window.tablesInfo[activeTable] : null); 
     if (!tInfo) return;
     const item = tInfo.items.find(i => i.id === itemId); 
-    const menuItem = menuItems.find(m => m.id === itemId);
+    const itemsPool = (typeof menuItems !== 'undefined' && Array.isArray(menuItems) && menuItems.length > 0) ? menuItems : (window.menuItems || []);
+    const menuItem = itemsPool.find(m => m.id === itemId);
     if (item) {
         if (delta > 0 && menuItem && menuItem.trackStock && (item.qty + delta) > menuItem.stockQty) return showToast(`Only ${menuItem.stockQty} left!`);
         item.qty += delta; 
@@ -1759,6 +1774,7 @@ async function confirmCheckout() {
 }
 window.confirmCheckout = confirmCheckout;
 window.settleOrder = confirmCheckout;
+window.completeCheckout = confirmCheckout;
 
 // --- THERMAL PRINTER ESC/POS UTILITIES ---
 let bleDevice = null; 
