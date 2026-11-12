@@ -95,10 +95,10 @@ export const CANDIDATE_TIMEOUT_MS = 25000;
 
 export const CANDIDATE_MODELS = [
   'gemini-3.1-flash-lite',
-  'gemini-2.5-flash',
+  'gemini-3.8-flash',
   'gemini-flash-latest',
-  'gemini-2.5-flash-lite',
-  'gemini-3.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
   CONFIG.gemini.model || 'gemini-3.8-flash'
 ];
 
@@ -143,21 +143,28 @@ export function cleanParsedPrice(rawPrice) {
       return 0;
     }
     // Strip currency abbreviations, symbols, colons, and abbreviation periods
-    const cleanedStr = rawStr
+    const strippedStr = rawStr
       .replace(/(?:mrp|rs|inr|₹|\$|€|£|¥)\s*[:.]?\s*/gi, '')
       .replace(/,/g, '')
-      .replace(/[^\d.]/g, '')
-      .replace(/^\.+/, '');
-    price = parseFloat(cleanedStr) || 0;
+      .trim();
+
+    // Match the first valid numeric segment (prevents "80-150" or "80/150" concatenating to 80150)
+    const numMatch = strippedStr.match(/\d+(?:\.\d+)?/);
+    if (numMatch) {
+      price = parseFloat(numMatch[0]) || 0;
+    } else {
+      const fallbackClean = strippedStr.replace(/[^\d.]/g, '').replace(/^\.+/, '');
+      price = parseFloat(fallbackClean) || 0;
+    }
   }
-  if (isNaN(price) || price < 0) price = 0;
+  if (!Number.isFinite(price) || isNaN(price) || price < 0) price = 0;
   return price;
 }
 
 /**
  * Resilient multi-strategy JSON parser for AI vision OCR outputs.
  * Handles direct JSON, markdown code fences, leading conversational preambles,
- * and outermost bracket/brace slicing.
+ * outermost bracket/brace slicing, and diverse object/array schemas.
  */
 export function parseMenuJsonSafely(rawText) {
   if (!rawText || typeof rawText !== 'string' || rawText.trim().length === 0) {
@@ -200,14 +207,7 @@ export function parseMenuJsonSafely(rawText) {
       const lastBracket = text.lastIndexOf(']');
       if (firstBracket !== -1 && lastBracket > firstBracket) {
         try {
-          const arr = JSON.parse(text.substring(firstBracket, lastBracket + 1));
-          if (Array.isArray(arr)) {
-            if (arr.length > 0 && Array.isArray(arr[0].items)) {
-              parsed = { menu_categories: arr };
-            } else {
-              parsed = { menu_categories: [{ category_name: 'General', items: arr }] };
-            }
-          }
+          parsed = JSON.parse(text.substring(firstBracket, lastBracket + 1));
         } catch (e4) {
           // Fall through
         }
@@ -215,42 +215,97 @@ export function parseMenuJsonSafely(rawText) {
     }
   }
 
-  if (Array.isArray(parsed)) {
-    if (parsed.length > 0 && Array.isArray(parsed[0].items)) {
-      parsed = { menu_categories: parsed };
-    } else {
-      parsed = { menu_categories: [{ category_name: 'General', items: parsed }] };
-    }
-  }
-
-  if (!parsed || typeof parsed !== 'object') {
+  if (!parsed || (typeof parsed !== 'object' && !Array.isArray(parsed))) {
     throw new Error('AI output was not valid JSON');
   }
 
-  // Normalize both menu_categories and categories schemas for POS compatibility
-  const rawCategories = parsed.menu_categories || parsed.categories || [];
+  // Extract and normalize categories from any top-level key variant
+  let rawCategories = [];
+  if (Array.isArray(parsed)) {
+    if (parsed.length > 0 && Array.isArray(parsed[0]?.items)) {
+      rawCategories = parsed;
+    } else {
+      // Group flat items by category if annotated, otherwise group as General
+      const catMap = new Map();
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object') continue;
+        const cName = String(item.category_name || item.category || item.group || item.section || 'General').trim() || 'General';
+        if (!catMap.has(cName)) catMap.set(cName, []);
+        catMap.get(cName).push(item);
+      }
+      if (catMap.size > 0) {
+        rawCategories = Array.from(catMap.entries()).map(([name, items]) => ({
+          name,
+          category_name: name,
+          items
+        }));
+      } else {
+        rawCategories = [{ category_name: 'General', items: parsed }];
+      }
+    }
+  } else if (parsed && typeof parsed === 'object') {
+    const rawList = parsed.menu_categories ||
+                    parsed.categories ||
+                    parsed.menu ||
+                    parsed.items ||
+                    parsed.dishes ||
+                    parsed.products ||
+                    parsed.menu_items ||
+                    (parsed.data && (parsed.data.menu_categories || parsed.data.categories || parsed.data.items || parsed.data.menu)) ||
+                    (parsed.result && (parsed.result.menu_categories || parsed.result.categories || parsed.result.items));
+
+    if (Array.isArray(rawList)) {
+      if (rawList.length > 0 && Array.isArray(rawList[0].items)) {
+        rawCategories = rawList;
+      } else {
+        // Group flat items by category if available
+        const catMap = new Map();
+        for (const item of rawList) {
+          if (!item || typeof item !== 'object') continue;
+          const cName = String(item.category_name || item.category || item.group || item.section || 'General').trim() || 'General';
+          if (!catMap.has(cName)) catMap.set(cName, []);
+          catMap.get(cName).push(item);
+        }
+        if (catMap.size > 0) {
+          rawCategories = Array.from(catMap.entries()).map(([name, items]) => ({ category_name: name, name, items }));
+        } else {
+          rawCategories = [{ category_name: 'General', items: rawList }];
+        }
+      }
+    } else {
+      // Check if keys are category names mapping to item arrays: { "Beverages": [...], "Desserts": [...] }
+      const entries = Object.entries(parsed).filter(([k, v]) => Array.isArray(v) && k !== 'gst_pricing_note' && k !== 'notes');
+      if (entries.length > 0) {
+        rawCategories = entries.map(([name, items]) => ({ category_name: name, name, items }));
+      }
+    }
+  }
+
+  // Normalize categories and dish items for POS compatibility
   const normalizedCategories = (Array.isArray(rawCategories) ? rawCategories : []).map(cat => ({
     name: String(cat.category_name || cat.name || cat.category || 'General').trim() || 'General',
     items: (Array.isArray(cat.items) ? cat.items : []).map(item => {
-      const name = String(item.item_name || item.name || item.title || '').trim();
-      const price = cleanParsedPrice(item.price);
+      if (!item || typeof item !== 'object') return null;
+      const name = String(item.item_name || item.name || item.title || item.dish || item.dishName || '').trim();
+      const price = cleanParsedPrice(item.price !== undefined ? item.price : (item.rate !== undefined ? item.rate : (item.Price !== undefined ? item.Price : item.cost)));
 
       let isVeg = null;
       if (typeof item.isVeg === 'boolean') isVeg = item.isVeg;
       else if (typeof item.is_veg === 'boolean') isVeg = item.is_veg;
       else if (typeof item.veg === 'boolean') isVeg = item.veg;
+      else if (typeof item.vegetarian === 'boolean') isVeg = item.vegetarian;
 
       return {
         name,
-        description: item.description ? String(item.description).trim() : null,
+        description: item.description ? String(item.description).trim() : (item.desc ? String(item.desc).trim() : null),
         price,
         isVeg
       };
-    }).filter(i => i.name.length > 0)
+    }).filter(Boolean).filter(i => i.name.length > 0)
   })).filter(c => c.items.length > 0);
 
   return {
-    menu_categories: rawCategories,
+    menu_categories: normalizedCategories,
     categories: normalizedCategories,
     gst_pricing_note: parsed.gst_pricing_note || 'inclusive'
   };

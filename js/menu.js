@@ -308,6 +308,9 @@ function renderMenuCatalogUI() {
     if (countBadge) {
         countBadge.innerText = `${activeCatalogItems.length} Item${activeCatalogItems.length === 1 ? '' : 's'}`;
     }
+    if (typeof refreshAiMenuQuotaPill === 'function') {
+        refreshAiMenuQuotaPill();
+    }
 
     // 2. Render Category Filter Chips
     const chipsContainer = document.getElementById('catalogCategoryChips');
@@ -472,10 +475,40 @@ document.addEventListener('click', (event) => {
     }
 });
 
-// 📸 Upload Menu Choice Dialog Handlers
+// 📸 Upload Menu Choice Dialog Handlers & Quota Telemetry Pill
+async function refreshAiMenuQuotaPill() {
+    try {
+        const activeShopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || 
+                             (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || 
+                             (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_store_code') || localStorage.getItem('storeCode')) : null) || 
+                             'SHOP-BILLNAW-01';
+        const res = await fetch(`/api/ai/quota?shopId=${encodeURIComponent(activeShopId)}`).catch(() => null);
+        if (!res || !res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (!data) return;
+        const remaining = typeof data.remaining === 'number' ? data.remaining : (data.limit !== undefined && data.used !== undefined ? Math.max(0, data.limit - data.used) : 15);
+        const limit = data.limit || 15;
+        const pillText = document.getElementById('aiMenuQuotaPillText');
+        if (pillText) {
+            pillText.innerText = `${remaining} / ${limit} scans left this month`;
+        }
+        const modalStatus = document.getElementById('modalAiQuotaStatus');
+        if (modalStatus) {
+            modalStatus.innerText = `Quota: ${remaining}/${limit} remaining this month`;
+            modalStatus.style.color = remaining <= 2 ? '#DC2626' : 'var(--primary)';
+        }
+    } catch (e) {
+        // Non-critical telemetry UI update
+    }
+}
+window.refreshAiMenuQuotaPill = refreshAiMenuQuotaPill;
+
 function openUploadMenuChoiceModal() {
     const modal = document.getElementById('uploadMenuChoiceModal');
     if (modal) modal.style.display = 'flex';
+    if (typeof refreshAiMenuQuotaPill === 'function') {
+        refreshAiMenuQuotaPill();
+    }
 }
 window.openUploadMenuChoiceModal = openUploadMenuChoiceModal;
 
@@ -1752,6 +1785,9 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
         if (uploader) uploader.value = '';
         const camUploader = document.getElementById('aiMenuCameraInput');
         if (camUploader) camUploader.value = '';
+        if (typeof refreshAiMenuQuotaPill === 'function') {
+            refreshAiMenuQuotaPill();
+        }
     }
 }
 window.executeMenuExtraction = executeMenuExtraction;

@@ -168,6 +168,7 @@ service cloud.firestore {
       match /reports/{reportId} { allow read, write: if isTenantStaff(cafeId); }
       match /daily_summaries/{summaryId} { allow read, write: if isTenantStaff(cafeId); }
       match /marketing_logs/{logId} { allow read, write: if isTenantStaff(cafeId); }
+      match /quota/{quotaId} { allow read, write: if isTenantStaff(cafeId); }
     }
 
     // Aligned Dual-Path Backward-Compatibility Paths (/shops/{shopId})
@@ -283,6 +284,7 @@ service cloud.firestore {
       match /reports/{reportId} { allow read, write: if isTenantStaff(shopId); }
       match /daily_summaries/{summaryId} { allow read, write: if isTenantStaff(shopId); }
       match /marketing_logs/{logId} { allow read, write: if isTenantStaff(shopId); }
+      match /quota/{quotaId} { allow read, write: if isTenantStaff(shopId); }
     }
 
     // Legacy Client Collection (/clients/{clientId})

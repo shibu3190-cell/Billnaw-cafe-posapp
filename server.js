@@ -26,7 +26,7 @@ import {
 } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle, syncStoreToFirestoreREST, getStoreFromFirestoreREST, deleteStaffFromFirestoreREST } from './server/sync-service.js';
-import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot } from './server/quota-service.js';
+import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot, normalizeShopId } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
 import {
   sendOtp,
@@ -211,10 +211,8 @@ app.get('/api/config/client', (req, res) => {
 // Client AI Quota Info: Returns current month usage, limit, and quota remaining
 app.get('/api/ai/quota', async (req, res) => {
   try {
-    const shopId = sanitizeTenantStoreCode(req) || (req.query?.shopId || req.query?.clientId || req.headers['x-shop-id'] || '').trim();
-    if (!shopId || !/^[A-Za-z0-9_-]{3,64}$/.test(shopId)) {
-      return res.status(400).json({ error: 'Tenant isolation error: valid shopId or storeCode required.' });
-    }
+    const rawShop = sanitizeTenantStoreCode(req) || req.query?.shopId || req.query?.clientId || req.query?.storeCode || req.headers['x-shop-id'];
+    const shopId = normalizeShopId(rawShop);
     const quota = await getClientQuotaInfo(shopId);
     res.json(quota);
   } catch (err) {
@@ -364,10 +362,8 @@ app.post('/api/print/network', (req, res) => {
 app.get('/api/gemini/status', async (req, res) => {
   const headerKey = req.headers['x-gemini-api-key'] || req.headers['x-api-key'];
   const customKey = (headerKey || req.query.apiKey || '').trim();
-  const shopId = sanitizeTenantStoreCode(req) || (req.query?.shopId || req.query?.clientId || req.headers['x-shop-id'] || '').trim();
-  if (!shopId || !/^[A-Za-z0-9_-]{3,64}$/.test(shopId)) {
-    return res.json({ operational: false, hasKey: false, error: 'Tenant isolation error: valid shopId or storeCode required' });
-  }
+  const rawShop = sanitizeTenantStoreCode(req) || req.query?.shopId || req.query?.clientId || req.headers['x-shop-id'];
+  const shopId = normalizeShopId(rawShop);
 
   try {
     let keyCheck = null;
@@ -411,10 +407,8 @@ app.get('/api/gemini/status', async (req, res) => {
 const handleMenuScanRequest = async (req, res) => {
   const customHeaderKey = req.headers['x-gemini-api-key'] || req.headers['x-api-key'];
   const customKey = (customHeaderKey || req.body?.apiKey || req.body?.customGeminiKey || '').trim();
-  const shopId = sanitizeTenantStoreCode(req) || (req.body?.shopId || req.query?.shopId || req.body?.clientId || req.query?.clientId || '').trim();
-  if (!shopId || !/^[A-Za-z0-9_-]{3,64}$/.test(shopId)) {
-    return res.status(400).json({ error: 'Tenant isolation error: valid shopId or storeCode required for menu scan' });
-  }
+  const rawShop = sanitizeTenantStoreCode(req) || req.body?.shopId || req.query?.shopId || req.body?.clientId || req.query?.clientId || req.headers['x-shop-id'];
+  const shopId = normalizeShopId(rawShop);
   const shopEmail = (req.headers['x-shop-email'] || req.body?.shopEmail || req.query?.shopEmail || '').trim();
   const { base64Data, mimeType, extractedText } = req.body || {};
   let keyCheck = null;
@@ -435,8 +429,19 @@ const handleMenuScanRequest = async (req, res) => {
       throw quotaErr;
     }
 
-    const resolvedApiKey = resolveGeminiApiKey(customKey || keyCheck?.apiKey);
-    const isCustomKey = Boolean(customKey || (keyCheck && keyCheck.isCustomKey));
+    if (customKey && customKey.length <= 15) {
+      if (slotReserved) {
+        releaseAiQuotaSlot(shopId);
+        slotReserved = false;
+      }
+      return res.status(401).json({
+        error: 'Custom Gemini API key is too short or invalid. Please verify your key in Settings > AI Quota & Custom Key.',
+        invalidCustomKey: true
+      });
+    }
+
+    const isCustomKey = Boolean((customKey && customKey.length > 15) || (keyCheck && keyCheck.isCustomKey));
+    const resolvedApiKey = isCustomKey ? (customKey || keyCheck?.apiKey) : resolveGeminiApiKey();
 
     // If custom key was provided, ensure it is operational; otherwise fail with 401
     if (isCustomKey && resolvedApiKey) {

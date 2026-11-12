@@ -8,7 +8,7 @@ console.log("🖨️ SINGLE-PRINTER UNIFIED MODE & DELTA-KOT FIX SUITE");
 console.log("====================================================\n");
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-const jsPos = fs.readFileSync(path.join(__dirname, '..', 'js', 'pos.js'), 'utf8');
+const jsPos = fs.readFileSync(path.join(__dirname, '..', 'js', 'pos.js'), 'utf8').replace(/\r\n/g, '\n');
 const bridgeCode = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'platform-bridge.js'), 'utf8');
 
 let passed = 0;

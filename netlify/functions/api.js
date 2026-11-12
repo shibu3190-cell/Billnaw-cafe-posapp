@@ -15,7 +15,8 @@ import {
   getClientQuotaInfo,
   updateClientProfileData,
   releaseAiQuotaSlot,
-  getCurrentYearMonth
+  getCurrentYearMonth,
+  normalizeShopId
 } from '../../server/quota-service.js';
 import {
   getShopSubscription,
@@ -319,14 +320,8 @@ export async function handler(event, context) {
   if (event.httpMethod === 'GET' && (cleanPath === '/gemini/status' || cleanPath.endsWith('/gemini/status'))) {
     const headerKey = headers['x-gemini-api-key'] || headers['x-api-key'];
     const customKey = (headerKey || event.queryStringParameters?.apiKey || '').trim();
-    const shopId = sanitizeTenantStoreCode(event, body);
-    if (!shopId) {
-      return jsonResponse(200, {
-        operational: false,
-        keyAvailable: false,
-        error: 'Tenant isolation error: valid shopId or storeCode required'
-      });
-    }
+    const rawShop = sanitizeTenantStoreCode(event, body) || event.queryStringParameters?.shopId || headers['x-shop-id'];
+    const shopId = normalizeShopId(rawShop);
     let keyCheck = null;
     try {
       keyCheck = await checkAiQuotaAndKey({ shopId, customApiKey: customKey, reserveSlot: false });
@@ -372,10 +367,8 @@ export async function handler(event, context) {
   // Route: /ai/quota (Client AI Quota Telemetry)
   // -----------------------------------------------------------
   if (event.httpMethod === 'GET' && (cleanPath === '/ai/quota' || cleanPath.endsWith('/ai/quota'))) {
-    const clientId = sanitizeTenantStoreCode(event, body);
-    if (!clientId) {
-      return jsonResponse(400, { error: 'Tenant isolation error: valid shopId or storeCode required.' });
-    }
+    const rawClient = sanitizeTenantStoreCode(event, body) || event.queryStringParameters?.shopId || event.queryStringParameters?.clientId || headers['x-shop-id'];
+    const clientId = normalizeShopId(rawClient);
     try {
       const quota = await getClientQuotaInfo(clientId);
       return jsonResponse(200, {
@@ -436,10 +429,8 @@ export async function handler(event, context) {
     const { base64Data, mimeType, extractedText } = body;
     const customHeaderKey = headers['x-gemini-api-key'] || headers['x-api-key'];
     const customKey = (customHeaderKey || body.apiKey || body.customGeminiKey || '').trim();
-    const shopId = sanitizeTenantStoreCode(event, body);
-    if (!shopId) {
-      return jsonResponse(400, { error: 'Tenant isolation error: valid shopId or storeCode required for menu scan' });
-    }
+    const rawShop = sanitizeTenantStoreCode(event, body) || body?.shopId || event.queryStringParameters?.shopId || headers['x-shop-id'];
+    const shopId = normalizeShopId(rawShop);
 
     let keyCheck = null;
     let slotReserved = false;
@@ -458,8 +449,19 @@ export async function handler(event, context) {
         throw quotaErr;
       }
 
-      const resolvedApiKey = resolveGeminiApiKey(customKey || keyCheck?.apiKey);
-      const isCustomKey = Boolean(customKey || (keyCheck && keyCheck.isCustomKey));
+      if (customKey && customKey.length <= 15) {
+        if (slotReserved) {
+          releaseAiQuotaSlot(shopId);
+          slotReserved = false;
+        }
+        return jsonResponse(401, {
+          error: 'Custom Gemini API key is too short or invalid. Please verify your key in Settings > AI Quota & Custom Key.',
+          invalidCustomKey: true
+        });
+      }
+
+      const isCustomKey = Boolean((customKey && customKey.length > 15) || (keyCheck && keyCheck.isCustomKey));
+      const resolvedApiKey = isCustomKey ? (customKey || keyCheck?.apiKey) : resolveGeminiApiKey();
 
       if (isCustomKey && resolvedApiKey) {
         const isCustomKeyValid = await isGeminiKeyOperational(resolvedApiKey);

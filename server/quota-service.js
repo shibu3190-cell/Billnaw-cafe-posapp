@@ -3,22 +3,79 @@
 // calendar month auto-reset (YYYY-MM), atomic concurrency locking, and custom API keys.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import fs from 'node:fs';
+import path from 'node:path';
 import { CONFIG } from './config.js';
 import { resolveGeminiApiKey } from './gemini-service.js';
 
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
 export const DEFAULT_MONTHLY_LIMIT = 15;
+const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const DATA_DIR = isServerless ? '/tmp' : path.resolve(process.cwd(), 'data');
+const QUOTA_FILE = path.join(DATA_DIR, 'ai-quota.json');
+
 const localClientMemoryStore = new Map();
 const shopMutexMap = new Map();
 const shopInFlightMap = new Map();
 const lockStorage = new AsyncLocalStorage();
 
 /**
+ * Normalizes shop identifier to prevent regex or path injection failures.
+ */
+export function normalizeShopId(rawId) {
+  if (typeof rawId === 'object' && rawId !== null) {
+    rawId = rawId.shopId || rawId.clientId || rawId.storeCode || '';
+  }
+  const clean = String(rawId || '').trim().replace(/[^A-Za-z0-9_-]/g, '_');
+  return (clean && clean.length >= 3) ? clean.slice(0, 64) : 'SHOP-BILLNAW-01';
+}
+
+function loadQuotaStoreFromDisk() {
+  try {
+    if (fs.existsSync(QUOTA_FILE)) {
+      const raw = fs.readFileSync(QUOTA_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (data && typeof data === 'object') {
+        Object.entries(data).forEach(([k, v]) => {
+          if (v && typeof v === 'object') {
+            localClientMemoryStore.set(k, v);
+          }
+        });
+      }
+    }
+  } catch (err) {
+    // Non-fatal disk fallback
+  }
+}
+
+function saveQuotaStoreToDisk() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const data = {};
+    for (const [k, v] of localClientMemoryStore.entries()) {
+      // Exclude synthetic test prefixes from persistent disk store
+      if (k.startsWith('TEST') || k.startsWith('ADV_') || k.startsWith('AUDITOR') || k.startsWith('BURST') || k.startsWith('EXHAUST') || k.startsWith('PROBE')) {
+        continue;
+      }
+      data[k] = v;
+    }
+    fs.writeFileSync(QUOTA_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    // Non-fatal disk warning
+  }
+}
+
+// Initial hydration from disk
+loadQuotaStoreFromDisk();
+
+/**
  * In-process promise mutex to serialize concurrent quota checks and increments per shop.
  * Supports re-entrant acquisition within the same async call tree to prevent deadlocks.
  */
 export async function withShopLock(shopId, fn) {
-  const target = shopId || 'SHOP-BILLNAW-01';
+  const target = normalizeShopId(shopId);
   const heldLocks = lockStorage.getStore();
   if (heldLocks && heldLocks.has(target)) {
     return await fn();
@@ -48,9 +105,7 @@ export async function withShopLock(shopId, fn) {
  * Used during error/fallback/rejection paths when an extraction fails or is aborted.
  */
 export function releaseAiQuotaSlot(shopId) {
-  const target = (typeof shopId === 'object' && shopId !== null)
-    ? (shopId.shopId || shopId.clientId || 'SHOP-BILLNAW-01')
-    : (shopId || 'SHOP-BILLNAW-01');
+  const target = normalizeShopId(shopId);
   const inFlight = shopInFlightMap.get(target) || 0;
   if (inFlight <= 1) {
     shopInFlightMap.delete(target);
@@ -83,7 +138,7 @@ export function getCurrentYearMonth(date = new Date()) {
  * Checks /shops/{shopId}/quota/menu_scans, falling back to /clients/{clientId}.
  */
 export async function getClientProfileData(clientId) {
-  const targetId = clientId || 'SHOP-BILLNAW-01';
+  const targetId = normalizeShopId(clientId);
   const memoryCached = localClientMemoryStore.get(targetId) || {};
   
   // Try subcollection /shops/{shopId}/quota/menu_scans first
@@ -121,9 +176,10 @@ export const getShopQuotaData = getClientProfileData;
  * Writes to /shops/{shopId}/quota/menu_scans, /cafes/{shopId}/quota/menu_scans, and /clients/{clientId}.
  */
 export async function updateClientProfileData(clientId, fieldsToUpdate) {
-  const targetId = clientId || 'SHOP-BILLNAW-01';
+  const targetId = normalizeShopId(clientId);
   const existingMemory = localClientMemoryStore.get(targetId) || {};
   localClientMemoryStore.set(targetId, { ...existingMemory, ...fieldsToUpdate });
+  saveQuotaStoreToDisk();
 
   const fieldPaths = Object.keys(fieldsToUpdate);
   if (fieldPaths.length === 0) return true;
@@ -180,9 +236,7 @@ export const updateShopQuotaData = updateClientProfileData;
  * Supports both checkAiQuotaAndKey(clientId) and checkAiQuotaAndKey({ shopId, customApiKey, reserveSlot })
  */
 export async function checkAiQuotaAndKey(targetOrOptions) {
-  const shopId = (typeof targetOrOptions === 'object' && targetOrOptions !== null)
-    ? (targetOrOptions.shopId || targetOrOptions.clientId || 'SHOP-BILLNAW-01')
-    : (targetOrOptions || 'SHOP-BILLNAW-01');
+  const shopId = normalizeShopId(targetOrOptions);
 
   const passedCustomKey = (typeof targetOrOptions === 'object' && targetOrOptions !== null)
     ? (targetOrOptions.customApiKey || targetOrOptions.apiKey || '')
@@ -223,9 +277,11 @@ export async function checkAiQuotaAndKey(targetOrOptions) {
     // 4. Resolve API Key Precedence: passed custom key > profile key > server fallback
     const clientCustomKey = (passedCustomKey || profile?.customGeminiKey || '').trim();
     const effectiveApiKey = resolveGeminiApiKey(clientCustomKey);
+    const isCustomKey = Boolean(clientCustomKey && clientCustomKey.length > 15);
 
     // 5. Verify Quota Limit against committed usage + active in-flight reservations
-    if ((currentUsage + inFlight) >= monthlyLimit) {
+    // Custom BYOK keys use the client's own Gemini key and bypass the server's free 15-scan limit
+    if (!isCustomKey && (currentUsage + inFlight) >= monthlyLimit) {
       const err = new Error(`Monthly AI scan quota of ${monthlyLimit} scans reached for this shop. Monthly AI menu upload limit (${monthlyLimit} scans/month) reached for client '${shopId}'. Usage resets next month.`);
       err.status = 429;
       err.quota = {
@@ -267,9 +323,7 @@ export async function checkAiQuotaAndKey(targetOrOptions) {
  * Automatically releases the active in-flight slot reservation.
  */
 export async function recordSuccessfulAiUsage(targetOrOptions, checkResult) {
-  const shopId = (typeof targetOrOptions === 'object' && targetOrOptions !== null)
-    ? (targetOrOptions.shopId || targetOrOptions.clientId || checkResult?.shopId || 'SHOP-BILLNAW-01')
-    : (targetOrOptions || checkResult?.shopId || 'SHOP-BILLNAW-01');
+  const shopId = normalizeShopId(targetOrOptions || checkResult?.shopId);
 
   return await withShopLock(shopId, async () => {
     // 1. Release in-flight slot reservation
@@ -334,7 +388,7 @@ export async function recordSuccessfulAiUsage(targetOrOptions, checkResult) {
  * Read-only quota check for client dashboard/settings
  */
 export async function getClientQuotaInfo(clientId) {
-  const targetId = clientId || 'SHOP-BILLNAW-01';
+  const targetId = normalizeShopId(clientId);
   const currentMonth = getCurrentYearMonth();
   const profile = await getClientProfileData(targetId);
 
