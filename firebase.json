@@ -5,9 +5,12 @@
       "rules": "firestore.rules"
     }
   ],
-  "storage": {
-    "rules": "storage.rules"
-  },
+  "storage": [
+    {
+      "bucket": "abhi-pro-cafe-pos.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ],
   "functions": [
     {
       "source": "database/server-functions",
