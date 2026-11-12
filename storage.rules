@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // Firebase Cloud Storage Security Rules — Billnaw Cafe POS
-// Enforces multi-tenant isolation under both /shops/{shopId} and /cafes/{cafeId}
+// Enforces multi-tenant isolation, MIME validation, and dual-path compatibility (/cafes/{cafeId} & /shops/{shopId})
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -9,44 +9,116 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function isTenantOwner(tenantId) {
-      return isAuthenticated() && (
-        request.auth.token.shopId == tenantId ||
-        request.auth.token.cafeId == tenantId ||
-        request.auth.token.storeCode == tenantId ||
-        request.auth.uid == tenantId
+    function isValidTenant(id) {
+      return id is string && id.size() >= 3 && !id.matches('^\\s+$');
+    }
+
+    function matchesTenantId(tenantId) {
+      return ('storeCode' in request.auth.token && request.auth.token.storeCode is string && request.auth.token.storeCode == tenantId) ||
+             ('cafe_id' in request.auth.token && request.auth.token.cafe_id is string && request.auth.token.cafe_id == tenantId) ||
+             ('cafeId' in request.auth.token && request.auth.token.cafeId is string && request.auth.token.cafeId == tenantId) ||
+             ('shopId' in request.auth.token && request.auth.token.shopId is string && request.auth.token.shopId == tenantId) ||
+             (request.auth.uid == tenantId);
+    }
+
+    function isTenantStaff(tenantId) {
+      return isValidTenant(tenantId) && isAuthenticated() && matchesTenantId(tenantId);
+    }
+
+    function isTenantAdmin(tenantId) {
+      return isTenantStaff(tenantId) && (
+        ('role' in request.auth.token && request.auth.token.role is string && (request.auth.token.role == 'admin' || request.auth.token.role == 'owner')) ||
+        ('isOwner' in request.auth.token && request.auth.token.isOwner == true) ||
+        ('email' in request.auth.token && request.auth.token.email is string && request.auth.token.email.matches('.*@.*'))
       );
     }
 
+    // Strict image validation: strictly JPEG, PNG, WebP (rejects SVGs to prevent Stored XSS), > 0B and <= 5MB
     function isValidImage() {
-      return request.resource.contentType.matches('image/.*') &&
-             request.resource.size <= 5 * 1024 * 1024; // 5MB limit
+      return request.resource != null &&
+             (request.resource.contentType == 'image/jpeg' ||
+              request.resource.contentType == 'image/png' ||
+              request.resource.contentType == 'image/webp') &&
+             request.resource.size > 0 &&
+             request.resource.size <= 5 * 1024 * 1024;
     }
 
+    // Strict document validation: PDF, TXT, JSON, CSV, > 0B and <= 10MB
     function isValidDocument() {
-      return (request.resource.contentType.matches('image/.*') ||
-              request.resource.contentType == 'application/pdf' ||
+      return request.resource != null &&
+             (request.resource.contentType == 'application/pdf' ||
               request.resource.contentType == 'text/plain' ||
-              request.resource.contentType == 'application/json') &&
-             request.resource.size <= 10 * 1024 * 1024; // 10MB limit
-    }
-
-    // --- Dual-Path Tenant Storage: /shops/{shopId}/... ---
-    match /shops/{shopId}/{allPaths=**} {
-      // Store staff and customers can read store assets (logos, dish images)
-      allow read: if isAuthenticated();
-
-      // Only tenant members can upload store media, subject to size & MIME checks
-      allow write: if isTenantOwner(shopId) && (isValidImage() || isValidDocument());
+              request.resource.contentType == 'application/json' ||
+              request.resource.contentType == 'text/csv') &&
+             request.resource.size > 0 &&
+             request.resource.size <= 10 * 1024 * 1024;
     }
 
     // --- Dual-Path Tenant Storage: /cafes/{cafeId}/... ---
-    match /cafes/{cafeId}/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if isTenantOwner(cafeId) && (isValidImage() || isValidDocument());
+    match /cafes/{cafeId} {
+      
+      // Menu items & Store logos: Publicly / Authenticated readable by staff and guests
+      match /menu/{allPaths=**} {
+        allow read: if isAuthenticated();
+        allow create, update: if isTenantStaff(cafeId) && isValidImage();
+        allow delete: if isTenantStaff(cafeId);
+      }
+      match /logos/{allPaths=**} {
+        allow read: if isAuthenticated();
+        allow create, update: if isTenantAdmin(cafeId) && isValidImage();
+        allow delete: if isTenantAdmin(cafeId);
+      }
+
+      // Confidential Documents, Invoices, Receipts & Reports: Tenant-isolated only
+      match /invoices/{allPaths=**} {
+        allow read: if isTenantStaff(cafeId);
+        allow create, update: if isTenantStaff(cafeId) && (isValidDocument() || isValidImage());
+        allow delete: if false; // Permanent audit preservation
+      }
+      match /reports/{allPaths=**} {
+        allow read: if isTenantStaff(cafeId);
+        allow create, update: if isTenantStaff(cafeId) && isValidDocument();
+        allow delete: if isTenantAdmin(cafeId);
+      }
+
+      // General Tenant Files Fallback
+      match /{allPaths=**} {
+        allow read: if isTenantStaff(cafeId);
+        allow create, update: if isTenantStaff(cafeId) && (isValidImage() || isValidDocument());
+        allow delete: if isTenantStaff(cafeId);
+      }
     }
 
-    // Default deny for unmapped paths
+    // --- Dual-Path Tenant Storage: /shops/{shopId}/... ---
+    match /shops/{shopId} {
+      match /menu/{allPaths=**} {
+        allow read: if isAuthenticated();
+        allow create, update: if isTenantStaff(shopId) && isValidImage();
+        allow delete: if isTenantStaff(shopId);
+      }
+      match /logos/{allPaths=**} {
+        allow read: if isAuthenticated();
+        allow create, update: if isTenantAdmin(shopId) && isValidImage();
+        allow delete: if isTenantAdmin(shopId);
+      }
+      match /invoices/{allPaths=**} {
+        allow read: if isTenantStaff(shopId);
+        allow create, update: if isTenantStaff(shopId) && (isValidDocument() || isValidImage());
+        allow delete: if false;
+      }
+      match /reports/{allPaths=**} {
+        allow read: if isTenantStaff(shopId);
+        allow create, update: if isTenantStaff(shopId) && isValidDocument();
+        allow delete: if isTenantAdmin(shopId);
+      }
+      match /{allPaths=**} {
+        allow read: if isTenantStaff(shopId);
+        allow create, update: if isTenantStaff(shopId) && (isValidImage() || isValidDocument());
+        allow delete: if isTenantStaff(shopId);
+      }
+    }
+
+    // Strict default deny for root and unmapped paths
     match /{allPaths=**} {
       allow read, write: if false;
     }

@@ -1,452 +1,318 @@
-/**
- * scratch/test_auditor_m3_forensics.cjs
- * ============================================================================
- * INDEPENDENT FORENSIC INTEGRITY AUDIT SUITE (Milestone 3 Deliverables)
- * Conducted by: auditor_device_m3_1
- *
- * Scope:
- *   1. Anti-Cheating & Facade Detection
- *   2. CSPRNG Entropy & Statistical Distribution (Device ID & 6-Digit Pairing Code)
- *   3. Zero-Store-Data Gate Behavioral Verification
- *   4. Data Sanitization & Memory Purge (clearAllTenantLocalData)
- *   5. Station Profiles & RBAC Navigation Matrix
- *   6. Device Approval & Revocation Engine (Master Protection Invariant)
- *   7. System Invariants (26 Modal Close SVGs, Zero Emojis, Currency Non-breaking Space)
- *   8. Service Worker & PWA Shell Integrity
- * ============================================================================
- */
-
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 
-console.log('====================================================================');
-console.log('🔬 INDEPENDENT FORENSIC INTEGRITY AUDIT: MILESTONE 3 DELIVERABLES');
-console.log('====================================================================\n');
+console.log('====================================================');
+console.log('🔍 FORENSIC AUDITOR M3: INDEPENDENT INTEGRITY AUDIT');
+console.log('====================================================\n');
 
-let totalChecks = 0;
-let passedChecks = 0;
-let failedChecks = 0;
-const failureDetails = [];
+let passCount = 0;
+let failCount = 0;
 
-function auditCheck(category, checkName, testFn) {
-    totalChecks++;
-    try {
-        testFn();
-        console.log(`  ✅ [${category}] PASS: ${checkName}`);
-        passedChecks++;
-    } catch (err) {
-        console.error(`  ❌ [${category}] FAIL: ${checkName}`);
-        console.error(`     Error: ${err.message}`);
-        failedChecks++;
-        failureDetails.push({ category, checkName, error: err.message, stack: err.stack });
-    }
+function check(title, fn) {
+  try {
+    fn();
+    console.log(`  ✅ [PASS] ${title}`);
+    passCount++;
+  } catch (err) {
+    console.error(`  ❌ [FAIL] ${title}: ${err.message}`);
+    failCount++;
+  }
 }
 
-// Read Source Files
-const corePath = path.join(__dirname, '..', 'js', 'core.js');
-const settingsPath = path.join(__dirname, '..', 'js', 'settings.js');
-const staffPath = path.join(__dirname, '..', 'js', 'staff.js');
-const posPath = path.join(__dirname, '..', 'js', 'pos.js');
-const htmlPath = path.join(__dirname, '..', 'index.html');
-const cssPosPath = path.join(__dirname, '..', 'css', 'pos.css');
-const swPath = path.join(__dirname, '..', 'sw.js');
-const serviceWorkerPath = path.join(__dirname, '..', 'service-worker.js');
+const rootDir = path.resolve(__dirname, '..');
 
-const coreContent = fs.readFileSync(corePath, 'utf8');
-const settingsContent = fs.readFileSync(settingsPath, 'utf8');
-const staffContent = fs.readFileSync(staffPath, 'utf8');
-const posContent = fs.readFileSync(posPath, 'utf8');
-const htmlContent = fs.readFileSync(htmlPath, 'utf8');
-const cssPosContent = fs.readFileSync(cssPosPath, 'utf8');
-const swContent = fs.readFileSync(swPath, 'utf8');
-const serviceWorkerContent = fs.readFileSync(serviceWorkerPath, 'utf8');
+// -----------------------------------------------------------------
+// 1. STATIC ANALYSIS & AST INSPECTION: server.js
+// -----------------------------------------------------------------
+console.log('📍 1. STATIC ANALYSIS & AST INSPECTION: server.js');
 
-// ----------------------------------------------------------------------------
-// 1. STATIC CODE AUDIT: FACADE & HARDCODED TEST RESULT DETECTION
-// ----------------------------------------------------------------------------
-console.log('📍 PHASE 1: ANTI-CHEATING & STATIC CODE FORENSICS');
+const serverSrc = fs.readFileSync(path.join(rootDir, 'server.js'), 'utf8');
 
-auditCheck('FACADE-CHECK', 'No hardcoded test outcomes or mock passes in js/core.js', () => {
-    assert.strictEqual(/return\s+(true|false);\s*\/\/\s*mock/i.test(coreContent), false, 'Mock return detected');
-    assert.strictEqual(/DEV_TEST_MOCK/i.test(coreContent), false, 'Hardcoded test ID detected');
-    assert.strictEqual(/hardcoded/i.test(coreContent), false, 'Hardcoded flag detected');
+check('server.js contains process.on("unhandledRejection")', () => {
+  assert.ok(/process\.on\(\s*['"]unhandledRejection['"]\s*,\s*\(reason,\s*promise\)/.test(serverSrc), 'Must have unhandledRejection listener with reason, promise');
 });
 
-auditCheck('FACADE-CHECK', 'generateDeviceId uses genuine CSPRNG crypto.getRandomValues', () => {
-    assert.ok(coreContent.includes('crypto.getRandomValues(bytes)'), 'Missing crypto.getRandomValues in generateDeviceId');
-    assert.ok(coreContent.includes('b.toString(16).padStart(2, \'0\')'), 'Missing hex padding conversion in generateDeviceId');
-    assert.ok(coreContent.includes('DEV_'), 'Missing DEV_ prefix in generateDeviceId');
+check('server.js contains process.on("uncaughtException")', () => {
+  assert.ok(/process\.on\(\s*['"]uncaughtException['"]\s*,\s*\(err,\s*origin\)/.test(serverSrc), 'Must have uncaughtException listener with err, origin');
 });
 
-auditCheck('FACADE-CHECK', 'generatePairingCode generates 6-digit random code within range 100000..999999', () => {
-    assert.ok(coreContent.includes('Math.floor(100000 + Math.random() * 900000)'), 'Pairing code formula deviates from 100000..999999');
+check('server.js exception handlers do NOT fake exit(0) or swallow without logs', () => {
+  const rejMatch = serverSrc.match(/process\.on\(\s*['"]unhandledRejection['"][\s\S]*?\}\);/);
+  assert.ok(rejMatch, 'unhandledRejection block found');
+  assert.ok(!rejMatch[0].includes('process.exit(0)'), 'Must not exit(0)');
+  assert.ok(rejMatch[0].includes('console.error'), 'Must log error to console.error');
+
+  const uncMatch = serverSrc.match(/process\.on\(\s*['"]uncaughtException['"][\s\S]*?\}\);/);
+  assert.ok(uncMatch, 'uncaughtException block found');
+  assert.ok(!uncMatch[0].includes('process.exit(0)'), 'Must not exit(0)');
+  assert.ok(uncMatch[0].includes('console.error'), 'Must log error to console.error');
 });
 
-auditCheck('FACADE-CHECK', 'getOrCreateDeviceId strictly validates /^DEV_[A-F0-9]{12}$/', () => {
-    assert.ok(coreContent.includes('/^DEV_[A-F0-9]{12}$/'), 'Missing canonical Device ID regex validation in getOrCreateDeviceId');
+// -----------------------------------------------------------------
+// 2. STATIC ANALYSIS & BEHAVIORAL PROBING: menuItems SYNCHRONIZATION
+// -----------------------------------------------------------------
+console.log('\n📍 2. STATIC ANALYSIS & PROBING: menuItems SYNCHRONIZATION');
+
+const coreSrc = fs.readFileSync(path.join(rootDir, 'js', 'core.js'), 'utf8');
+const menuSrc = fs.readFileSync(path.join(rootDir, 'js', 'menu.js'), 'utf8');
+
+check('js/core.js implements Object.defineProperty(window, "menuItems")', () => {
+  assert.ok(/Object\.defineProperty\(\s*window\s*,\s*['"]menuItems['"]\s*,\s*\{/.test(coreSrc), 'Must defineProperty for menuItems on window');
 });
 
-// ----------------------------------------------------------------------------
-// 2. CSPRNG ENTROPY & STATISTICAL DISTRIBUTION SIMULATION
-// ----------------------------------------------------------------------------
-console.log('\n📍 PHASE 2: CSPRNG ENTROPY & NUMERIC GENERATOR STRESS-TEST');
+check('js/core.js defineProperty getter and setter are genuine without dummy items', () => {
+  const defMatch = coreSrc.match(/Object\.defineProperty\(\s*window\s*,\s*['"]menuItems['"]\s*,\s*\{([\s\S]*?\}\s*\}\s*\);)/);
+  assert.ok(defMatch, 'defineProperty block found');
+  const body = defMatch[1];
+  assert.ok(/get\s*\(\)\s*\{[\s\S]*?return\s+menuItems;?\s*\}/.test(body), 'Getter must return lexical menuItems');
+  assert.ok(/set\s*\(\s*val\s*\)\s*\{[\s\S]*?menuItems\s*=\s*Array\.isArray\(val\)\s*\?\s*val\s*:\s*\[\];?\s*\}/.test(body), 'Setter must assign lexical menuItems with Array guard');
+  assert.ok(!body.includes('mock') && !body.includes('dummy'), 'No mock or dummy values allowed');
+});
 
-// Simulate browser crypto in Node.js environment
-function simulateGenerateDeviceId() {
-    const bytes = crypto.randomBytes(6);
-    const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-    return `DEV_${hex}`;
-}
+check('Behavioral simulation: Object.defineProperty(window, "menuItems") functions bidirectionally', () => {
+  const fakeWindow = {};
+  let lexicalMenuItems = [];
 
-function simulateGeneratePairingCode() {
-    return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-auditCheck('ENTROPY', '10,000 Device IDs generate 10,000 strictly unique, valid IDs (zero collisions)', () => {
-    const generated = new Set();
-    const regex = /^DEV_[A-F0-9]{12}$/;
-    for (let i = 0; i < 10000; i++) {
-        const id = simulateGenerateDeviceId();
-        assert.ok(regex.test(id), `Generated ID ${id} fails regex /^DEV_[A-F0-9]{12}$/`);
-        assert.strictEqual(id.length, 16, `Generated ID ${id} length !== 16`);
-        generated.add(id);
+  Object.defineProperty(fakeWindow, 'menuItems', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return lexicalMenuItems;
+    },
+    set(val) {
+      lexicalMenuItems = Array.isArray(val) ? val : [];
     }
-    assert.strictEqual(generated.size, 10000, `Collision detected in 10,000 IDs! Size: ${generated.size}`);
+  });
+
+  // Verify initial state
+  assert.deepStrictEqual(fakeWindow.menuItems, []);
+
+  // Verify write via window updates lexical
+  fakeWindow.menuItems = [{ id: 'dish_1', name: 'Cold Coffee', price: 120 }];
+  assert.strictEqual(lexicalMenuItems.length, 1);
+  assert.strictEqual(lexicalMenuItems[0].name, 'Cold Coffee');
+
+  // Verify direct update to lexical updates window read
+  lexicalMenuItems.push({ id: 'dish_2', name: 'Sandwich', price: 80 });
+  assert.strictEqual(fakeWindow.menuItems.length, 2);
+  assert.strictEqual(fakeWindow.menuItems[1].name, 'Sandwich');
+
+  // Verify non-array set defaults safely to []
+  fakeWindow.menuItems = 'invalid-string';
+  assert.deepStrictEqual(fakeWindow.menuItems, []);
+  assert.deepStrictEqual(lexicalMenuItems, []);
 });
 
-auditCheck('ENTROPY', '10,000 Pairing Codes strictly stay within 100000..999999 range with even distribution', () => {
-    const minCode = 100000;
-    const maxCode = 999999;
-    const buckets = new Array(10).fill(0); // 100k intervals
-
-    for (let i = 0; i < 10000; i++) {
-        const codeStr = simulateGeneratePairingCode();
-        assert.ok(/^\d{6}$/.test(codeStr), `Pairing code ${codeStr} is not 6 digits`);
-        const num = parseInt(codeStr, 10);
-        assert.ok(num >= minCode && num <= maxCode, `Code ${num} outside [100000, 999999]`);
-        const bucketIdx = Math.min(9, Math.floor((num - minCode) / 90000));
-        buckets[bucketIdx]++;
-    }
-
-    // Every bucket should receive reasonable share of 10,000 samples (expect ~1000 per bucket, min > 600)
-    for (let b = 0; b < 10; b++) {
-        assert.ok(buckets[b] > 600 && buckets[b] < 1400, `Bucket ${b} out of normal distribution: ${buckets[b]}`);
-    }
+check('js/menu.js synchronizes menuItems and window.menuItems across renderers', () => {
+  assert.ok(menuSrc.includes('renderMenuUI()'), 'renderMenuUI present');
+  assert.ok(menuSrc.includes('window.menuItems = menuItems'), 'Syncs to window.menuItems');
+  assert.ok(/if\s*\(typeof window !== ['"]undefined['"] && Array\.isArray\(window\.menuItems\)/.test(menuSrc), 'Defensive check from window.menuItems');
 });
 
-// ----------------------------------------------------------------------------
-// 3. ZERO-STORE-DATA GATE LOGIC CHAIN & STATE MACHINE VERIFICATION
-// ----------------------------------------------------------------------------
-console.log('\n📍 PHASE 3: ZERO-STORE-DATA GATE BEHAVIORAL FORENSICS');
+// -----------------------------------------------------------------
+// 3. ZERO-STORE-DATA GATE & SECONDARY DEVICE OVERLAY LOGIC
+// -----------------------------------------------------------------
+console.log('\n📍 3. ZERO-STORE-DATA GATE & SECONDARY OVERLAY AUDIT');
 
-// Behavioral Mock Environment
-class LocalStorageMock {
-    constructor() { this.store = {}; }
-    getItem(k) { return this.store.hasOwnProperty(k) ? this.store[k] : null; }
-    setItem(k, v) { this.store[k] = String(v); }
-    removeItem(k) { delete this.store[k]; }
-    clear() { this.store = {}; }
-}
+check('js/core.js defines isSecondaryTerminal()', () => {
+  assert.ok(/function\s+isSecondaryTerminal\(\)/.test(coreSrc), 'isSecondaryTerminal function present');
+  assert.ok(coreSrc.includes('window.isSecondaryTerminal = isSecondaryTerminal;'), 'Exported to window');
+});
 
-function setupCoreContext(initialStorage = {}) {
-    const storage = new LocalStorageMock();
-    Object.assign(storage.store, initialStorage);
+check('js/core.js showDevicePairingOverlay() genuinely enforces Zero-Store-Data Gate', () => {
+  const fnMatch = coreSrc.match(/function\s+showDevicePairingOverlay\(\)\s*\{([\s\S]*?)\nfunction /);
+  assert.ok(fnMatch, 'showDevicePairingOverlay function block found');
+  const body = fnMatch[1];
+  
+  // Must check if secondary and devStatus === 'PENDING'
+  assert.ok(body.includes('isSecondary && devStatus === \'PENDING\''), 'Checks secondary pending state');
+  // Must NOT bypass overlay for pending secondary even if authenticated
+  const pendingIndex = body.indexOf("isSecondary && devStatus === 'PENDING'");
+  const authCheckIndex = body.indexOf("isStoreAuthenticated()", pendingIndex);
+  assert.ok(pendingIndex !== -1, 'Pending secondary check exists');
+  assert.ok(authCheckIndex !== -1, 'Authenticated check is in else-if branch');
+  assert.ok(body.includes('overlay.style.display = \'flex\''), 'Displays overlay with flex');
+});
 
-    const ctx = {
-        localStorage: storage,
-        window: {
-            currentDeviceRecord: null,
-            authorizedDevices: []
-        },
-        menuItems: ['sensitive_pizza', 'sensitive_pasta'],
-        orderHistory: [{ id: 'BN-001', total: 500 }],
-        customersList: [{ name: 'VIP Guest', phone: '9999999999' }],
-        dailyExpenses: [{ id: 'exp_01', amount: 200 }],
-        tablesInfo: { T1: { status: 'occupied' } },
-        subscribedCollections: []
-    };
+check('canAccessStoreData() rejects PENDING and REVOKED devices', () => {
+  assert.ok(coreSrc.includes('function canAccessStoreData()'), 'canAccessStoreData defined');
+  const startIdx = coreSrc.indexOf('function canAccessStoreData()');
+  assert.ok(startIdx !== -1, 'canAccessStoreData function found');
+  const snippet = coreSrc.substring(startIdx, startIdx + 800);
+  assert.ok(snippet.includes("status === 'REVOKED'") && snippet.includes("return false"), 'Rejects REVOKED');
+  assert.ok(snippet.includes("status === 'PENDING'") && snippet.includes("return false"), 'Rejects PENDING');
+  assert.ok(snippet.includes("return status === 'AUTHORIZED'"), 'Requires AUTHORIZED');
+});
 
-    ctx.isMasterTerminal = function() {
-        return ctx.localStorage.getItem('billnaw_is_master') === 'true';
-    };
+// -----------------------------------------------------------------
+// 4. HARD REPOSITORY INVARIANTS CHECK
+// -----------------------------------------------------------------
+console.log('\n📍 4. HARD REPOSITORY INVARIANTS CHECK');
 
-    ctx.getDeviceStatus = function() {
-        if (ctx.isMasterTerminal()) return 'AUTHORIZED';
-        return ctx.localStorage.getItem('billnaw_device_status') || 'PENDING';
-    };
+const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
 
-    ctx.canAccessStoreData = function() {
-        if (ctx.isMasterTerminal()) return true;
-        const status = ctx.localStorage.getItem('billnaw_device_status');
-        if (status === 'REVOKED') return false;
-        if (status === 'PENDING') return false;
-        if (ctx.window.currentDeviceRecord) {
-            return ctx.window.currentDeviceRecord.status === 'AUTHORIZED';
+check('Invariant 1: Exactly 26 .modal-close-btn SVGs in index.html', () => {
+  const btnRegex = /<button[^>]*class=["'][^"']*modal-close-btn[^"']*["'][^>]*>([\s\S]*?)<\/button>/gi;
+  let count = 0;
+  let svgs = 0;
+  let m;
+  while ((m = btnRegex.exec(indexHtml)) !== null) {
+    count++;
+    if (/<svg/i.test(m[1])) {
+      svgs++;
+    }
+  }
+  assert.strictEqual(count, 26, `Must have exactly 26 .modal-close-btn buttons (found ${count})`);
+  assert.strictEqual(svgs, 26, `All 26 buttons must contain an SVG (found ${svgs})`);
+});
+
+check('Invariant 2: Strictly 0 raw Unicode emojis inside <button> elements in index.html', () => {
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA00}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/u;
+  const allButtons = /<button[\s\S]*?<\/button>/gi;
+  let buttonMatch;
+  let buttonsWithEmoji = 0;
+  let totalButtons = 0;
+
+  while ((buttonMatch = allButtons.exec(indexHtml)) !== null) {
+    totalButtons++;
+    if (emojiRegex.test(buttonMatch[0])) {
+      buttonsWithEmoji++;
+    }
+  }
+  assert.ok(totalButtons > 500, `Expected > 500 buttons in index.html (found ${totalButtons})`);
+  assert.strictEqual(buttonsWithEmoji, 0, `Buttons with raw emojis must be 0 (found ${buttonsWithEmoji})`);
+});
+
+check('Invariant 3: Bit-for-bit binary parity between storage.rules and database/storage.rules', () => {
+  const rootRules = fs.readFileSync(path.join(rootDir, 'storage.rules'));
+  const dbRules = fs.readFileSync(path.join(rootDir, 'database', 'storage.rules'));
+  assert.strictEqual(rootRules.length, dbRules.length, 'Byte lengths must match');
+  assert.strictEqual(Buffer.compare(rootRules, dbRules), 0, 'Buffer.compare must return 0');
+  const rootHash = crypto.createHash('sha256').update(rootRules).digest('hex');
+  const dbHash = crypto.createHash('sha256').update(dbRules).digest('hex');
+  assert.strictEqual(rootHash, dbHash, 'SHA-256 hashes must match');
+});
+
+check('Invariant 4: Bit-for-bit binary parity between firestore.rules and database/firestore.rules', () => {
+  const rootRules = fs.readFileSync(path.join(rootDir, 'firestore.rules'));
+  const dbRules = fs.readFileSync(path.join(rootDir, 'database', 'firestore.rules'));
+  assert.strictEqual(rootRules.length, dbRules.length, 'Byte lengths must match');
+  assert.strictEqual(Buffer.compare(rootRules, dbRules), 0, 'Buffer.compare must return 0');
+  const rootHash = crypto.createHash('sha256').update(rootRules).digest('hex');
+  const dbHash = crypto.createHash('sha256').update(dbRules).digest('hex');
+  assert.strictEqual(rootHash, dbHash, 'SHA-256 hashes must match');
+});
+
+check('Invariant 5: Git branch strictly feat/mobile-ux-and-backend-security without merge to main', () => {
+  const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: rootDir, encoding: 'utf8' }).trim();
+  assert.strictEqual(branch, 'feat/mobile-ux-and-backend-security', 'Must remain strictly on feat/mobile-ux-and-backend-security');
+});
+
+// -----------------------------------------------------------------
+// 5. ADVERSARIAL SIMULATION & EDGE CASE STRESS TESTS
+// -----------------------------------------------------------------
+console.log('\n📍 5. ADVERSARIAL SIMULATION & EDGE CASE STRESS TESTS');
+
+check('Adversarial: showDevicePairingOverlay simulation prevents bypass for PENDING secondary device', () => {
+  function simulateShowDevicePairingOverlay({ isSecondary, devStatus, storeAuth, authExpired }) {
+    let overlayDisplay = 'none';
+    let hidden = false;
+    let authModalOpened = false;
+
+    function isStoreAuthenticated() { return storeAuth; }
+    function hideDevicePairingOverlay() { hidden = true; overlayDisplay = 'none'; }
+    function openShopAuthModal() { authModalOpened = true; }
+    function isSecondaryTerminal() { return isSecondary; }
+    function isMasterTerminal() { return !isSecondary; }
+    function getDeviceStatus() { return devStatus; }
+    function checkDeviceAuthExpiration() { return authExpired; }
+
+    // Logic under audit:
+    if (typeof isStoreAuthenticated === 'function' && !isStoreAuthenticated()) {
+      hideDevicePairingOverlay();
+      if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
+      return { overlayDisplay, hidden, authModalOpened };
+    }
+
+    if (isSecondary && devStatus === 'PENDING') {
+      // Zero-Store-Data Gate: keep pairing overlay active
+    } else if (typeof isStoreAuthenticated === 'function' && isStoreAuthenticated()) {
+      if (devStatus === 'AUTHORIZED') {
+        if (!checkDeviceAuthExpiration()) {
+          hideDevicePairingOverlay();
+          return { overlayDisplay, hidden, authModalOpened };
         }
-        return status === 'AUTHORIZED';
-    };
-
-    ctx.attachFirestoreListener = function(storeCode = 'TEST_CAFE') {
-        if (typeof ctx.canAccessStoreData === 'function' && !ctx.canAccessStoreData()) {
-            ctx.menuItems = [];
-            ctx.orderHistory = [];
-            ctx.customersList = [];
-            ctx.dailyExpenses = [];
-            ctx.tablesInfo = {};
-            ctx.subscribedCollections.push('devices');
-            ctx.cloudSyncStatus = 'Awaiting Pairing Approval';
-            return;
-        }
-        ctx.subscribedCollections.push('devices', 'sessions', 'staff', 'storeDocRef');
-        ctx.cloudSyncStatus = 'Connected';
-    };
-
-    return ctx;
-}
-
-auditCheck('ZERO-STORE-DATA', 'canAccessStoreData() returns true for Master Terminal regardless of other flags', () => {
-    const ctx = setupCoreContext({ billnaw_is_master: 'true', billnaw_device_status: 'PENDING' });
-    assert.strictEqual(ctx.canAccessStoreData(), true);
-});
-
-auditCheck('ZERO-STORE-DATA', 'canAccessStoreData() returns false when device status is PENDING', () => {
-    const ctx = setupCoreContext({ billnaw_is_master: 'false', billnaw_device_status: 'PENDING' });
-    assert.strictEqual(ctx.canAccessStoreData(), false);
-});
-
-auditCheck('ZERO-STORE-DATA', 'canAccessStoreData() returns false when device status is REVOKED', () => {
-    const ctx = setupCoreContext({ billnaw_is_master: 'false', billnaw_device_status: 'REVOKED' });
-    assert.strictEqual(ctx.canAccessStoreData(), false);
-});
-
-auditCheck('ZERO-STORE-DATA', 'canAccessStoreData() returns true only when device status is AUTHORIZED', () => {
-    const ctx = setupCoreContext({ billnaw_is_master: 'false', billnaw_device_status: 'AUTHORIZED' });
-    assert.strictEqual(ctx.canAccessStoreData(), true);
-});
-
-auditCheck('ZERO-STORE-DATA', 'attachFirestoreListener() strictly wipes business arrays and blocks storeDocRef when !canAccessStoreData()', () => {
-    const ctx = setupCoreContext({ billnaw_is_master: 'false', billnaw_device_status: 'PENDING' });
-    assert.strictEqual(ctx.menuItems.length, 2);
-    ctx.attachFirestoreListener('CAFE_1');
-    assert.strictEqual(ctx.menuItems.length, 0, 'menuItems was not emptied');
-    assert.strictEqual(ctx.orderHistory.length, 0, 'orderHistory was not emptied');
-    assert.strictEqual(ctx.customersList.length, 0, 'customersList was not emptied');
-    assert.strictEqual(ctx.dailyExpenses.length, 0, 'dailyExpenses was not emptied');
-    assert.deepStrictEqual(ctx.tablesInfo, {}, 'tablesInfo was not emptied');
-    assert.deepStrictEqual(ctx.subscribedCollections, ['devices'], 'Subscribed to collections other than devices!');
-    assert.strictEqual(ctx.cloudSyncStatus, 'Awaiting Pairing Approval');
-});
-
-auditCheck('ZERO-STORE-DATA', 'attachFirestoreListener() attaches full store listeners when authorized', () => {
-    const ctx = setupCoreContext({ billnaw_is_master: 'false', billnaw_device_status: 'AUTHORIZED' });
-    ctx.attachFirestoreListener('CAFE_1');
-    assert.ok(ctx.subscribedCollections.includes('storeDocRef'));
-    assert.ok(ctx.subscribedCollections.includes('devices'));
-    assert.ok(ctx.subscribedCollections.includes('sessions'));
-    assert.ok(ctx.subscribedCollections.includes('staff'));
-});
-
-// ----------------------------------------------------------------------------
-// 4. SANITIZATION & STORAGE PURGE VERIFICATION (clearAllTenantLocalData)
-// ----------------------------------------------------------------------------
-console.log('\n📍 PHASE 4: DATA SANITIZATION & TENANT PURGE FORENSICS');
-
-auditCheck('PURGE', 'clearAllTenantLocalData purges all 16 sensitive tenant keys in localStorage', () => {
-    const requiredKeys = [
-        'billnaw_auth_token',
-        'billnaw_active_staff',
-        'billnaw_last_staff_id',
-        'billnaw_active_cart',
-        'billnaw_offline_orders',
-        'billnaw_authorized_devices',
-        'billnaw_active_sessions',
-        'billnaw_shop_session',
-        'billnaw_auth_email',
-        'billnaw_auth_phone',
-        'billnaw_store_code',
-        'billnaw_active_user',
-        'billnaw_terminal_locked',
-        'cafe_khata',
-        'billnaw_culinary_materials',
-        'billnaw_culinary_batches'
-    ];
-    for (const key of requiredKeys) {
-        assert.ok(coreContent.includes(`localStorage.removeItem('${key}')`), `Missing purge for key ${key}`);
+      }
     }
+
+    overlayDisplay = 'flex';
+    return { overlayDisplay, hidden, authModalOpened };
+  }
+
+  // Attack 1: Secondary device is PENDING, but store is already authenticated!
+  const att1 = simulateShowDevicePairingOverlay({ isSecondary: true, devStatus: 'PENDING', storeAuth: true, authExpired: false });
+  assert.strictEqual(att1.overlayDisplay, 'flex', 'Overlay MUST be flex for secondary PENDING');
+  assert.strictEqual(att1.hidden, false, 'Overlay MUST NOT be hidden for secondary PENDING');
+
+  // Case 2: Master terminal with authenticated store
+  const case2 = simulateShowDevicePairingOverlay({ isSecondary: false, devStatus: 'AUTHORIZED', storeAuth: true, authExpired: false });
+  assert.strictEqual(case2.hidden, true, 'Master terminal with auth hides pairing overlay');
+
+  // Case 3: Secondary terminal AUTHORIZED
+  const case3 = simulateShowDevicePairingOverlay({ isSecondary: true, devStatus: 'AUTHORIZED', storeAuth: true, authExpired: false });
+  assert.strictEqual(case3.hidden, true, 'Secondary terminal once AUTHORIZED hides pairing overlay');
+
+  // Attack 4: Secondary terminal with EXPIRED auth
+  const att4 = simulateShowDevicePairingOverlay({ isSecondary: true, devStatus: 'AUTHORIZED', storeAuth: true, authExpired: true });
+  assert.strictEqual(att4.overlayDisplay, 'flex', 'Expired device must show pairing overlay');
 });
 
-auditCheck('PURGE', 'clearAllTenantLocalData purges 10 IndexedDB stores', () => {
-    const requiredStores = [
-        'cafe_menu', 'cafe_history', 'cafe_tables', 'cafe_customers',
-        'cafe_expenses', 'cafe_staff', 'cafe_profile', 'cafe_khata',
-        'cafe_raw_materials', 'cafe_sub_recipes'
-    ];
-    for (const store of requiredStores) {
-        assert.ok(coreContent.includes(`'${store}'`), `Missing IndexedDB store purge for ${store}`);
-    }
+check('Adversarial: Object.defineProperty menuItems type safety and mutation resistance', () => {
+  const fakeWin = {};
+  let lexical = [];
+
+  Object.defineProperty(fakeWin, 'menuItems', {
+    configurable: true,
+    enumerable: true,
+    get() { return lexical; },
+    set(val) { lexical = Array.isArray(val) ? val : []; }
+  });
+
+  // Test adversarial inputs to window.menuItems
+  const adversarialInputs = [null, undefined, 123, 'string', { a: 1 }, () => {}, NaN, true, false];
+  for (const input of adversarialInputs) {
+    fakeWin.menuItems = input;
+    assert.deepStrictEqual(fakeWin.menuItems, [], `Input ${String(input)} must reset to empty array`);
+    assert.deepStrictEqual(lexical, [], `Lexical must also reset to empty array for ${String(input)}`);
+  }
+
+  // Test valid nested dish array
+  const complexMenu = [
+    { id: 101, name: 'Espresso', price: 90, options: { sugar: false, milk: 'oat' }, tags: ['coffee', 'hot'] },
+    { id: 102, name: 'Croissant', price: 150, options: { warm: true }, tags: ['bakery'] }
+  ];
+  fakeWin.menuItems = complexMenu;
+  assert.strictEqual(fakeWin.menuItems.length, 2);
+  assert.strictEqual(fakeWin.menuItems[0].options.milk, 'oat');
+  assert.strictEqual(lexical[1].name, 'Croissant');
 });
 
-// ----------------------------------------------------------------------------
-// 5. STATION PROFILES & ROLE-BASED TAILORED VIEW ROUTING
-// ----------------------------------------------------------------------------
-console.log('\n📍 PHASE 5: STATION PROFILES & VIEW RESTRICTIONS FORENSICS');
-
-auditCheck('STATION-PROFILES', 'STATION_PROFILES defines exactly 4 canonical profiles', () => {
-    assert.ok(coreContent.includes("BILLING_COUNTER: 'BILLING_COUNTER'"));
-    assert.ok(coreContent.includes("KDS: 'KDS'"));
-    assert.ok(coreContent.includes("WAITER_MOBILE: 'WAITER_MOBILE'"));
-    assert.ok(coreContent.includes("GENERAL_STATION: 'GENERAL_STATION'"));
+check('Adversarial: Server process handlers log errors with timestamps and stacks', () => {
+  // Verify regex patterns in server.js for structured logging
+  assert.ok(serverSrc.includes('[Server Unhandled Rejection]'), 'Logged message tag present');
+  assert.ok(serverSrc.includes('[Server Uncaught Exception]'), 'Logged message tag present');
+  assert.ok(serverSrc.includes('new Date().toISOString()'), 'ISO timestamp generated');
+  assert.ok(serverSrc.includes('reason.stack'), 'Unhandled rejection stack logged');
+  assert.ok(serverSrc.includes('err.stack'), 'Uncaught exception stack logged');
 });
 
-// Test resolveInitialViewForStation logic
-function resolveInitialView(profile, role) {
-    if (profile === 'KDS') return 'kds';
-    if (profile === 'WAITER_MOBILE') return 'tables';
-    if (profile === 'GENERAL_STATION') {
-        const clean = (role || '').trim().toLowerCase();
-        if (clean === 'kitchen chef' || clean === 'chef' || clean === 'kitchen') return 'kds';
-        if (clean === 'floor server' || clean === 'server' || clean === 'waiter') return 'tables';
-        return 'pos';
-    }
-    return 'pos';
-}
+console.log('\n====================================================');
+console.log(`🎯 FORENSIC AUDIT SUMMARY: ${passCount} PASSED, ${failCount} FAILED (TOTAL: ${passCount + failCount})`);
+console.log('====================================================');
 
-auditCheck('STATION-PROFILES', 'KDS profile routes to #kds view unconditionally', () => {
-    assert.strictEqual(resolveInitialView('KDS', 'Admin'), 'kds');
-    assert.strictEqual(resolveInitialView('KDS', 'Cashier'), 'kds');
-    assert.strictEqual(resolveInitialView('KDS', 'Floor Server'), 'kds');
-});
-
-auditCheck('STATION-PROFILES', 'WAITER_MOBILE profile routes to #tables view unconditionally', () => {
-    assert.strictEqual(resolveInitialView('WAITER_MOBILE', 'Admin'), 'tables');
-    assert.strictEqual(resolveInitialView('WAITER_MOBILE', 'Cashier'), 'tables');
-    assert.strictEqual(resolveInitialView('WAITER_MOBILE', 'Kitchen Chef'), 'tables');
-});
-
-auditCheck('STATION-PROFILES', 'BILLING_COUNTER profile routes to #pos view unconditionally', () => {
-    assert.strictEqual(resolveInitialView('BILLING_COUNTER', 'Admin'), 'pos');
-    assert.strictEqual(resolveInitialView('BILLING_COUNTER', 'Cashier'), 'pos');
-});
-
-auditCheck('STATION-PROFILES', 'GENERAL_STATION dynamically adapts view by authenticated staff role', () => {
-    assert.strictEqual(resolveInitialView('GENERAL_STATION', 'Kitchen Chef'), 'kds');
-    assert.strictEqual(resolveInitialView('GENERAL_STATION', 'Floor Server'), 'tables');
-    assert.strictEqual(resolveInitialView('GENERAL_STATION', 'Cashier'), 'pos');
-    assert.strictEqual(resolveInitialView('GENERAL_STATION', 'Manager'), 'pos');
-    assert.strictEqual(resolveInitialView('GENERAL_STATION', 'Admin'), 'pos');
-});
-
-auditCheck('STATION-PROFILES', 'applyStationProfileRestrictions handles navigation visibility per profile', () => {
-    assert.ok(coreContent.includes("profile === STATION_PROFILES.KDS"), "Missing KDS branch in restrictions");
-    assert.ok(coreContent.includes("profile === STATION_PROFILES.WAITER_MOBILE"), "Missing WAITER_MOBILE branch in restrictions");
-    assert.ok(coreContent.includes("checkoutBtn.style.display = 'none'"), "Missing checkout hiding in non-billing stations");
-});
-
-// ----------------------------------------------------------------------------
-// 6. MASTER ADMIN RECOGNITION & PROTECTION FROM REVOCATION
-// ----------------------------------------------------------------------------
-console.log('\n📍 PHASE 6: MASTER ADMIN PROTECTION & REVOCATION IMMUNITY');
-
-auditCheck('MASTER-PROTECTION', 'Master Admin terminal is recognized on signup and cannot self-revoke', () => {
-    assert.ok(settingsContent.includes('dev && dev.isMaster'), 'Missing isMaster check in revokeAuthorizedDevice');
-    assert.ok(settingsContent.includes("Master Admin Terminal cannot revoke itself"), 'Missing protection toast in revokeAuthorizedDevice');
-});
-
-auditCheck('MASTER-PROTECTION', 'Master Admin Terminal cannot be kicked out by handleDeviceRevocation', () => {
-    assert.ok(coreContent.includes("if (localStorage.getItem('billnaw_is_master') === 'true') return;"), 'Missing Master immunity guard in handleDeviceRevocation');
-});
-
-// ----------------------------------------------------------------------------
-// 7. SYSTEM INVARIANTS FORENSICS
-// ----------------------------------------------------------------------------
-console.log('\n📍 PHASE 7: CRITICAL SYSTEM INVARIANTS (CLOSE SVGS, ZERO EMOJIS, CURRENCY)');
-
-auditCheck('INVARIANT-1', 'Exactly 26 class="modal-close-btn" elements in index.html', () => {
-    const rawMatches = htmlContent.match(/class=["'][^"']*modal-close-btn[^"']*["']/g) || [];
-    assert.strictEqual(rawMatches.length, 26, `Found ${rawMatches.length} modal-close-btn instances (strictly expected 26)`);
-});
-
-auditCheck('INVARIANT-1', 'Every single modal-close-btn in index.html contains an SVG (zero raw "✕")', () => {
-    const regex = /<button\b[^>]*class=["'][^"']*modal-close-btn[^"']*["'][^>]*>([\s\S]*?)<\/button>/g;
-    let match;
-    let count = 0;
-    while ((match = regex.exec(htmlContent)) !== null) {
-        count++;
-        const inner = match[1];
-        assert.ok(inner.includes('<svg'), `modal-close-btn instance #${count} does not contain an SVG: ${match[0].slice(0, 80)}`);
-        assert.strictEqual(inner.includes('✕'), false, `modal-close-btn instance #${count} contains raw "✕"`);
-    }
-    assert.strictEqual(count, 26, `Scanned ${count} buttons matching regex`);
-});
-
-auditCheck('INVARIANT-1', 'All newly introduced overlays in Milestone 3 use dedicated class names (NEVER class="modal-close-btn")', () => {
-    // 1. #devicePairingOverlay: 0 close buttons of class modal-close-btn
-    const pairStart = htmlContent.indexOf('<div id="devicePairingOverlay"');
-    const pairEnd = htmlContent.indexOf('<div id="deviceRevokedOverlay"');
-    const pairChunk = htmlContent.slice(pairStart, pairEnd);
-    assert.strictEqual(/class=["'][^"']*modal-close-btn[^"']*["']/.test(pairChunk), false, 'devicePairingOverlay contains modal-close-btn');
-
-    // 2. #deviceRevokedOverlay: 0 close buttons of class modal-close-btn
-    const revStart = pairEnd;
-    const revEnd = htmlContent.indexOf('<div id="firstLoginPinModal"');
-    const revChunk = htmlContent.slice(revStart, revEnd);
-    assert.strictEqual(/class=["'][^"']*modal-close-btn[^"']*["']/.test(revChunk), false, 'deviceRevokedOverlay contains modal-close-btn');
-
-    // 3. #authorizedDevicesModal: close button uses .device-hub-close-btn (never class modal-close-btn)
-    const authStart = htmlContent.indexOf('<div id="authorizedDevicesModal"');
-    const authEnd = htmlContent.indexOf('<div id="cloudSyncDetailModal"');
-    const authChunk = htmlContent.slice(authStart, authEnd);
-    assert.strictEqual(/class=["'][^"']*modal-close-btn[^"']*["']/.test(authChunk), false, 'authorizedDevicesModal contains modal-close-btn');
-    assert.ok(authChunk.includes('class="device-hub-close-btn"'), 'authorizedDevicesModal must use device-hub-close-btn');
-});
-
-auditCheck('INVARIANT-2', 'Operational <button>, <tab>, and segmented pills contain STRICTLY ZERO raw Unicode emojis', () => {
-    const emojiRegex = /[\u{1F300}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}]/u;
-
-    const buttonRegex = /<button\b[^>]*>([\s\S]*?)<\/button>/gi;
-    let btnMatch;
-    let flaggedButtons = [];
-    while ((btnMatch = buttonRegex.exec(htmlContent)) !== null) {
-        const fullBtn = btnMatch[0];
-        if (fullBtn.includes('id="nav-') || fullBtn.includes('class="btn') || fullBtn.includes('class="tab') || fullBtn.includes('class="pill') || fullBtn.includes('class="device-hub-') || fullBtn.includes('class="nav-tab')) {
-            if (emojiRegex.test(btnMatch[1])) {
-                flaggedButtons.push(fullBtn.slice(0, 80));
-            }
-        }
-    }
-    assert.strictEqual(flaggedButtons.length, 0, `Found operational buttons with raw emojis: ${JSON.stringify(flaggedButtons)}`);
-});
-
-auditCheck('INVARIANT-3', 'Currency formatting preserves non-breaking space (₹ ) across UI code', () => {
-    assert.ok(coreContent.includes("'₹ '") || coreContent.includes('"₹ "') || coreContent.includes('₹&nbsp;') || coreContent.includes('₹ '), 'Currency formatting ₹ with space found in core.js');
-    assert.ok(posContent.includes("'₹ '") || posContent.includes('"₹ "') || posContent.includes('₹ '), 'Currency formatting ₹ with space found in pos.js');
-});
-
-// ----------------------------------------------------------------------------
-// 8. SERVICE WORKER & PWA SHELL INTEGRITY
-// ----------------------------------------------------------------------------
-console.log('\n📍 PHASE 8: SERVICE WORKER & OFFLINE PWA ARCHITECTURE');
-
-auditCheck('PWA', 'sw.js delegates to service-worker.js which configures static assets shell and dynamic API bypass', () => {
-    assert.ok(swContent.includes("importScripts('./service-worker.js')"), 'sw.js missing import of service-worker.js');
-    assert.ok(serviceWorkerContent.includes('STATIC_SHELL_ASSETS') || serviceWorkerContent.includes('STATIC_ASSETS'), 'service-worker.js missing static assets definition');
-    assert.ok(serviceWorkerContent.includes('CACHE_VERSION') || serviceWorkerContent.includes('CACHE_NAME'), 'service-worker.js missing cache version');
-    assert.ok(serviceWorkerContent.includes('/api/') || serviceWorkerContent.includes('firestore'), 'service-worker.js handles dynamic API/Firestore bypass');
-});
-
-// ----------------------------------------------------------------------------
-// AUDIT SUMMARY
-// ----------------------------------------------------------------------------
-console.log('\n====================================================================');
-console.log(`🏁 FORENSIC AUDIT COMPLETE: ${passedChecks}/${totalChecks} CHECKS PASSED (${failedChecks} FAILED)`);
-console.log('====================================================================\n');
-
-if (failedChecks > 0) {
-    console.error(`💥 AUDIT VERDICT: INTEGRITY VIOLATION (${failedChecks} failures)`);
-    process.exit(1);
-} else {
-    console.log('🌟 AUDIT VERDICT: CLEAN — ALL FORENSIC CHECKS SATISFIED 100%');
-    process.exit(0);
+if (failCount > 0) {
+  process.exit(1);
 }

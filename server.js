@@ -97,6 +97,23 @@ try {
   console.warn('[CSS Bundler] Startup note:', bundleErr.message);
 }
 
+// Global Process Exception & Rejection Handlers for Server Resilience
+process.on('unhandledRejection', (reason, promise) => {
+  const ts = new Date().toISOString();
+  console.error(`[${ts}] [Server Unhandled Rejection] Reason:`, reason);
+  if (reason && reason.stack) {
+    console.error(`[${ts}] [Server Unhandled Rejection Stack]:`, reason.stack);
+  }
+});
+
+process.on('uncaughtException', (err, origin) => {
+  const ts = new Date().toISOString();
+  console.error(`[${ts}] [Server Uncaught Exception] Origin: ${origin}, Error:`, err);
+  if (err && err.stack) {
+    console.error(`[${ts}] [Server Uncaught Exception Stack]:`, err.stack);
+  }
+});
+
 // Persistent Disk Storage for Food Images & Offloaded Reports
 const uploadsDir = path.join(__dirname, 'uploads');
 const uploadsFoodImagesDir = path.join(uploadsDir, 'food-images');

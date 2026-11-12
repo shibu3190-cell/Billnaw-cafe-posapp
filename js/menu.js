@@ -139,6 +139,9 @@ function deleteCategory(cat) {
 window.deleteCategory = deleteCategory;
 
 function filterMenu(category) { 
+    if (typeof window !== 'undefined' && Array.isArray(window.menuItems) && window.menuItems.length > 0 && (!Array.isArray(menuItems) || menuItems.length === 0)) {
+        menuItems = window.menuItems;
+    }
     activeCategory = category; 
     renderCategoryFilters(); 
     renderMenuUI(); 
@@ -146,6 +149,11 @@ function filterMenu(category) {
 window.filterMenu = filterMenu;
 
 function renderMenuUI() {
+    if (typeof window !== 'undefined' && Array.isArray(window.menuItems) && window.menuItems.length > 0 && (!Array.isArray(menuItems) || menuItems.length === 0)) {
+        menuItems = window.menuItems;
+    } else if (Array.isArray(menuItems) && typeof window !== 'undefined' && (!window.menuItems || window.menuItems.length !== menuItems.length)) {
+        window.menuItems = menuItems;
+    }
     const posGrid = document.getElementById('menuGridUI');
     if (!posGrid) return;
 
@@ -280,6 +288,11 @@ function switchMenuSubTab(subTab) {
 window.switchMenuSubTab = switchMenuSubTab;
 
 function renderMenuCatalogUI() {
+    if (typeof window !== 'undefined' && Array.isArray(window.menuItems) && window.menuItems.length > 0 && (!Array.isArray(menuItems) || menuItems.length === 0)) {
+        menuItems = window.menuItems;
+    } else if (Array.isArray(menuItems) && typeof window !== 'undefined' && (!window.menuItems || window.menuItems.length !== menuItems.length)) {
+        window.menuItems = menuItems;
+    }
     const cleanCardsContainer = document.getElementById('cleanItemCardsList');
     const { mode: gstCurrentMode, defaultRate: gstStoreRate } = getStoreGstConfig();
     const activeCatalogItems = (Array.isArray(menuItems) ? menuItems : []).filter(i => !i.is_template && i.source !== 'template' && i.is_active !== false);
@@ -1353,6 +1366,7 @@ function addMenuItem() {
         } else if (typeof localStorage !== 'undefined') {
             localStorage.setItem('billnaw_menu_customized', 'true');
         }
+        window.menuItems = menuItems;
         persistMenu(); 
         renderMenuUI(); 
         if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
@@ -1391,6 +1405,7 @@ function deleteMenuItem(id, bypassRoleCheck = false) {
         } else if (typeof localStorage !== 'undefined') {
             localStorage.setItem('billnaw_menu_customized', 'true');
         }
+        window.menuItems = menuItems;
         persistMenu(); 
         renderMenuUI(); 
         showToast("Deleted."); 
@@ -2075,6 +2090,7 @@ async function confirmAiImport() {
             throw new Error("Please specify at least one valid item name.");
         }
 
+        window.menuItems = menuItems;
         persistCategories();
         persistMenu();
         renderCategoryDropdown();

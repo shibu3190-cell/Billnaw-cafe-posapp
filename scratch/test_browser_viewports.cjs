@@ -598,13 +598,35 @@ async function testDomain2_POS(cdp, viewport) {
 
     await ensureOverlaysSuppressed(cdp);
 
-    // 1. Switch to POS Tab
+    // 1. Switch to POS Tab & Initialize Menu Items
     await cdp.evaluate(`
-        (() => {
+        (async () => {
+            const sampleMenu = [
+                { id: 1, name: "Espresso", category: "Beverages", price: 60, stockQty: 20, trackStock: true, is_active: true },
+                { id: 2, name: "Masala Chai", category: "Beverages", price: 25, stockQty: 30, trackStock: true, is_active: true },
+                { id: 3, name: "Chicken Burger", category: "Snacks", price: 150, stockQty: 10, trackStock: true, is_active: true },
+                { id: 4, name: "Veg Club Sandwich", category: "Snacks", price: 120, stockQty: 15, trackStock: true, is_active: true }
+            ];
+
+            if (typeof menuItems !== 'undefined') {
+                menuItems.length = 0;
+                menuItems.push(...sampleMenu);
+            }
+            window.menuItems = sampleMenu;
+
+            try {
+                if (typeof idb !== 'undefined' && idb.set) {
+                    await idb.set('cafe_menu', sampleMenu);
+                }
+            } catch(e) {}
+
             switchTab('pos');
+            if (typeof renderTables === 'function') renderTables();
+            if (typeof renderMenuUI === 'function') renderMenuUI();
+            if (typeof renderMenu === 'function') renderMenu();
         })()
     `);
-    await new Promise(r => setTimeout(r, 250));
+    await new Promise(r => setTimeout(r, 400));
 
     // 2. Assert Menu Grid Columns (Desktop: 4, Mobile: 2)
     const expectedCols = viewport === 'desktop' ? 4 : 2;
@@ -1616,14 +1638,28 @@ async function runMasterAudit() {
                 } catch (e) {}
 
                 // Ensure sample menuItems exist if empty
-                if (!Array.isArray(window.menuItems) || window.menuItems.length === 0) {
-                    window.menuItems = [
-                        { id: 1, name: "Espresso", category: "Beverages", price: 60, stockQty: 20, trackStock: true, is_active: true },
-                        { id: 2, name: "Masala Chai", category: "Beverages", price: 25, stockQty: 30, trackStock: true, is_active: true },
-                        { id: 3, name: "Chicken Burger", category: "Snacks", price: 150, stockQty: 10, trackStock: true, is_active: true },
-                        { id: 4, name: "Veg Club Sandwich", category: "Snacks", price: 120, stockQty: 15, trackStock: true, is_active: true }
-                    ];
+                const sampleMenu = [
+                    { id: 1, name: "Espresso", category: "Beverages", price: 60, stockQty: 20, trackStock: true, is_active: true },
+                    { id: 2, name: "Masala Chai", category: "Beverages", price: 25, stockQty: 30, trackStock: true, is_active: true },
+                    { id: 3, name: "Chicken Burger", category: "Snacks", price: 150, stockQty: 10, trackStock: true, is_active: true },
+                    { id: 4, name: "Veg Club Sandwich", category: "Snacks", price: 120, stockQty: 15, trackStock: true, is_active: true }
+                ];
+
+                if (typeof menuItems !== 'undefined') {
+                    menuItems.length = 0;
+                    menuItems.push(...sampleMenu);
                 }
+                window.menuItems = sampleMenu;
+
+                try {
+                    if (typeof idb !== 'undefined' && idb.set) {
+                        idb.set('cafe_menu', sampleMenu);
+                    }
+                } catch (e) {}
+
+                if (typeof renderTables === 'function') renderTables();
+                if (typeof renderMenuUI === 'function') renderMenuUI();
+                if (typeof renderMenu === 'function') renderMenu();
                 return { success: true };
             })()
         `);

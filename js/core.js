@@ -348,8 +348,21 @@ let syncQueue = [];
 let currentItemImageBase64 = "";
 let deferredPrompt = null;
 
-// Expose globals for cross-module compatibility
-window.menuItems = menuItems;
+// Expose globals for cross-module compatibility with bidirectional lexical-window synchronization
+try {
+    Object.defineProperty(window, 'menuItems', {
+        configurable: true,
+        enumerable: true,
+        get() {
+            return menuItems;
+        },
+        set(val) {
+            menuItems = Array.isArray(val) ? val : [];
+        }
+    });
+} catch (e) {
+    window.menuItems = menuItems;
+}
 window.orderHistory = orderHistory;
 window.dailyExpenses = dailyExpenses;
 window.tablesInfo = tablesInfo;
@@ -2865,6 +2878,7 @@ function attachFirestoreListener(targetStoreCode = null) {
         console.warn('[ZeroStoreDataGate] Device status: ' + (typeof getDeviceStatus === 'function' ? getDeviceStatus() : 'PENDING') + '. Suspending store data sync.');
         // Ensure store business arrays remain empty
         menuItems = [];
+        window.menuItems = menuItems;
         orderHistory = [];
         customersList = [];
         dailyExpenses = [];
@@ -3212,6 +3226,10 @@ window.persistTables = persistTables;
 
 function persistMenu() { 
     if (typeof markMenuCustomized === 'function') markMenuCustomized();
+    if (typeof window !== 'undefined' && Array.isArray(window.menuItems) && window.menuItems.length > 0 && (!Array.isArray(menuItems) || menuItems.length === 0)) {
+        menuItems = window.menuItems;
+    }
+    window.menuItems = menuItems;
     const sanitizedMenu = Array.isArray(menuItems)
         ? menuItems.map(item => sanitizeMenuItemForStorage(item))
         : menuItems;
@@ -3653,6 +3671,14 @@ function isMasterTerminal() {
     return false;
 }
 window.isMasterTerminal = isMasterTerminal;
+
+function isSecondaryTerminal() {
+    if (typeof isMasterTerminal === 'function') {
+        return !isMasterTerminal();
+    }
+    return localStorage.getItem('billnaw_is_master') === 'false';
+}
+window.isSecondaryTerminal = isSecondaryTerminal;
 
 async function registerMasterDeviceToCloud(deviceId) {
     try {
@@ -4373,12 +4399,20 @@ function showDevicePairingOverlay() {
         if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
         return;
     }
-    // Option 1: Suppress pairing overlay for store-authenticated devices
-    if (typeof isStoreAuthenticated === 'function' && isStoreAuthenticated()) {
-        hideDevicePairingOverlay();
-        return;
-    }
-    if ((typeof getDeviceStatus === 'function' && getDeviceStatus() === 'AUTHORIZED') || localStorage.getItem('billnaw_device_status') === 'AUTHORIZED') {
+    const devStatus = (typeof getDeviceStatus === 'function') ? getDeviceStatus() : (localStorage.getItem('billnaw_device_status') || 'PENDING');
+    const isSecondary = (typeof isSecondaryTerminal === 'function') ? isSecondaryTerminal() : (!isMasterTerminal());
+
+    // 🔒 ZERO-STORE-DATA GATE: Secondary device in PENDING approval state must NEVER hide or bypass pairing overlay, even if isStoreAuthenticated() is true
+    if (isSecondary && devStatus === 'PENDING') {
+        // Enforce Zero-Store-Data Gate: keep pairing overlay active until Master Admin explicitly authorizes device
+    } else if (typeof isStoreAuthenticated === 'function' && isStoreAuthenticated()) {
+        if ((typeof getDeviceStatus === 'function' && getDeviceStatus() === 'AUTHORIZED') || localStorage.getItem('billnaw_device_status') === 'AUTHORIZED') {
+            if (typeof checkDeviceAuthExpiration !== 'function' || !checkDeviceAuthExpiration()) {
+                hideDevicePairingOverlay();
+                return;
+            }
+        }
+    } else if ((typeof getDeviceStatus === 'function' && getDeviceStatus() === 'AUTHORIZED') || localStorage.getItem('billnaw_device_status') === 'AUTHORIZED') {
         if (typeof checkDeviceAuthExpiration !== 'function' || !checkDeviceAuthExpiration()) {
             hideDevicePairingOverlay();
             return;

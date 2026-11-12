@@ -137,6 +137,7 @@
         min-height: 24px !important;
         height: 24px !important;
         border-radius: 6px !important;
+        position: relative !important;
     }
     .item-qty-control {
         width: 100% !important;
@@ -150,6 +151,7 @@
         min-height: 28px !important;
         font-size: 13px !important;
         padding: 4px !important;
+        position: relative !important;
     }
     .qty-pill {
         min-height: 28px !important;
@@ -162,6 +164,45 @@
         min-height: 28px !important;
         font-size: 14px !important;
         padding: 4px !important;
+        position: relative !important;
+    }
+
+    /* 44px ergonomic touch hit target expansion on tablet portrait */
+    .item-qty-control button::before,
+    .qty-pill button::before,
+    .menu-card .add-btn::before,
+    .item-add-btn::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 44px;
+        min-height: 44px;
+        width: 100%;
+        height: 100%;
+        pointer-events: auto;
+    }
+
+    /* Expand ledger action dropdown button touch target on tablet */
+    #customersTableBody .action-dropdown-btn,
+    #historyTableBody .action-dropdown-btn {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        position: relative !important;
+    }
+    #customersTableBody .action-dropdown-btn::before,
+    #historyTableBody .action-dropdown-btn::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 44px;
+        min-height: 44px;
+        width: 100%;
+        height: 100%;
+        pointer-events: auto;
     }
 
     /* Dashboard Stack for Split Screen */
@@ -486,7 +527,9 @@
         justify-content: center !important;
         padding: 0 !important;
     }
-    .auth-box, .modal-box {
+    .auth-box, .modal-box,
+    #shopAuthModal .shop-auth-card,
+    #aiScanningOverlay > div {
         padding: 18px 18px !important;
         padding-bottom: max(20px, env(safe-area-inset-bottom, 24px)) !important;
         border-radius: 24px 24px 0 0 !important;
@@ -507,13 +550,27 @@
         border-radius: 2px;
         margin: 0 auto 12px auto;
     }
-    .modal-close-btn {
+    .modal-close-btn,
+    .khata-close-btn,
+    .orders-log-close-btn,
+    .printer-close-btn,
+    .device-hub-close-btn,
+    .device-approval-close-btn,
+    .forgot-pin-close-btn,
+    .report-picker-close-btn,
+    .txn-action-close-btn,
+    .ai_scan_close_btn,
+    .drawer-close-btn,
+    .hdr-close-btn,
+    .wa-preview-close-btn,
+    .slide-menu-close-btn {
         min-width: 44px !important;
         min-height: 44px !important;
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
         padding: 10px !important;
+        position: relative !important;
     }
     @keyframes sheetSlideUpMobile {
         from { transform: translateY(100%); }
@@ -1172,13 +1229,28 @@ body.printing { background: #fff !important; }
     }
 
     /* Ensure 3-dot action dropdown button is thumb-friendly (>= 44x44px) */
-    #customersTableBody .action-dropdown-btn {
+    #customersTableBody .action-dropdown-btn,
+    #historyTableBody .action-dropdown-btn {
         min-width: 44px !important;
         min-height: 44px !important;
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
         border-radius: 8px !important;
+        position: relative !important;
+    }
+    #customersTableBody .action-dropdown-btn::before,
+    #historyTableBody .action-dropdown-btn::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 44px;
+        min-height: 44px;
+        width: 100%;
+        height: 100%;
+        pointer-events: auto;
     }
 
     /* Modal Action Buttons Touch Ergonomics on Mobile (48px targets) */

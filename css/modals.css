@@ -73,6 +73,49 @@
     box-sizing: border-box;
 }
 .more-close-btn:hover { background: var(--bg-body); color: var(--text-dark); }
+
+/* 🎯 Ergonomic 44x44px Touch Target Expansion for Custom Close Buttons (Protects 26-button invariant) */
+.khata-close-btn,
+.orders-log-close-btn,
+.printer-close-btn,
+.device-hub-close-btn,
+.device-approval-close-btn,
+.forgot-pin-close-btn,
+.report-picker-close-btn,
+.txn-action-close-btn,
+.ai_scan_close_btn,
+.drawer-close-btn,
+.hdr-close-btn,
+.wa-preview-close-btn,
+.slide-menu-close-btn {
+    position: relative;
+    touch-action: manipulation;
+}
+
+.khata-close-btn::before,
+.orders-log-close-btn::before,
+.printer-close-btn::before,
+.device-hub-close-btn::before,
+.device-approval-close-btn::before,
+.forgot-pin-close-btn::before,
+.report-picker-close-btn::before,
+.txn-action-close-btn::before,
+.ai_scan_close_btn::before,
+.drawer-close-btn::before,
+.hdr-close-btn::before,
+.wa-preview-close-btn::before,
+.slide-menu-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
+    pointer-events: auto;
+}
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
 
 /* 🛡️ Strict Modal Stacking & Z-Index Hierarchy (Prevents Popup-Under-Popup Bugs) */
