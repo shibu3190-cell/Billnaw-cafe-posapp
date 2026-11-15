@@ -291,9 +291,37 @@ export async function handler(event, context) {
     };
   }
 
-  // 2. Normalize requested path
-  const rawPath = event.path || '';
-  const cleanPath = rawPath
+  // 2. Normalize requested path across all Netlify serverless rewrite formats
+  const rawHeaders = event.headers || {};
+  const getHeader = (name) => {
+    const target = name.toLowerCase();
+    for (const [k, v] of Object.entries(rawHeaders)) {
+      if (k.toLowerCase() === target) return v;
+    }
+    return '';
+  };
+
+  const headerOriginalUrl = getHeader('x-nf-original-url') || getHeader('x-original-url') || getHeader('x-rewrite-url') || '';
+  let rawPath = '';
+  if (headerOriginalUrl) {
+    rawPath = headerOriginalUrl.split('?')[0];
+  } else if (event.rawUrl) {
+    try {
+      rawPath = new URL(event.rawUrl).pathname;
+    } catch (_) {
+      rawPath = event.path || '';
+    }
+  } else {
+    rawPath = event.path || '';
+  }
+
+  if (!rawPath || rawPath === '/.netlify/functions/api' || rawPath === '/.netlify/functions/api/') {
+    if (event.path && event.path !== '/.netlify/functions/api' && event.path !== '/.netlify/functions/api/') {
+      rawPath = event.path;
+    }
+  }
+
+  const cleanPath = (rawPath || '')
     .replace(/^\/\.netlify\/functions\/api/, '')
     .replace(/^\/api/, '')
     .replace(/\/$/, '');
@@ -1401,3 +1429,8 @@ export async function handler(event, context) {
     path: cleanPath
   });
 }
+
+// Netlify Functions v2 Path Configuration
+export const config = {
+  path: ["/api/*", "/.netlify/functions/api/*"]
+};

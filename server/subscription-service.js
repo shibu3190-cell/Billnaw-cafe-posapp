@@ -8,7 +8,8 @@ import { CONFIG } from './config.js';
 import { normalizeEmail, isValidEmail, generateStoreCode } from './auth-service.js';
 import { getDbClient } from '../src/core/db-client.js';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const DATA_DIR = isServerless ? '/tmp' : path.resolve(process.cwd(), 'data');
 const AUTH_FILE = path.join(DATA_DIR, 'auth_store.json');
 
 // In-memory subscription map: shopId -> subscription & email -> subscription

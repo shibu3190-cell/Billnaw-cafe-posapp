@@ -10,7 +10,8 @@ import nodemailer from 'nodemailer';
 import { CONFIG } from './config.js';
 import { syncStoreToFirestoreREST } from './sync-service.js';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const DATA_DIR = isServerless ? '/tmp' : path.resolve(process.cwd(), 'data');
 const AUTH_FILE = path.join(DATA_DIR, 'auth_store.json');
 
 // In-memory data repositories (backed by persistent JSON store)
