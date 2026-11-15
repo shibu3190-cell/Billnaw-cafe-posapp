@@ -493,6 +493,7 @@ export async function handler(event, context) {
             }
           }
         } catch (geminiError) {
+          console.warn('[Menu Digitizer Netlify] Vision OCR failed:', geminiError?.message || geminiError);
           // Continue to fallback
         }
       }

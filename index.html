@@ -2727,6 +2727,15 @@
         </div>
     </div>
 
+    <!-- Dedicated File Inputs for AI & Excel Menu Digitization (Placed at root body level to prevent mobile file picker cancellation) -->
+    <div id="aiMenuInputContainer" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" aria-hidden="true">
+        <input type="file" id="aiMenuFileInput" accept="image/*" onchange="processAIMenu(event)">
+        <input type="file" id="aiMenuCameraInput" accept="image/*" capture="environment" onchange="processAIMenu(event)">
+        <input type="file" id="aiMenuPdfInput" accept="application/pdf" onchange="processAIMenu(event)">
+        <input type="file" id="aiMenuUploader" accept="image/*, application/pdf" onchange="processAIMenu(event)">
+        <input type="file" id="aiMenuExcelInput" accept=".xlsx, .xls, .csv" onchange="handleExcelMenuUpload(event)">
+    </div>
+
     <div id="uploadMenuChoiceModal" class="modal-overlay" style="display: none; z-index: 1000010;">
         <div class="modal-box" style="max-width: 480px; border-radius: 20px;">
             <div class="modal-header" style="border-bottom: 1px solid var(--border); padding-bottom: 14px;">
@@ -2744,14 +2753,8 @@
                 </button>
             </div>
 
-            <input type="file" id="aiMenuFileInput" accept="image/*" style="display: none;" onclick="this.value=null;" onchange="processAIMenu(event)">
-            <input type="file" id="aiMenuCameraInput" accept="image/*" capture="environment" style="display: none;" onclick="this.value=null;" onchange="processAIMenu(event)">
-            <input type="file" id="aiMenuPdfInput" accept="application/pdf" style="display: none;" onclick="this.value=null;" onchange="processAIMenu(event)">
-            <input type="file" id="aiMenuUploader" accept="image/*, application/pdf" style="display: none;" onclick="this.value=null;" onchange="processAIMenu(event)">
-            <input type="file" id="aiMenuExcelInput" accept=".xlsx, .xls, .csv" style="display: none;" onclick="this.value=null;" onchange="handleExcelMenuUpload(event)">
-
             <div style="padding: 16px 0; display: flex; flex-direction: column; gap: 10px;">
-                <button type="button" id="aiMenuCameraBtn" class="upload-choice-tile" onclick="document.getElementById('aiMenuCameraInput').click(); closeUploadMenuChoiceModal();">
+                <button type="button" id="aiMenuCameraBtn" class="upload-choice-tile" onclick="openMenuFilePicker('aiMenuCameraInput')">
                     <div class="upload-choice-icon" style="background: #FEF2F2; color: #DC2626;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                     </div>
@@ -2762,7 +2765,7 @@
                     <span style="font-size: 12px; color: var(--primary); font-weight: 700;">Open &rarr;</span>
                 </button>
 
-                <button type="button" id="aiMenuBtn" class="upload-choice-tile" onclick="document.getElementById('aiMenuFileInput').click(); closeUploadMenuChoiceModal();">
+                <button type="button" id="aiMenuBtn" class="upload-choice-tile" onclick="openMenuFilePicker('aiMenuFileInput')">
                     <div class="upload-choice-icon" style="background: #E8F5E9; color: #16A34A;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
                     </div>
@@ -2773,7 +2776,7 @@
                     <span style="font-size: 12px; color: var(--primary); font-weight: 700;">Select &rarr;</span>
                 </button>
 
-                <button type="button" id="aiMenuPdfBtn" class="upload-choice-tile" onclick="document.getElementById('aiMenuPdfInput').click(); closeUploadMenuChoiceModal();">
+                <button type="button" id="aiMenuPdfBtn" class="upload-choice-tile" onclick="openMenuFilePicker('aiMenuPdfInput')">
                     <div class="upload-choice-icon" style="background: #EFF6FF; color: #2563EB;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     </div>
@@ -2784,7 +2787,7 @@
                     <span style="font-size: 12px; color: var(--primary); font-weight: 700;">Select &rarr;</span>
                 </button>
 
-                <button type="button" id="aiMenuExcelBtn" class="upload-choice-tile" onclick="document.getElementById('aiMenuExcelInput').click(); closeUploadMenuChoiceModal();">
+                <button type="button" id="aiMenuExcelBtn" class="upload-choice-tile" onclick="openMenuFilePicker('aiMenuExcelInput')">
                     <div class="upload-choice-icon" style="background: #FEF3C7; color: #D97706;">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="17"/><line x1="16" y1="13" x2="8" y2="17"/></svg>
                     </div>
@@ -4957,7 +4960,7 @@
                             </div>
                         </div>
                         <div class="unified-ai-ingest-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <button type="button" class="btn btn-outline" onclick="document.getElementById('aiMenuCameraInput').click()" style="font-size: 12px; padding: 8px 14px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; border: 1.5px solid #CBD5E1; background: #FFFFFF; color: var(--text-dark); cursor: pointer;" title="Snap physical menu with device camera">
+                            <button type="button" class="btn btn-outline" onclick="openMenuFilePicker('aiMenuCameraInput')" style="font-size: 12px; padding: 8px 14px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; border: 1.5px solid #CBD5E1; background: #FFFFFF; color: var(--text-dark); cursor: pointer;" title="Snap physical menu with device camera">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                                 <span>Camera Snap</span>
                             </button>

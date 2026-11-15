@@ -482,6 +482,7 @@ const handleMenuScanRequest = async (req, res) => {
           }
         }
       } catch (geminiError) {
+        console.warn('[Menu Digitizer] Vision OCR model generation failed:', geminiError?.message || geminiError);
         // Continue to structured layout fallback
       }
     }

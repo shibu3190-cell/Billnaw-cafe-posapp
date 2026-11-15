@@ -417,7 +417,10 @@ Schema:
           model: modelName,
           contents: [{ role: 'user', parts: promptParts }],
           config: {
-            responseMimeType: 'application/json'
+            responseMimeType: 'application/json',
+            thinkingConfig: {
+              thinkingBudget: 0
+            }
           }
         });
       }, CANDIDATE_TIMEOUT_MS, `Model '${modelName}' request exceeded ${CANDIDATE_TIMEOUT_MS}ms timeout`);

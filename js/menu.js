@@ -518,6 +518,16 @@ function closeUploadMenuChoiceModal() {
 }
 window.closeUploadMenuChoiceModal = closeUploadMenuChoiceModal;
 
+function openMenuFilePicker(inputId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.value = '';
+        input.click();
+    }
+    closeUploadMenuChoiceModal();
+}
+window.openMenuFilePicker = openMenuFilePicker;
+
 // 📊 Excel / Spreadsheet Menu Upload Handler
 async function handleExcelMenuUpload(event) {
     const file = event.target.files && event.target.files[0];
@@ -1521,7 +1531,7 @@ async function processAIMenu(event) {
                  (event && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]);
     if (!file) return;
     const btn = document.getElementById('aiMenuBtn'); 
-    if (btn) { btn.disabled = true; btn.innerText = "⏳ Preparing document..."; }
+    if (btn) { btn.disabled = true; }
 
     const scanOverlay = document.getElementById('aiScanningOverlay');
     const scanText = document.getElementById('aiScanningOverlayText');
@@ -1635,10 +1645,12 @@ async function processAIMenu(event) {
         console.warn("AI Menu Processing:", error.message); 
         showToast("⚠️ " + error.message); 
     } finally { 
-        if (btn) { btn.disabled = false; btn.innerText = "Upload Menu Photo"; }
+        if (btn) { btn.disabled = false; }
         if (scanOverlay) scanOverlay.style.display = 'none';
-        const uploader = document.getElementById('aiMenuFileInput') || document.getElementById('aiMenuUploader');
-        if (uploader) uploader.value = ''; 
+        ['aiMenuFileInput', 'aiMenuCameraInput', 'aiMenuPdfInput', 'aiMenuUploader', 'aiMenuExcelInput'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
     }
 }
 window.processAIMenu = processAIMenu;
@@ -1646,7 +1658,7 @@ window.processAIMenu = processAIMenu;
 async function executeMenuExtraction(payload, isExplicitFallback = false) {
     if (!payload) return;
     const btn = document.getElementById('aiMenuBtn');
-    if (btn) { btn.disabled = true; btn.innerText = "⏳ Extracting Menu..."; }
+    if (btn) { btn.disabled = true; }
 
     const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || payload.apiKey || '';
     const activeShopId = payload.shopId || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || null;
@@ -1780,11 +1792,11 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
     } finally {
         const scanOverlay = document.getElementById('aiScanningOverlay');
         if (scanOverlay) scanOverlay.style.display = 'none';
-        if (btn) { btn.disabled = false; btn.innerText = "Upload Menu Photo"; }
-        const uploader = document.getElementById('aiMenuFileInput') || document.getElementById('aiMenuUploader');
-        if (uploader) uploader.value = '';
-        const camUploader = document.getElementById('aiMenuCameraInput');
-        if (camUploader) camUploader.value = '';
+        if (btn) { btn.disabled = false; }
+        ['aiMenuFileInput', 'aiMenuCameraInput', 'aiMenuPdfInput', 'aiMenuUploader', 'aiMenuExcelInput'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
         if (typeof refreshAiMenuQuotaPill === 'function') {
             refreshAiMenuQuotaPill();
         }
