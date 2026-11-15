@@ -1663,6 +1663,9 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
     const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || payload.apiKey || '';
     const activeShopId = payload.shopId || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || null;
     const activeShopEmail = (typeof shopProfile !== 'undefined' && shopProfile.email) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_shop_email') : null) || '';
+    if (payload.base64Data && !lastUploadedMenuPreviewUrl) {
+        lastUploadedMenuPreviewUrl = (payload.base64Data.startsWith('data:image')) ? payload.base64Data : null;
+    }
 
     if (isExplicitFallback) {
         showToast("📄 Parsing menu layout with Smart Parser...");

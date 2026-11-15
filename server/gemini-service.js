@@ -422,16 +422,22 @@ Schema:
     const perModelTimeout = Math.min(CANDIDATE_TIMEOUT_MS, remainingBudget);
 
     try {
+      const modelConfig = {
+        responseMimeType: 'application/json'
+      };
+      // Models with configurable reasoning (e.g. gemini-3.1-flash-lite, gemini-2.5-flash) accept thinkingBudget: 0 to bypass thinking latency.
+      // gemini-3.5-flash-lite does not support thinkingConfig and throws 400 INVALID_ARGUMENT if thinkingConfig is supplied.
+      if (modelName !== 'gemini-3.5-flash-lite' && (modelName.includes('3.1') || modelName.includes('2.5') || modelName.includes('thinking'))) {
+        modelConfig.thinkingConfig = {
+          thinkingBudget: 0
+        };
+      }
+
       response = await executeWithTimeout(async () => {
         return await ai.models.generateContent({
           model: modelName,
           contents: [{ role: 'user', parts: promptParts }],
-          config: {
-            responseMimeType: 'application/json',
-            thinkingConfig: {
-              thinkingBudget: 0
-            }
-          }
+          config: modelConfig
         });
       }, perModelTimeout, `Model '${modelName}' request exceeded ${perModelTimeout}ms timeout`);
 
