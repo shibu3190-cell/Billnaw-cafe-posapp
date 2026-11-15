@@ -27,8 +27,8 @@ export const CONFIG = {
       ).trim();
       return (k && k.length > 15) ? k : '';
     },
-    model: 'gemini-3.8-flash',
-    imageModel: 'gemini-3.8-flash',
+    model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+    imageModel: process.env.GEMINI_IMAGE_MODEL || 'gemini-3.5-flash-lite',
     imagenModel: 'imagen-3.0-generate-002'
   },
   sheets: {

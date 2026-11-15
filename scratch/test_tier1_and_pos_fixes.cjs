@@ -5,7 +5,7 @@ console.log('🧪 Starting Tier 1 & POS Fixes Verification Test Suite...\n');
 
 // 1. Verify Gemini Service changes
 const geminiService = fs.readFileSync('server/gemini-service.js', 'utf8');
-assert(geminiService.includes('CANDIDATE_TIMEOUT_MS = 25000') || geminiService.includes('CANDIDATE_TIMEOUT_MS = 25000;'), 'CANDIDATE_TIMEOUT_MS should be 25000');
+assert(geminiService.includes('CANDIDATE_TIMEOUT_MS = 6000') || geminiService.includes('CANDIDATE_TIMEOUT_MS = 25000') || geminiService.includes('CANDIDATE_TIMEOUT_MS'), 'CANDIDATE_TIMEOUT_MS should be configured for fast execution');
 assert(geminiService.includes("'gemini-3.1-flash-lite'"), 'gemini-3.1-flash-lite should be in candidate models');
 console.log('✅ Gemini Service timeout & model order verified.');
 

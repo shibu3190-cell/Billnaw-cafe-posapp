@@ -38,7 +38,8 @@ function test(name, fn) {
     const {
         cleanParsedPrice,
         parseMenuJsonSafely,
-        CANDIDATE_MODELS
+        CANDIDATE_MODELS,
+        CANDIDATE_TIMEOUT_MS
     } = await import('../server/gemini-service.js');
 
     const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
@@ -148,14 +149,17 @@ Hope this helps!`;
     });
 
     // -----------------------------------------------------------------
-    // SECTION 3: GEMINI MODEL CASCADE PRUNING
+    // SECTION 3: GEMINI MODEL CASCADE PRUNING & SERVERLESS TIMEOUT
     // -----------------------------------------------------------------
-    console.log("\n📍 SECTION 3: GEMINI MODEL CASCADE");
+    console.log("\n📍 SECTION 3: GEMINI MODEL CASCADE & SERVERLESS TIMEOUT");
 
     await test("QC-06: CANDIDATE_MODELS does not contain deprecated 404 models", () => {
         assert.ok(!CANDIDATE_MODELS.includes('gemini-2.5-flash'), "Deprecated 404 gemini-2.5-flash must be pruned");
-        assert.ok(CANDIDATE_MODELS.includes('gemini-3.1-flash-lite'), "gemini-3.1-flash-lite must be present");
+        assert.strictEqual(CANDIDATE_MODELS[0], 'gemini-3.5-flash-lite', "gemini-3.5-flash-lite must lead candidate cascade");
+        assert.strictEqual(CANDIDATE_MODELS[1], 'gemini-3.1-flash-lite', "gemini-3.1-flash-lite must be second");
+        assert.strictEqual(CANDIDATE_MODELS[2], 'gemini-flash-latest', "gemini-flash-latest must be third");
         assert.ok(CANDIDATE_MODELS.includes('gemini-3.8-flash'), "gemini-3.8-flash must be present");
+        assert.ok(CANDIDATE_TIMEOUT_MS <= 7000, `CANDIDATE_TIMEOUT_MS (${CANDIDATE_TIMEOUT_MS}ms) must be <= 7000ms for Netlify 10s ceiling`);
     });
 
     // -----------------------------------------------------------------

@@ -91,15 +91,14 @@ export async function isGeminiKeyOperational(apiKey = null) {
   return looksValid;
 }
 
-export const CANDIDATE_TIMEOUT_MS = 25000;
+export const CANDIDATE_TIMEOUT_MS = 6000;
 
 export const CANDIDATE_MODELS = [
+  'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
-  'gemini-3.8-flash',
   'gemini-flash-latest',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  CONFIG.gemini.model || 'gemini-3.8-flash'
+  'gemini-3.8-flash',
+  CONFIG.gemini.model || 'gemini-3.5-flash-lite'
 ];
 
 /**
@@ -1020,11 +1019,11 @@ Given the dish name "${cleanItemName}" and category "${cleanCat}", classify it i
 Output strictly a JSON object: {"matched_type": "one_item_from_list"}`;
 
       const candidateModels = [...new Set([
-        CONFIG.gemini.model,
-        'gemini-3.8-flash',
+        'gemini-3.5-flash-lite',
         'gemini-3.1-flash-lite',
         'gemini-flash-latest',
-        'gemini-3.5-flash-lite',
+        CONFIG.gemini.model,
+        'gemini-3.8-flash',
         'gemini-3.5-flash'
       ].filter(Boolean))];
 
@@ -1113,11 +1112,11 @@ Guidelines:
     try {
       const ai = getGeminiClient(effectiveKey);
       const candidateModels = [...new Set([
-        CONFIG.gemini.model,
-        'gemini-3.8-flash',
+        'gemini-3.5-flash-lite',
         'gemini-3.1-flash-lite',
         'gemini-flash-latest',
-        'gemini-3.5-flash-lite',
+        CONFIG.gemini.model,
+        'gemini-3.8-flash',
         'gemini-3.5-flash'
       ].filter(Boolean))];
 

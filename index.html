@@ -2728,7 +2728,7 @@
     </div>
 
     <!-- Dedicated File Inputs for AI & Excel Menu Digitization (Placed at root body level to prevent mobile file picker cancellation) -->
-    <div id="aiMenuInputContainer" style="position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;" aria-hidden="true">
+    <div id="aiMenuInputContainer" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; opacity: 0;" aria-hidden="true">
         <input type="file" id="aiMenuFileInput" accept="image/*" onchange="processAIMenu(event)">
         <input type="file" id="aiMenuCameraInput" accept="image/*" capture="environment" onchange="processAIMenu(event)">
         <input type="file" id="aiMenuPdfInput" accept="application/pdf" onchange="processAIMenu(event)">
