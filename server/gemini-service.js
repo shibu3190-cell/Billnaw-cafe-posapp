@@ -91,13 +91,14 @@ export async function isGeminiKeyOperational(apiKey = null) {
   return looksValid;
 }
 
-export const CANDIDATE_TIMEOUT_MS = 6000;
+export const CANDIDATE_TIMEOUT_MS = 7000;
 
 export const CANDIDATE_MODELS = [
   'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
   'gemini-flash-latest',
   'gemini-3.8-flash',
+  'gemini-3.5-flash',
   CONFIG.gemini.model || 'gemini-3.5-flash-lite'
 ];
 
@@ -408,8 +409,18 @@ Schema:
   let response = null;
   let successfulModel = null;
   let lastError = null;
+  const startTime = Date.now();
+  const MAX_TOTAL_CASCADE_MS = 8500; // Safeguard for Netlify serverless 10s ceiling, leaving buffer for fallback parsing
 
   for (const modelName of candidateModels) {
+    const elapsed = Date.now() - startTime;
+    const remainingBudget = MAX_TOTAL_CASCADE_MS - elapsed;
+    if (remainingBudget < 1500) {
+      // Insufficient time for another remote model call before serverless deadline; drop to layout fallback
+      break;
+    }
+    const perModelTimeout = Math.min(CANDIDATE_TIMEOUT_MS, remainingBudget);
+
     try {
       response = await executeWithTimeout(async () => {
         return await ai.models.generateContent({
@@ -422,7 +433,7 @@ Schema:
             }
           }
         });
-      }, CANDIDATE_TIMEOUT_MS, `Model '${modelName}' request exceeded ${CANDIDATE_TIMEOUT_MS}ms timeout`);
+      }, perModelTimeout, `Model '${modelName}' request exceeded ${perModelTimeout}ms timeout`);
 
       if (response && response.text) {
         successfulModel = modelName;
