@@ -496,7 +496,9 @@ const handleMenuScanRequest = async (req, res) => {
     const fallbackData = parseMenuFromText(extractedText || '');
 
     let warningMessage = 'Menu digitized using Smart Layout Parser.';
-    if (resolvedApiKey && !isOperationalKey) {
+    if (!resolvedApiKey) {
+      warningMessage = 'Menu digitized using Smart Layout Parser. (Server Gemini key is not configured; tap AI Key to add your key in Settings).';
+    } else if (!isOperationalKey) {
       warningMessage = 'Menu digitized using Smart Layout Parser. (Configured Gemini Key could not be verified; check your key in Settings > AI Quota & Key).';
     }
 

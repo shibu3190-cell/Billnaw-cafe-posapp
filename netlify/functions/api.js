@@ -6,7 +6,8 @@ import {
   extractMenuFromDocument,
   generateMenuItemImage,
   generateMarketingCampaign,
-  resolveGeminiApiKey
+  resolveGeminiApiKey,
+  sanitizeErrorForClient
 } from '../../server/gemini-service.js';
 import { parseMenuFromText } from '../../server/menu-parser.js';
 import {
@@ -407,7 +408,7 @@ export async function handler(event, context) {
         ...quota
       });
     } catch (err) {
-      return jsonResponse(500, { error: err.message });
+      return jsonResponse(500, { error: sanitizeErrorForClient(err.message, '') });
     }
   }
 
@@ -532,11 +533,15 @@ export async function handler(event, context) {
       }
 
       const fallback = parseMenuFromText(extractedText || '');
+      let fallbackWarning = 'Menu processed using smart layout parser.';
+      if (!resolvedApiKey) {
+        fallbackWarning = 'Menu processed using smart layout parser. (Server Gemini key is not configured; tap AI Key to add your key or set GEMINI_API_KEY in Netlify).';
+      }
       return jsonResponse(200, {
         categories: fallback.categories,
         isFallback: true,
         fallbackSource: fallback.source,
-        warning: 'Menu processed using smart layout parser.',
+        warning: fallbackWarning,
         quota: keyCheck ? {
           limit: keyCheck.monthlyLimit,
           used: keyCheck.currentUsage,
@@ -550,7 +555,7 @@ export async function handler(event, context) {
         releaseAiQuotaSlot(shopId);
         slotReserved = false;
       }
-      return jsonResponse(500, { error: err.message });
+      return jsonResponse(500, { error: sanitizeErrorForClient(err.message, resolvedApiKey || '') });
     }
   }
 

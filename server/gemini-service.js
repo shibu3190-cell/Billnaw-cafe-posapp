@@ -19,16 +19,7 @@ export function resolveGeminiApiKey(customKey = null) {
   if (custom && custom.length > 15) {
     return custom;
   }
-  const defaultKey = (
-    CONFIG.gemini.apiKey ||
-    process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_API_KEY2 ||
-    process.env.API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GOOGLE_GENAI_API_KEY ||
-    ''
-  ).trim();
-  return (defaultKey && defaultKey.length > 15) ? defaultKey : '';
+  return CONFIG.gemini.apiKey || '';
 }
 
 export function getGeminiClient(customKey = null) {
@@ -1478,6 +1469,7 @@ export function sanitizeErrorForClient(errMsg, apiKey = '') {
     clean = clean.split(envKey3).join('[REDACTED_API_KEY]');
   }
   clean = clean.replace(/AIzaSy[A-Za-z0-9_-]{33}/g, '[REDACTED_API_KEY]');
+  clean = clean.replace(/AQ\.[A-Za-z0-9_-]{30,}/g, '[REDACTED_API_KEY]');
   return clean;
 }
 
