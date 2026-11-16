@@ -44,11 +44,11 @@ document.addEventListener('keydown', function(event) {
 
 // Dynamic Top Modal Dismissal (Clean hierarchy stack resolution)
 function dismissTopModal() {
-    const overlays = Array.from(document.querySelectorAll('.modal-overlay')).filter(el => {
+    const overlays = Array.from(document.querySelectorAll('.modal-overlay, .drawer-overlay, .action-sheet-overlay')).filter(el => {
         if (!el || el.id === 'activationOverlay' || el.id === 'loginOverlay' || el.id === 'shopAuthModal') return false;
         if (el.style.display === 'none') return false;
         const comp = window.getComputedStyle(el);
-        return comp.display !== 'none' && comp.visibility !== 'hidden';
+        return comp.display !== 'none' && comp.visibility !== 'hidden' && comp.opacity !== '0';
     });
     if (overlays.length === 0) return false;
     
@@ -60,7 +60,11 @@ function dismissTopModal() {
     });
     
     const topModal = overlays[0];
-    const closeBtn = topModal.querySelector('.modal-close-btn');
+    if (topModal.id === 'moreHubModal' && typeof window.closeMoreHub === 'function') {
+        window.closeMoreHub();
+        return true;
+    }
+    const closeBtn = topModal.querySelector('.modal-close-btn, .tbl-close-btn, .session-close-btn, .rtr_close_btn, .upload_choice_close_btn, .close-drawer-btn, .close-btn, [aria-label*="Close" i]');
     if (closeBtn && typeof closeBtn.click === 'function') {
         closeBtn.click();
     } else {
@@ -381,6 +385,14 @@ async function initApp() {
                     }
                 }
             }, 60);
+        }
+
+        // Initialize Android/Hardware Back Button Navigation Handling & Audio Gesture Unlock
+        if (typeof initBackNavigationHandling === 'function') {
+            initBackNavigationHandling();
+        }
+        if (typeof unlockAudioContextOnGesture === 'function') {
+            unlockAudioContextOnGesture();
         }
     } catch (err) {
         console.error("Initialization error:", err);

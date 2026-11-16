@@ -1522,6 +1522,17 @@ function switchTab(tabId) {
 
 function switchTabDirect(tabId) {
     if (tabId === 'tables') tabId = 'pos';
+
+    // Track navigation history for physical/gesture back button support
+    if (!window._isNavigatingBack) {
+        if (!window._appNavHistory) window._appNavHistory = ['pos'];
+        const safeTarget = tabId || 'pos';
+        if (window._appNavHistory[window._appNavHistory.length - 1] !== safeTarget) {
+            window._appNavHistory.push(safeTarget);
+            if (window._appNavHistory.length > 25) window._appNavHistory.shift();
+        }
+    }
+
     document.querySelectorAll('.nav-btn, .tab-btn').forEach(btn => btn.classList.remove('active')); 
     document.querySelectorAll('.view, .tab-content').forEach(c => c.classList.remove('active')); 
     

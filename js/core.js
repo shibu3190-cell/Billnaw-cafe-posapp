@@ -1709,18 +1709,126 @@ function broadcastMeshEvent(eventData) {
 }
 window.broadcastMeshEvent = broadcastMeshEvent;
 
+// Web Audio Service Bell & Notification Synthesizer (Tier 1 Cross-Device Alert)
+let _sharedAudioCtx = null;
+
+function unlockAudioContextOnGesture() {
+    if (typeof window === 'undefined') return;
+    const unlock = () => {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+                if (!_sharedAudioCtx || _sharedAudioCtx.state === 'closed') {
+                    _sharedAudioCtx = new AudioCtx();
+                }
+                if (_sharedAudioCtx && _sharedAudioCtx.state === 'suspended') {
+                    _sharedAudioCtx.resume().catch(() => {});
+                }
+            }
+        } catch (_) {}
+        document.removeEventListener('click', unlock);
+        document.removeEventListener('touchstart', unlock);
+    };
+    document.addEventListener('click', unlock, { once: true, passive: true });
+    document.addEventListener('touchstart', unlock, { once: true, passive: true });
+}
+window.unlockAudioContextOnGesture = unlockAudioContextOnGesture;
+
+function playAlertSound(type = 'bell') {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_billing_alert_muted') === 'true') {
+        return;
+    }
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+
+        if (!_sharedAudioCtx || _sharedAudioCtx.state === 'closed') {
+            _sharedAudioCtx = new AudioCtx();
+        }
+        const ctx = _sharedAudioCtx;
+        if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+        }
+
+        const now = ctx.currentTime;
+
+        // Multi-tone resonant service bell chime (high crisp primary + harmonic overtone)
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        const gain2 = ctx.createGain();
+
+        // Primary bell note (D6 ~ 1174.66 Hz) with subtle decay
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(1174.66, now);
+        osc1.frequency.exponentialRampToValueAtTime(1170.0, now + 0.8);
+
+        // Overtone chime (A6 ~ 1760 Hz) for bright metallic sparkle
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(1760.0, now);
+        osc2.frequency.exponentialRampToValueAtTime(1755.0, now + 0.5);
+
+        // Attack & Exponential Decay Envelopes
+        gain1.gain.setValueAtTime(0.001, now);
+        gain1.gain.linearRampToValueAtTime(0.35, now + 0.015);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+
+        gain2.gain.setValueAtTime(0.001, now);
+        gain2.gain.linearRampToValueAtTime(0.18, now + 0.012);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.9);
+        osc2.stop(now + 0.9);
+
+        // Haptic pulse on mobile terminals
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            try { navigator.vibrate([160, 80, 160]); } catch (_) {}
+        }
+    } catch (e) {
+        console.warn('[playAlertSound] Audio synthesis warning:', e);
+    }
+}
+window.playAlertSound = playAlertSound;
+
+const _recentBillingAlerts = new Map();
+
+function triggerBillingReadyAlert(tableId, tableName, staffName) {
+    const key = String(tableId || 'active');
+    const now = Date.now();
+    const last = _recentBillingAlerts.get(key) || 0;
+    // Deduplicate within 3 seconds to prevent double ding from mesh + cloud snapshot
+    if (now - last < 3000) return;
+    _recentBillingAlerts.set(key, now);
+
+    if (typeof playAlertSound === 'function') {
+        playAlertSound('bell');
+    }
+    if (typeof showToast === 'function') {
+        const name = tableName || (typeof getTableName === 'function' ? getTableName(tableId) : `Table ${tableId}`);
+        const by = staffName || 'Floor Server';
+        showToast(`🔔 ${name} is Ready for Billing! (${by})`, 'info');
+    }
+    if (typeof syncTableUI === 'function') {
+        syncTableUI();
+    }
+}
+window.triggerBillingReadyAlert = triggerBillingReadyAlert;
+
 if (posMeshChannel) {
     posMeshChannel.onmessage = (event) => {
         const data = event?.data;
         if (!data || !data.type) return;
         if (data.type === 'READY_FOR_BILLING') {
-            const role = (typeof currentStaff !== 'undefined' && currentStaff?.role) ? currentStaff.role : 'Admin';
+            const role = (typeof currentStaff !== 'undefined' && currentStaff?.role) ? currentStaff.role : (window.currentRole || 'Admin');
             if (role === 'Cashier' || role === 'Admin' || role === 'Manager') {
-                if (typeof playAlertSound === 'function') playAlertSound();
-                if (typeof showToast === 'function') {
-                    showToast(`🔔 ${data.tableName || ('Table ' + data.tableNumber)} is Ready for Billing! (${data.staffName || 'Server'})`, 'info');
-                }
-                if (typeof syncTableUI === 'function') syncTableUI();
+                triggerBillingReadyAlert(data.tableNumber, data.tableName, data.staffName);
             }
         }
     };
@@ -2219,8 +2327,25 @@ function handleRemoteFirestoreUpdate(data) {
     if (data.tables && typeof data.tables === 'object') {
         const localTableCountBefore = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
         if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
+
+        const newlyReadyTables = [];
+        const role = (typeof currentStaff !== 'undefined' && currentStaff?.role) ? currentStaff.role : (window.currentRole || 'Admin');
+        const isAdminOrCashier = role === 'Cashier' || role === 'Admin' || role === 'Manager';
+
         for (const [tId, tData] of Object.entries(data.tables)) {
             if (tData) {
+                const prevStatus = tablesInfo[tId]?.status;
+                const newStatus = tData.status;
+
+                // Detect remote table transitioning to ready_for_billing
+                if (newStatus === 'ready_for_billing' && prevStatus !== 'ready_for_billing') {
+                    newlyReadyTables.push({
+                        tableId: tId,
+                        tableName: tData.name || (typeof getTableName === 'function' ? getTableName(tId) : `Table ${tId}`),
+                        staffName: tData.readyForBillingBy || 'Floor Server'
+                    });
+                }
+
                 if (!tablesInfo[tId]) {
                     tablesInfo[tId] = tData;
                 } else {
@@ -2234,6 +2359,20 @@ function handleRemoteFirestoreUpdate(data) {
         }
         if (typeof renderTables === 'function') renderTables();
         if (typeof syncTableUI === 'function') syncTableUI();
+
+        // Cross-device alert: sound chime and toast notification for Cashier/Admin
+        if (isAdminOrCashier && newlyReadyTables.length > 0) {
+            newlyReadyTables.forEach(t => {
+                if (typeof triggerBillingReadyAlert === 'function') {
+                    triggerBillingReadyAlert(t.tableId, t.tableName, t.staffName);
+                } else {
+                    if (typeof playAlertSound === 'function') playAlertSound();
+                    if (typeof showToast === 'function') {
+                        showToast(`🔔 ${t.tableName} is Ready for Billing! (${t.staffName})`, 'info');
+                    }
+                }
+            });
+        }
 
         // If local device has more tables than remote cloud snapshot, immediately push back full local tables
         if (localTableCountBefore > Object.keys(data.tables).length && typeof dispatchBackendStoreSync === 'function') {
@@ -4006,14 +4145,16 @@ function applyStationProfileRestrictions() {
                 if (typeof showToast === 'function') showToast(`Table ${curT} has no active items to bill!`, 'warning');
                 return;
             }
+            const staffName = (typeof currentStaff !== 'undefined' && currentStaff?.name) ? currentStaff.name : 'Floor Server';
             if (typeof tablesInfo !== 'undefined' && tablesInfo[curT]) {
                 tablesInfo[curT].status = 'ready_for_billing';
+                tablesInfo[curT].readyForBillingTime = Date.now();
+                tablesInfo[curT].readyForBillingBy = staffName;
             }
             if (typeof persistTables === 'function') persistTables();
             if (typeof syncTableUI === 'function') syncTableUI();
 
             const tableName = (typeof getTableName === 'function') ? getTableName(curT) : `Table ${curT}`;
-            const staffName = (typeof currentStaff !== 'undefined' && currentStaff?.name) ? currentStaff.name : 'Floor Server';
             if (typeof broadcastMeshEvent === 'function') {
                 broadcastMeshEvent({
                     type: 'READY_FOR_BILLING',
@@ -4023,10 +4164,16 @@ function applyStationProfileRestrictions() {
                     timestamp: Date.now()
                 });
             }
+            if (typeof dispatchBackendStoreSync === 'function') {
+                dispatchBackendStoreSync({ tables: tablesInfo }, true);
+            } else if (typeof persistAllToFirestore === 'function') {
+                persistAllToFirestore();
+            }
             if (typeof showToast === 'function') {
                 showToast(`🔔 ${tableName} marked Ready for Billing! Cashier notified.`, 'info');
             }
         };
+        window.handleReadyForBilling = handleReadyForBilling;
 
         const dBtn = document.getElementById('desktopCheckoutBtn');
         if (dBtn) {
@@ -5184,6 +5331,139 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
                 }
             }
         }
+
+        if (typeof initBackNavigationHandling === 'function') {
+            initBackNavigationHandling();
+        }
+        if (typeof unlockAudioContextOnGesture === 'function') {
+            unlockAudioContextOnGesture();
+        }
     });
 }
+
+// ============================================================
+// 📱 UNIFIED BACK-BUTTON & NAVIGATION HISTORY SYSTEM
+// Prevents accidental app exits, dismisses topmost modals / drawers,
+// and routes back through secondary view history.
+// ============================================================
+let _appNavHistory = ['pos'];
+let _isNavigatingBack = false;
+let _lastBackTapTime = 0;
+let _backNavInitialized = false;
+
+function ensureHistoryGuardState() {
+    if (typeof window === 'undefined' || !window.history || typeof window.history.pushState !== 'function') return;
+    try {
+        window.history.pushState({ billnawGuard: true, timestamp: Date.now() }, document.title, window.location.href);
+    } catch (_) {}
+}
+window.ensureHistoryGuardState = ensureHistoryGuardState;
+
+function handleAppBackNavigation(event) {
+    // 1. Layer 1: Check for open modals or popups via dismissTopModal
+    if (typeof dismissTopModal === 'function') {
+        const modalDismissed = dismissTopModal();
+        if (modalDismissed) {
+            ensureHistoryGuardState();
+            return true;
+        }
+    }
+
+    // 2. Layer 2: Check for open mobile cart drawer
+    const cartDrawer = document.getElementById('cartDrawer');
+    if (cartDrawer && cartDrawer.classList.contains('open')) {
+        if (typeof toggleCartDrawer === 'function') {
+            toggleCartDrawer();
+        } else {
+            cartDrawer.classList.remove('open');
+            const overlay = document.getElementById('cartDrawerOverlay');
+            if (overlay) overlay.classList.remove('show');
+        }
+        ensureHistoryGuardState();
+        return true;
+    }
+
+    // 3. Layer 3: Check for secondary tab/view
+    const activeView = document.querySelector('.view.active, .tab-content.active');
+    const currentTab = activeView ? activeView.id : 'pos';
+
+    if (currentTab !== 'pos') {
+        _isNavigatingBack = true;
+        window._isNavigatingBack = true;
+        try {
+            if (Array.isArray(window._appNavHistory) && window._appNavHistory.length > 1) {
+                window._appNavHistory.pop(); // remove current tab
+                const prevTab = window._appNavHistory[window._appNavHistory.length - 1] || 'pos';
+                if (typeof switchTabDirect === 'function') {
+                    switchTabDirect(prevTab);
+                }
+            } else {
+                if (typeof switchTabDirect === 'function') {
+                    switchTabDirect('pos');
+                }
+                window._appNavHistory = ['pos'];
+            }
+        } finally {
+            _isNavigatingBack = false;
+            window._isNavigatingBack = false;
+        }
+        ensureHistoryGuardState();
+        return true;
+    }
+
+    // 4. Layer 4: Accidental Exit Protection on root POS view (Double-back to exit)
+    const now = Date.now();
+    if (_lastBackTapTime && (now - _lastBackTapTime < 2000)) {
+        // Confirmed second tap within 2 seconds: permit app exit
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App && typeof window.Capacitor.Plugins.App.exitApp === 'function') {
+            window.Capacitor.Plugins.App.exitApp();
+            return false;
+        }
+        // In browser / PWA: let back navigation proceed to previous URL/history
+        try {
+            window.history.go(-1);
+        } catch (_) {}
+        return false;
+    } else {
+        _lastBackTapTime = now;
+        window._lastBackTapTime = now;
+        if (typeof showToast === 'function') {
+            showToast('Press back again to exit Billnaw POS', 'info');
+        }
+        ensureHistoryGuardState();
+        return true;
+    }
+}
+window.handleAppBackNavigation = handleAppBackNavigation;
+
+function initBackNavigationHandling() {
+    if (_backNavInitialized) return;
+    _backNavInitialized = true;
+    window._backNavInitialized = true;
+    window._appNavHistory = ['pos'];
+    window._lastBackTapTime = 0;
+    window._isNavigatingBack = false;
+
+    // Seed browser history stack so hardware/gesture back triggers popstate instead of immediately closing window
+    if (typeof window !== 'undefined' && window.history && typeof window.history.pushState === 'function') {
+        try {
+            window.history.replaceState({ billnawGuard: true, initial: true }, document.title, window.location.href);
+            window.history.pushState({ billnawGuard: true, active: true }, document.title, window.location.href);
+        } catch (_) {}
+
+        window.addEventListener('popstate', (e) => {
+            handleAppBackNavigation(e);
+        });
+    }
+
+    // Android Native / Capacitor Back Button Integration
+    if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App && typeof window.Capacitor.Plugins.App.addListener === 'function') {
+        try {
+            window.Capacitor.Plugins.App.addListener('backButton', () => {
+                handleAppBackNavigation();
+            });
+        } catch (_) {}
+    }
+}
+window.initBackNavigationHandling = initBackNavigationHandling;
 
