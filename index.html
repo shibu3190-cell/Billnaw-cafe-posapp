@@ -795,7 +795,8 @@
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.8V4a2 2 0 1 1 4 0v9.8"></path><path d="m2 14 2 8h16l2-8"></path></svg>
             </div>
             <h2 style="color: var(--warning); margin-bottom: 6px; font-size: 18px; font-weight: 800;">Kitchen Ticket</h2>
-            <p style="color: var(--text-dark); margin-bottom: 18px; font-size: 13px; font-weight: 500;">Send Table <span id="kotTableNoDisplay" style="font-size: 20px; font-weight: 800; color: var(--primary);"></span> to kitchen printer?</p>
+            <p style="color: var(--text-dark); margin-bottom: 12px; font-size: 13px; font-weight: 500;">Send Table <span id="kotTableNoDisplay" style="font-size: 20px; font-weight: 800; color: var(--primary);"></span> to kitchen printer?</p>
+            <div id="kotNextNumberBadge" style="display: inline-block; background: rgba(199, 126, 26, 0.12); color: var(--warning); padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 13px; margin-bottom: 16px;">KOT #...</div>
             <div class="modal-actions" style="margin-top: 0; display: flex; gap: 8px;">
                 <button class="btn btn-outline" style="flex: 1;" onclick="document.getElementById('kotModal').style.display='none'">Cancel</button>
                 <button class="btn btn-warning" style="flex: 2; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="printKitchenTicket()">
@@ -1182,9 +1183,26 @@
             <div class="modal-header">
                 <div>
                     <h2>Complete Payment</h2>
-                    <p>Table <span id="checkoutTableNoDisplay"></span> • <span id="checkoutTotalItems"></span> Items</p>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap;">
+                        <button type="button" id="checkoutTableBadgeBtn" class="checkout-table-badge-btn" onclick="toggleCheckoutTablePicker()" title="Click to change or switch table">
+                            <span id="checkoutTableNoDisplay">Table 1</span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <span style="color: var(--text-muted); font-size: 13px;">• <span id="checkoutTotalItems"></span> Items</span>
+                    </div>
                 </div>
                 <button class="modal-close-btn" aria-label="Close" onclick="document.getElementById('checkoutModal').style.display='none'"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+            </div>
+            <div id="checkoutTablePickerDropdown" class="checkout-table-picker" style="display: none; background: #fff; border: 1.5px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">Switch / Move Table</div>
+                    <button type="button" onclick="toggleCheckoutTablePicker(false)" style="background: none; border: none; font-size: 11px; color: var(--text-muted); cursor: pointer; text-decoration: underline;">Close</button>
+                </div>
+                <div id="checkoutTablePickerGrid" class="checkout-table-picker-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; max-height: 180px; overflow-y: auto; padding: 2px;"></div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px; display: flex; align-items: center; justify-content: space-between;">
+                    <span>Green: Free (Transfers Order)</span>
+                    <span>Amber: Busy (Switches View)</span>
+                </div>
             </div>
             <div class="huge-total">₹ <span id="checkoutTotal">0</span></div>
 
@@ -3475,6 +3493,19 @@
                     </div>
                 </button>
 
+                <button type="button" class="more-hub-card" onclick="closeMoreHub(); switchTab('khata');">
+                    <div class="more-hub-icon-box" style="background: rgba(184, 92, 56, 0.12); color: var(--primary);">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><line x1="8" y1="7" x2="16" y2="7"></line><line x1="8" y1="11" x2="16" y2="11"></line><line x1="8" y1="15" x2="13" y2="15"></line></svg>
+                    </div>
+                    <div class="more-hub-info">
+                        <div class="more-hub-title">Khata & Customer Ledger</div>
+                        <div class="more-hub-desc">Track customer debt, store credits & settlements</div>
+                    </div>
+                    <div class="more-hub-arrow">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
+                </button>
+
                 <button type="button" class="more-hub-card" onclick="closeMoreHub(); switchTab('customers');">
                     <div class="more-hub-icon-box">
                         <svg width="22" height="22" viewBox="0 0 24 24"><use href="#icon-users"></use></svg>
@@ -3495,6 +3526,19 @@
                     <div class="more-hub-info">
                         <div class="more-hub-title">WhatsApp Campaigns</div>
                         <div class="more-hub-desc">Broadcast discounts, bills & promotions</div>
+                    </div>
+                    <div class="more-hub-arrow">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
+                </button>
+
+                <button type="button" class="more-hub-card" onclick="closeMoreHub(); switchTab('inventory');">
+                    <div class="more-hub-icon-box" style="background: rgba(30, 64, 175, 0.12); color: #1E40AF;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    </div>
+                    <div class="more-hub-info">
+                        <div class="more-hub-title">Inventory & Stock</div>
+                        <div class="more-hub-desc">Live stock telemetry, alerts & ingredients</div>
                     </div>
                     <div class="more-hub-arrow">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -3530,11 +3574,6 @@
             <span class="nav-text">POS</span>
         </button>
 
-        <button class="nav-btn" id="nav-kds" onclick="switchTab('kds')" title="Kitchen Display System (KDS)" style="display: none;">
-            <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24"><use href="#icon-coffee"></use></svg></span>
-            <span class="nav-text">Kitchen</span>
-        </button>
-
         <button class="nav-btn" id="nav-menu" onclick="switchTab('menu')" title="Menu Management">
             <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg></span>
             <span class="nav-text">Menu</span>
@@ -3545,19 +3584,29 @@
             <span class="nav-text">Reports</span>
         </button>
 
-        <button class="nav-btn" id="nav-inventory" onclick="switchTab('inventory')" title="Stock Levels & Telemetry">
-            <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></span>
-            <span class="nav-text">Inventory</span>
-        </button>
-
-        <button class="nav-btn" id="nav-khata" onclick="switchTab('khata')" title="Khata & Due Ledger">
-            <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><line x1="8" y1="7" x2="16" y2="7"></line><line x1="8" y1="11" x2="16" y2="11"></line><line x1="8" y1="15" x2="13" y2="15"></line></svg></span>
-            <span class="nav-text">Khata</span>
+        <button class="nav-btn" id="nav-tables" onclick="switchTab('tables')" title="Floor Tables & Quick Checkout">
+            <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg></span>
+            <span class="nav-text">Tables</span>
         </button>
 
         <button class="nav-btn" id="nav-more" onclick="openMoreHub()" title="More Hub & Management">
             <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle><circle cx="5" cy="12" r="1.5"></circle></svg></span>
             <span class="nav-text">More</span>
+        </button>
+
+        <button class="nav-btn" id="nav-inventory" onclick="switchTab('inventory')" title="Stock Levels & Telemetry" style="display: none !important;">
+            <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></span>
+            <span class="nav-text">Inventory</span>
+        </button>
+
+        <button class="nav-btn" id="nav-kds" onclick="switchTab('kds')" title="Kitchen Display System (KDS)" style="display: none;">
+            <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24"><use href="#icon-coffee"></use></svg></span>
+            <span class="nav-text">Kitchen</span>
+        </button>
+
+        <button class="nav-btn" id="nav-khata" onclick="switchTab('khata')" title="Khata & Due Ledger" style="display: none !important;">
+            <span class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><line x1="8" y1="7" x2="16" y2="7"></line><line x1="8" y1="11" x2="16" y2="11"></line><line x1="8" y1="15" x2="13" y2="15"></line></svg></span>
+            <span class="nav-text">Khata</span>
         </button>
 
         <button class="nav-btn" id="nav-customers" onclick="switchTab('customers')" title="Customer Directory & Loyalty" style="display: none !important;">
@@ -4883,6 +4932,71 @@
                 </div>
             </div>
 
+            <div id="tables" class="view">
+                <div class="tables-view-container">
+                    <div class="tables-view-header">
+                        <div class="tables-view-header-left">
+                            <div class="floor-selector-pills" id="tablesFloorSelector">
+                                <button type="button" class="floor-pill active" onclick="switchTablesFloor('Ground Floor', this)">Ground Floor</button>
+                                <button type="button" class="floor-pill" onclick="switchTablesFloor('1st Floor', this)">1st Floor</button>
+                                <button type="button" class="floor-pill" onclick="switchTablesFloor('Outdoor', this)">Outdoor</button>
+                            </div>
+                            <div class="tables-view-filter-pills" id="tablesFilterPills">
+                                <button type="button" class="filter-pill active" onclick="filterTablesView('all', this)">All</button>
+                                <button type="button" class="filter-pill" onclick="filterTablesView('occupied', this)">Occupied</button>
+                                <button type="button" class="filter-pill" onclick="filterTablesView('ready_for_billing', this)">Bill Ready</button>
+                                <button type="button" class="filter-pill" onclick="filterTablesView('vacant', this)">Vacant</button>
+                            </div>
+                        </div>
+                        <div class="tables-view-header-right">
+                            <span id="tablesViewStatsSummary" class="tables-stats-badge">0 Active • 0 Bill Ready • 32 Vacant</span>
+                            <button type="button" class="btn btn-sm btn-outline tables-header-pos-btn" onclick="switchTab('pos')" title="Open POS Menu & Billing">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                <span>POS Menu</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="tables-fullscreen-grid" id="tablesViewGridUI"></div>
+
+                    <div id="tableOrderFloatingBar" class="table-order-floating-bar" style="display: none;">
+                        <div class="tofb-inner">
+                            <div class="tofb-table-info">
+                                <div class="tofb-pill-code" id="tofbTableCode">T1</div>
+                                <div class="tofb-details">
+                                    <div class="tofb-title-row">
+                                        <span class="tofb-table-name" id="tofbTableName">Table 1</span>
+                                        <span class="tofb-status-tag" id="tofbStatusTag">VACANT</span>
+                                        <span class="tofb-server-tag" id="tofbServerTag" style="display:none;"></span>
+                                    </div>
+                                    <div class="tofb-items-preview" id="tofbItemsPreview">No active items</div>
+                                </div>
+                            </div>
+                            <div class="tofb-actions-right">
+                                <div class="tofb-total-box">
+                                    <span class="tofb-total-label">Total</span>
+                                    <span class="tofb-total-val" id="tofbTotalVal">&#8377; 0.00</span>
+                                </div>
+                                <div class="tofb-buttons-row">
+                                    <button type="button" id="tofbAddInPosBtn" class="btn btn-outline tofb-btn-pos" onclick="addItemsInPosFromTableView()" title="Add / Edit items in POS Catalog">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                                        <span>Add in POS</span>
+                                    </button>
+                                    <button type="button" id="tofbPrintKotBtn" class="btn btn-outline tofb-btn-kot" onclick="printTableFromTableView()" title="Print KOT / Order">
+                                        <svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg>
+                                        <span>Print</span>
+                                    </button>
+                                    <button type="button" id="tofbCheckoutBtn" class="btn btn-primary tofb-btn-checkout" onclick="checkoutFromTableView()" title="Proceed to Checkout & Settle">
+                                        <span>CHECKOUT</span>
+                                        <svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div id="kds" class="view">
                 <div class="kds-header-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #FAF7F4; border: 1.5px solid #E6DCCD; border-radius: 12px; margin-bottom: 16px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
@@ -6007,7 +6121,8 @@
     <div id="print-kot" style="display: none;">
         <div class="print-center">
             <h2 style="margin: 0; border-bottom: 2px dashed #000; padding-bottom: 5px;">KITCHEN TICKET</h2>
-            <h1 style="margin: 10px 0; font-size: 28px;">TABLE: <span id="printKotTableNo"></span></h1>
+            <h3 id="printKotDisplayNo" style="margin: 4px 0 0 0; font-size: 20px; font-weight: 800; color: #000;">KOT #1</h3>
+            <h1 style="margin: 8px 0; font-size: 28px;">TABLE: <span id="printKotTableNo"></span></h1>
             <p style="margin: 0; font-weight: bold;">Time: <span id="printKotTime"></span></p>
             <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: bold;">Server: <span id="printKotBiller"></span></p>
             <div class="print-line" style="border-bottom: 2px solid #000;"></div>
@@ -6065,6 +6180,10 @@
             <button type="button" class="slide-nav-item active" onclick="switchTab('pos'); toggleMobileSlideMenu(false);">
                 <span class="icon-box" style="width: 28px; height: 28px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></span>
                 <span>POS Terminal</span>
+            </button>
+            <button type="button" class="slide-nav-item" onclick="switchTab('tables'); toggleMobileSlideMenu(false);">
+                <span class="icon-box" style="width: 28px; height: 28px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg></span>
+                <span>Floor Tables & Checkout</span>
             </button>
             <button type="button" class="slide-nav-item" onclick="switchTab('menu'); toggleMobileSlideMenu(false);">
                 <span class="icon-box" style="width: 28px; height: 28px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg></span>

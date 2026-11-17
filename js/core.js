@@ -1709,6 +1709,75 @@ function broadcastMeshEvent(eventData) {
 }
 window.broadcastMeshEvent = broadcastMeshEvent;
 
+// Tombstone Tracking for Menu & Staff Sync (Prevents Zombie Resurrection Bug)
+function getDeletedMenuItemIds() {
+    try {
+        const raw = localStorage.getItem('billnaw_deleted_menu_ids');
+        return raw ? JSON.parse(raw) : [];
+    } catch(e) {
+        return [];
+    }
+}
+window.getDeletedMenuItemIds = getDeletedMenuItemIds;
+
+function recordDeletedMenuItemId(id) {
+    if (!id) return;
+    try {
+        const list = getDeletedMenuItemIds();
+        const idStr = String(id);
+        if (!list.includes(idStr)) {
+            list.push(idStr);
+            localStorage.setItem('billnaw_deleted_menu_ids', JSON.stringify(list.slice(-500)));
+        }
+    } catch(e) {}
+}
+window.recordDeletedMenuItemId = recordDeletedMenuItemId;
+
+function removeDeletedMenuItemId(id) {
+    if (!id) return;
+    try {
+        const list = getDeletedMenuItemIds();
+        const idStr = String(id);
+        const filtered = list.filter(x => String(x) !== idStr);
+        localStorage.setItem('billnaw_deleted_menu_ids', JSON.stringify(filtered));
+    } catch(e) {}
+}
+window.removeDeletedMenuItemId = removeDeletedMenuItemId;
+
+function getDeletedStaffIds() {
+    try {
+        const raw = localStorage.getItem('billnaw_deleted_staff_ids');
+        return raw ? JSON.parse(raw) : [];
+    } catch(e) {
+        return [];
+    }
+}
+window.getDeletedStaffIds = getDeletedStaffIds;
+
+function recordDeletedStaffId(id) {
+    if (!id) return;
+    try {
+        const list = getDeletedStaffIds();
+        const idStr = String(id);
+        if (!list.includes(idStr)) {
+            list.push(idStr);
+            localStorage.setItem('billnaw_deleted_staff_ids', JSON.stringify(list.slice(-200)));
+        }
+    } catch(e) {}
+}
+window.recordDeletedStaffId = recordDeletedStaffId;
+
+function removeDeletedStaffId(id) {
+    if (!id) return;
+    try {
+        const list = getDeletedStaffIds();
+        const idStr = String(id);
+        const filtered = list.filter(x => String(x) !== idStr);
+        localStorage.setItem('billnaw_deleted_staff_ids', JSON.stringify(filtered));
+    } catch(e) {}
+}
+window.removeDeletedStaffId = removeDeletedStaffId;
+
 // Web Audio Service Bell & Notification Synthesizer (Tier 1 Cross-Device Alert)
 let _sharedAudioCtx = null;
 
@@ -1830,6 +1899,66 @@ if (posMeshChannel) {
             if (role === 'Cashier' || role === 'Admin' || role === 'Manager') {
                 triggerBillingReadyAlert(data.tableNumber, data.tableName, data.staffName);
             }
+        } else if (data.type === 'TABLES_UPDATED' && data.tables) {
+            tablesInfo = data.tables;
+            window.tablesInfo = tablesInfo;
+            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_tables', tablesInfo);
+            if (typeof syncTableUI === 'function') syncTableUI();
+            if (typeof renderTablesView === 'function') renderTablesView();
+        } else if (data.type === 'MENU_UPDATED' && Array.isArray(data.menu)) {
+            if (Array.isArray(data.deletedIds) && typeof recordDeletedMenuItemId === 'function') {
+                data.deletedIds.forEach(id => recordDeletedMenuItemId(id));
+            }
+            menuItems = data.menu;
+            window.menuItems = menuItems;
+            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
+            if (typeof renderMenuUI === 'function') renderMenuUI();
+            if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
+            if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+        } else if (data.type === 'STAFF_UPDATED' && Array.isArray(data.staff)) {
+            if (Array.isArray(data.deletedStaffIds) && typeof recordDeletedStaffId === 'function') {
+                data.deletedStaffIds.forEach(id => recordDeletedStaffId(id));
+            }
+            const activeStaff = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
+            if (activeStaff && activeStaff.role !== 'Admin') {
+                const isDeleted = Array.isArray(data.deletedStaffIds) && data.deletedStaffIds.some(id => String(id) === String(activeStaff.id));
+                const stillInList = data.staff.some(s => String(s.id) === String(activeStaff.id));
+                if (isDeleted || !stillInList) {
+                    try { localStorage.setItem('billnaw_session_revoked', 'true'); } catch (e) {}
+                    if (typeof lockTerminalByRemote === 'function') {
+                        lockTerminalByRemote({ staffId: activeStaff.id, status: 'REVOKED', reason: 'Staff profile removed by Admin' });
+                    } else if (typeof logoutStaff === 'function') {
+                        logoutStaff();
+                    }
+                }
+            }
+            staffList = data.staff;
+            window.staffList = staffList;
+            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_staff', staffList);
+            if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
+            if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
+        } else if (data.type === 'KOT_DISPATCHED' && data.kot) {
+            try {
+                if (data.kotNo) {
+                    const currentLast = parseInt(localStorage.getItem('billnaw_last_kot_no') || '0', 10);
+                    if (data.kotNo > currentLast) {
+                        localStorage.setItem('billnaw_last_kot_no', String(data.kotNo));
+                        if (typeof shopProfile !== 'undefined' && shopProfile) shopProfile.lastKotNo = data.kotNo;
+                    }
+                }
+                const rawKots = localStorage.getItem('billnaw_active_kots');
+                const list = rawKots ? JSON.parse(rawKots) : [];
+                const exists = list.some(k => k.kot_id === data.kot.kot_id);
+                if (!exists) {
+                    list.unshift(data.kot);
+                    localStorage.setItem('billnaw_active_kots', JSON.stringify(list.slice(0, 100)));
+                    window.dispatchEvent(new CustomEvent('billnaw:kot-created', { detail: { kot: data.kot } }));
+                    if (typeof playKdsAudioChime === 'function') playKdsAudioChime();
+                    if (window.kotUIInstance && typeof window.kotUIInstance.loadKots === 'function') {
+                        window.kotUIInstance.loadKots();
+                    }
+                }
+            } catch(e) {}
         }
     };
 }
@@ -2228,9 +2357,19 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
     }
     if (Array.isArray(data.staff) && data.staff.length > 0) {
+        const deletedStaffSet = new Set([
+            ...((typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds().map(String) : []),
+            ...(Array.isArray(data.deletedStaffIds) ? data.deletedStaffIds.map(String) : [])
+        ]);
+        if (Array.isArray(data.deletedStaffIds) && typeof recordDeletedStaffId === 'function') {
+            data.deletedStaffIds.forEach(id => recordDeletedStaffId(id));
+        }
+
+        const cleanRemoteStaff = data.staff.filter(s => s && s.id && !deletedStaffSet.has(String(s.id)));
+
         const activeStaff = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
         if (activeStaff && activeStaff.role !== 'Admin') {
-            const stillExists = data.staff.some(s => String(s.id) === String(activeStaff.id));
+            const stillExists = cleanRemoteStaff.some(s => String(s.id) === String(activeStaff.id));
             if (!stillExists) {
                 try { localStorage.setItem('billnaw_session_revoked', 'true'); } catch (e) {}
                 if (typeof lockTerminalByRemote === 'function') {
@@ -2240,17 +2379,22 @@ function handleRemoteFirestoreUpdate(data) {
                 }
             }
         }
-        if (Array.isArray(staffList) && staffList.length > data.staff.length) {
-            // Local device has newer/more staff members: union merge so local additions are never wiped
+
+        if (Array.isArray(staffList) && staffList.length > cleanRemoteStaff.length) {
+            // Local device has newer/more staff members: union merge so local additions are never wiped, excluding deleted staff
             const staffMap = new Map();
-            data.staff.forEach(s => { if (s && s.id) staffMap.set(String(s.id), s); });
-            staffList.forEach(s => { if (s && s.id && !staffMap.has(String(s.id))) staffMap.set(String(s.id), s); });
+            cleanRemoteStaff.forEach(s => { if (s && s.id) staffMap.set(String(s.id), s); });
+            staffList.forEach(s => {
+                if (s && s.id && !deletedStaffSet.has(String(s.id)) && !staffMap.has(String(s.id))) {
+                    staffMap.set(String(s.id), s);
+                }
+            });
             staffList = Array.from(staffMap.values());
             if (typeof dispatchBackendStoreSync === 'function') {
-                dispatchBackendStoreSync({ staff: staffList }, true);
+                dispatchBackendStoreSync({ staff: staffList, deletedStaffIds: Array.from(deletedStaffSet) }, true);
             }
         } else {
-            staffList = data.staff;
+            staffList = cleanRemoteStaff;
         }
         window.staffList = staffList;
         try {
@@ -2269,16 +2413,26 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
     }
     if (Array.isArray(data.menu) && data.menu.length > 0) {
+        const deletedMenuSet = new Set([
+            ...((typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds().map(String) : []),
+            ...(Array.isArray(data.deletedMenuIds) ? data.deletedMenuIds.map(String) : [])
+        ]);
+        if (Array.isArray(data.deletedMenuIds) && typeof recordDeletedMenuItemId === 'function') {
+            data.deletedMenuIds.forEach(id => recordDeletedMenuItemId(id));
+        }
+
+        const cleanRemoteMenu = data.menu.filter(m => m && m.id && !deletedMenuSet.has(String(m.id)));
+
         if (typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(menuItems)) {
             // Local store only held the default 4-item baseline: replace cleanly with authentic cloud catalog
-            menuItems = data.menu;
-        } else if (Array.isArray(menuItems) && menuItems.length > data.menu.length) {
-            // Local store has more items: union merge by item name, excluding template defaults
+            menuItems = cleanRemoteMenu;
+        } else if (Array.isArray(menuItems) && menuItems.length > cleanRemoteMenu.length) {
+            // Local store has more items: union merge by item name, excluding template defaults and deleted items
             const defaultNames = new Set(['samosa', 'tea', 'chicken curry', 'masala coke']);
             const menuMap = new Map();
-            data.menu.forEach(m => { if (m && m.name) menuMap.set(m.name.trim().toLowerCase(), m); });
+            cleanRemoteMenu.forEach(m => { if (m && m.name) menuMap.set(m.name.trim().toLowerCase(), m); });
             menuItems.forEach(m => {
-                if (m && m.name) {
+                if (m && m.name && m.id && !deletedMenuSet.has(String(m.id))) {
                     const key = m.name.trim().toLowerCase();
                     if (!menuMap.has(key) && !defaultNames.has(key)) {
                         menuMap.set(key, m);
@@ -2287,15 +2441,18 @@ function handleRemoteFirestoreUpdate(data) {
             });
             menuItems = Array.from(menuMap.values());
             if (typeof dispatchBackendStoreSync === 'function') {
-                dispatchBackendStoreSync({ menu: menuItems }, true);
+                dispatchBackendStoreSync({ menu: menuItems, deletedMenuIds: Array.from(deletedMenuSet) }, true);
             }
         } else {
-            menuItems = data.menu;
+            menuItems = cleanRemoteMenu;
         }
         window.menuItems = menuItems;
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_menu', menuItems);
         }
+        if (typeof renderMenuUI === 'function') renderMenuUI();
+        if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
+        if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
     } else {
         const isAuthMode = (typeof isStoreAuthenticated === 'function')
             ? isStoreAuthenticated()
@@ -3303,12 +3460,16 @@ async function persistAllToFirestore() {
 
     const targetStoreCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (shopProfile?.storeCode || null);
     const safeProfile = JSON.parse(JSON.stringify(shopProfile || {}));
+    const deletedMenuIds = (typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds() : [];
+    const deletedStaffIds = (typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds() : [];
     const fullPayload = {
         storeCode: targetStoreCode,
         replaceStaff: true,
         profile: safeProfile,
         staff: staffList,
+        deletedStaffIds: deletedStaffIds,
         menu: sanitizedMenu,
+        deletedMenuIds: deletedMenuIds,
         categories: menuCategories,
         customers: customersList,
         history: orderHistory,
@@ -3360,6 +3521,9 @@ function persistTables() {
     if (typeof dispatchBackendStoreSync === 'function') {
         dispatchBackendStoreSync({ tables: tablesInfo, profile: shopProfile }, true);
     }
+    if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+        try { posMeshChannel.postMessage({ type: 'TABLES_UPDATED', tables: tablesInfo }); } catch(e) {}
+    }
 }
 window.persistTables = persistTables;
 
@@ -3373,14 +3537,18 @@ function persistMenu() {
         ? menuItems.map(item => sanitizeMenuItemForStorage(item))
         : menuItems;
     idb.set('cafe_menu', sanitizedMenu); 
+    const deletedIds = (typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds() : [];
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { menu: sanitizedMenu, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, { menu: sanitizedMenu, deletedMenuIds: deletedIds, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ menu: sanitizedMenu }, true);
+        dispatchBackendStoreSync({ menu: sanitizedMenu, deletedMenuIds: deletedIds }, true);
+    }
+    if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+        try { posMeshChannel.postMessage({ type: 'MENU_UPDATED', menu: sanitizedMenu, deletedIds }); } catch(e) {}
     }
 }
 window.persistMenu = persistMenu;
@@ -3629,10 +3797,11 @@ window.persistExpensesFirebase = persistExpensesFirebase;
 function persistStaffToFirestore(newStaff = null) {
     idb.set('cafe_staff', staffList);
     try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
+    const deletedStaffIds = (typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds() : [];
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { staff: staffList, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, { staff: staffList, deletedStaffIds, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
         if (newStaff && (newStaff.id || newStaff.staffId)) {
             syncStaffRecordToCloud(newStaff).catch(() => {});
@@ -3645,7 +3814,7 @@ function persistStaffToFirestore(newStaff = null) {
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ staff: staffList }, true);
+        dispatchBackendStoreSync({ staff: staffList, deletedStaffIds }, true);
     }
 }
 window.persistStaffToFirestore = persistStaffToFirestore;
@@ -4091,13 +4260,13 @@ function applyStationProfileRestrictions() {
     // Admin & Supervisor Unrestricted Access: Full POS, KDS, Menu, Reports, Inventory & Settings
     if (isSupervisor) {
         if (navPos) navPos.style.display = 'flex';
-        if (navKds) navKds.style.display = 'flex';
-        if (navTables) navTables.style.display = 'none'; // Tables is cleanly integrated inside More modal
+        if (navTables) navTables.style.display = 'flex';
         if (navMenu) navMenu.style.display = 'flex';
         if (navReports) navReports.style.display = 'flex';
-        if (navInventory) navInventory.style.display = 'flex';
-        if (navKhata) navKhata.style.display = 'flex';
         if (navMore) navMore.style.display = 'flex';
+        if (navKds) navKds.style.display = 'none';
+        if (navInventory) navInventory.style.display = 'none'; // Primary 5-Tab Bar: accessible in More Hub
+        if (navKhata) navKhata.style.display = 'none'; // Accessible in More Hub & slide menu
         if (checkoutBtn) checkoutBtn.style.display = '';
         if (cartDiscountWrap) cartDiscountWrap.style.display = '';
 
@@ -4130,11 +4299,12 @@ function applyStationProfileRestrictions() {
         if (checkoutBtn) checkoutBtn.style.display = 'none';
     } else if (profile === STATION_PROFILES.WAITER_MOBILE || normRole === 'Floor Server' || normRole === 'Server') {
         if (navPos) navPos.style.display = 'flex';
-        if (navTables) navTables.style.display = 'none';
+        if (navTables) navTables.style.display = 'flex'; // Dedicated Table Floor View accessible to waitstaff
         if (navKds) navKds.style.display = 'none';
         if (navReports) navReports.style.display = 'none';
         if (navInventory) navInventory.style.display = 'none';
         if (navKhata) navKhata.style.display = 'none';
+        if (navMore) navMore.style.display = 'flex';
         if (cartDiscountWrap) cartDiscountWrap.style.display = 'none';
         
         // Floor Server: replace Checkout button with "Ready for Billing - Notify Cashier"
@@ -4190,10 +4360,11 @@ function applyStationProfileRestrictions() {
         // Cashier Profile: Can create/edit active orders, checkout, view menu and reports.
         if (navPos) navPos.style.display = 'flex';
         if (navKds) navKds.style.display = 'none';
-        if (navTables) navTables.style.display = 'none';
+        if (navTables) navTables.style.display = 'flex';
         if (navMenu) navMenu.style.display = 'flex';
-        if (navInventory) navInventory.style.display = 'flex';
-        if (navKhata) navKhata.style.display = 'flex';
+        if (navReports) navReports.style.display = 'flex';
+        if (navInventory) navInventory.style.display = 'none'; // Primary 5-Tab Bar: accessible in More Hub
+        if (navKhata) navKhata.style.display = 'none'; // Accessible in More Hub & slide menu
         if (navMore) navMore.style.display = 'flex';
         if (checkoutBtn) checkoutBtn.style.display = '';
         if (cartDiscountWrap) cartDiscountWrap.style.display = '';

@@ -1502,7 +1502,8 @@ function switchTab(tabId) {
                 inventory: 'Inventory & Commissary',
                 khata: 'Khata Due Ledger',
                 staff: 'Staff Management',
-                devices: 'Authorized Devices Hub'
+                devices: 'Authorized Devices Hub',
+                tables: 'Floor Tables Overview'
             };
             const isAdminOnlyTab = ['dashboard', 'settings', 'staff', 'devices', 'whatsapp'].includes(tabId);
             requestManagerOverride({
@@ -1521,8 +1522,6 @@ function switchTab(tabId) {
 }
 
 function switchTabDirect(tabId) {
-    if (tabId === 'tables') tabId = 'pos';
-
     // Track navigation history for physical/gesture back button support
     if (!window._isNavigatingBack) {
         if (!window._appNavHistory) window._appNavHistory = ['pos'];
@@ -1557,6 +1556,9 @@ function switchTabDirect(tabId) {
     // Always keep topbar active table indicator synced across all tab views
     if (typeof syncTableUI === 'function') syncTableUI();
 
+    if (tabId === 'tables') {
+        if (typeof renderTablesView === 'function') renderTablesView();
+    }
     if (tabId === 'dashboard') {
         if (typeof renderDashboardAnalytics === 'function') renderDashboardAnalytics();
     }

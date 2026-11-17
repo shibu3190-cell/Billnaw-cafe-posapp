@@ -1404,6 +1404,9 @@ function addMenuItem() {
             }); 
             showToast("✅ Item added!"); 
         }
+        if (savedDishId && typeof removeDeletedMenuItemId === 'function') {
+            removeDeletedMenuItemId(savedDishId);
+        }
         if (typeof markMenuCustomized === 'function') {
             markMenuCustomized();
         } else if (typeof localStorage !== 'undefined') {
@@ -1442,7 +1445,10 @@ function deleteMenuItem(id, bypassRoleCheck = false) {
         }
     }
     if(confirm("Delete this item permanently?")) { 
-        menuItems = menuItems.filter(item => item.id !== id); 
+        if (typeof recordDeletedMenuItemId === 'function') {
+            recordDeletedMenuItemId(id);
+        }
+        menuItems = menuItems.filter(item => String(item.id) !== String(id)); 
         if (typeof markMenuCustomized === 'function') {
             markMenuCustomized();
         } else if (typeof localStorage !== 'undefined') {
@@ -1451,6 +1457,7 @@ function deleteMenuItem(id, bypassRoleCheck = false) {
         window.menuItems = menuItems;
         persistMenu(); 
         renderMenuUI(); 
+        if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
         showToast("Deleted."); 
     } 
 }

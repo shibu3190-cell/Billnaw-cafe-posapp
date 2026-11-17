@@ -42,11 +42,16 @@ export async function createKOT(kotData) {
     const cafeId = getTenantCafeId();
     const terminalId = getTerminalId();
     const db = getDbClient();
-    const kotId = generateKotNumber();
+    const kotId = kotData.kot_id || generateKotNumber();
     const now = new Date().toISOString();
+    const kotNumber = kotData.kotNumber || kotData.kotNo || (typeof kotId === 'string' && /^KOT-(\d+)$/i.test(kotId) ? parseInt(kotId.replace(/^KOT-/i, ''), 10) : null);
+    const kotDisplayNo = kotData.kotDisplayNo || (kotNumber ? `KOT #${kotNumber}` : `#${kotId}`);
 
     const kotDoc = {
       kot_id: kotId,
+      kotNumber: kotNumber || kotId,
+      kotNo: kotNumber || kotId,
+      kotDisplayNo: kotDisplayNo,
       cafe_id: cafeId,
       terminal_id: terminalId,
       table_id: kotData.table_id || 'TAKEAWAY',

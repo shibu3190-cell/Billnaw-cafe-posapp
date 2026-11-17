@@ -1592,6 +1592,9 @@ async function saveStaffMember(data = null) {
         } catch(e) {}
         if (typeof persistProfile === 'function') persistProfile();
     }
+    if (savedStaff && savedStaff.id && typeof removeDeletedStaffId === 'function') {
+        removeDeletedStaffId(savedStaff.id);
+    }
     if (typeof idb !== 'undefined' && idb.set) {
         idb.set('cafe_staff', staffList).catch(() => {});
     }
@@ -1602,6 +1605,9 @@ async function saveStaffMember(data = null) {
     }
     if (savedStaff && typeof syncStaffRecordToCloud === 'function') {
         syncStaffRecordToCloud(savedStaff).catch(() => {});
+    }
+    if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+        try { posMeshChannel.postMessage({ type: 'STAFF_UPDATED', staff: staffList }); } catch(e) {}
     }
     return true;
 }
@@ -1617,6 +1623,9 @@ async function deleteStaffMember(id) {
         return showToast("The default Admin profile cannot be removed.", "warning");
     }
     if (confirm(`Are you sure you want to remove staff member "${staff.name}"?`)) {
+        if (typeof recordDeletedStaffId === 'function') {
+            recordDeletedStaffId(id);
+        }
         staffList = staffList.filter(s => String(s.id) !== String(id));
         saveToLocal();
         if (typeof idb !== 'undefined' && idb.set) {
@@ -1686,6 +1695,9 @@ async function deleteStaffMember(id) {
         if (typeof persistStaffToFirestore === 'function') persistStaffToFirestore();
         if (typeof dispatchBackendStoreSync === 'function') {
             dispatchBackendStoreSync({ staff: staffList, replaceStaff: true, deletedStaffId: String(id) }, true);
+        }
+        if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+            try { posMeshChannel.postMessage({ type: 'STAFF_UPDATED', staff: staffList, deletedStaffIds: (typeof getDeletedStaffIds === 'function' ? getDeletedStaffIds() : [String(id)]) }); } catch(e) {}
         }
         showToast("Staff member removed.");
     }
@@ -1907,9 +1919,10 @@ function enforcePermissions() {
         }
     }
 
-    // Tables is totally removed from the bottom bar (accessible via More Hub)
+    // Dedicated Tables Floor View: accessible on 5-tab bar for all counter, floor server and admin profiles
     if (navTables) {
-        navTables.style.display = 'none';
+        const isKds = normRole === ROLES.CHEF || (typeof getStationProfile === 'function' && getStationProfile() === 'KDS');
+        navTables.style.display = isKds ? 'none' : 'flex';
     }
 }
 window.enforcePermissions = enforcePermissions;

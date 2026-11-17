@@ -3501,6 +3501,480 @@ svg.nav-icon.active, svg.btn-icon.active {
   outline: 2px solid var(--primary, #143832);
 }
 
+/* ============================================================
+   TABLES FLOOR VIEW & 4x8 RESPONSIVE GRID (32+ TABLES)
+   ============================================================ */
+.tables-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 18px 90px 18px;
+  width: 100%;
+  min-height: calc(100vh - 120px);
+  box-sizing: border-box;
+}
+
+.tables-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #FAF7F4;
+  border: 1.5px solid var(--border, #E6DCCD);
+  border-radius: var(--radius-lg, 16px);
+  padding: 12px 18px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.tables-view-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tables-view-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tables-view-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #FFFFFF;
+  border: 1px solid var(--border, #E6DCCD);
+  color: var(--text-dark, #143832);
+  transition: all 0.15s ease;
+}
+
+.filter-pill:hover {
+  border-color: var(--primary, #143832);
+}
+
+.filter-pill.active {
+  background: var(--primary, #143832);
+  color: #FFFFFF;
+  border-color: var(--primary, #143832);
+}
+
+.tables-stats-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted, #718096);
+  background: #FFFFFF;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border, #E6DCCD);
+}
+
+.tables-header-pos-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 20px;
+}
+
+/* Tables Floor View Responsive Auto-Fit Grid */
+.tables-fullscreen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (min-width: 1280px) {
+  .tables-fullscreen-grid {
+    grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+    gap: 14px;
+  }
+}
+
+@media (max-width: 600px) {
+  .tables-fullscreen-grid {
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+    gap: 8px;
+  }
+  .tables-view-container {
+    padding: 8px 8px 160px 8px;
+  }
+  .tables-view-header {
+    padding: 8px 10px;
+  }
+}
+
+/* Floor Table Card */
+.table-view-card {
+  min-height: 88px;
+  padding: 10px 10px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.table-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 4px;
+  padding-left: 12px;
+}
+
+.table-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #718096);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.table-btn.selected .table-card-name {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.table-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.table-card-amount {
+  color: var(--text-dark, #143832);
+  font-variant-numeric: tabular-nums;
+}
+
+.table-card-amount.has-total {
+  color: var(--primary, #143832);
+  font-weight: 800;
+}
+
+.table-btn.selected .table-card-amount {
+  color: #FFFFFF;
+}
+
+.table-card-waiter {
+  font-size: 9px;
+  color: var(--text-muted, #718096);
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 5px;
+  border-radius: 4px;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-btn.selected .table-card-waiter {
+  background: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+}
+
+/* Add Table Card */
+.table-view-card.add-table-card {
+  border: 2px dashed #C8BFB3;
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--text-muted, #718096);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 88px;
+}
+
+.table-view-card.add-table-card:hover {
+  border-color: var(--primary, #143832);
+  background: rgba(20, 56, 50, 0.05);
+  color: var(--primary, #143832);
+  transform: translateY(-2px);
+}
+
+.table-view-card.add-table-card .add-table-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.table-view-card.add-table-card .add-table-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: inherit;
+}
+
+.table-view-card.add-table-card .add-table-sub {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted, #718096);
+}
+
+/* Floating Table Order & Checkout Bar */
+.table-order-floating-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 48px);
+  max-width: 980px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1.5px solid var(--primary, #143832);
+  border-radius: 18px;
+  box-shadow: 0 12px 36px rgba(20, 56, 50, 0.2);
+  padding: 10px 18px;
+  z-index: 1050;
+  box-sizing: border-box;
+  animation: slideUpFloatBar 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpFloatBar {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.tofb-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.tofb-table-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.tofb-pill-code {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--primary, #143832);
+  color: #FFFFFF;
+  font-size: 16px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(20, 56, 50, 0.25);
+}
+
+.tofb-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.tofb-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tofb-table-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-dark, #143832);
+}
+
+.tofb-status-tag {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+  text-transform: uppercase;
+}
+
+.tofb-server-tag {
+  font-size: 10px;
+  color: var(--text-muted, #718096);
+}
+
+.tofb-items-preview {
+  font-size: 11px;
+  color: var(--text-muted, #718096);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+
+.tofb-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.tofb-total-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.tofb-total-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted, #718096);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tofb-total-val {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--primary, #143832);
+  font-variant-numeric: tabular-nums;
+}
+
+.tofb-buttons-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tofb-btn-pos {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: var(--primary, #143832);
+  color: var(--primary, #143832);
+}
+
+.tofb-btn-kot {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tofb-btn-checkout {
+  font-size: 13px;
+  font-weight: 800;
+  padding: 10px 18px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary, #143832);
+  color: #FFFFFF;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.tofb-btn-checkout:hover {
+  background: #0D2622;
+  transform: translateY(-1px);
+}
+
+/* ============================================================
+   🏷️ CHECKOUT TABLE PICKER & SWITCHER
+   ============================================================ */
+.checkout-table-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(20, 56, 50, 0.08);
+  color: var(--primary, #143832);
+  border: 1.5px solid rgba(20, 56, 50, 0.22);
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.checkout-table-badge-btn:hover {
+  background: rgba(20, 56, 50, 0.16);
+  border-color: var(--primary, #143832);
+  transform: translateY(-1px);
+}
+
+.checkout-table-picker {
+  animation: fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.checkout-table-chip {
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.checkout-table-chip:hover {
+  transform: scale(1.04);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.checkout-table-chip.current {
+  box-shadow: 0 0 0 2px var(--primary, #143832);
+}
+
+@media (max-width: 768px) {
+  .table-order-floating-bar {
+    bottom: calc(72px + env(safe-area-inset-bottom, 12px)); /* Above mobile bottom bar */
+    width: calc(100% - 20px);
+    padding: 8px 12px;
+  }
+  .tofb-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .tofb-actions-right {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
 /* ==========================================================================
    MODULE: css/checkout.css
    ========================================================================== */

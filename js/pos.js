@@ -175,6 +175,331 @@ function renderTables() {
 }
 window.renderTables = renderTables;
 
+let _tablesViewFilter = 'all';
+let _tablesViewFloor = 'Ground Floor';
+
+function renderTablesView(filter) {
+    if (filter) _tablesViewFilter = filter;
+    const currentFilter = _tablesViewFilter || 'all';
+    
+    checkAndRolloverStaleTables();
+    const grid = document.getElementById('tablesViewGridUI');
+    if (!grid) return;
+    
+    // Dynamically scale table count based on shopProfile settings (default 5)
+    // Also include any active tables that might exist beyond configured count to prevent orphaned orders
+    const configuredTables = Math.max(1, parseInt((typeof shopProfile !== 'undefined' && shopProfile?.tableCount) || 5, 10));
+    let highestActiveTable = configuredTables;
+    if (typeof tablesInfo === 'object' && tablesInfo) {
+        Object.keys(tablesInfo).forEach(k => {
+            const num = parseInt(k, 10);
+            if (!isNaN(num) && tablesInfo[num]?.items?.length > 0 && num > highestActiveTable) {
+                highestActiveTable = num;
+            }
+        });
+    }
+    const totalTables = highestActiveTable;
+    
+    let occupiedCount = 0;
+    let readyBillingCount = 0;
+    let vacantCount = 0;
+    
+    for (let i = 1; i <= totalTables; i++) {
+        const tInfo = tablesInfo[i];
+        const hasItems = tInfo && tInfo.items && tInfo.items.length > 0;
+        if (hasItems) {
+            occupiedCount++;
+            if (tInfo.status === 'ready_for_billing') readyBillingCount++;
+        } else {
+            vacantCount++;
+        }
+    }
+    
+    const summaryBadge = document.getElementById('tablesViewStatsSummary');
+    if (summaryBadge) {
+        summaryBadge.innerHTML = `<strong>${occupiedCount}</strong> Active • <strong>${readyBillingCount}</strong> Bill Ready • <strong>${vacantCount}</strong> Vacant`;
+    }
+    
+    let gridHtml = '';
+    for (let i = 1; i <= totalTables; i++) {
+        const tInfo = tablesInfo[i];
+        const tableName = getTableName(i);
+        let classes = 'table-btn table-view-card';
+        let statusTag = 'VACANT';
+        const hasItems = tInfo && tInfo.items && tInfo.items.length > 0;
+        
+        let totals = { finalTotal: 0 };
+        if (hasItems) {
+            if (typeof calculateOrderTotals === 'function') {
+                totals = calculateOrderTotals(tInfo.items, tInfo.discount);
+            } else {
+                const sub = tInfo.items.reduce((s, it) => s + ((it.price || 0) * (it.qty || 1)), 0);
+                totals = { finalTotal: sub };
+            }
+            
+            if (tInfo.status === 'ready_for_billing') {
+                classes += ' ready-billing';
+                statusTag = 'BILL READY';
+            } else if (tInfo.status === 'billed' || tInfo.status === 'served') {
+                classes += ' billed';
+                statusTag = 'BILLED';
+            } else {
+                classes += ' occupied';
+                if (tInfo.status === 'alert') {
+                    classes += ' alert';
+                } else if (tInfo.status === 'saved' || tInfo.status === 'kot') {
+                    classes += ' kot';
+                }
+                const elapsedMinutes = tInfo.savedTime 
+                    ? Math.max(1, Math.floor((Date.now() - tInfo.savedTime) / 60000)) 
+                    : 1;
+                let formattedTimer = `${elapsedMinutes}m`;
+                if (elapsedMinutes >= 1440) {
+                    formattedTimer = 'Yesterday';
+                    classes += ' stale-table';
+                } else if (elapsedMinutes >= 60) {
+                    const hrs = Math.floor(elapsedMinutes / 60);
+                    const mins = elapsedMinutes % 60;
+                    formattedTimer = `${hrs}h ${mins}m`;
+                }
+                statusTag = formattedTimer;
+            }
+        } else {
+            classes += ' empty';
+            statusTag = 'VACANT';
+        }
+        
+        if (i === activeTable) classes += ' selected';
+        
+        // Filter logic
+        if (currentFilter === 'occupied' && !hasItems) continue;
+        if (currentFilter === 'ready_for_billing' && (!hasItems || tInfo.status !== 'ready_for_billing')) continue;
+        if (currentFilter === 'vacant' && hasItems) continue;
+        
+        const itemCount = hasItems 
+            ? tInfo.items.reduce((s, it) => s + it.qty, 0) 
+            : 0;
+        const countBadge = itemCount > 0 ? `<span class="table-item-badge">${itemCount}</span>` : '';
+        const waiterName = tInfo?.readyForBillingBy || tInfo?.serverName || '';
+        const waiterBadge = waiterName ? `<span class="table-card-waiter" title="Server: ${escapeHtml(waiterName)}">${escapeHtml(waiterName)}</span>` : '';
+        const amountDisplay = hasItems ? `₹ ${totals.finalTotal.toFixed(2)}` : 'Vacant';
+        
+        gridHtml += `
+            <button type="button" id="tables-view-btn-${i}" class="${classes}" onclick="selectTableInTableView(${i})" title="Table ${escapeHtml(tableName)}">
+                <div class="table-status-dot"></div>
+                <span class="table-num-pill">${i}</span>
+                <div class="table-card-top">
+                    <span class="table-t-code">T${i}</span>
+                    <span class="table-status-tag">${statusTag}</span>
+                </div>
+                <div class="table-card-name">${escapeHtml(tableName)}</div>
+                <div class="table-card-footer">
+                    <span class="table-card-amount ${hasItems ? 'has-total' : ''}">${amountDisplay}</span>
+                    ${waiterBadge}
+                </div>
+                ${countBadge}
+            </button>
+        `;
+    }
+    
+    // Append "+ Add Table" card at the end of the grid
+    gridHtml += `
+        <button type="button" class="table-btn table-view-card add-table-card" onclick="openTableManagementModal()" title="Add / Configure Tables in Settings">
+            <div class="add-table-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </div>
+            <div class="add-table-label">+ Add Table</div>
+            <div class="add-table-sub">Settings</div>
+        </button>
+    `;
+    grid.innerHTML = gridHtml;
+    
+    updateTableOrderFloatingBar();
+}
+window.renderTablesView = renderTablesView;
+
+function selectTableInTableView(num) {
+    if (typeof selectTable === 'function') {
+        selectTable(num);
+    } else {
+        activeTable = num;
+    }
+    
+    // Highlight selected card on grid
+    const allCards = document.querySelectorAll('.table-view-card[id^="tables-view-btn-"]');
+    allCards.forEach(btn => {
+        const idNum = parseInt(btn.id.replace('tables-view-btn-', ''), 10);
+        if (idNum === activeTable) btn.classList.add('selected');
+        else btn.classList.remove('selected');
+    });
+    
+    updateTableOrderFloatingBar();
+}
+window.selectTableInTableView = selectTableInTableView;
+
+function updateTableOrderFloatingBar() {
+    const bar = document.getElementById('tableOrderFloatingBar');
+    if (!bar) return;
+    
+    const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
+    const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[curT] : null;
+    const hasItems = tInfo && Array.isArray(tInfo.items) && tInfo.items.length > 0;
+    const tableName = (typeof getTableName === 'function') ? getTableName(curT) : `Table ${curT}`;
+    
+    const codeEl = document.getElementById('tofbTableCode');
+    if (codeEl) codeEl.innerText = `T${curT}`;
+    
+    const nameEl = document.getElementById('tofbTableName');
+    if (nameEl) nameEl.innerText = tableName;
+    
+    const tagEl = document.getElementById('tofbStatusTag');
+    const serverEl = document.getElementById('tofbServerTag');
+    const previewEl = document.getElementById('tofbItemsPreview');
+    const totalEl = document.getElementById('tofbTotalVal');
+    const checkoutBtn = document.getElementById('tofbCheckoutBtn');
+    const printBtn = document.getElementById('tofbPrintKotBtn');
+    
+    let totals = { finalTotal: 0 };
+    if (hasItems) {
+        if (typeof calculateOrderTotals === 'function') {
+            totals = calculateOrderTotals(tInfo.items, tInfo.discount);
+        } else {
+            const sub = tInfo.items.reduce((s, it) => s + ((it.price || 0) * (it.qty || 1)), 0);
+            totals = { finalTotal: sub };
+        }
+        
+        let statusText = 'OCCUPIED';
+        if (tInfo.status === 'ready_for_billing') statusText = 'BILL READY';
+        else if (tInfo.status === 'billed' || tInfo.status === 'served') statusText = 'BILLED';
+        else if (tInfo.status === 'saved' || tInfo.status === 'kot') statusText = 'KOT SENT';
+        
+        if (tagEl) {
+            tagEl.innerText = statusText;
+            tagEl.className = 'tofb-status-tag ' + (tInfo.status === 'ready_for_billing' ? 'ready-billing' : 'occupied');
+        }
+        
+        const waiter = tInfo.readyForBillingBy || tInfo.serverName || '';
+        if (serverEl) {
+            if (waiter) {
+                serverEl.innerText = `• Server: ${waiter}`;
+                serverEl.style.display = 'inline';
+            } else {
+                serverEl.style.display = 'none';
+            }
+        }
+        
+        if (previewEl) {
+            const itemsList = tInfo.items.map(it => `${it.qty}x ${it.name}`).join(', ');
+            previewEl.innerText = itemsList || `${tInfo.items.length} items ordered`;
+        }
+        
+        if (totalEl) totalEl.innerText = `₹ ${totals.finalTotal.toFixed(2)}`;
+        if (checkoutBtn) {
+            checkoutBtn.disabled = false;
+            checkoutBtn.style.opacity = '1';
+        }
+        if (printBtn) printBtn.style.display = 'inline-flex';
+    } else {
+        if (tagEl) {
+            tagEl.innerText = 'VACANT';
+            tagEl.className = 'tofb-status-tag vacant';
+        }
+        if (serverEl) serverEl.style.display = 'none';
+        if (previewEl) previewEl.innerText = 'No active order • Tap "Add in POS" to take order';
+        if (totalEl) totalEl.innerText = '₹ 0.00';
+        if (checkoutBtn) {
+            checkoutBtn.disabled = true;
+            checkoutBtn.style.opacity = '0.5';
+        }
+        if (printBtn) printBtn.style.display = 'none';
+    }
+    
+    // Role-aware action button (Floor Server/Waiter: Ready for Billing; Cashier/Admin: Checkout)
+    const isFloorServer = (typeof isFloorServerRole === 'function' && isFloorServerRole()) ||
+                          ((typeof getStationProfile === 'function' ? getStationProfile() : '') === 'WAITER_MOBILE');
+    if (checkoutBtn) {
+        const btnSpan = checkoutBtn.querySelector('span') || checkoutBtn;
+        if (isFloorServer) {
+            btnSpan.textContent = 'Ready for Billing';
+            checkoutBtn.title = 'Mark Table Ready for Billing & Notify Cashier';
+            checkoutBtn.onclick = () => {
+                if (typeof handleReadyForBilling === 'function') handleReadyForBilling();
+            };
+        } else {
+            btnSpan.textContent = 'CHECKOUT';
+            checkoutBtn.title = 'Proceed to Checkout & Settle';
+            checkoutBtn.onclick = () => checkoutFromTableView();
+        }
+    }
+    const addInPosBtn = document.getElementById('tofbAddInPosBtn');
+    if (addInPosBtn) {
+        const addSpan = addInPosBtn.querySelector('span') || addInPosBtn;
+        addSpan.textContent = hasItems ? 'Add / Edit' : '+ Take Order';
+    }
+    
+    bar.style.display = 'block';
+}
+window.updateTableOrderFloatingBar = updateTableOrderFloatingBar;
+
+function addItemsInPosFromTableView() {
+    const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
+    if (typeof selectTable === 'function') selectTable(curT);
+    if (typeof switchTab === 'function') switchTab('pos');
+}
+window.addItemsInPosFromTableView = addItemsInPosFromTableView;
+
+function checkoutFromTableView() {
+    const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
+    const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[curT] : null;
+    if (!tInfo || !tInfo.items || tInfo.items.length === 0) {
+        if (typeof showToast === 'function') showToast(`Table ${curT} has no active order to checkout!`, 'warning');
+        return;
+    }
+    if (typeof openCheckoutModal === 'function') openCheckoutModal();
+}
+window.checkoutFromTableView = checkoutFromTableView;
+
+function printTableFromTableView() {
+    const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
+    const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[curT] : null;
+    if (!tInfo || !tInfo.items || tInfo.items.length === 0) {
+        if (typeof showToast === 'function') showToast(`Table ${curT} has no items to print!`, 'warning');
+        return;
+    }
+    if (typeof printKitchenTicket === 'function') {
+        printKitchenTicket();
+    } else if (typeof showToast === 'function') {
+        showToast('Printing unavailable', 'warning');
+    }
+}
+window.printTableFromTableView = printTableFromTableView;
+
+function filterTablesView(filter, btnEl) {
+    _tablesViewFilter = filter;
+    const container = document.getElementById('tablesFilterPills');
+    if (container) {
+        container.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+    }
+    if (btnEl) btnEl.classList.add('active');
+    renderTablesView(filter);
+}
+window.filterTablesView = filterTablesView;
+
+function switchTablesFloor(floor, btnEl) {
+    _tablesViewFloor = floor;
+    const container = document.getElementById('tablesFloorSelector');
+    if (container) {
+        container.querySelectorAll('.floor-pill').forEach(b => b.classList.remove('active'));
+    }
+    if (btnEl) btnEl.classList.add('active');
+    if (typeof switchFloor === 'function') switchFloor(floor, btnEl);
+    renderTablesView();
+}
+window.switchTablesFloor = switchTablesFloor;
+
 function syncTableUI() {
     const totalTables = shopProfile.tableCount || 5;
     let occupiedCount = 0;
@@ -267,6 +592,7 @@ function syncTableUI() {
     const aTable = document.getElementById('activeTableUI'); if (aTable) aTable.innerText = currentTableName;
     const cartTableTitle = document.getElementById('cartTableTitle'); if (cartTableTitle) cartTableTitle.innerText = `Table ${currentTableName}`;
     const kTable = document.getElementById('kotTableNoDisplay'); if (kTable) kTable.innerText = currentTableName;
+    const kBadge = document.getElementById('kotNextNumberBadge'); if (kBadge && typeof peekNextKotNumber === 'function') kBadge.innerText = 'KOT #' + peekNextKotNumber();
     const cTable = document.getElementById('checkoutTableNoDisplay'); if (cTable) cTable.innerText = currentTableName;
     const discountModalTableNo = document.getElementById('discountModalTableNo'); if (discountModalTableNo) discountModalTableNo.innerText = currentTableName;
     
@@ -287,6 +613,11 @@ function syncTableUI() {
     if (topbarPill) {
         topbarPill.style.display = 'none';
     }
+
+    // Sync Floor Table View if active
+    if (document.getElementById('tables')?.classList.contains('active')) {
+        if (typeof renderTablesView === 'function') renderTablesView();
+    }
 }
 window.syncTableUI = syncTableUI;
 
@@ -301,7 +632,13 @@ function triggerSmartMenuUpload() {
 window.triggerSmartMenuUpload = triggerSmartMenuUpload;
 
 function selectTable(num) { 
-    activeTable = num; 
+    const checkoutModal = document.getElementById('checkoutModal');
+    if (checkoutModal && checkoutModal.style.display !== 'none' && typeof onCheckoutTableSelect === 'function') {
+        onCheckoutTableSelect(num);
+        return;
+    }
+    activeTable = num;
+    window.activeTable = num;
     syncTableUI(); 
     updateCartUI(); 
     if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities(); 
@@ -1092,6 +1429,10 @@ function sendToKitchen() {
     if (kTable) {
         kTable.innerText = String(activeTable) + (delta.isAddon ? ` (Add-on: +${delta.totalDeltaCount} items)` : '');
     }
+    const kBadge = document.getElementById('kotNextNumberBadge');
+    if (kBadge && typeof peekNextKotNumber === 'function') {
+        kBadge.innerText = 'KOT #' + peekNextKotNumber();
+    }
 
     const btnSubmit = document.getElementById('btnKotPrintSubmit') || document.querySelector('#kotModal .btn-warning');
     if (btnSubmit) {
@@ -1337,9 +1678,10 @@ function openCheckoutModal(bypassRoleCheck = false) {
     let tInfo = tablesInfo[activeTable]; 
     if(!tInfo || tInfo.items.length === 0) return showToast(`Table ${activeTable} is empty!`);
     const totals = calculateOrderTotals(tInfo.items, tInfo.discount);
+    const currentTableName = (typeof getTableName === 'function') ? getTableName(activeTable) : String(activeTable);
     
     const cTot = document.getElementById('checkoutTotal'); if (cTot) cTot.innerText = totals.finalTotal.toFixed(2); 
-    const cTable = document.getElementById('checkoutTableNoDisplay'); if (cTable) cTable.innerText = activeTable; 
+    const cTable = document.getElementById('checkoutTableNoDisplay'); if (cTable) cTable.innerText = currentTableName; 
     const cItems = document.getElementById('checkoutTotalItems'); if (cItems) cItems.innerText = tInfo.items.length;
     const cType = document.getElementById('checkoutOrderType'); if (cType) cType.value = "Dine-In"; 
 
@@ -1415,8 +1757,110 @@ function openCheckoutModal(bypassRoleCheck = false) {
     document.getElementById('cartDrawerOverlay')?.classList.remove('show'); 
     const cModal = document.getElementById('checkoutModal');
     if (cModal) cModal.style.display = 'flex';
+    const picker = document.getElementById('checkoutTablePickerDropdown');
+    if (picker) picker.style.display = 'none';
+    renderCheckoutTablePicker();
 }
 window.openCheckoutModal = openCheckoutModal;
+
+function toggleCheckoutTablePicker(force) {
+    const picker = document.getElementById('checkoutTablePickerDropdown');
+    if (!picker) return;
+    const isVisible = picker.style.display !== 'none';
+    const shouldShow = typeof force === 'boolean' ? force : !isVisible;
+    if (shouldShow) {
+        renderCheckoutTablePicker();
+        picker.style.display = 'block';
+    } else {
+        picker.style.display = 'none';
+    }
+}
+window.toggleCheckoutTablePicker = toggleCheckoutTablePicker;
+
+function renderCheckoutTablePicker() {
+    const grid = document.getElementById('checkoutTablePickerGrid');
+    if (!grid) return;
+    const configuredTables = Math.max(1, parseInt((typeof shopProfile !== 'undefined' && shopProfile?.tableCount) || 5, 10));
+    let highestActiveTable = configuredTables;
+    if (typeof tablesInfo === 'object' && tablesInfo) {
+        Object.keys(tablesInfo).forEach(k => {
+            const num = parseInt(k, 10);
+            if (!isNaN(num) && tablesInfo[num]?.items?.length > 0 && num > highestActiveTable) {
+                highestActiveTable = num;
+            }
+        });
+    }
+    const totalTables = highestActiveTable;
+    let html = '';
+    for (let i = 1; i <= totalTables; i++) {
+        const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[i] : null;
+        const isOccupied = tInfo && Array.isArray(tInfo.items) && tInfo.items.length > 0;
+        const isCurrent = i === activeTable;
+        const tName = (typeof getTableName === 'function') ? getTableName(i) : `T${i}`;
+        const statusClass = isCurrent ? 'current' : (isOccupied ? 'occupied' : 'vacant');
+        
+        let borderCol = isCurrent ? 'var(--primary, #143832)' : (isOccupied ? '#f59e0b' : '#10b981');
+        let bgCol = isCurrent ? 'rgba(20, 56, 50, 0.12)' : (isOccupied ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.08)');
+        let textCol = isCurrent ? 'var(--primary, #143832)' : (isOccupied ? '#b45309' : '#047857');
+        let badgeText = isCurrent ? 'ACTIVE' : (isOccupied ? `${tInfo.items.length} itm` : 'FREE');
+
+        html += `<button type="button" class="checkout-table-chip ${statusClass}" onclick="onCheckoutTableSelect(${i})" style="padding: 6px 4px; border-radius: 8px; font-size: 12px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1.5px solid ${borderCol}; background: ${bgCol}; color: ${textCol}; cursor: pointer;">
+            <span>${escapeHtml(tName)}</span>
+            <span style="font-size: 9px; font-weight: 600; opacity: 0.85;">${badgeText}</span>
+        </button>`;
+    }
+    grid.innerHTML = html;
+}
+window.renderCheckoutTablePicker = renderCheckoutTablePicker;
+
+function onCheckoutTableSelect(newTableNo) {
+    if (newTableNo === activeTable) {
+        toggleCheckoutTablePicker(false);
+        return;
+    }
+    if (typeof tablesInfo === 'undefined' || !tablesInfo) tablesInfo = {};
+    const currentTInfo = tablesInfo[activeTable];
+    const targetTInfo = tablesInfo[newTableNo];
+    const targetHasItems = targetTInfo && Array.isArray(targetTInfo.items) && targetTInfo.items.length > 0;
+    const currentHasItems = currentTInfo && Array.isArray(currentTInfo.items) && currentTInfo.items.length > 0;
+
+    const fromName = (typeof getTableName === 'function') ? getTableName(activeTable) : `Table ${activeTable}`;
+    const toName = (typeof getTableName === 'function') ? getTableName(newTableNo) : `Table ${newTableNo}`;
+
+    if (!targetHasItems && currentHasItems) {
+        // Target is vacant: Move / Transfer active table order to target table
+        tablesInfo[newTableNo] = JSON.parse(JSON.stringify(currentTInfo));
+        tablesInfo[activeTable] = { items: [], status: 'vacant', notes: '' };
+        activeTable = newTableNo;
+        window.activeTable = newTableNo;
+        persistTables();
+        syncTableUI();
+        updateCartUI();
+        openCheckoutModal(true);
+        toggleCheckoutTablePicker(false);
+        if (typeof showToast === 'function') showToast(`Order transferred from ${fromName} to ${toName}`, 'success');
+    } else if (targetHasItems) {
+        // Target is occupied: switch checkout context to target table's active order
+        activeTable = newTableNo;
+        window.activeTable = newTableNo;
+        syncTableUI();
+        updateCartUI();
+        openCheckoutModal(true);
+        toggleCheckoutTablePicker(false);
+        if (typeof showToast === 'function') showToast(`Switched checkout to ${toName}`, 'info');
+    } else {
+        // Target is vacant, current has no items: switch active table and close checkout modal
+        activeTable = newTableNo;
+        window.activeTable = newTableNo;
+        syncTableUI();
+        updateCartUI();
+        toggleCheckoutTablePicker(false);
+        const modal = document.getElementById('checkoutModal');
+        if (modal) modal.style.display = 'none';
+        if (typeof showToast === 'function') showToast(`Selected ${toName}`, 'info');
+    }
+}
+window.onCheckoutTableSelect = onCheckoutTableSelect;
 
 function executeHtmlPrint(divId) {
     return new Promise(resolve => {
@@ -2734,6 +3178,60 @@ async function sendEscPosToPrinter(order) {
 }
 window.sendEscPosToPrinter = sendEscPosToPrinter;
 
+// ============================================================================
+// 🔢 UNIFIED SEQUENTIAL KOT NUMBER ENGINE
+// ============================================================================
+function peekNextKotNumber() {
+    let lastKot = 0;
+    try {
+        const stored = parseInt(localStorage.getItem('billnaw_last_kot_no') || '0', 10);
+        if (!isNaN(stored) && stored > lastKot) lastKot = stored;
+
+        if (typeof shopProfile !== 'undefined' && shopProfile && shopProfile.lastKotNo) {
+            const spKot = parseInt(shopProfile.lastKotNo, 10);
+            if (!isNaN(spKot) && spKot > lastKot) lastKot = spKot;
+        }
+
+        const rawKots = localStorage.getItem('billnaw_active_kots');
+        if (rawKots) {
+            const list = JSON.parse(rawKots);
+            if (Array.isArray(list)) {
+                list.forEach(k => {
+                    let kn = 0;
+                    if (k.kotNumber && !isNaN(parseInt(k.kotNumber, 10))) {
+                        kn = parseInt(k.kotNumber, 10);
+                    } else if (k.kotNo && !isNaN(parseInt(k.kotNo, 10))) {
+                        kn = parseInt(k.kotNo, 10);
+                    } else if (k.kot_id) {
+                        const m = String(k.kot_id).match(/^KOT-(\d+)$/i);
+                        if (m) {
+                            const parsed = parseInt(m[1], 10);
+                            if (parsed < 100000) kn = parsed;
+                        }
+                    }
+                    if (kn > lastKot) lastKot = kn;
+                });
+            }
+        }
+    } catch(e) {}
+    return lastKot + 1;
+}
+window.peekNextKotNumber = peekNextKotNumber;
+
+function getNextUnifiedKotNumber() {
+    const nextKot = peekNextKotNumber();
+    try {
+        localStorage.setItem('billnaw_last_kot_no', String(nextKot));
+        if (typeof shopProfile !== 'undefined' && shopProfile) {
+            shopProfile.lastKotNo = nextKot;
+            if (typeof persistProfile === 'function') persistProfile();
+            else if (typeof persistShopProfile === 'function') persistShopProfile();
+        }
+    } catch(e) {}
+    return nextKot;
+}
+window.getNextUnifiedKotNumber = getNextUnifiedKotNumber;
+
 /**
  * Non-Blocking Kitchen Order Ticket (KOT) Generator
  * Strictly text-only ESC/POS command stream with zero raster graphics overhead.
@@ -2743,13 +3241,18 @@ window.sendEscPosToPrinter = sendEscPosToPrinter;
 async function sendKotToPrinter(tableNo, items, options = {}) {
     const billerName = (currentStaff && currentStaff.name) ? currentStaff.name : 'Admin';
     const billerRole = (currentStaff && currentStaff.role) ? currentStaff.role : 'Server';
-    const kotId = `KOT-${Date.now()}`;
+    const kotNo = options.kotNumber || options.kotNo || (typeof getNextUnifiedKotNumber === 'function' ? getNextUnifiedKotNumber() : 1);
+    const kotId = options.kotId || `KOT-${kotNo}`;
+    const kotDisplayNo = options.kotDisplayNo || `KOT #${kotNo}`;
     const isAddon = Boolean(options.isAddon);
-    const kotHeader = options.kotHeader || (isAddon ? `ADD-ON / RUNNING ORDER - TABLE ${tableNo}` : `KITCHEN ORDER TICKET - TABLE ${tableNo}`);
+    const kotHeader = options.kotHeader || (isAddon ? `ADD-ON / RUNNING ORDER - TABLE ${tableNo} (${kotDisplayNo})` : `KITCHEN ORDER TICKET - TABLE ${tableNo} (${kotDisplayNo})`);
 
     const kotJobPayload = {
         jobType: 'KOT',
         kotId: kotId,
+        kotNo: kotNo,
+        kotNumber: kotNo,
+        kotDisplayNo: kotDisplayNo,
         table: tableNo,
         tableNo: tableNo,
         items: items,
@@ -2766,6 +3269,7 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
 
     // 1. Route KOT print job through ThermalPrinterBridge if available
     const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
+    const kotDisplayEl = document.getElementById('printKotDisplayNo'); if (kotDisplayEl) kotDisplayEl.innerText = kotDisplayNo;
     const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
     const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
     let itemsHtml = '';
@@ -2849,11 +3353,12 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
 
         // Secondary fallback to browser HTML print dialog if cloud relay unavailable
         const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
+        const kotDisplayEl = document.getElementById('printKotDisplayNo'); if (kotDisplayEl) kotDisplayEl.innerText = kotDisplayNo;
         const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
         const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
         let itemsHtml = '';
         items.forEach(item => {
-            itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${item.name}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
+            itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${escapeHtml(item.name)}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
         });
         const kotItems = document.getElementById('printKotItems');
         if (kotItems) kotItems.innerHTML = itemsHtml;
@@ -2865,6 +3370,7 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
 
     let kotText = INIT; 
     kotText += ALIGN_CENTER + BOLD_ON + "KITCHEN TICKET\n" + BOLD_OFF; 
+    kotText += DOUBLE_SIZE + BOLD_ON + kotDisplayNo + "\n" + NORMAL_SIZE + BOLD_OFF; 
     kotText += "--------------------------------\n"; 
     kotText += DOUBLE_SIZE + BOLD_ON + `TABLE: ${tableNo}\n` + NORMAL_SIZE + BOLD_OFF; 
     kotText += `Time: ${new Date().toLocaleTimeString()} | Server: ${billerName}\n`; 
@@ -3233,8 +3739,11 @@ async function printKitchenTicket() {
     }
 
     try { 
-        const kotHeader = delta.isAddon ? `ADD-ON / RUNNING ORDER - TABLE ${currentTableName}` : `KITCHEN ORDER TICKET - TABLE ${currentTableName}`;
-        await sendKotToPrinter(currentTableName, delta.deltaItems, { isAddon: delta.isAddon, kotHeader });
+        const kotNo = (typeof getNextUnifiedKotNumber === 'function') ? getNextUnifiedKotNumber() : 1;
+        const kotId = `KOT-${kotNo}`;
+        const kotDisplayNo = `KOT #${kotNo}`;
+        const kotHeader = delta.isAddon ? `ADD-ON / RUNNING ORDER - TABLE ${currentTableName} (${kotDisplayNo})` : `KITCHEN ORDER TICKET - TABLE ${currentTableName} (${kotDisplayNo})`;
+        await sendKotToPrinter(currentTableName, delta.deltaItems, { isAddon: delta.isAddon, kotHeader, kotNumber: kotNo, kotNo: kotNo, kotId: kotId, kotDisplayNo: kotDisplayNo });
 
         // Update qtyKotPrinted for each line item on the table
         if (tInfo && Array.isArray(tInfo.items)) {
@@ -3246,29 +3755,41 @@ async function printKitchenTicket() {
             syncTableUI();
         }
 
-        // Dispatch to Kitchen Display System (KDS) & persist ticket
-        if (window.kotUIInstance && typeof window.kotUIInstance.handleDispatchKot === 'function') {
-            await window.kotUIInstance.handleDispatchKot(currentTableName, (tInfo.items || []).map(it => ({
+        // Dispatch to Kitchen Display System (KDS) & persist ticket (use delta items for add-on KOT)
+        const kotItemsToDispatch = (delta && delta.isAddon && Array.isArray(delta.deltaItems) && delta.deltaItems.length > 0)
+            ? delta.deltaItems
+            : (tInfo.items || []);
+        const newKot = {
+            kot_id: kotId,
+            kotNumber: kotNo,
+            kotNo: kotNo,
+            kotDisplayNo: kotDisplayNo,
+            table_id: currentTableName,
+            tableNo: currentTableName,
+            items: kotItemsToDispatch.map(it => ({
                 name: it.name,
                 quantity: it.qty || it.quantity || 1,
                 notes: it.notes || ''
-            })), tInfo.notes || '');
+            })),
+            status: 'PENDING',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+
+        if (window.kotUIInstance && typeof window.kotUIInstance.handleDispatchKot === 'function') {
+            await window.kotUIInstance.handleDispatchKot(currentTableName, newKot.items, tInfo.notes || '', newKot);
         } else {
             const raw = localStorage.getItem('billnaw_active_kots');
             const list = raw ? JSON.parse(raw) : [];
-            const kotId = `KOT-${Date.now().toString().slice(-6)}`;
-            const newKot = {
-                kot_id: kotId,
-                table_id: currentTableName,
-                items: (tInfo.items || []).map(it => ({ name: it.name, quantity: it.qty || 1, notes: it.notes || '' })),
-                status: 'PENDING',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            };
             list.unshift(newKot);
             localStorage.setItem('billnaw_active_kots', JSON.stringify(list.slice(0, 100)));
             window.dispatchEvent(new CustomEvent('billnaw:kot-created', { detail: { kot: newKot } }));
             if (typeof playKdsAudioChime === 'function') playKdsAudioChime();
+        }
+
+        // Broadcast to multi-terminal mesh
+        if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+            try { posMeshChannel.postMessage({ type: 'KOT_DISPATCHED', kot: newKot, kotNo: kotNo }); } catch(e) {}
         }
 
         const kotModal = document.getElementById('kotModal');

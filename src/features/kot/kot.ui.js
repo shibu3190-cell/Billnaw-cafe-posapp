@@ -71,12 +71,14 @@ export class KotUI {
     }
   }
 
-  async handleDispatchKot(tableId, items, instructions = '') {
-    const res = await createKOT({
+  async handleDispatchKot(tableId, items, instructions = '', customKot = null) {
+    const kotPayload = {
       table_id: tableId,
       items,
-      special_instructions: instructions
-    });
+      special_instructions: instructions,
+      ...(customKot && typeof customKot === 'object' ? customKot : {})
+    };
+    const res = await createKOT(kotPayload);
 
     if (res.error) {
       showToast(`KOT dispatch failed: ${res.error.message || res.error}`, 'error');
