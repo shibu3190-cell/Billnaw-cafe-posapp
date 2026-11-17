@@ -1243,6 +1243,14 @@ function discardFoodImage() {
 }
 window.discardFoodImage = discardFoodImage;
 
+function closeAddMenuItemModal() {
+    const modal = document.getElementById('menuItemModal');
+    if (modal) modal.style.display = 'none';
+    editingMenuItemId = null;
+    isGeneratingFoodImage = false;
+}
+window.closeAddMenuItemModal = closeAddMenuItemModal;
+
 function openAddMenuItemModal() {
     editingMenuItemId = null; 
     renderCategoryDropdown();
@@ -1306,7 +1314,7 @@ function openAddMenuItemModal() {
 window.openAddMenuItemModal = openAddMenuItemModal;
 
 function editMenuItem(id) {
-    const item = menuItems.find(i => i.id === id);
+    const item = (Array.isArray(menuItems) ? menuItems : []).find(i => String(i.id) === String(id));
     if(item) {
         renderCategoryDropdown();
         const nameEl = document.getElementById('newItemName');
@@ -1402,8 +1410,9 @@ function addMenuItem() {
         const previewSrc = (previewEl && previewEl.src && !previewEl.src.includes('placeholder') && !previewEl.src.startsWith('data:image/svg+xml')) ? previewEl.src : '';
         const dishPhoto = currentItemImageBase64 || previewSrc || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name, category) : generateFallbackImage(name, category));
 
+        const now = Date.now();
         const imgMeta = currentItemImageMetadata || {
-            id: 'img_' + (editingMenuItemId || Date.now()),
+            id: 'img_' + (editingMenuItemId || now),
             url: dishPhoto,
             source: dishPhoto.startsWith('/uploads/') ? (dishPhoto.includes('upload') ? 'upload' : 'gemini-imagen') : 'curated',
             createdAt: new Date().toISOString(),
@@ -1411,11 +1420,14 @@ function addMenuItem() {
         };
 
         if (editingMenuItemId) {
-            const index = menuItems.findIndex(i => i.id === editingMenuItemId);
+            let index = (Array.isArray(menuItems) ? menuItems : []).findIndex(i => String(i.id) === String(editingMenuItemId));
+            if (index === -1) {
+                index = (Array.isArray(menuItems) ? menuItems : []).findIndex(i => i.name && i.name.trim().toLowerCase() === name.toLowerCase());
+            }
             if(index > -1) { 
                 menuItems[index] = {
                     ...menuItems[index],
-                    id: editingMenuItemId,
+                    id: menuItems[index].id || editingMenuItemId,
                     name,
                     category,
                     price,
@@ -1426,31 +1438,82 @@ function addMenuItem() {
                     servingStyle,
                     dietary,
                     image: dishPhoto,
-                    imageMetadata: imgMeta
+                    imageMetadata: imgMeta,
+                    updatedAt: now,
+                    isDeleted: false,
+                    isAvailable: true
                 }; 
-                savedDishId = editingMenuItemId;
+                savedDishId = menuItems[index].id;
+            } else {
+                savedDishId = editingMenuItemId || now;
+                menuItems.push({
+                    id: savedDishId,
+                    name,
+                    category,
+                    price,
+                    gstRate,
+                    trackStock,
+                    stockQty,
+                    cuisine,
+                    servingStyle,
+                    dietary,
+                    image: dishPhoto,
+                    imageMetadata: imgMeta,
+                    updatedAt: now,
+                    isDeleted: false,
+                    isAvailable: true
+                });
             }
             showToast("✅ Item updated!");
         } else { 
-            savedDishId = Date.now();
-            menuItems.push({
-                id: savedDishId,
-                name,
-                category,
-                price,
-                gstRate,
-                trackStock,
-                stockQty,
-                cuisine,
-                servingStyle,
-                dietary,
-                image: dishPhoto,
-                imageMetadata: imgMeta
-            }); 
-            showToast("✅ Item added!"); 
+            // Deduplicate by case-insensitive name so accidental duplicate items are updated rather than duplicated
+            const existingIndex = (Array.isArray(menuItems) ? menuItems : []).findIndex(i => i.name && i.name.trim().toLowerCase() === name.toLowerCase());
+            if (existingIndex > -1) {
+                menuItems[existingIndex] = {
+                    ...menuItems[existingIndex],
+                    category,
+                    price,
+                    gstRate,
+                    trackStock,
+                    stockQty,
+                    cuisine,
+                    servingStyle,
+                    dietary,
+                    image: dishPhoto,
+                    imageMetadata: imgMeta,
+                    updatedAt: now,
+                    isDeleted: false,
+                    isAvailable: true
+                };
+                savedDishId = menuItems[existingIndex].id;
+                showToast("✅ Existing item updated!");
+            } else {
+                savedDishId = now;
+                menuItems.push({
+                    id: savedDishId,
+                    name,
+                    category,
+                    price,
+                    gstRate,
+                    trackStock,
+                    stockQty,
+                    cuisine,
+                    servingStyle,
+                    dietary,
+                    image: dishPhoto,
+                    imageMetadata: imgMeta,
+                    updatedAt: now,
+                    isDeleted: false,
+                    isAvailable: true
+                }); 
+                showToast("✅ Item added!"); 
+            }
         }
         if (savedDishId && typeof removeDeletedMenuItemId === 'function') {
             removeDeletedMenuItemId(savedDishId);
+        }
+        if (name && typeof removeDeletedMenuItemName === 'function') {
+            removeDeletedMenuItemName(name);
         }
         if (typeof markMenuCustomized === 'function') {
             markMenuCustomized();
@@ -1469,7 +1532,7 @@ function addMenuItem() {
                 window.culinaryInventory.syncMenuItems();
             }
         }
-        document.getElementById('menuItemModal').style.display = 'none';
+        closeAddMenuItemModal();
     } else { 
         showToast("⚠️ Name and Price required."); 
     }
@@ -1500,6 +1563,10 @@ function deleteMenuItem(id, bypassRoleCheck = false) {
             targetItem.isAvailable = false;
             targetItem.is_active = false;
             targetItem.deletedAt = new Date().toISOString();
+            targetItem.updatedAt = Date.now();
+            if (targetItem.name && typeof recordDeletedMenuItemName === 'function') {
+                recordDeletedMenuItemName(targetItem.name);
+            }
         }
         // Maintain referential integrity: retain item as soft-deleted if active table cart references it
         menuItems = (Array.isArray(menuItems) ? menuItems : []).filter(item => {
@@ -2157,12 +2224,9 @@ async function confirmAiImport() {
         let newCategoriesAdded = 0;
         const { defaultRate } = getStoreGstConfig();
 
-        // If the menu currently only contains the pristine 4 default demo items,
+        // If the menu currently only contains the pristine default demo items,
         // clear them so the shop owner's real menu replaces the template baseline.
-        const isDefaultDemoMenu = Array.isArray(menuItems) && menuItems.length === 4 &&
-            menuItems.every(m => [1, 2, 3, 4].includes(Number(m.id)) && ['Samosa', 'Tea', 'Chicken Curry', 'Masala Coke'].includes(m.name));
-
-        if (isDefaultDemoMenu) {
+        if (typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(menuItems)) {
             menuItems = [];
             window.menuItems = menuItems;
         }
@@ -2194,6 +2258,9 @@ async function confirmAiImport() {
                 existing.category = catName;
                 if (item.image) existing.image = item.image;
                 if (item.gstRate !== undefined) existing.gstRate = Number(item.gstRate);
+                existing.updatedAt = Date.now();
+                existing.isDeleted = false;
+                existing.isAvailable = true;
                 itemsUpdated++;
             } else {
                 const newItem = {
@@ -2204,10 +2271,16 @@ async function confirmAiImport() {
                     gstRate: defaultRate,
                     trackStock: false,
                     stockQty: 0,
-                    image: finalImage
+                    image: finalImage,
+                    updatedAt: Date.now(),
+                    isDeleted: false,
+                    isAvailable: true
                 };
                 menuItems.push(newItem);
                 itemsAdded++;
+            }
+            if (typeof removeDeletedMenuItemName === 'function') {
+                removeDeletedMenuItemName(rawName);
             }
         });
 
@@ -2215,6 +2288,11 @@ async function confirmAiImport() {
             throw new Error("Please specify at least one valid item name.");
         }
 
+        if (typeof markMenuCustomized === 'function') {
+            markMenuCustomized();
+        } else if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('billnaw_menu_customized', 'true');
+        }
         window.menuItems = menuItems;
         persistCategories();
         persistMenu();

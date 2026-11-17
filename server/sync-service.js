@@ -203,6 +203,12 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
 
   if (Array.isArray(payload.menu)) fieldsToPatch.menu = payload.menu;
+  if (Array.isArray(payload.deletedMenuIds)) fieldsToPatch.deletedMenuIds = payload.deletedMenuIds;
+  if (Array.isArray(payload.deletedMenuNames)) fieldsToPatch.deletedMenuNames = payload.deletedMenuNames;
+  if (typeof payload.menuVersion === 'number' || typeof payload.menuVersion === 'string') {
+    const v = Number(payload.menuVersion);
+    if (!isNaN(v) && v >= 0) fieldsToPatch.menuVersion = v;
+  }
   if (Array.isArray(payload.categories)) fieldsToPatch.categories = payload.categories;
   if (payload.tables && typeof payload.tables === 'object') fieldsToPatch.tables = payload.tables;
   if (Array.isArray(payload.history)) fieldsToPatch.history = payload.history;
@@ -353,6 +359,9 @@ export async function getStoreFromFirestoreREST(storeCode) {
       profile: profileObj,
       staff: fields.staff ? firestoreValueToJson(fields.staff) : [],
       menu: fields.menu ? firestoreValueToJson(fields.menu) : [],
+      deletedMenuIds: fields.deletedMenuIds ? firestoreValueToJson(fields.deletedMenuIds) : [],
+      deletedMenuNames: fields.deletedMenuNames ? firestoreValueToJson(fields.deletedMenuNames) : [],
+      menuVersion: fields.menuVersion ? firestoreValueToJson(fields.menuVersion) : 0,
       categories: fields.categories ? firestoreValueToJson(fields.categories) : [],
       tables: fields.tables ? firestoreValueToJson(fields.tables) : {},
       history: fields.history ? firestoreValueToJson(fields.history) : [],

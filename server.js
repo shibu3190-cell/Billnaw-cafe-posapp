@@ -1263,7 +1263,7 @@ app.post('/api/sync/store-data', async (req, res) => {
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
-    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots } = req.body || {};
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots } = req.body || {};
     
     // Normalize and link ownerEmail with shop profile
     const normalizedEmail = (ownerEmail || profile?.ownerEmail || profile?.email || req.headers['x-shop-email'] || '').trim().toLowerCase();
@@ -1271,7 +1271,7 @@ app.post('/api/sync/store-data', async (req, res) => {
     const result = await syncStoreToFirestoreREST(code, {
       ownerEmail: normalizedEmail || undefined,
       profile: profile ? { ...profile, ownerEmail: normalizedEmail || profile.ownerEmail } : undefined,
-      staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots
+      staff, replaceStaff, deletedStaffId, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots
     });
     res.json(result);
   } catch (err) {

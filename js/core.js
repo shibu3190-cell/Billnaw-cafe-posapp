@@ -1744,6 +1744,42 @@ function removeDeletedMenuItemId(id) {
 }
 window.removeDeletedMenuItemId = removeDeletedMenuItemId;
 
+function getDeletedMenuItemNames() {
+    try {
+        const raw = localStorage.getItem('billnaw_deleted_menu_names');
+        return raw ? JSON.parse(raw) : [];
+    } catch(e) {
+        return [];
+    }
+}
+window.getDeletedMenuItemNames = getDeletedMenuItemNames;
+
+function recordDeletedMenuItemName(name) {
+    if (!name || typeof name !== 'string') return;
+    const clean = name.trim().toLowerCase();
+    if (!clean) return;
+    try {
+        const list = getDeletedMenuItemNames();
+        if (!list.includes(clean)) {
+            list.push(clean);
+            localStorage.setItem('billnaw_deleted_menu_names', JSON.stringify(list.slice(-500)));
+        }
+    } catch(e) {}
+}
+window.recordDeletedMenuItemName = recordDeletedMenuItemName;
+
+function removeDeletedMenuItemName(name) {
+    if (!name || typeof name !== 'string') return;
+    const clean = name.trim().toLowerCase();
+    if (!clean) return;
+    try {
+        const list = getDeletedMenuItemNames();
+        const filtered = list.filter(x => x !== clean);
+        localStorage.setItem('billnaw_deleted_menu_names', JSON.stringify(filtered));
+    } catch(e) {}
+}
+window.removeDeletedMenuItemName = removeDeletedMenuItemName;
+
 function getDeletedStaffIds() {
     try {
         const raw = localStorage.getItem('billnaw_deleted_staff_ids');
@@ -1909,7 +1945,26 @@ if (posMeshChannel) {
             if (Array.isArray(data.deletedIds) && typeof recordDeletedMenuItemId === 'function') {
                 data.deletedIds.forEach(id => recordDeletedMenuItemId(id));
             }
-            menuItems = data.menu;
+            if (Array.isArray(data.deletedNames) && typeof recordDeletedMenuItemName === 'function') {
+                data.deletedNames.forEach(name => recordDeletedMenuItemName(name));
+            }
+            if (data.version) {
+                const v = Number(data.version);
+                if (!isNaN(v) && v > 0) {
+                    localStorage.setItem('billnaw_menu_version', String(v));
+                    if (shopProfile) shopProfile.menuVersion = v;
+                    window.currentMenuVersion = v;
+                }
+            }
+            const deletedIdSet = new Set((typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds().map(String) : []);
+            const deletedNameSet = new Set((typeof getDeletedMenuItemNames === 'function') ? getDeletedMenuItemNames() : []);
+            menuItems = data.menu.filter(m => {
+                if (!m) return false;
+                if (m.id && deletedIdSet.has(String(m.id))) return false;
+                if (m.name && deletedNameSet.has(String(m.name).trim().toLowerCase())) return false;
+                if (m.isDeleted === true || (m.isAvailable === false && m.is_active === false && m.deletedAt)) return false;
+                return true;
+            });
             window.menuItems = menuItems;
             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
             if (typeof renderMenuUI === 'function') renderMenuUI();
@@ -2423,48 +2478,113 @@ function handleRemoteFirestoreUpdate(data) {
         const incomingMenuVersion = Number(data.menuVersion || (data.menuMeta && data.menuMeta.version) || 0);
         const localMenuVersion = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 0);
 
+        // Prepare comprehensive tombstones (both ID and normalized item name)
+        const localDeletedIds = (typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds().map(String) : [];
+        const remoteDeletedIds = Array.isArray(data.deletedMenuIds) ? data.deletedMenuIds.map(String) : [];
+        const deletedIdSet = new Set([...localDeletedIds, ...remoteDeletedIds]);
+
+        const localDeletedNames = (typeof getDeletedMenuItemNames === 'function') ? getDeletedMenuItemNames() : [];
+        const remoteDeletedNames = Array.isArray(data.deletedMenuNames) ? data.deletedMenuNames.map(n => String(n).trim().toLowerCase()) : [];
+        const deletedNameSet = new Set([...localDeletedNames, ...remoteDeletedNames]);
+
+        // Sync and save any remote tombstones locally
+        if (Array.isArray(data.deletedMenuIds) && typeof recordDeletedMenuItemId === 'function') {
+            data.deletedMenuIds.forEach(id => recordDeletedMenuItemId(id));
+        }
+        if (Array.isArray(data.deletedMenuNames) && typeof recordDeletedMenuItemName === 'function') {
+            data.deletedMenuNames.forEach(n => recordDeletedMenuItemName(n));
+        }
+
+        // Build clean remote menu (excluding all tombstoned items by ID and Name)
+        const cleanRemoteMenu = data.menu.filter(m => {
+            if (!m) return false;
+            const idStr = String(m.id || '');
+            const nameStr = String(m.name || '').trim().toLowerCase();
+            if (idStr && deletedIdSet.has(idStr)) return false;
+            if (nameStr && deletedNameSet.has(nameStr)) return false;
+            if (m.isDeleted === true || (m.isAvailable === false && m.is_active === false && m.deletedAt)) return false;
+            return true;
+        });
+
+        const isLocalCustomized = (typeof isMenuCustomized === 'function') ? isMenuCustomized() : (localStorage.getItem('billnaw_menu_customized') === 'true');
+        const isLocalTemplate = (typeof isDefaultTemplateMenu === 'function') && isDefaultTemplateMenu(menuItems);
+
         // Zero-Lag Optimization: If menu version has not changed and local catalog is populated, avoid full DOM wipe
-        if (incomingMenuVersion > 0 && incomingMenuVersion <= localMenuVersion && Array.isArray(menuItems) && menuItems.length > 0) {
+        // CASE 1: Local is authoritative with higher or equal version, AND local has items
+        // (Prevents stale snapshots, background health checks, or legacy docs from overwriting local edits/deletes!)
+        if (localMenuVersion > 0 && incomingMenuVersion <= localMenuVersion && Array.isArray(menuItems) && menuItems.length > 0) {
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
-        } else {
-            if (incomingMenuVersion > 0) {
-                localStorage.setItem('billnaw_menu_version', String(incomingMenuVersion));
-                if (shopProfile) shopProfile.menuVersion = incomingMenuVersion;
-                window.currentMenuVersion = incomingMenuVersion;
+            // If cloud document is unversioned (legacy existing shop doc), push local version and catalog back to cloud
+            if (incomingMenuVersion === 0 && isLocalCustomized && typeof dispatchBackendStoreSync === 'function') {
+                dispatchBackendStoreSync({
+                    menu: menuItems.map(item => sanitizeMenuItemForStorage(item)),
+                    menuVersion: localMenuVersion,
+                    deletedMenuIds: Array.from(deletedIdSet),
+                    deletedMenuNames: Array.from(deletedNameSet)
+                }, true);
             }
-            const deletedMenuSet = new Set([
-                ...((typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds().map(String) : []),
-                ...(Array.isArray(data.deletedMenuIds) ? data.deletedMenuIds.map(String) : [])
-            ]);
-            if (Array.isArray(data.deletedMenuIds) && typeof recordDeletedMenuItemId === 'function') {
-                data.deletedMenuIds.forEach(id => recordDeletedMenuItemId(id));
+        }
+        // CASE 2: Remote has a strictly newer version bumped by another device/admin
+        else if (incomingMenuVersion > localMenuVersion) {
+            localStorage.setItem('billnaw_menu_version', String(incomingMenuVersion));
+            if (shopProfile) shopProfile.menuVersion = incomingMenuVersion;
+            window.currentMenuVersion = incomingMenuVersion;
+
+            menuItems = cleanRemoteMenu;
+            window.menuItems = menuItems;
+            if (typeof idb !== 'undefined' && idb.set) {
+                idb.set('cafe_menu', menuItems);
             }
+            if (typeof renderMenuUI === 'function') renderMenuUI();
+            if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
+            if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+        }
+        // CASE 3: Local was only the pristine 4-item default template: adopt clean remote menu
+        else if (isLocalTemplate) {
+            const adoptedVer = incomingMenuVersion > 0 ? incomingMenuVersion : 1;
+            localStorage.setItem('billnaw_menu_version', String(adoptedVer));
+            if (shopProfile) shopProfile.menuVersion = adoptedVer;
+            window.currentMenuVersion = adoptedVer;
 
-            const cleanRemoteMenu = data.menu.filter(m => m && m.id && !deletedMenuSet.has(String(m.id)));
+            menuItems = cleanRemoteMenu;
+            window.menuItems = menuItems;
+            if (typeof idb !== 'undefined' && idb.set) {
+                idb.set('cafe_menu', menuItems);
+            }
+            if (typeof renderMenuUI === 'function') renderMenuUI();
+            if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
+            if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+        }
+        // CASE 4: Reconcile unversioned legacy catalog (incomingMenuVersion === 0 && localMenuVersion === 0)
+        else {
+            const mergedMap = new Map();
+            cleanRemoteMenu.forEach(rm => {
+                if (rm && rm.name) {
+                    const key = String(rm.name).trim().toLowerCase();
+                    mergedMap.set(key, rm);
+                }
+            });
+            if (Array.isArray(menuItems)) {
+                menuItems.forEach(lm => {
+                    if (lm && lm.name) {
+                        const idStr = String(lm.id || '');
+                        const key = String(lm.name).trim().toLowerCase();
+                        if (deletedIdSet.has(idStr) || deletedNameSet.has(key)) return;
 
-            if (typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(menuItems)) {
-                // Local store only held the default 4-item baseline: replace cleanly with authentic cloud catalog
-                menuItems = cleanRemoteMenu;
-            } else if (Array.isArray(menuItems) && menuItems.length > cleanRemoteMenu.length) {
-                // Local store has more items: union merge by item name, excluding template defaults and deleted items
-                const defaultNames = new Set(['samosa', 'tea', 'chicken curry', 'masala coke']);
-                const menuMap = new Map();
-                cleanRemoteMenu.forEach(m => { if (m && m.name) menuMap.set(m.name.trim().toLowerCase(), m); });
-                menuItems.forEach(m => {
-                    if (m && m.name && m.id && !deletedMenuSet.has(String(m.id))) {
-                        const key = m.name.trim().toLowerCase();
-                        if (!menuMap.has(key) && !defaultNames.has(key)) {
-                            menuMap.set(key, m);
+                        if (mergedMap.has(key)) {
+                            const existingRemote = mergedMap.get(key);
+                            const localTime = Number(lm.updatedAt || 0);
+                            const remoteTime = Number(existingRemote.updatedAt || 0);
+                            if (localTime >= remoteTime) {
+                                mergedMap.set(key, { ...existingRemote, ...lm });
+                            }
+                        } else {
+                            mergedMap.set(key, lm);
                         }
                     }
                 });
-                menuItems = Array.from(menuMap.values());
-                if (typeof dispatchBackendStoreSync === 'function') {
-                    dispatchBackendStoreSync({ menu: menuItems, menuVersion: incomingMenuVersion || 1, deletedMenuIds: Array.from(deletedMenuSet) }, true);
-                }
-            } else {
-                menuItems = cleanRemoteMenu;
             }
+            menuItems = Array.from(mergedMap.values());
             window.menuItems = menuItems;
             if (typeof idb !== 'undefined' && idb.set) {
                 idb.set('cafe_menu', menuItems);
@@ -3616,7 +3736,9 @@ async function persistAllToFirestore() {
     const targetStoreCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (shopProfile?.storeCode || null);
     const safeProfile = JSON.parse(JSON.stringify(shopProfile || {}));
     const deletedMenuIds = (typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds() : [];
+    const deletedMenuNames = (typeof getDeletedMenuItemNames === 'function') ? getDeletedMenuItemNames() : [];
     const deletedStaffIds = (typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds() : [];
+    const currentMenuVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 1);
     const fullPayload = {
         storeCode: targetStoreCode,
         replaceStaff: true,
@@ -3624,7 +3746,9 @@ async function persistAllToFirestore() {
         staff: staffList,
         deletedStaffIds: deletedStaffIds,
         menu: sanitizedMenu,
+        menuVersion: currentMenuVer,
         deletedMenuIds: deletedMenuIds,
+        deletedMenuNames: deletedMenuNames,
         categories: menuCategories,
         customers: customersList,
         history: orderHistory,
@@ -3693,6 +3817,7 @@ function persistMenu() {
         : menuItems;
     idb.set('cafe_menu', sanitizedMenu); 
     const deletedIds = (typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds() : [];
+    const deletedNames = (typeof getDeletedMenuItemNames === 'function') ? getDeletedMenuItemNames() : [];
 
     // Monotonic Menu Version Bump for Zero-Lag Cross-Device Invalidation
     const currentVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 1);
@@ -3708,6 +3833,7 @@ function persistMenu() {
                 menu: sanitizedMenu, 
                 menuVersion: newVersion, 
                 deletedMenuIds: deletedIds, 
+                deletedMenuNames: deletedNames,
                 updatedAt: new Date().toISOString() 
             }, { merge: true }).catch(() => {});
 
@@ -3732,10 +3858,10 @@ function persistMenu() {
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ menu: sanitizedMenu, menuVersion: newVersion, deletedMenuIds: deletedIds }, true);
+        dispatchBackendStoreSync({ menu: sanitizedMenu, menuVersion: newVersion, deletedMenuIds: deletedIds, deletedMenuNames: deletedNames }, true);
     }
     if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
-        try { posMeshChannel.postMessage({ type: 'MENU_UPDATED', version: newVersion, menu: sanitizedMenu, deletedIds }); } catch(e) {}
+        try { posMeshChannel.postMessage({ type: 'MENU_UPDATED', version: newVersion, menu: sanitizedMenu, deletedIds, deletedNames }); } catch(e) {}
     }
 }
 window.persistMenu = persistMenu;
