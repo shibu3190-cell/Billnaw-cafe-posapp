@@ -144,14 +144,33 @@ async function run() {
         const tablesView = document.getElementById('tables');
         const isActive = tablesView && tablesView.classList.contains('active');
         const grid = document.getElementById('tablesViewGridUI');
+        if (typeof shopProfile === 'object' && shopProfile) {
+            shopProfile.tableCount = 5;
+        }
+        if (typeof tablesInfo === 'object' && tablesInfo) {
+            Object.keys(tablesInfo).forEach(k => {
+                if (parseInt(k, 10) > 5) delete tablesInfo[k];
+                else if (tablesInfo[k]) tablesInfo[k].items = [];
+            });
+        }
+        if (typeof window.renderTablesView === 'function') window.renderTablesView();
+
         const cardsInitial = grid ? grid.querySelectorAll('.table-view-card') : [];
         const addCardInitial = grid ? grid.querySelector('.add-table-card') : null;
         const floatingBar = document.getElementById('tableOrderFloatingBar');
 
-        // Select Table 1
+        // Select vacant Table 1 -> pill must be hidden ('none')
         if (typeof window.selectTableInTableView === 'function') {
             window.selectTableInTableView(1);
         }
+        const pillDisplayWhenVacant = floatingBar ? floatingBar.style.display : null;
+
+        // Test collapsible filter bar
+        const filterDrawer = document.getElementById('tablesCollapsibleFilters');
+        const filterCollapsedBefore = filterDrawer ? filterDrawer.style.display === 'none' : false;
+        if (typeof window.toggleTablesFilterCollapse === 'function') window.toggleTablesFilterCollapse();
+        const filterExpandedAfter = filterDrawer ? filterDrawer.style.display === 'flex' : false;
+        if (typeof window.toggleTablesFilterCollapse === 'function') window.toggleTablesFilterCollapse();
 
         // Test dynamic scaling up to 32 tables
         const initialCount = cardsInitial.length;
@@ -186,19 +205,25 @@ async function run() {
             hasAddTableCard: Boolean(addCardInitial),
             scaledCardCount: cardsScaled.length,
             activeTable: typeof window.activeTable !== 'undefined' ? window.activeTable : null,
-            floatingBarExists: Boolean(floatingBar)
+            floatingBarExists: Boolean(floatingBar),
+            pillDisplayWhenVacant,
+            filterCollapsedBefore,
+            filterExpandedAfter
         };
     })()`);
     console.log('Table floor view result:', tableFloorRes);
     assert.strictEqual(tableFloorRes.isActive, true, 'Tables view must be active');
     assert.strictEqual(tableFloorRes.moreCount, 1, 'Must have strictly one #nav-more element');
     assert.deepStrictEqual(tableFloorRes.navButtons, ['nav-pos', 'nav-menu', 'nav-dashboard', 'nav-tables', 'nav-more'], 'Navbar must have exact 5 buttons in order: POS, Menu, Reports, Tables, More');
-    assert.strictEqual(tableFloorRes.hasAddTableCard, true, 'Must render + Add Table card');
-    assert.ok(tableFloorRes.initialCardCount >= 6, 'Must render 5 tables + 1 Add Table card initially');
-    assert.ok(tableFloorRes.scaledCardCount >= 33, 'Must render 32 tables + 1 Add Table card when shop profile is set to 32');
+    assert.strictEqual(tableFloorRes.hasAddTableCard, false, 'Must not render extra + Add Table card');
+    assert.strictEqual(tableFloorRes.initialCardCount, 5, 'Must render strictly 5 tables matching shop profile');
+    assert.strictEqual(tableFloorRes.scaledCardCount, 32, 'Must render strictly 32 tables when shop profile is set to 32');
+    assert.strictEqual(tableFloorRes.pillDisplayWhenVacant, 'none', 'Checkout pill must be hidden when selected table has no order');
+    assert.strictEqual(tableFloorRes.filterCollapsedBefore, true, 'Filter drawer must start collapsed');
+    assert.strictEqual(tableFloorRes.filterExpandedAfter, true, 'Filter drawer must expand on toggle');
     assert.strictEqual(tableFloorRes.activeTable, 1, 'Table 1 must be selected');
     assert.strictEqual(tableFloorRes.floatingBarExists, true, 'Floating order inspector bar must exist');
-    console.log('✅ PASS: Dedicated Table Floor View renders dynamic auto-fit grid, + Add Table card, and scales seamlessly.');
+    console.log('✅ PASS: Dedicated Table Floor View renders compact POS cards, collapsible filter bar, hidden pill on vacant table, and exact shop table count.');
 
     console.log('\n--- CHECK 2: Unified Sequential KOT Engine & Add-on Delta Dispatch ---');
     const kotEngineRes = await evaluateInApp(`(async function() {

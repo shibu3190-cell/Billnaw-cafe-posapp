@@ -177,6 +177,24 @@ window.renderTables = renderTables;
 
 let _tablesViewFilter = 'all';
 let _tablesViewFloor = 'Ground Floor';
+let _tablesFilterCollapsed = true;
+
+function toggleTablesFilterCollapse(forceState) {
+    const drawer = document.getElementById('tablesCollapsibleFilters');
+    const toggleBtn = document.getElementById('tablesFilterToggleBtn');
+    if (!drawer) return;
+    if (typeof forceState === 'boolean') {
+        _tablesFilterCollapsed = !forceState;
+    } else {
+        _tablesFilterCollapsed = !_tablesFilterCollapsed;
+    }
+    drawer.style.display = _tablesFilterCollapsed ? 'none' : 'flex';
+    if (toggleBtn) {
+        toggleBtn.classList.toggle('expanded', !_tablesFilterCollapsed);
+        toggleBtn.setAttribute('aria-expanded', String(!_tablesFilterCollapsed));
+    }
+}
+window.toggleTablesFilterCollapse = toggleTablesFilterCollapse;
 
 function renderTablesView(filter) {
     if (filter) _tablesViewFilter = filter;
@@ -186,8 +204,8 @@ function renderTablesView(filter) {
     const grid = document.getElementById('tablesViewGridUI');
     if (!grid) return;
     
-    // Dynamically scale table count based on shopProfile settings (default 5)
-    // Also include any active tables that might exist beyond configured count to prevent orphaned orders
+    // Strictly scale table count to what the shop selected in settings (default 5)
+    // Also include any active tables with orders beyond configured count to prevent orphaned orders
     const configuredTables = Math.max(1, parseInt((typeof shopProfile !== 'undefined' && shopProfile?.tableCount) || 5, 10));
     let highestActiveTable = configuredTables;
     if (typeof tablesInfo === 'object' && tablesInfo) {
@@ -215,9 +233,20 @@ function renderTablesView(filter) {
         }
     }
     
+    const floorLabel = document.getElementById('tablesActiveFloorLabel');
+    if (floorLabel) floorLabel.innerText = _tablesViewFloor || 'Ground Floor';
+
+    const filterLabel = document.getElementById('tablesActiveFilterLabel');
+    if (filterLabel) {
+        const filterNames = { all: 'Filter', occupied: 'Occupied', ready_for_billing: 'Bill Ready', vacant: 'Vacant' };
+        filterLabel.innerText = filterNames[currentFilter] || 'Filter';
+    }
+
     const summaryBadge = document.getElementById('tablesViewStatsSummary');
     if (summaryBadge) {
-        summaryBadge.innerHTML = `<strong>${occupiedCount}</strong> Active • <strong>${readyBillingCount}</strong> Bill Ready • <strong>${vacantCount}</strong> Vacant`;
+        summaryBadge.innerHTML = readyBillingCount > 0
+            ? `<strong>${occupiedCount}</strong> Active • <strong>${readyBillingCount}</strong> Bill Ready • <strong>${vacantCount}</strong> Vacant`
+            : `<strong>${occupiedCount}</strong> Active • <strong>${vacantCount}</strong> Vacant`;
     }
     
     let gridHtml = '';
@@ -280,41 +309,20 @@ function renderTablesView(filter) {
             ? tInfo.items.reduce((s, it) => s + it.qty, 0) 
             : 0;
         const countBadge = itemCount > 0 ? `<span class="table-item-badge">${itemCount}</span>` : '';
-        const waiterName = tInfo?.readyForBillingBy || tInfo?.serverName || '';
-        const waiterBadge = waiterName ? `<span class="table-card-waiter" title="Server: ${escapeHtml(waiterName)}">${escapeHtml(waiterName)}</span>` : '';
         const amountDisplay = hasItems ? `₹ ${totals.finalTotal.toFixed(2)}` : 'Vacant';
         
         gridHtml += `
             <button type="button" id="tables-view-btn-${i}" class="${classes}" onclick="selectTableInTableView(${i})" title="Table ${escapeHtml(tableName)}">
                 <div class="table-status-dot"></div>
                 <span class="table-num-pill">${i}</span>
-                <div class="table-card-top">
-                    <span class="table-t-code">T${i}</span>
-                    <span class="table-status-tag">${statusTag}</span>
-                </div>
-                <div class="table-card-name">${escapeHtml(tableName)}</div>
-                <div class="table-card-footer">
-                    <span class="table-card-amount ${hasItems ? 'has-total' : ''}">${amountDisplay}</span>
-                    ${waiterBadge}
-                </div>
+                <span class="table-t-code">T${i}</span>
+                <span class="table-status-tag">${statusTag}</span>
+                <span class="table-btn-name" style="display:none;">${escapeHtml(tableName)}</span>
+                <span class="table-card-amount ${hasItems ? 'has-total' : ''}" style="display:none;">${amountDisplay}</span>
                 ${countBadge}
             </button>
         `;
     }
-    
-    // Append "+ Add Table" card at the end of the grid
-    gridHtml += `
-        <button type="button" class="table-btn table-view-card add-table-card" onclick="openTableManagementModal()" title="Add / Configure Tables in Settings">
-            <div class="add-table-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-            </div>
-            <div class="add-table-label">+ Add Table</div>
-            <div class="add-table-sub">Settings</div>
-        </button>
-    `;
     grid.innerHTML = gridHtml;
     
     updateTableOrderFloatingBar();
@@ -322,6 +330,10 @@ function renderTablesView(filter) {
 window.renderTablesView = renderTablesView;
 
 function selectTableInTableView(num) {
+    const wasAlreadySelected = (typeof activeTable !== 'undefined' && activeTable === num);
+    const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[num] : null;
+    const hasItems = tInfo && Array.isArray(tInfo.items) && tInfo.items.length > 0;
+
     if (typeof selectTable === 'function') {
         selectTable(num);
     } else {
@@ -337,8 +349,32 @@ function selectTableInTableView(num) {
     });
     
     updateTableOrderFloatingBar();
+
+    // If user taps an already-selected vacant table, jump to POS to add items
+    if (wasAlreadySelected && !hasItems && typeof switchTab === 'function') {
+        switchTab('pos');
+    }
 }
 window.selectTableInTableView = selectTableInTableView;
+
+function openCartDrawerFromTableView() {
+    if (typeof updateCartUI === 'function') updateCartUI();
+    const drawer = document.getElementById('cartDrawer');
+    const overlay = document.getElementById('cartDrawerOverlay');
+    if (drawer) {
+        const isClosing = drawer.classList.contains('open');
+        if (isClosing) {
+            drawer.classList.remove('open');
+            if (overlay) overlay.classList.remove('show');
+            document.body?.classList.remove('cart-drawer-from-tables');
+        } else {
+            document.body?.classList.add('cart-drawer-from-tables');
+            drawer.classList.add('open');
+            if (overlay) overlay.classList.add('show');
+        }
+    }
+}
+window.openCartDrawerFromTableView = openCartDrawerFromTableView;
 
 function updateTableOrderFloatingBar() {
     const bar = document.getElementById('tableOrderFloatingBar');
@@ -359,63 +395,66 @@ function updateTableOrderFloatingBar() {
     const serverEl = document.getElementById('tofbServerTag');
     const previewEl = document.getElementById('tofbItemsPreview');
     const totalEl = document.getElementById('tofbTotalVal');
+    const countEl = document.getElementById('tablesFcCount');
     const checkoutBtn = document.getElementById('tofbCheckoutBtn');
     const printBtn = document.getElementById('tofbPrintKotBtn');
     
-    let totals = { finalTotal: 0 };
-    if (hasItems) {
-        if (typeof calculateOrderTotals === 'function') {
-            totals = calculateOrderTotals(tInfo.items, tInfo.discount);
-        } else {
-            const sub = tInfo.items.reduce((s, it) => s + ((it.price || 0) * (it.qty || 1)), 0);
-            totals = { finalTotal: sub };
-        }
-        
-        let statusText = 'OCCUPIED';
-        if (tInfo.status === 'ready_for_billing') statusText = 'BILL READY';
-        else if (tInfo.status === 'billed' || tInfo.status === 'served') statusText = 'BILLED';
-        else if (tInfo.status === 'saved' || tInfo.status === 'kot') statusText = 'KOT SENT';
-        
-        if (tagEl) {
-            tagEl.innerText = statusText;
-            tagEl.className = 'tofb-status-tag ' + (tInfo.status === 'ready_for_billing' ? 'ready-billing' : 'occupied');
-        }
-        
-        const waiter = tInfo.readyForBillingBy || tInfo.serverName || '';
-        if (serverEl) {
-            if (waiter) {
-                serverEl.innerText = `• Server: ${waiter}`;
-                serverEl.style.display = 'inline';
-            } else {
-                serverEl.style.display = 'none';
-            }
-        }
-        
-        if (previewEl) {
-            const itemsList = tInfo.items.map(it => `${it.qty}x ${it.name}`).join(', ');
-            previewEl.innerText = itemsList || `${tInfo.items.length} items ordered`;
-        }
-        
-        if (totalEl) totalEl.innerText = `₹ ${totals.finalTotal.toFixed(2)}`;
-        if (checkoutBtn) {
-            checkoutBtn.disabled = false;
-            checkoutBtn.style.opacity = '1';
-        }
-        if (printBtn) printBtn.style.display = 'inline-flex';
-    } else {
+    // If the table has NO order, no pill should come up at all (exact POS screen behavior)
+    if (!hasItems) {
         if (tagEl) {
             tagEl.innerText = 'VACANT';
             tagEl.className = 'tofb-status-tag vacant';
         }
         if (serverEl) serverEl.style.display = 'none';
-        if (previewEl) previewEl.innerText = 'No active order • Tap "Add in POS" to take order';
+        if (previewEl) previewEl.innerText = 'No active items';
         if (totalEl) totalEl.innerText = '₹ 0.00';
-        if (checkoutBtn) {
-            checkoutBtn.disabled = true;
-            checkoutBtn.style.opacity = '0.5';
-        }
-        if (printBtn) printBtn.style.display = 'none';
+        if (countEl) countEl.innerText = '0 ITEMS';
+        bar.style.display = 'none';
+        return;
     }
+
+    let totals = { finalTotal: 0 };
+    if (typeof calculateOrderTotals === 'function') {
+        totals = calculateOrderTotals(tInfo.items, tInfo.discount);
+    } else {
+        const sub = tInfo.items.reduce((s, it) => s + ((it.price || 0) * (it.qty || 1)), 0);
+        totals = { finalTotal: sub };
+    }
+    
+    const totalQty = tInfo.items.reduce((s, it) => s + (Number(it.qty) || 1), 0);
+    if (countEl) countEl.innerText = `${totalQty} ${totalQty === 1 ? 'ITEM' : 'ITEMS'}`;
+    
+    let statusText = 'OCCUPIED';
+    if (tInfo.status === 'ready_for_billing') statusText = 'BILL READY';
+    else if (tInfo.status === 'billed' || tInfo.status === 'served') statusText = 'BILLED';
+    else if (tInfo.status === 'saved' || tInfo.status === 'kot') statusText = 'KOT SENT';
+    
+    if (tagEl) {
+        tagEl.innerText = statusText;
+        tagEl.className = 'tofb-status-tag ' + (tInfo.status === 'ready_for_billing' ? 'ready-billing' : 'occupied');
+    }
+    
+    const waiter = tInfo.readyForBillingBy || tInfo.serverName || '';
+    if (serverEl) {
+        if (waiter) {
+            serverEl.innerText = `• Server: ${waiter}`;
+            serverEl.style.display = 'inline';
+        } else {
+            serverEl.style.display = 'none';
+        }
+    }
+    
+    if (previewEl) {
+        const itemsList = tInfo.items.map(it => `${it.qty}x ${it.name}`).join(', ');
+        previewEl.innerText = itemsList || `${tInfo.items.length} items ordered`;
+    }
+    
+    if (totalEl) totalEl.innerText = `₹ ${totals.finalTotal.toFixed(2)}`;
+    if (checkoutBtn) {
+        checkoutBtn.disabled = false;
+        checkoutBtn.style.opacity = '1';
+    }
+    if (printBtn) printBtn.style.display = 'inline-flex';
     
     // Role-aware action button (Floor Server/Waiter: Ready for Billing; Cashier/Admin: Checkout)
     const isFloorServer = (typeof isFloorServerRole === 'function' && isFloorServerRole()) ||
@@ -437,14 +476,17 @@ function updateTableOrderFloatingBar() {
     const addInPosBtn = document.getElementById('tofbAddInPosBtn');
     if (addInPosBtn) {
         const addSpan = addInPosBtn.querySelector('span') || addInPosBtn;
-        addSpan.textContent = hasItems ? 'Add / Edit' : '+ Take Order';
+        addSpan.textContent = 'Add / Edit';
     }
     
-    bar.style.display = 'block';
+    bar.style.display = 'flex';
 }
 window.updateTableOrderFloatingBar = updateTableOrderFloatingBar;
 
 function addItemsInPosFromTableView() {
+    document.body?.classList.remove('cart-drawer-from-tables');
+    document.getElementById('cartDrawer')?.classList.remove('open');
+    document.getElementById('cartDrawerOverlay')?.classList.remove('show');
     const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
     if (typeof selectTable === 'function') selectTable(curT);
     if (typeof switchTab === 'function') switchTab('pos');
@@ -452,6 +494,7 @@ function addItemsInPosFromTableView() {
 window.addItemsInPosFromTableView = addItemsInPosFromTableView;
 
 function checkoutFromTableView() {
+    document.body?.classList.remove('cart-drawer-from-tables');
     const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
     const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[curT] : null;
     if (!tInfo || !tInfo.items || tInfo.items.length === 0) {
@@ -706,6 +749,9 @@ function modifyQty(itemId, delta, event) {
     if (item) {
         if (delta > 0 && menuItem && menuItem.trackStock && (item.qty + delta) > menuItem.stockQty) return showToast(`Only ${menuItem.stockQty} left!`);
         item.qty += delta; 
+        if (typeof item.qtyKotPrinted === 'number' && item.qtyKotPrinted > item.qty) {
+            item.qtyKotPrinted = Math.max(0, item.qty);
+        }
         const isDishRemoved = item.qty <= 0;
         if(isDishRemoved) tInfo.items = tInfo.items.filter(i => i.id !== itemId); 
         if(tInfo.items.length === 0 && tInfo.status !== 'booked') { 
@@ -1112,6 +1158,7 @@ function updateCartUI() {
     if (currentCart.length === 0) {
         cartDiv.innerHTML = `<div style="text-align: center; color: var(--text-muted); margin-top: 40px; font-weight: 600;">Select items from the menu to start an order.</div>`;
     } else {
+        const anyKotPrinted = currentCart.some(it => Number(it.qtyKotPrinted || 0) > 0);
         currentCart.forEach((item) => {
             let itemTotal = item.price * item.qty;
             const menuItem = (Array.isArray(window.menuItems) ? window.menuItems : []).find(m => String(m.id) === String(item.id));
@@ -1120,10 +1167,23 @@ function updateCartUI() {
             const finalThumbSrc = itemImg || fallbackSrc;
             const thumbHtml = `<img src="${finalThumbSrc}" alt="${escapeHtml(item.name)}" class="cart-item-thumb" loading="lazy" onerror="this.onerror=null; this.src='${fallbackSrc}';">`;
 
+            const printedQty = Number(item.qtyKotPrinted || 0);
+            const orderedQty = Number(item.qty || 0);
+            let kotBadgeHtml = '';
+            if (anyKotPrinted) {
+                if (orderedQty > printedQty && printedQty > 0) {
+                    kotBadgeHtml = ` <span class="cart-kot-badge addon" style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">+${orderedQty - printedQty} ADD-ON</span>`;
+                } else if (orderedQty > printedQty && printedQty === 0) {
+                    kotBadgeHtml = ` <span class="cart-kot-badge addon" style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">+${orderedQty} ADD-ON</span>`;
+                } else if (printedQty > 0 && orderedQty === printedQty) {
+                    kotBadgeHtml = ` <span class="cart-kot-badge sent" style="font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px; background:#DCFCE7; color:#15803D;">KOT Sent</span>`;
+                }
+            }
+
             cartDiv.innerHTML += `<div class="cart-item">
                 ${thumbHtml}
                 <div class="cart-item-info">
-                    <div class="cart-item-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+                    <div class="cart-item-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}${kotBadgeHtml}</div>
                     <div class="cart-item-math">₹ ${item.price.toFixed(2)} each</div>
                 </div>
                 <div class="cart-item-right">
@@ -1274,7 +1334,11 @@ function updateCartUI() {
             fc.style.display = 'none';
             const drawer = document.getElementById('cartDrawer'); if (drawer) drawer.classList.remove('open');
             const overlay = document.getElementById('cartDrawerOverlay'); if (overlay) overlay.classList.remove('show');
+            document.body?.classList.remove('cart-drawer-from-tables');
         }
+    }
+    if (typeof updateTableOrderFloatingBar === 'function') {
+        updateTableOrderFloatingBar();
     }
     cartDiv.scrollTop = cartDiv.scrollHeight;
 }
@@ -1285,8 +1349,15 @@ function toggleCartDrawer() {
     const overlay = document.getElementById('cartDrawerOverlay');
     if (drawer) drawer.classList.toggle('open'); 
     if (overlay && drawer) {
-        if (drawer.classList.contains('open')) overlay.classList.add('show'); 
-        else overlay.classList.remove('show');
+        if (drawer.classList.contains('open')) {
+            overlay.classList.add('show');
+            if (document.getElementById('tables')?.classList.contains('active')) {
+                document.body?.classList.add('cart-drawer-from-tables');
+            }
+        } else {
+            overlay.classList.remove('show');
+            document.body?.classList.remove('cart-drawer-from-tables');
+        }
     }
 }
 window.toggleCartDrawer = toggleCartDrawer;
@@ -1300,6 +1371,7 @@ function markServed() {
     syncTableUI(); 
     document.getElementById('cartDrawer')?.classList.remove('open'); 
     document.getElementById('cartDrawerOverlay')?.classList.remove('show'); 
+    document.body?.classList.remove('cart-drawer-from-tables');
     showToast(`Table ${activeTable} served. Timer started.`); 
 }
 window.markServed = markServed;
@@ -1434,6 +1506,18 @@ function sendToKitchen() {
         kBadge.innerText = 'KOT #' + peekNextKotNumber();
     }
 
+    const previewList = document.getElementById('kotItemsPreviewList');
+    if (previewList && Array.isArray(delta.deltaItems)) {
+        previewList.innerHTML = delta.deltaItems.map(it => {
+            const addonTag = delta.isAddon ? `<span style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; margin-left:6px;">ADD-ON</span>` : '';
+            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px dashed rgba(0,0,0,0.06);">
+                <span style="font-weight:700; color:var(--text-dark);">${escapeHtml(it.name)}${addonTag}</span>
+                <span style="font-weight:800; color:var(--primary);">x${it.qty || it.quantity || 1}</span>
+            </div>`;
+        }).join('');
+        previewList.style.display = 'block';
+    }
+
     const btnSubmit = document.getElementById('btnKotPrintSubmit') || document.querySelector('#kotModal .btn-warning');
     if (btnSubmit) {
         const spanText = btnSubmit.querySelector('.btn-text') || btnSubmit.querySelector('span') || btnSubmit;
@@ -1446,6 +1530,7 @@ function sendToKitchen() {
 
     document.getElementById('cartDrawer')?.classList.remove('open'); 
     document.getElementById('cartDrawerOverlay')?.classList.remove('show'); 
+    document.body?.classList.remove('cart-drawer-from-tables'); 
     const kotModal = document.getElementById('kotModal');
     if (kotModal) kotModal.style.display = 'flex';
 }
@@ -3268,13 +3353,15 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
     };
 
     // 1. Route KOT print job through ThermalPrinterBridge if available
+    const kotHeaderEl = document.getElementById('printKotHeaderTitle'); if (kotHeaderEl) kotHeaderEl.innerText = isAddon ? 'KITCHEN TICKET (ADD-ON)' : 'KITCHEN TICKET';
     const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
     const kotDisplayEl = document.getElementById('printKotDisplayNo'); if (kotDisplayEl) kotDisplayEl.innerText = kotDisplayNo;
     const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
     const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
     let itemsHtml = '';
     items.forEach(item => {
-        itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${escapeHtml(item.name)}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
+        const addonBadge = isAddon ? ' [ADD-ON]' : '';
+        itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${escapeHtml(item.name)}${addonBadge}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
     });
     const kotItems = document.getElementById('printKotItems');
     if (kotItems) kotItems.innerHTML = itemsHtml;
@@ -3352,13 +3439,15 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
         }
 
         // Secondary fallback to browser HTML print dialog if cloud relay unavailable
+        const kotHeaderEl2 = document.getElementById('printKotHeaderTitle'); if (kotHeaderEl2) kotHeaderEl2.innerText = isAddon ? 'KITCHEN TICKET (ADD-ON)' : 'KITCHEN TICKET';
         const kotTable = document.getElementById('printKotTableNo'); if (kotTable) kotTable.innerText = tableNo;
         const kotDisplayEl = document.getElementById('printKotDisplayNo'); if (kotDisplayEl) kotDisplayEl.innerText = kotDisplayNo;
         const kotTime = document.getElementById('printKotTime'); if (kotTime) kotTime.innerText = new Date().toLocaleTimeString();
         const kotBiller = document.getElementById('printKotBiller'); if (kotBiller) kotBiller.innerText = `${billerName} (${billerRole})`;
         let itemsHtml = '';
         items.forEach(item => {
-            itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${escapeHtml(item.name)}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
+            const addonBadge = isAddon ? ' [ADD-ON]' : '';
+            itemsHtml += `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;"><span>${escapeHtml(item.name)}${addonBadge}</span><span style="font-size:18px;">x${item.qty}</span></div>`;
         });
         const kotItems = document.getElementById('printKotItems');
         if (kotItems) kotItems.innerHTML = itemsHtml;
@@ -3369,7 +3458,7 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
     const ESC = '\x1B'; const GS = '\x1D'; const INIT = ESC + '@'; const ALIGN_CENTER = ESC + 'a\x01'; const ALIGN_LEFT = ESC + 'a\x00'; const BOLD_ON = ESC + 'E\x01'; const BOLD_OFF = ESC + 'E\x00'; const DOUBLE_SIZE = GS + '!\x11'; const NORMAL_SIZE = GS + '!\x00'; const FEED_AND_CUT = '\x0A\x0A\x0A\x0A' + GS + 'V\x42\x00'; 
 
     let kotText = INIT; 
-    kotText += ALIGN_CENTER + BOLD_ON + "KITCHEN TICKET\n" + BOLD_OFF; 
+    kotText += ALIGN_CENTER + BOLD_ON + (isAddon ? "KITCHEN TICKET (ADD-ON)\n" : "KITCHEN TICKET\n") + BOLD_OFF; 
     kotText += DOUBLE_SIZE + BOLD_ON + kotDisplayNo + "\n" + NORMAL_SIZE + BOLD_OFF; 
     kotText += "--------------------------------\n"; 
     kotText += DOUBLE_SIZE + BOLD_ON + `TABLE: ${tableNo}\n` + NORMAL_SIZE + BOLD_OFF; 
@@ -3753,6 +3842,7 @@ async function printKitchenTicket() {
             tInfo.status = 'kot';
             persistTables();
             syncTableUI();
+            if (typeof updateCartUI === 'function') updateCartUI();
         }
 
         // Dispatch to Kitchen Display System (KDS) & persist ticket (use delta items for add-on KOT)
@@ -3764,12 +3854,14 @@ async function printKitchenTicket() {
             kotNumber: kotNo,
             kotNo: kotNo,
             kotDisplayNo: kotDisplayNo,
+            isAddon: Boolean(delta.isAddon),
             table_id: currentTableName,
             tableNo: currentTableName,
             items: kotItemsToDispatch.map(it => ({
                 name: it.name,
                 quantity: it.qty || it.quantity || 1,
-                notes: it.notes || ''
+                notes: it.notes || '',
+                isAddon: Boolean(delta.isAddon)
             })),
             status: 'PENDING',
             created_at: new Date().toISOString(),

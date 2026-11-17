@@ -161,12 +161,16 @@ export class KotUI {
         </div>
       `).join('');
 
+      const displayNo = kot.kotDisplayNo || `#${kot.kot_id}`;
+      const addonBadge = kot.isAddon ? `<span class="kot-addon-badge" style="font-size:10px; font-weight:800; padding:2px 6px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">ADD-ON</span>` : '';
+
       return `
         <div class="kot-card kot-status-${(kot.status || 'pending').toLowerCase()}" data-kot-id="${kot.kot_id}">
           <div class="kot-card-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="kot-title">#${kot.kot_id}</span>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span class="kot-title">${displayNo}</span>
               <span class="kot-table-badge">${kot.table_id}</span>
+              ${addonBadge}
             </div>
             <span class="kot-timer-pill" style="font-size: 11px; font-weight: 700; color: ${timerColor}; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">${timerText}</span>
           </div>

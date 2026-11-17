@@ -90,32 +90,38 @@ test('index.html #mobileSlideMenuDrawer includes both Tables and Khata options',
 // ------------------------------------------------------------
 console.log('\n📍 PART 2: DEDICATED TABLE VIEW & 4x8 GRID');
 
-test('index.html defines primary first-class <div id="tables" class="view">', () => {
+test('index.html defines primary first-class <div id="tables" class="view"> with minimal collapsible filters and no POS Menu button', () => {
     assert.ok(html.includes('<div id="tables" class="view">'), 'Must contain <div id="tables" class="view">');
     assert.ok(html.includes('id="tablesViewGridUI"'), 'Must contain #tablesViewGridUI container for the floor grid');
     assert.ok(html.includes('id="tableOrderFloatingBar"'), 'Must contain #tableOrderFloatingBar');
+    assert.ok(html.includes('id="tablesFloatingCartPill"'), 'Must contain POS-identical sleek checkout pill #tablesFloatingCartPill');
+    assert.ok(html.includes('id="tablesCollapsibleFilters"'), 'Must contain collapsible filter drawer #tablesCollapsibleFilters');
+    assert.ok(html.includes('id="tablesFilterToggleBtn"'), 'Must contain minimal filter toggle button #tablesFilterToggleBtn');
+    assert.ok(!html.includes('tables-header-pos-btn'), 'POS Menu button must be removed from tables header');
     assert.ok(html.includes('id="tablesViewStatsSummary"'), 'Must contain #tablesViewStatsSummary');
 });
 
-test('pos.css and style.css define .tables-fullscreen-grid responsive auto-fit layout', () => {
+test('pos.css and style.css define .tables-fullscreen-grid with 4-column mobile and 8-column desktop layout', () => {
     assert.ok(posCss.includes('.tables-fullscreen-grid'), 'pos.css must define .tables-fullscreen-grid');
+    assert.ok(posCss.includes('grid-template-columns: repeat(4, minmax(0, 1fr))'), 'Mobile must have 4 columns per row');
+    assert.ok(posCss.includes('grid-template-columns: repeat(8, minmax(0, 1fr))'), 'Desktop must have 8 columns per row');
     assert.ok(styleCss.includes('.tables-fullscreen-grid'), 'Bundled style.css must contain .tables-fullscreen-grid');
 });
 
-test('js/pos.js defines renderTablesView() dynamically scaling to shopProfile.tableCount with Add Table card', () => {
+test('js/pos.js defines renderTablesView() scaling strictly to shopProfile.tableCount without extra Add Table box', () => {
     assert.ok(posJs.includes('function renderTablesView'), 'Must define renderTablesView');
     assert.ok(posJs.includes('shopProfile?.tableCount') || posJs.includes('shopProfile.tableCount'), 'Must dynamically scale to shopProfile.tableCount');
-    assert.ok(posJs.includes('add-table-card'), 'Must append Add Table card');
+    assert.ok(!posJs.includes('add-table-card'), 'Must not render extra Add Table card on the floor grid');
     assert.ok(posJs.includes('window.renderTablesView = renderTablesView'), 'Must export renderTablesView');
 });
 
-test('js/pos.js renderTablesView formats table cards with identical POS telemetry', () => {
+test('js/pos.js renderTablesView formats compact table cards with POS telemetry and hides Table 1 label', () => {
     assert.ok(posJs.includes('table-status-dot'), 'Must render table status dot');
     assert.ok(posJs.includes('table-num-pill'), 'Must render table number pill');
     assert.ok(posJs.includes('table-t-code'), 'Must render table T-code');
     assert.ok(posJs.includes('table-status-tag'), 'Must render status tag (VACANT, BILL READY, etc.)');
     assert.ok(posJs.includes('table-item-badge'), 'Must render item count badge');
-    assert.ok(posJs.includes('table-card-amount'), 'Must render table bill amount');
+    assert.ok(posJs.includes('table-card-amount'), 'Must include table-card-amount hook');
     assert.ok(posJs.includes('selectTableInTableView'), 'Cards must trigger selectTableInTableView');
 });
 
@@ -124,10 +130,12 @@ test('js/pos.js renderTablesView formats table cards with identical POS telemetr
 // ------------------------------------------------------------
 console.log('\n📍 PART 3: FLOATING ORDER INSPECTOR & QUICK CHECKOUT');
 
-test('js/pos.js defines updateTableOrderFloatingBar with complete order summary & actions', () => {
+test('js/pos.js defines updateTableOrderFloatingBar hiding pill when table has no order and showing POS sleek pill when occupied', () => {
     assert.ok(posJs.includes('function updateTableOrderFloatingBar'), 'Must define updateTableOrderFloatingBar');
+    assert.ok(posJs.includes("bar.style.display = 'none'"), 'Must hide pill when table has no order');
+    assert.ok(posJs.includes("bar.style.display = 'flex'"), 'Must show sleek pill when table has order');
+    assert.ok(posJs.includes('openCartDrawerFromTableView'), 'Must allow opening Cart Drawer from sleek pill');
     assert.ok(posJs.includes('tofbCheckoutBtn'), 'Must control checkout button');
-    assert.ok(posJs.includes('tofbItemsPreview'), 'Must preview order items');
     assert.ok(posJs.includes('tofbTotalVal'), 'Must format order total with currency symbol');
 });
 

@@ -2319,14 +2319,21 @@ function handleRemoteFirestoreUpdate(data) {
         const existingName = (shopProfile?.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') 
             ? shopProfile.name 
             : (localStorage.getItem('billnaw_shop_name') && localStorage.getItem('billnaw_shop_name') !== 'billnaw' && localStorage.getItem('billnaw_shop_name') !== 'My Cafe' ? localStorage.getItem('billnaw_shop_name') : null);
-        const existingTableCount = shopProfile?.tableCount || 0;
-        const existingTablesLen = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
-        const maxTables = Math.max(existingTableCount, existingTablesLen, data.profile.tableCount || 0);
+        const existingTableCount = parseInt(shopProfile?.tableCount || localStorage.getItem('billnaw_table_count') || 0, 10);
+        const incomingTableCount = parseInt(data.profile.tableCount || 0, 10);
+        let highestOccupiedTable = 0;
+        if (typeof tablesInfo === 'object' && tablesInfo) {
+            Object.keys(tablesInfo).forEach(k => {
+                const n = parseInt(k, 10);
+                if (!isNaN(n) && tablesInfo[n]?.items?.length > 0 && n > highestOccupiedTable) {
+                    highestOccupiedTable = n;
+                }
+            });
+        }
 
         shopProfile = { ...shopProfile, ...data.profile };
-        if (maxTables > (shopProfile.tableCount || 0)) {
-            shopProfile.tableCount = maxTables;
-        }
+        const resolvedTableCount = incomingTableCount > 0 ? incomingTableCount : (existingTableCount > 0 ? existingTableCount : 5);
+        shopProfile.tableCount = Math.max(resolvedTableCount, highestOccupiedTable);
         if (!shopProfile.logo && existingLogo) shopProfile.logo = existingLogo;
         if (existingName && (!data.profile.name || data.profile.name === 'My Cafe' || data.profile.name === 'billnaw')) {
             shopProfile.name = existingName;
@@ -2479,7 +2486,31 @@ function handleRemoteFirestoreUpdate(data) {
         window.menuCategories = menuCategories;
     }
     if (Array.isArray(data.customers) && data.customers.length > 0) {
-        customersList = data.customers;
+        const custMap = new Map();
+        (customersList || []).forEach(c => {
+            if (c) {
+                const key = String(c.phone || c.id || c.name || Math.random());
+                custMap.set(key, c);
+            }
+        });
+        data.customers.forEach(rc => {
+            if (rc) {
+                const key = String(rc.phone || rc.id || rc.name || Math.random());
+                if (custMap.has(key)) {
+                    const lc = custMap.get(key);
+                    const rTime = Number(rc.updatedAt || rc.lastVisit || 0);
+                    const lTime = Number(lc.updatedAt || lc.lastVisit || 0);
+                    custMap.set(key, rTime >= lTime ? { ...lc, ...rc } : { ...rc, ...lc });
+                } else {
+                    custMap.set(key, rc);
+                }
+            }
+        });
+        customersList = Array.from(custMap.values());
+        window.customersList = customersList;
+        if (typeof idb !== 'undefined' && idb.set) {
+            idb.set('cafe_customers', customersList);
+        }
     }
     if (data.tables && typeof data.tables === 'object') {
         const localTableCountBefore = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
@@ -2491,7 +2522,8 @@ function handleRemoteFirestoreUpdate(data) {
 
         for (const [tId, tData] of Object.entries(data.tables)) {
             if (tData) {
-                const prevStatus = tablesInfo[tId]?.status;
+                const prevTable = tablesInfo[tId];
+                const prevStatus = prevTable?.status;
                 const newStatus = tData.status;
 
                 // Detect remote table transitioning to ready_for_billing
@@ -2500,6 +2532,18 @@ function handleRemoteFirestoreUpdate(data) {
                         tableId: tId,
                         tableName: tData.name || (typeof getTableName === 'function' ? getTableName(tId) : `Table ${tId}`),
                         staffName: tData.readyForBillingBy || 'Floor Server'
+                    });
+                }
+
+                // Preserve qtyKotPrinted across devices for running orders so add-on KOTs stay accurate
+                if (prevTable && Array.isArray(prevTable.items) && prevTable.items.length > 0 && Array.isArray(tData.items) && tData.items.length > 0 && newStatus !== 'empty' && newStatus !== 'billed') {
+                    tData.items = tData.items.map(rItem => {
+                        const lItem = prevTable.items.find(li => String(li.id) === String(rItem.id) || li.name === rItem.name);
+                        if (lItem && Number(lItem.qtyKotPrinted || 0) > 0) {
+                            const maxPrinted = Math.max(Number(lItem.qtyKotPrinted || 0), Number(rItem.qtyKotPrinted || 0));
+                            return { ...rItem, qtyKotPrinted: Math.min(Number(rItem.qty || rItem.quantity || 1), maxPrinted) };
+                        }
+                        return rItem;
                     });
                 }
 
@@ -2598,7 +2642,7 @@ function handleRemoteFirestoreUpdate(data) {
         const fetchedTables = data.tables;
         for(let i = 1; i <= shopProfile.tableCount; i++) {
             if(fetchedTables[i]) { 
-                tablesInfo[i] = fetchedTables[i]; 
+                tablesInfo[i] = { ...(tablesInfo[i] || {}), ...fetchedTables[i] }; 
                 if(!tablesInfo[i].items) tablesInfo[i].items = []; 
             } else { 
                 if (!tablesInfo[i]) tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null }; 
@@ -5085,14 +5129,21 @@ async function initDatabase() {
                             const existingName = (shopProfile?.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') 
                                 ? shopProfile.name 
                                 : (localStorage.getItem('billnaw_shop_name') && localStorage.getItem('billnaw_shop_name') !== 'billnaw' && localStorage.getItem('billnaw_shop_name') !== 'My Cafe' ? localStorage.getItem('billnaw_shop_name') : null);
-                            const existingTableCount = shopProfile?.tableCount || 0;
-                            const existingTablesLen = (typeof tablesInfo === 'object' && tablesInfo) ? Object.keys(tablesInfo).length : 0;
-                            const maxTables = Math.max(existingTableCount, existingTablesLen, rData.profile.tableCount || 0);
+                            const existingTableCount = parseInt(shopProfile?.tableCount || localStorage.getItem('billnaw_table_count') || 0, 10);
+                            const incomingTableCount = parseInt(rData.profile.tableCount || 0, 10);
+                            let highestOccupiedTable = 0;
+                            if (typeof tablesInfo === 'object' && tablesInfo) {
+                                Object.keys(tablesInfo).forEach(k => {
+                                    const n = parseInt(k, 10);
+                                    if (!isNaN(n) && tablesInfo[n]?.items?.length > 0 && n > highestOccupiedTable) {
+                                        highestOccupiedTable = n;
+                                    }
+                                });
+                            }
 
                             shopProfile = { ...shopProfile, ...rData.profile };
-                            if (maxTables > (shopProfile.tableCount || 0)) {
-                                shopProfile.tableCount = maxTables;
-                            }
+                            const resolvedTableCount = incomingTableCount > 0 ? incomingTableCount : (existingTableCount > 0 ? existingTableCount : 5);
+                            shopProfile.tableCount = Math.max(resolvedTableCount, highestOccupiedTable);
                             if (!shopProfile.logo && existingLogo) shopProfile.logo = existingLogo;
                             if (existingName && (!rData.profile.name || rData.profile.name === 'My Cafe' || rData.profile.name === 'billnaw')) {
                                 shopProfile.name = existingName;

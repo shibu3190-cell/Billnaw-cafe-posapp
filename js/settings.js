@@ -1532,6 +1532,9 @@ function switchTabDirect(tabId) {
         }
     }
 
+    document.body?.classList.remove('cart-drawer-from-tables');
+    document.getElementById('cartDrawer')?.classList.remove('open');
+    document.getElementById('cartDrawerOverlay')?.classList.remove('show');
     document.querySelectorAll('.nav-btn, .tab-btn').forEach(btn => btn.classList.remove('active')); 
     document.querySelectorAll('.view, .tab-content').forEach(c => c.classList.remove('active')); 
     

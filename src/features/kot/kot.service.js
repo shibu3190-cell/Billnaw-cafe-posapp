@@ -52,6 +52,7 @@ export async function createKOT(kotData) {
       kotNumber: kotNumber || kotId,
       kotNo: kotNumber || kotId,
       kotDisplayNo: kotDisplayNo,
+      isAddon: Boolean(kotData.isAddon),
       cafe_id: cafeId,
       terminal_id: terminalId,
       table_id: kotData.table_id || 'TAKEAWAY',
@@ -62,6 +63,7 @@ export async function createKOT(kotData) {
         name: it.name,
         quantity: Math.max(1, parseInt(it.quantity || 1, 10)),
         notes: it.notes || '',
+        isAddon: Boolean(it.isAddon || kotData.isAddon),
         station: it.station || 'KITCHEN'
       })),
       special_instructions: kotData.special_instructions || '',
@@ -315,24 +317,32 @@ export async function getActiveKOTs() {
       }
     });
 
-    // 4. Merge active in-memory table orders that contain kitchen items
+    // 4. Merge active in-memory table orders that contain unprinted kitchen items
     if (activeTables && !allTablesClear) {
       Object.keys(activeTables).forEach(tableKey => {
         const tInfo = activeTables[tableKey];
         if (tInfo && Array.isArray(tInfo.items) && tInfo.items.length > 0 && tInfo.status !== 'billed' && tInfo.status !== 'empty') {
           const tableName = typeof window.getTableName === 'function' ? window.getTableName(tableKey) : `Table ${tableKey}`;
-          const existing = kots.find(k => (k.table_id === tableName || k.table_id === `Table ${tableKey}` || k.table_id === String(tableKey) || k.kot_id === `KOT-TBL-${tableKey}`) && k.status !== 'SERVED' && k.status !== 'CANCELLED');
-          if (!existing) {
+          const existingActive = kots.find(k => (k.table_id === tableName || k.table_id === `Table ${tableKey}` || k.table_id === String(tableKey) || k.kot_id === `KOT-TBL-${tableKey}`) && k.status !== 'SERVED' && k.status !== 'CANCELLED');
+          const anyPrinted = tInfo.items.some(it => Number(it.qtyKotPrinted || 0) > 0);
+          const unprintedItems = tInfo.items
+            .map(it => {
+              const ordered = Number(it.qty || it.quantity || 1);
+              const printed = Number(it.qtyKotPrinted || 0);
+              return ordered > printed ? { name: it.name || 'Dish', quantity: ordered - printed, notes: it.notes || '', isAddon: anyPrinted } : null;
+            })
+            .filter(Boolean);
+
+          if (!existingActive && unprintedItems.length > 0) {
+            const nextNo = (typeof window !== 'undefined' && typeof window.peekNextKotNumber === 'function') ? window.peekNextKotNumber() : 1;
             kots.unshift({
               kot_id: `KOT-TBL-${tableKey}`,
+              kotDisplayNo: `KOT #${nextNo}`,
+              isAddon: anyPrinted,
               table_id: tableName,
               order_type: 'DINE_IN',
               status: 'PENDING',
-              items: tInfo.items.map(it => ({
-                name: it.name || 'Dish',
-                quantity: it.qty || it.quantity || 1,
-                notes: it.notes || ''
-              })),
+              items: unprintedItems,
               server_staff_id: tInfo.server || 'Floor Server',
               created_at: tInfo.savedTime ? new Date(tInfo.savedTime).toISOString() : new Date().toISOString(),
               updated_at: new Date().toISOString()

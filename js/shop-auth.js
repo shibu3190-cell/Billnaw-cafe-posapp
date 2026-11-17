@@ -1516,13 +1516,27 @@
             shopProfile.tableCount = count;
             shopProfile.showTablesInPos = showTables;
             shopProfile.unpaidTableAlert = unpaidAlert;
+            try { localStorage.setItem('billnaw_table_count', String(count)); } catch(e) {}
         }
 
-        if (typeof tablesInfo !== 'undefined') {
+        if (typeof tablesInfo !== 'undefined' && tablesInfo) {
             for (let i = 1; i <= count; i++) {
                 if (!tablesInfo[i]) {
                     tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
                 }
+            }
+            // Prune vacant tables above the newly configured count so table count stays exact
+            Object.keys(tablesInfo).forEach(k => {
+                const num = parseInt(k, 10);
+                if (!isNaN(num) && num > count) {
+                    const hasOrder = tablesInfo[num] && Array.isArray(tablesInfo[num].items) && tablesInfo[num].items.length > 0;
+                    if (!hasOrder) {
+                        delete tablesInfo[num];
+                    }
+                }
+            });
+            if (typeof activeTable !== 'undefined' && activeTable > count && (!tablesInfo[activeTable] || !tablesInfo[activeTable].items?.length)) {
+                activeTable = 1;
             }
         }
 
@@ -1534,6 +1548,7 @@
 
         toggleTablesVisibility(showTables);
         if (typeof renderTables === 'function') renderTables();
+        if (typeof renderTablesView === 'function') renderTablesView();
         if (typeof syncTableUI === 'function') syncTableUI();
 
         const subtitle = document.getElementById('settingsTableSubtitle');

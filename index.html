@@ -796,7 +796,8 @@
             </div>
             <h2 style="color: var(--warning); margin-bottom: 6px; font-size: 18px; font-weight: 800;">Kitchen Ticket</h2>
             <p style="color: var(--text-dark); margin-bottom: 12px; font-size: 13px; font-weight: 500;">Send Table <span id="kotTableNoDisplay" style="font-size: 20px; font-weight: 800; color: var(--primary);"></span> to kitchen printer?</p>
-            <div id="kotNextNumberBadge" style="display: inline-block; background: rgba(199, 126, 26, 0.12); color: var(--warning); padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 13px; margin-bottom: 16px;">KOT #...</div>
+            <div id="kotNextNumberBadge" style="display: inline-block; background: rgba(199, 126, 26, 0.12); color: var(--warning); padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 13px; margin-bottom: 12px;">KOT #...</div>
+            <div id="kotItemsPreviewList" style="display: none; text-align: left; background: #FAF7F4; border: 1px solid #E6DCCD; border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; font-size: 12px; max-height: 150px; overflow-y: auto;"></div>
             <div class="modal-actions" style="margin-top: 0; display: flex; gap: 8px;">
                 <button class="btn btn-outline" style="flex: 1;" onclick="document.getElementById('kotModal').style.display='none'">Cancel</button>
                 <button class="btn btn-warning" style="flex: 2; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="printKitchenTicket()">
@@ -4838,7 +4839,11 @@
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
                                 <span>TABLE <span id="activeTableUI">1</span></span>
                             </h3>
-                            <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <button type="button" id="cartAddItemsInPosBtn" class="btn btn-outline" style="padding: 5px 9px; border: 1px solid rgba(20,56,50,0.25); color: var(--primary); font-size: 11px; font-weight: 800; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px;" onclick="addItemsInPosFromTableView()" title="Add items to this table in POS">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    <span>Items</span>
+                                </button>
                                 <button class="btn btn-outline" style="padding: 5px 10px; border: 1px solid rgba(167,50,50,0.2); color: var(--danger); font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px;" onclick="clearTable()">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                     <span>Clear</span>
@@ -4934,8 +4939,19 @@
 
             <div id="tables" class="view">
                 <div class="tables-view-container">
-                    <div class="tables-view-header">
-                        <div class="tables-view-header-left">
+                    <div class="tables-view-header minimal-collapsible">
+                        <div class="tables-minimal-bar" onclick="toggleTablesFilterCollapse()">
+                            <div class="tables-minimal-left">
+                                <span class="tables-active-floor-chip" id="tablesActiveFloorLabel">Ground Floor</span>
+                                <span id="tablesViewStatsSummary" class="tables-stats-badge">0 Active • 5 Vacant</span>
+                            </div>
+                            <button type="button" id="tablesFilterToggleBtn" class="tables-filter-toggle-btn" onclick="event.stopPropagation(); toggleTablesFilterCollapse();" title="Toggle Floor & Status Filters" aria-expanded="false">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                                <span id="tablesActiveFilterLabel">Filter</span>
+                                <svg class="tables-filter-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                        </div>
+                        <div class="tables-collapsible-drawer" id="tablesCollapsibleFilters" style="display: none;">
                             <div class="floor-selector-pills" id="tablesFloorSelector">
                                 <button type="button" class="floor-pill active" onclick="switchTablesFloor('Ground Floor', this)">Ground Floor</button>
                                 <button type="button" class="floor-pill" onclick="switchTablesFloor('1st Floor', this)">1st Floor</button>
@@ -4948,50 +4964,35 @@
                                 <button type="button" class="filter-pill" onclick="filterTablesView('vacant', this)">Vacant</button>
                             </div>
                         </div>
-                        <div class="tables-view-header-right">
-                            <span id="tablesViewStatsSummary" class="tables-stats-badge">0 Active • 0 Bill Ready • 32 Vacant</span>
-                            <button type="button" class="btn btn-sm btn-outline tables-header-pos-btn" onclick="switchTab('pos')" title="Open POS Menu & Billing">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                                <span>POS Menu</span>
-                            </button>
-                        </div>
                     </div>
 
                     <div class="tables-fullscreen-grid" id="tablesViewGridUI"></div>
 
-                    <div id="tableOrderFloatingBar" class="table-order-floating-bar" style="display: none;">
-                        <div class="tofb-inner">
-                            <div class="tofb-table-info">
-                                <div class="tofb-pill-code" id="tofbTableCode">T1</div>
-                                <div class="tofb-details">
-                                    <div class="tofb-title-row">
-                                        <span class="tofb-table-name" id="tofbTableName">Table 1</span>
-                                        <span class="tofb-status-tag" id="tofbStatusTag">VACANT</span>
-                                        <span class="tofb-server-tag" id="tofbServerTag" style="display:none;"></span>
-                                    </div>
-                                    <div class="tofb-items-preview" id="tofbItemsPreview">No active items</div>
+                    <div id="tableOrderFloatingBar" class="mobile-pos-actions tables-floating-checkout-wrap" style="display: none;">
+                        <div style="display: flex; gap: 8px; width: 100%; max-width: 420px; margin: 0 auto; align-items: center;">
+                            <div id="tablesFloatingCartPill" class="sleek-checkout-bar" style="display: flex; flex: 1;">
+                                <div class="sc-left" onclick="openCartDrawerFromTableView()" title="Tap to open table order drawer">
+                                    <span class="icon" style="margin-right: 5px; display: inline-flex; align-items: center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg></span>
+                                    <span id="tofbTableCode" style="font-weight: 900; margin-right: 4px;">T1</span>
+                                    <span style="opacity: 0.7; margin-right: 4px;">•</span>
+                                    <span id="tablesFcCount">0 ITEMS</span>
                                 </div>
+                                <div class="sc-center" onclick="openCartDrawerFromTableView()" title="Tap to inspect order">
+                                    <span id="tofbTotalVal">&#8377; 0.00</span>
+                                </div>
+                                <button type="button" id="tofbCheckoutBtn" class="sc-right" onclick="checkoutFromTableView()" style="display: inline-flex; align-items: center; gap: 6px;">
+                                    <span>CHECKOUT</span>
+                                    <svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>
+                                </button>
                             </div>
-                            <div class="tofb-actions-right">
-                                <div class="tofb-total-box">
-                                    <span class="tofb-total-label">Total</span>
-                                    <span class="tofb-total-val" id="tofbTotalVal">&#8377; 0.00</span>
-                                </div>
-                                <div class="tofb-buttons-row">
-                                    <button type="button" id="tofbAddInPosBtn" class="btn btn-outline tofb-btn-pos" onclick="addItemsInPosFromTableView()" title="Add / Edit items in POS Catalog">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-                                        <span>Add in POS</span>
-                                    </button>
-                                    <button type="button" id="tofbPrintKotBtn" class="btn btn-outline tofb-btn-kot" onclick="printTableFromTableView()" title="Print KOT / Order">
-                                        <svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg>
-                                        <span>Print</span>
-                                    </button>
-                                    <button type="button" id="tofbCheckoutBtn" class="btn btn-primary tofb-btn-checkout" onclick="checkoutFromTableView()" title="Proceed to Checkout & Settle">
-                                        <span>CHECKOUT</span>
-                                        <svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>
-                                    </button>
-                                </div>
-                            </div>
+                        </div>
+                        <div style="display: none !important;">
+                            <span id="tofbTableName">Table 1</span>
+                            <span id="tofbStatusTag">VACANT</span>
+                            <span id="tofbServerTag"></span>
+                            <span id="tofbItemsPreview">No active items</span>
+                            <button type="button" id="tofbAddInPosBtn" onclick="addItemsInPosFromTableView()"><span>Add in POS</span></button>
+                            <button type="button" id="tofbPrintKotBtn" onclick="printTableFromTableView()"><span>Print</span></button>
                         </div>
                     </div>
                 </div>
@@ -6120,7 +6121,7 @@
 
     <div id="print-kot" style="display: none;">
         <div class="print-center">
-            <h2 style="margin: 0; border-bottom: 2px dashed #000; padding-bottom: 5px;">KITCHEN TICKET</h2>
+            <h2 id="printKotHeaderTitle" style="margin: 0; border-bottom: 2px dashed #000; padding-bottom: 5px;">KITCHEN TICKET</h2>
             <h3 id="printKotDisplayNo" style="margin: 4px 0 0 0; font-size: 20px; font-weight: 800; color: #000;">KOT #1</h3>
             <h1 style="margin: 8px 0; font-size: 28px;">TABLE: <span id="printKotTableNo"></span></h1>
             <p style="margin: 0; font-weight: bold;">Time: <span id="printKotTime"></span></p>
