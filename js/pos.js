@@ -697,12 +697,21 @@ function bookTable() {
     if (Array.isArray(tInfo.items) && tInfo.items.length > 0) {
         const delta = (typeof computeKotDelta === 'function') ? computeKotDelta(activeTable) : { hasNewItems: true };
         if (delta.hasNewItems) {
-            tInfo.items.forEach(item => {
-                item.qtyKotPrinted = Number(item.qty || item.quantity || 0);
-            });
-            tInfo.status = 'kot';
+            if (typeof markTableKotItemsPrinted === 'function') {
+                markTableKotItemsPrinted(activeTable);
+            } else {
+                tInfo.kotPrintedMap = tInfo.kotPrintedMap || {};
+                tInfo.items.forEach(item => {
+                    const q = Number(item.qty || item.quantity || 0);
+                    item.qtyKotPrinted = q;
+                    if (item.id !== undefined) tInfo.kotPrintedMap[String(item.id)] = q;
+                    if (item.name) tInfo.kotPrintedMap[item.name] = q;
+                });
+                tInfo.status = 'kot';
+            }
             persistTables();
             syncTableUI();
+            if (typeof updateCartUI === 'function') updateCartUI();
             if (typeof showToast === 'function') showToast(`Table ${currentTableName} KOT sent to Kitchen!`, 'success');
             return;
         } else {
@@ -725,11 +734,23 @@ function addToCart(itemId, event) {
     if (event) event.stopPropagation();
     let tInfo = (typeof tablesInfo !== 'undefined' && tablesInfo[activeTable]) ? tablesInfo[activeTable] : (window.tablesInfo ? window.tablesInfo[activeTable] : null); 
     const itemsPool = (typeof menuItems !== 'undefined' && Array.isArray(menuItems) && menuItems.length > 0) ? menuItems : (window.menuItems || []);
-    const menuItem = itemsPool.find(m => m.id === itemId); 
+    const menuItem = itemsPool.find(m => String(m.id) === String(itemId)); 
     if(!menuItem || !tInfo) return;
-    const existing = tInfo.items.find(i => i.id === itemId);
+    const existing = tInfo.items.find(i => String(i.id) === String(itemId) || (i.name && menuItem.name && i.name === menuItem.name));
     if (menuItem.trackStock && (existing ? existing.qty + 1 : 1) > menuItem.stockQty) return showToast(`Only ${menuItem.stockQty} left!`);
-    if(existing) existing.qty++; else tInfo.items.push({ id: menuItem.id, name: menuItem.name, price: menuItem.price, gstRate: menuItem.gstRate, qty: 1, image: menuItem.image || menuItem.image_url || '' });
+    if (existing) {
+        existing.qty = Number(existing.qty || 1) + 1;
+    } else {
+        tInfo.items.push({
+            id: menuItem.id,
+            name: menuItem.name,
+            price: menuItem.price,
+            gstRate: menuItem.gstRate,
+            qty: 1,
+            qtyKotPrinted: 0,
+            image: menuItem.image || menuItem.image_url || ''
+        });
+    }
     if(tInfo.status === 'empty' || tInfo.status === 'booked' || !tInfo.status) tInfo.status = 'occupied'; 
     if(!tInfo.savedTime) tInfo.savedTime = Date.now();
     persistTables(); 
@@ -743,21 +764,37 @@ function modifyQty(itemId, delta, event) {
     if (event) event.stopPropagation();
     let tInfo = (typeof tablesInfo !== 'undefined' && tablesInfo[activeTable]) ? tablesInfo[activeTable] : (window.tablesInfo ? window.tablesInfo[activeTable] : null); 
     if (!tInfo) return;
-    const item = tInfo.items.find(i => i.id === itemId); 
+    const item = tInfo.items.find(i => String(i.id) === String(itemId)); 
     const itemsPool = (typeof menuItems !== 'undefined' && Array.isArray(menuItems) && menuItems.length > 0) ? menuItems : (window.menuItems || []);
-    const menuItem = itemsPool.find(m => m.id === itemId);
+    const menuItem = itemsPool.find(m => String(m.id) === String(itemId));
     if (item) {
         if (delta > 0 && menuItem && menuItem.trackStock && (item.qty + delta) > menuItem.stockQty) return showToast(`Only ${menuItem.stockQty} left!`);
         item.qty += delta; 
         if (typeof item.qtyKotPrinted === 'number' && item.qtyKotPrinted > item.qty) {
             item.qtyKotPrinted = Math.max(0, item.qty);
         }
+        if (tInfo.kotPrintedMap && typeof tInfo.kotPrintedMap === 'object') {
+            const idKey = String(item.id);
+            if (tInfo.kotPrintedMap[idKey] !== undefined && tInfo.kotPrintedMap[idKey] > item.qty) {
+                tInfo.kotPrintedMap[idKey] = Math.max(0, item.qty);
+            }
+            if (item.name && tInfo.kotPrintedMap[item.name] !== undefined && tInfo.kotPrintedMap[item.name] > item.qty) {
+                tInfo.kotPrintedMap[item.name] = Math.max(0, item.qty);
+            }
+        }
         const isDishRemoved = item.qty <= 0;
-        if(isDishRemoved) tInfo.items = tInfo.items.filter(i => i.id !== itemId); 
+        if (isDishRemoved) {
+            tInfo.items = tInfo.items.filter(i => String(i.id) !== String(itemId));
+            if (tInfo.kotPrintedMap && typeof tInfo.kotPrintedMap === 'object') {
+                delete tInfo.kotPrintedMap[String(item.id)];
+                if (item.name) delete tInfo.kotPrintedMap[item.name];
+            }
+        }
         if(tInfo.items.length === 0 && tInfo.status !== 'booked') { 
             tInfo.status = 'empty'; 
             tInfo.savedTime = null; 
             tInfo.lastReminder = null; 
+            tInfo.kotPrintedMap = {};
         } else if (tInfo.items.length > 0 && !tInfo.savedTime) {
             tInfo.savedTime = Date.now();
             if (tInfo.status === 'empty') tInfo.status = 'occupied';
@@ -1404,6 +1441,24 @@ setInterval(() => {
 // 3. DELTA-KOT ENGINE (Smart Incremental KOT Printing)
 // ============================================================================
 
+function markTableKotItemsPrinted(tableId) {
+    const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[tableId] : null;
+    if (!tInfo || !Array.isArray(tInfo.items)) return;
+    tInfo.kotPrintedMap = (tInfo.kotPrintedMap && typeof tInfo.kotPrintedMap === 'object') ? tInfo.kotPrintedMap : {};
+    tInfo.items.forEach(item => {
+        const ordered = Number(item.qty || item.quantity || 0);
+        item.qtyKotPrinted = ordered;
+        if (item.id !== undefined && item.id !== null) {
+            tInfo.kotPrintedMap[String(item.id)] = ordered;
+        }
+        if (item.name) {
+            tInfo.kotPrintedMap[item.name] = ordered;
+        }
+    });
+    tInfo.status = 'kot';
+}
+window.markTableKotItemsPrinted = markTableKotItemsPrinted;
+
 function computeKotDelta(tableId) {
     const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[tableId] : null;
     if (!tInfo || !Array.isArray(tInfo.items) || tInfo.items.length === 0) {
@@ -1412,12 +1467,24 @@ function computeKotDelta(tableId) {
 
     const deltaItems = [];
     let totalDeltaCount = 0;
-    let anyPrintedBefore = false;
+    const printedMap = (tInfo.kotPrintedMap && typeof tInfo.kotPrintedMap === 'object') ? tInfo.kotPrintedMap : {};
+    let anyPrintedBefore = (tInfo.status === 'kot') || Object.values(printedMap).some(v => Number(v || 0) > 0);
 
     tInfo.items.forEach(item => {
         const ordered = Number(item.qty || item.quantity || 0);
-        const printed = Number(item.qtyKotPrinted || 0);
-        if (printed > 0) anyPrintedBefore = true;
+        const printedFromItem = Number(item.qtyKotPrinted || 0);
+        const printedFromMap = Number(
+            (item.id !== undefined && item.id !== null && printedMap[String(item.id)] !== undefined)
+                ? printedMap[String(item.id)]
+                : (item.name && printedMap[item.name] !== undefined ? printedMap[item.name] : 0)
+        );
+        const printed = Math.max(printedFromItem, printedFromMap);
+        if (printed > 0) {
+            anyPrintedBefore = true;
+            if (item.qtyKotPrinted !== printed) {
+                item.qtyKotPrinted = Math.min(ordered, printed);
+            }
+        }
 
         if (ordered > printed) {
             const deltaQty = ordered - printed;
@@ -1426,10 +1493,15 @@ function computeKotDelta(tableId) {
                 ...item,
                 qty: deltaQty,
                 quantity: deltaQty,
-                _deltaQty: deltaQty
+                _deltaQty: deltaQty,
+                isAddon: anyPrintedBefore
             });
         }
     });
+
+    if (anyPrintedBefore) {
+        deltaItems.forEach(di => { di.isAddon = true; });
+    }
 
     return {
         deltaItems,
@@ -1493,8 +1565,9 @@ function sendToKitchen() {
         return;
     }
 
-    tInfo.status = 'saved'; 
-    persistTables(); 
+    if (tInfo.status !== 'kot') {
+        tInfo.status = 'saved';
+    }
     syncTableUI(); 
 
     const kTable = document.getElementById('kotTableNoDisplay');
@@ -3832,23 +3905,15 @@ async function printKitchenTicket() {
         const kotId = `KOT-${kotNo}`;
         const kotDisplayNo = `KOT #${kotNo}`;
         const kotHeader = delta.isAddon ? `ADD-ON / RUNNING ORDER - TABLE ${currentTableName} (${kotDisplayNo})` : `KITCHEN ORDER TICKET - TABLE ${currentTableName} (${kotDisplayNo})`;
-        await sendKotToPrinter(currentTableName, delta.deltaItems, { isAddon: delta.isAddon, kotHeader, kotNumber: kotNo, kotNo: kotNo, kotId: kotId, kotDisplayNo: kotDisplayNo });
+        const kotItemsToDispatch = (delta && Array.isArray(delta.deltaItems) && delta.deltaItems.length > 0)
+            ? delta.deltaItems.map(it => ({ ...it }))
+            : (tInfo?.items || []).map(it => ({ ...it }));
 
-        // Update qtyKotPrinted for each line item on the table
-        if (tInfo && Array.isArray(tInfo.items)) {
-            tInfo.items.forEach(item => {
-                item.qtyKotPrinted = Number(item.qty || item.quantity || 0);
-            });
-            tInfo.status = 'kot';
-            persistTables();
-            syncTableUI();
-            if (typeof updateCartUI === 'function') updateCartUI();
+        // Stamp qtyKotPrinted & kotPrintedMap synchronously BEFORE awaiting printer/dialog to prevent snapshot race
+        if (typeof markTableKotItemsPrinted === 'function') {
+            markTableKotItemsPrinted(activeTable);
         }
 
-        // Dispatch to Kitchen Display System (KDS) & persist ticket (use delta items for add-on KOT)
-        const kotItemsToDispatch = (delta && delta.isAddon && Array.isArray(delta.deltaItems) && delta.deltaItems.length > 0)
-            ? delta.deltaItems
-            : (tInfo.items || []);
         const newKot = {
             kot_id: kotId,
             kotNumber: kotNo,
@@ -3868,13 +3933,28 @@ async function printKitchenTicket() {
             updated_at: new Date().toISOString()
         };
 
-        if (window.kotUIInstance && typeof window.kotUIInstance.handleDispatchKot === 'function') {
-            await window.kotUIInstance.handleDispatchKot(currentTableName, newKot.items, tInfo.notes || '', newKot);
-        } else {
+        // Always persist to billnaw_active_kots immediately (deduplicated by kot_id)
+        try {
             const raw = localStorage.getItem('billnaw_active_kots');
             const list = raw ? JSON.parse(raw) : [];
-            list.unshift(newKot);
-            localStorage.setItem('billnaw_active_kots', JSON.stringify(list.slice(0, 100)));
+            const filtered = Array.isArray(list) ? list.filter(k => k && k.kot_id !== kotId) : [];
+            filtered.unshift(newKot);
+            localStorage.setItem('billnaw_active_kots', JSON.stringify(filtered.slice(0, 100)));
+        } catch (storageErr) {}
+
+        await sendKotToPrinter(currentTableName, kotItemsToDispatch, { isAddon: delta.isAddon, kotHeader, kotNumber: kotNo, kotNo: kotNo, kotId: kotId, kotDisplayNo: kotDisplayNo });
+
+        // Re-verify qtyKotPrinted & kotPrintedMap on live tablesInfo[activeTable] after printer/dialog resolves
+        if (typeof markTableKotItemsPrinted === 'function') {
+            markTableKotItemsPrinted(activeTable);
+        }
+        persistTables();
+        syncTableUI();
+        if (typeof updateCartUI === 'function') updateCartUI();
+
+        if (window.kotUIInstance && typeof window.kotUIInstance.handleDispatchKot === 'function') {
+            await window.kotUIInstance.handleDispatchKot(currentTableName, newKot.items, (tablesInfo[activeTable]?.notes || ''), newKot);
+        } else {
             window.dispatchEvent(new CustomEvent('billnaw:kot-created', { detail: { kot: newKot } }));
             if (typeof playKdsAudioChime === 'function') playKdsAudioChime();
         }

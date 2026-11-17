@@ -1058,6 +1058,10 @@ export const ThermalPrinterBridge = {
       parts.push(new Uint8Array([0x1D, 0x21, 0x11, 0x1B, 0x45, 0x01]));
       const kotTitle = data.isAddon ? 'ADD-ON KOT' : 'KITCHEN TICKET';
       parts.push(encodeClean(`\n${kotTitle}\n`));
+      const kotBadgeStr = data.kotDisplayNo || (data.kotNo ? `KOT #${data.kotNo}` : '');
+      if (kotBadgeStr) {
+        parts.push(encodeClean(`${kotBadgeStr}\n`));
+      }
       // Normal Size + Bold Off
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
       parts.push(encodeClean(divider));

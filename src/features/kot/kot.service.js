@@ -71,35 +71,41 @@ export async function createKOT(kotData) {
       updated_at: now
     };
 
-    const batch = db.createBatch();
-
-    // 1. Save KOT document
-    const kotRef = db.doc(`cafes/${cafeId}/kots/${kotId}`);
-    batch.set(kotRef, kotDoc);
-
-    // 2. If table order, link KOT to table and transition status to KOT_SENT
-    if (kotData.table_id && kotData.table_id !== 'TAKEAWAY') {
-      const tableRef = db.doc(`cafes/${cafeId}/tables/${kotData.table_id}`);
-      batch.update(tableRef, {
-        status: 'KOT_SENT',
-        active_kot_ids: db.arrayUnion ? db.arrayUnion(kotId) : [kotId],
-        updated_at: now
-      });
-    }
-
-    await batch.commit();
-
-    // Persist to local storage for instant KDS display & offline resilience (Retain 24hr in DB)
+    // Persist to local storage FIRST for instant KDS display & offline resilience (Retain 24hr in DB)
     if (typeof localStorage !== 'undefined') {
       try {
         const raw = localStorage.getItem('billnaw_active_kots');
         const list = raw ? JSON.parse(raw) : [];
-        list.unshift(kotDoc);
+        const deduped = Array.isArray(list) ? list.filter(k => k && k.kot_id !== kotId) : [];
+        deduped.unshift(kotDoc);
         const cutoff = Date.now() - (24 * 60 * 60 * 1000);
-        const retained = list.filter(k => new Date(k.created_at || 0).getTime() >= cutoff);
+        const retained = deduped.filter(k => new Date(k.created_at || 0).getTime() >= cutoff);
         localStorage.setItem('billnaw_active_kots', JSON.stringify(retained.slice(0, 200)));
       } catch (e) {}
     }
+
+    try {
+      const batch = db.createBatch();
+
+      // 1. Save KOT document
+      const kotRef = db.doc(`cafes/${cafeId}/kots/${kotId}`);
+      batch.set(kotRef, kotDoc);
+
+      // 2. If table order, link KOT to table and transition status to KOT_SENT
+      if (kotData.table_id && kotData.table_id !== 'TAKEAWAY') {
+        const tableRef = db.doc(`cafes/${cafeId}/tables/${kotData.table_id}`);
+        batch.update(tableRef, {
+          status: 'KOT_SENT',
+          active_kot_ids: db.arrayUnion ? db.arrayUnion(kotId) : [kotId],
+          updated_at: now
+        });
+      }
+
+      await batch.commit();
+    } catch (cloudBatchErr) {
+      // Non-fatal: local storage & store sync already hold the authoritative KOT
+    }
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('billnaw:kot-created', { detail: { kot: kotDoc } }));
       if (typeof window.playKdsAudioChime === 'function') {

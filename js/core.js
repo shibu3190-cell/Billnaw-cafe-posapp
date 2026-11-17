@@ -2535,16 +2535,28 @@ function handleRemoteFirestoreUpdate(data) {
                     });
                 }
 
-                // Preserve qtyKotPrinted across devices for running orders so add-on KOTs stay accurate
-                if (prevTable && Array.isArray(prevTable.items) && prevTable.items.length > 0 && Array.isArray(tData.items) && tData.items.length > 0 && newStatus !== 'empty' && newStatus !== 'billed') {
+                // Preserve qtyKotPrinted & kotPrintedMap across devices for running orders so add-on KOTs stay accurate
+                if (prevTable && Array.isArray(tData.items) && tData.items.length > 0 && newStatus !== 'empty' && newStatus !== 'billed') {
+                    const mergedMap = { ...(prevTable.kotPrintedMap || {}), ...(tData.kotPrintedMap || {}) };
                     tData.items = tData.items.map(rItem => {
-                        const lItem = prevTable.items.find(li => String(li.id) === String(rItem.id) || li.name === rItem.name);
-                        if (lItem && Number(lItem.qtyKotPrinted || 0) > 0) {
-                            const maxPrinted = Math.max(Number(lItem.qtyKotPrinted || 0), Number(rItem.qtyKotPrinted || 0));
-                            return { ...rItem, qtyKotPrinted: Math.min(Number(rItem.qty || rItem.quantity || 1), maxPrinted) };
+                        const lItem = Array.isArray(prevTable.items)
+                            ? prevTable.items.find(li => String(li.id) === String(rItem.id) || li.name === rItem.name)
+                            : null;
+                        const mapQty = Number(mergedMap[String(rItem.id)] ?? mergedMap[rItem.name] ?? 0);
+                        const maxPrinted = Math.max(
+                            Number(lItem?.qtyKotPrinted || 0),
+                            Number(rItem.qtyKotPrinted || 0),
+                            mapQty
+                        );
+                        if (maxPrinted > 0) {
+                            const clamped = Math.min(Number(rItem.qty || rItem.quantity || 1), maxPrinted);
+                            if (rItem.id !== undefined) mergedMap[String(rItem.id)] = clamped;
+                            if (rItem.name) mergedMap[rItem.name] = clamped;
+                            return { ...rItem, qtyKotPrinted: clamped };
                         }
                         return rItem;
                     });
+                    tData.kotPrintedMap = mergedMap;
                 }
 
                 if (!tablesInfo[tId]) {

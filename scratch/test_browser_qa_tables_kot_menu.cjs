@@ -270,6 +270,15 @@ async function run() {
         const kots2 = JSON.parse(localStorage.getItem('billnaw_active_kots') || '[]');
         const secondKot = kots2[0]; // unshifted to index 0
 
+        // Now increase quantity of existing item (Fresh Lime Soda from 1 -> 3 via modifyQty)
+        modifyQty(2, 2);
+        const peek3 = peekNextKotNumber();
+        sendToKitchen();
+        await printKitchenTicket();
+
+        const kots3 = JSON.parse(localStorage.getItem('billnaw_active_kots') || '[]');
+        const thirdKot = kots3[0];
+
         return {
             peek1,
             badge1,
@@ -280,8 +289,16 @@ async function run() {
             badge2,
             secondKotNo: secondKot ? secondKot.kotNo : null,
             secondKotDisplayNo: secondKot ? secondKot.kotDisplayNo : null,
+            secondKotIsAddon: secondKot ? Boolean(secondKot.isAddon) : false,
             secondKotItemsCount: secondKot ? secondKot.items.length : 0,
-            secondKotItemName: (secondKot && secondKot.items[0]) ? secondKot.items[0].name : null
+            secondKotItemName: (secondKot && secondKot.items[0]) ? secondKot.items[0].name : null,
+            secondKotItemQty: (secondKot && secondKot.items[0]) ? secondKot.items[0].quantity : 0,
+            peek3,
+            thirdKotNo: thirdKot ? thirdKot.kotNo : null,
+            thirdKotIsAddon: thirdKot ? Boolean(thirdKot.isAddon) : false,
+            thirdKotItemsCount: thirdKot ? thirdKot.items.length : 0,
+            thirdKotItemName: (thirdKot && thirdKot.items[0]) ? thirdKot.items[0].name : null,
+            thirdKotItemQty: (thirdKot && thirdKot.items[0]) ? thirdKot.items[0].quantity : 0
         };
     })()`);
     console.log('KOT Engine Result:', kotEngineRes);
@@ -295,9 +312,18 @@ async function run() {
     assert.strictEqual(kotEngineRes.badge2, 'KOT #2', 'Second KOT badge must display KOT #2');
     assert.strictEqual(kotEngineRes.secondKotNo, 2, 'Second KOT ticket kotNo must be 2');
     assert.strictEqual(kotEngineRes.secondKotDisplayNo, 'KOT #2', 'Second KOT display number must be KOT #2');
+    assert.strictEqual(kotEngineRes.secondKotIsAddon, true, 'Second KOT must be marked as Add-on');
     assert.strictEqual(kotEngineRes.secondKotItemsCount, 1, 'Second KOT delta ticket must have ONLY the 1 added item');
     assert.strictEqual(kotEngineRes.secondKotItemName, 'Fresh Lime Soda', 'Delta item must be Fresh Lime Soda');
-    console.log('✅ PASS: Unified Sequential KOT Engine assigns monotonic KOT numbers and delta-only add-ons.');
+    assert.strictEqual(kotEngineRes.secondKotItemQty, 1, 'Delta item quantity must be 1');
+
+    assert.strictEqual(kotEngineRes.peek3, 3, 'Third peek KOT number must be 3');
+    assert.strictEqual(kotEngineRes.thirdKotNo, 3, 'Third KOT ticket kotNo must be 3');
+    assert.strictEqual(kotEngineRes.thirdKotIsAddon, true, 'Third KOT must be marked as Add-on');
+    assert.strictEqual(kotEngineRes.thirdKotItemsCount, 1, 'Third KOT must contain ONLY the 1 increased item');
+    assert.strictEqual(kotEngineRes.thirdKotItemName, 'Fresh Lime Soda', 'Third KOT item must be Fresh Lime Soda');
+    assert.strictEqual(kotEngineRes.thirdKotItemQty, 2, 'Third KOT must print ONLY the +2 increased delta quantity');
+    console.log('✅ PASS: Unified Sequential KOT Engine assigns monotonic KOT numbers and delta-only add-ons for both new and increased items.');
 
     console.log('\n--- CHECK 3: Interactive Checkout Table Changer & Order Transfer ---');
     const tableTransferRes = await evaluateInApp(`(async function() {
