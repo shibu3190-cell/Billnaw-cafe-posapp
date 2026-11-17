@@ -2,6 +2,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebas
 import { 
     getFirestore, 
     initializeFirestore,
+    persistentLocalCache,
+    persistentMultipleTabManager,
+    enableIndexedDbPersistence,
     doc, 
     collection, 
     onSnapshot, 
@@ -21,6 +24,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { 
     getAuth, 
+    setPersistence,
+    browserLocalPersistence,
     signInWithCustomToken, 
     onAuthStateChanged, 
     signOut 
@@ -62,29 +67,68 @@ async function initFirebaseFromBackend() {
 
     const app = initializeApp(firebaseConfig);
     let db;
+    let isIndexedDbPersistenceActive = false;
     try {
         db = initializeFirestore(app, {
+            localCache: persistentLocalCache({
+                tabManager: persistentMultipleTabManager()
+            }),
             experimentalAutoDetectLongPolling: true,
             useFetchStreams: false
         }, firestoreDbId);
-        console.log("Firestore initialized with custom db & auto-detect long-polling:", firestoreDbId);
+        isIndexedDbPersistenceActive = true;
+        console.log("⚡ [Firestore] Initialized with persistent multi-tab IndexedDB cache:", firestoreDbId);
     } catch (e) {
         try {
-            db = getFirestore(app, firestoreDbId);
-            console.log("Firestore initialized with custom db (fallback):", firestoreDbId);
+            db = initializeFirestore(app, {
+                experimentalAutoDetectLongPolling: true,
+                useFetchStreams: false
+            }, firestoreDbId);
+            try {
+                if (typeof enableIndexedDbPersistence === 'function') {
+                    enableIndexedDbPersistence(db).then(() => {
+                        isIndexedDbPersistenceActive = true;
+                        console.log("⚡ [Firestore] IndexedDB legacy persistence active");
+                    }).catch(pErr => {
+                        console.warn("[Firestore] IndexedDB persistence warning:", pErr.message || pErr);
+                    });
+                }
+            } catch(pErr) {}
+            console.log("Firestore initialized with custom db & auto-detect long-polling:", firestoreDbId);
         } catch (e2) {
-            console.warn("Falling back to default firestore database:", e2);
-            db = getFirestore(app);
+            try {
+                db = getFirestore(app, firestoreDbId);
+                console.log("Firestore initialized with custom db (fallback):", firestoreDbId);
+            } catch (e3) {
+                console.warn("Falling back to default firestore database:", e3);
+                db = getFirestore(app);
+            }
         }
     }
 
     let auth = null;
+    let isAuthPersistenceActive = false;
     try {
         auth = getAuth(app);
+        if (auth && typeof setPersistence === 'function' && browserLocalPersistence) {
+            setPersistence(auth, browserLocalPersistence).then(() => {
+                isAuthPersistenceActive = true;
+                console.log("⚡ [Auth] Persistent session locked with browserLocalPersistence");
+            }).catch(pErr => {
+                console.warn("[Auth] browserLocalPersistence warning:", pErr.message || pErr);
+            });
+        }
         console.log("Firebase Auth client initialized successfully");
     } catch (authErr) {
         console.warn("Firebase Auth initialization error, running in local fallback:", authErr);
     }
+
+    window.isIndexedDbPersistenceActive = isIndexedDbPersistenceActive;
+    window.isAuthPersistenceActive = isAuthPersistenceActive;
+    window.browserLocalPersistence = browserLocalPersistence;
+    window.persistentLocalCache = persistentLocalCache;
+    window.persistentMultipleTabManager = persistentMultipleTabManager;
+    window.enableIndexedDbPersistence = enableIndexedDbPersistence;
 
     window.firebaseApp = app;
     window.auth = auth;

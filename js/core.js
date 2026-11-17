@@ -2420,46 +2420,59 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
     }
     if (Array.isArray(data.menu) && data.menu.length > 0) {
-        const deletedMenuSet = new Set([
-            ...((typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds().map(String) : []),
-            ...(Array.isArray(data.deletedMenuIds) ? data.deletedMenuIds.map(String) : [])
-        ]);
-        if (Array.isArray(data.deletedMenuIds) && typeof recordDeletedMenuItemId === 'function') {
-            data.deletedMenuIds.forEach(id => recordDeletedMenuItemId(id));
-        }
+        const incomingMenuVersion = Number(data.menuVersion || (data.menuMeta && data.menuMeta.version) || 0);
+        const localMenuVersion = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 0);
 
-        const cleanRemoteMenu = data.menu.filter(m => m && m.id && !deletedMenuSet.has(String(m.id)));
-
-        if (typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(menuItems)) {
-            // Local store only held the default 4-item baseline: replace cleanly with authentic cloud catalog
-            menuItems = cleanRemoteMenu;
-        } else if (Array.isArray(menuItems) && menuItems.length > cleanRemoteMenu.length) {
-            // Local store has more items: union merge by item name, excluding template defaults and deleted items
-            const defaultNames = new Set(['samosa', 'tea', 'chicken curry', 'masala coke']);
-            const menuMap = new Map();
-            cleanRemoteMenu.forEach(m => { if (m && m.name) menuMap.set(m.name.trim().toLowerCase(), m); });
-            menuItems.forEach(m => {
-                if (m && m.name && m.id && !deletedMenuSet.has(String(m.id))) {
-                    const key = m.name.trim().toLowerCase();
-                    if (!menuMap.has(key) && !defaultNames.has(key)) {
-                        menuMap.set(key, m);
-                    }
-                }
-            });
-            menuItems = Array.from(menuMap.values());
-            if (typeof dispatchBackendStoreSync === 'function') {
-                dispatchBackendStoreSync({ menu: menuItems, deletedMenuIds: Array.from(deletedMenuSet) }, true);
-            }
+        // Zero-Lag Optimization: If menu version has not changed and local catalog is populated, avoid full DOM wipe
+        if (incomingMenuVersion > 0 && incomingMenuVersion <= localMenuVersion && Array.isArray(menuItems) && menuItems.length > 0) {
+            if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
         } else {
-            menuItems = cleanRemoteMenu;
+            if (incomingMenuVersion > 0) {
+                localStorage.setItem('billnaw_menu_version', String(incomingMenuVersion));
+                if (shopProfile) shopProfile.menuVersion = incomingMenuVersion;
+                window.currentMenuVersion = incomingMenuVersion;
+            }
+            const deletedMenuSet = new Set([
+                ...((typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds().map(String) : []),
+                ...(Array.isArray(data.deletedMenuIds) ? data.deletedMenuIds.map(String) : [])
+            ]);
+            if (Array.isArray(data.deletedMenuIds) && typeof recordDeletedMenuItemId === 'function') {
+                data.deletedMenuIds.forEach(id => recordDeletedMenuItemId(id));
+            }
+
+            const cleanRemoteMenu = data.menu.filter(m => m && m.id && !deletedMenuSet.has(String(m.id)));
+
+            if (typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(menuItems)) {
+                // Local store only held the default 4-item baseline: replace cleanly with authentic cloud catalog
+                menuItems = cleanRemoteMenu;
+            } else if (Array.isArray(menuItems) && menuItems.length > cleanRemoteMenu.length) {
+                // Local store has more items: union merge by item name, excluding template defaults and deleted items
+                const defaultNames = new Set(['samosa', 'tea', 'chicken curry', 'masala coke']);
+                const menuMap = new Map();
+                cleanRemoteMenu.forEach(m => { if (m && m.name) menuMap.set(m.name.trim().toLowerCase(), m); });
+                menuItems.forEach(m => {
+                    if (m && m.name && m.id && !deletedMenuSet.has(String(m.id))) {
+                        const key = m.name.trim().toLowerCase();
+                        if (!menuMap.has(key) && !defaultNames.has(key)) {
+                            menuMap.set(key, m);
+                        }
+                    }
+                });
+                menuItems = Array.from(menuMap.values());
+                if (typeof dispatchBackendStoreSync === 'function') {
+                    dispatchBackendStoreSync({ menu: menuItems, menuVersion: incomingMenuVersion || 1, deletedMenuIds: Array.from(deletedMenuSet) }, true);
+                }
+            } else {
+                menuItems = cleanRemoteMenu;
+            }
+            window.menuItems = menuItems;
+            if (typeof idb !== 'undefined' && idb.set) {
+                idb.set('cafe_menu', menuItems);
+            }
+            if (typeof renderMenuUI === 'function') renderMenuUI();
+            if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
+            if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
         }
-        window.menuItems = menuItems;
-        if (typeof idb !== 'undefined' && idb.set) {
-            idb.set('cafe_menu', menuItems);
-        }
-        if (typeof renderMenuUI === 'function') renderMenuUI();
-        if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
-        if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
     } else {
         const isAuthMode = (typeof isStoreAuthenticated === 'function')
             ? isStoreAuthenticated()
@@ -3108,6 +3121,87 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
 }
 window.subscribeInvoicesCloudListener = subscribeInvoicesCloudListener;
 
+let firestoreMenuMetaUnsubscribe = null;
+
+function subscribeMenuMetaCloudListener(targetStoreCode = null) {
+    if (!window.firestoreDB || !window.firestoreDoc || !window.firestoreOnSnapshot) return null;
+    if (firestoreMenuMetaUnsubscribe) {
+        try { firestoreMenuMetaUnsubscribe(); } catch(e) {}
+        firestoreMenuMetaUnsubscribe = null;
+    }
+    try {
+        const storeCode = targetStoreCode || getActiveStoreIdentifier();
+        if (!storeCode) return null;
+
+        const rootCol = (storeCode.startsWith('STORE-') || storeCode.startsWith('SHOP-')) ? 'shops' : 'cafes';
+        const metaDocRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode, 'menu_meta', 'version');
+        if (!metaDocRef) return null;
+
+        firestoreMenuMetaUnsubscribe = window.firestoreOnSnapshot(metaDocRef, (snap) => {
+            if (snap.exists()) {
+                const meta = snap.data();
+                const incomingVer = Number(meta.version || 0);
+                const localVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 0);
+
+                if (incomingVer > localVer) {
+                    console.log(`⚡ [MenuMeta] New menu version detected: v${incomingVer} (local: v${localVer}). Syncing bundled menu...`);
+                    localStorage.setItem('billnaw_menu_version', String(incomingVer));
+                    if (shopProfile) shopProfile.menuVersion = incomingVer;
+                    window.currentMenuVersion = incomingVer;
+                    syncBundledMenuFromCloud(storeCode, incomingVer);
+                }
+            }
+        }, (err) => {
+            // Silently fall back if subcollection listener is restricted or quota paused
+            console.debug('[Firestore] menu_meta listener notice:', err?.message || err);
+        });
+        return firestoreMenuMetaUnsubscribe;
+    } catch (err) {
+        console.debug('Error attaching menu_meta listener:', err);
+        return null;
+    }
+}
+window.subscribeMenuMetaCloudListener = subscribeMenuMetaCloudListener;
+
+async function syncBundledMenuFromCloud(storeCode, expectedVersion = null) {
+    if (!storeCode) return;
+    try {
+        if (window.firestoreDB && window.firestoreDoc && window.firestoreGetDoc) {
+            const rootCol = (storeCode.startsWith('STORE-') || storeCode.startsWith('SHOP-')) ? 'shops' : 'cafes';
+            const storeRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode);
+            const snap = await window.firestoreGetDoc(storeRef);
+            if (snap.exists()) {
+                const data = snap.data();
+                if (Array.isArray(data.menu)) {
+                    handleRemoteFirestoreUpdate({
+                        menu: data.menu,
+                        menuVersion: expectedVersion || data.menuVersion,
+                        deletedMenuIds: data.deletedMenuIds,
+                        categories: data.categories
+                    });
+                    return;
+                }
+            }
+        }
+        // Fallback to server REST endpoint (1 single HTTP fetch)
+        const res = await fetch(`/api/sync/store-data?storeCode=${encodeURIComponent(storeCode)}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.menu)) {
+                handleRemoteFirestoreUpdate({
+                    menu: data.menu,
+                    menuVersion: expectedVersion || data.menuVersion,
+                    deletedMenuIds: data.deletedMenuIds,
+                    categories: data.categories
+                });
+            }
+        }
+    } catch(err) {
+        console.warn("[MenuSync] Error fetching bundled menu:", err);
+    }
+}
+window.syncBundledMenuFromCloud = syncBundledMenuFromCloud;
+
 async function syncDeviceRecordToCloud(deviceRecord, targetStoreCode = null) {
     if (!deviceRecord || !deviceRecord.deviceId) return;
     try {
@@ -3249,11 +3343,12 @@ function attachFirestoreListener(targetStoreCode = null) {
             return;
         }
 
-        // Attach subcollection listeners for devices, sessions, staff, and decoupled 10-day invoices
+        // Attach subcollection listeners for devices, sessions, staff, decoupled 10-day invoices, and lightweight menu version meta
         subscribeDevicesCloudListener(targetStoreCode);
         subscribeSessionsCloudListener(targetStoreCode);
         subscribeStaffCloudListener(targetStoreCode);
         subscribeInvoicesCloudListener(targetStoreCode);
+        subscribeMenuMetaCloudListener(targetStoreCode);
 
         firestoreUnsubscribe = window.firestoreOnSnapshot(storeDocRef, (snap) => {
             if (snap.exists()) {
@@ -3307,6 +3402,10 @@ function detachFirestoreListener() {
     if (firestoreInvoicesUnsubscribe) {
         try { firestoreInvoicesUnsubscribe(); } catch(e) {}
         firestoreInvoicesUnsubscribe = null;
+    }
+    if (firestoreMenuMetaUnsubscribe) {
+        try { firestoreMenuMetaUnsubscribe(); } catch(e) {}
+        firestoreMenuMetaUnsubscribe = null;
     }
     setCloudSyncStatus('offline', 'Disconnected');
 }
@@ -3594,17 +3693,49 @@ function persistMenu() {
         : menuItems;
     idb.set('cafe_menu', sanitizedMenu); 
     const deletedIds = (typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds() : [];
+
+    // Monotonic Menu Version Bump for Zero-Lag Cross-Device Invalidation
+    const currentVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 1);
+    const newVersion = currentVer + 1;
+    localStorage.setItem('billnaw_menu_version', String(newVersion));
+    if (shopProfile) shopProfile.menuVersion = newVersion;
+    window.currentMenuVersion = newVersion;
+
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { menu: sanitizedMenu, deletedMenuIds: deletedIds, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, { 
+                menu: sanitizedMenu, 
+                menuVersion: newVersion, 
+                deletedMenuIds: deletedIds, 
+                updatedAt: new Date().toISOString() 
+            }, { merge: true }).catch(() => {});
+
+            // Update lightweight metadata version document (/menu_meta/version)
+            try {
+                const storeCode = getActiveStoreIdentifier();
+                if (storeCode) {
+                    const rootCol = (storeCode.startsWith('STORE-') || storeCode.startsWith('SHOP-')) ? 'shops' : 'cafes';
+                    const metaDocRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode, 'menu_meta', 'version');
+                    if (metaDocRef) {
+                        window.firestoreSetDoc(metaDocRef, {
+                            version: newVersion,
+                            itemCount: sanitizedMenu.length,
+                            updatedAt: new Date().toISOString(),
+                            updatedBy: (typeof currentStaff !== 'undefined' && currentStaff?.name) ? currentStaff.name : 'Admin'
+                        }, { merge: true }).catch(() => {});
+                    }
+                }
+            } catch(metaErr) {
+                console.warn("[MenuMeta] Metadata version bump warning:", metaErr);
+            }
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ menu: sanitizedMenu, deletedMenuIds: deletedIds }, true);
+        dispatchBackendStoreSync({ menu: sanitizedMenu, menuVersion: newVersion, deletedMenuIds: deletedIds }, true);
     }
     if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
-        try { posMeshChannel.postMessage({ type: 'MENU_UPDATED', menu: sanitizedMenu, deletedIds }); } catch(e) {}
+        try { posMeshChannel.postMessage({ type: 'MENU_UPDATED', version: newVersion, menu: sanitizedMenu, deletedIds }); } catch(e) {}
     }
 }
 window.persistMenu = persistMenu;

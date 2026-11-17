@@ -37,7 +37,7 @@ test("SPD-01: printKitchenTicket computes delta at top of function without Refer
 
 test("SPD-02: printKitchenTicket guards empty/already-sent delta gracefully", () => {
     assert.ok(jsPos.includes('KOT already sent for all items.'));
-    assert.ok(jsPos.includes('tInfo.items.forEach(item => {\n                item.qtyKotPrinted = Number(item.qty || item.quantity || 0);'));
+    assert.ok(/tInfo\.items\.forEach\(item => \{\s+item\.qtyKotPrinted = Number\(item\.qty \|\| item\.quantity \|\| 0\);/.test(jsPos));
 });
 
 // SECTION 2: SINGLE-PRINTER MODE & HARDWARE ROUTING

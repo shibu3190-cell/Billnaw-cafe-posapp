@@ -702,8 +702,8 @@ function bookTable() {
             } else {
                 tInfo.kotPrintedMap = tInfo.kotPrintedMap || {};
                 tInfo.items.forEach(item => {
-                    const q = Number(item.qty || item.quantity || 0);
-                    item.qtyKotPrinted = q;
+                    item.qtyKotPrinted = Number(item.qty || item.quantity || 0);
+                    const q = item.qtyKotPrinted;
                     if (item.id !== undefined) tInfo.kotPrintedMap[String(item.id)] = q;
                     if (item.name) tInfo.kotPrintedMap[item.name] = q;
                 });
@@ -730,6 +730,37 @@ function bookTable() {
 }
 window.bookTable = bookTable;
 
+// ⚡ HIGH-THROUGHPUT TABLE PERSIST DEBOUNCER (350ms Waiter Batching Queue)
+let _tablePersistDebounceTimer = null;
+const TABLE_PERSIST_DEBOUNCE_MS = 350;
+
+function debouncedPersistTables(delay = TABLE_PERSIST_DEBOUNCE_MS) {
+    if (typeof idb !== 'undefined' && idb.set && typeof tablesInfo !== 'undefined') {
+        idb.set('cafe_tables', tablesInfo);
+    }
+    if (_tablePersistDebounceTimer) {
+        clearTimeout(_tablePersistDebounceTimer);
+    }
+    _tablePersistDebounceTimer = setTimeout(() => {
+        _tablePersistDebounceTimer = null;
+        if (typeof persistTables === 'function') {
+            persistTables();
+        }
+    }, delay);
+}
+window.debouncedPersistTables = debouncedPersistTables;
+
+function flushDebouncedTablePersist() {
+    if (_tablePersistDebounceTimer) {
+        clearTimeout(_tablePersistDebounceTimer);
+        _tablePersistDebounceTimer = null;
+        if (typeof persistTables === 'function') {
+            persistTables();
+        }
+    }
+}
+window.flushDebouncedTablePersist = flushDebouncedTablePersist;
+
 function addToCart(itemId, event) {
     if (event) event.stopPropagation();
     let tInfo = (typeof tablesInfo !== 'undefined' && tablesInfo[activeTable]) ? tablesInfo[activeTable] : (window.tablesInfo ? window.tablesInfo[activeTable] : null); 
@@ -741,19 +772,24 @@ function addToCart(itemId, event) {
     if (existing) {
         existing.qty = Number(existing.qty || 1) + 1;
     } else {
+        const snapPrice = Number(menuItem.price) || 0;
         tInfo.items.push({
             id: menuItem.id,
             name: menuItem.name,
-            price: menuItem.price,
-            gstRate: menuItem.gstRate,
+            price: snapPrice,
+            rate: snapPrice, // Explicit immutable price snapshot
+            gstRate: menuItem.gstRate !== undefined ? Number(menuItem.gstRate) : 0,
             qty: 1,
             qtyKotPrinted: 0,
-            image: menuItem.image || menuItem.image_url || ''
+            image: menuItem.image || menuItem.image_url || '',
+            category: menuItem.category || '',
+            priceSnapshotAt: Date.now(),
+            isAvailable: true
         });
     }
     if(tInfo.status === 'empty' || tInfo.status === 'booked' || !tInfo.status) tInfo.status = 'occupied'; 
     if(!tInfo.savedTime) tInfo.savedTime = Date.now();
-    persistTables(); 
+    debouncedPersistTables(350); 
     syncTableUI(); 
     updateCartUI(); 
     if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
@@ -799,7 +835,7 @@ function modifyQty(itemId, delta, event) {
             tInfo.savedTime = Date.now();
             if (tInfo.status === 'empty') tInfo.status = 'occupied';
         }
-        persistTables(); 
+        debouncedPersistTables(350); 
         syncTableUI(); 
         updateCartUI(); 
         if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
@@ -1446,8 +1482,8 @@ function markTableKotItemsPrinted(tableId) {
     if (!tInfo || !Array.isArray(tInfo.items)) return;
     tInfo.kotPrintedMap = (tInfo.kotPrintedMap && typeof tInfo.kotPrintedMap === 'object') ? tInfo.kotPrintedMap : {};
     tInfo.items.forEach(item => {
-        const ordered = Number(item.qty || item.quantity || 0);
-        item.qtyKotPrinted = ordered;
+        item.qtyKotPrinted = Number(item.qty || item.quantity || 0);
+        const ordered = item.qtyKotPrinted;
         if (item.id !== undefined && item.id !== null) {
             tInfo.kotPrintedMap[String(item.id)] = ordered;
         }
@@ -1556,6 +1592,7 @@ window.confirmKotRelayFallback = confirmKotRelayFallback;
 window.cancelKotRelayFallback = cancelKotRelayFallback;
 
 function sendToKitchen() { 
+    if (typeof flushDebouncedTablePersist === 'function') flushDebouncedTablePersist();
     let tInfo = tablesInfo[activeTable]; 
     if(!tInfo || !Array.isArray(tInfo.items) || tInfo.items.length === 0) return showToast("Nothing to send!"); 
     
@@ -1833,6 +1870,7 @@ function openCheckoutModal(bypassRoleCheck = false) {
         }
     }
 
+    if (typeof flushDebouncedTablePersist === 'function') flushDebouncedTablePersist();
     let tInfo = tablesInfo[activeTable]; 
     if(!tInfo || tInfo.items.length === 0) return showToast(`Table ${activeTable} is empty!`);
     const totals = calculateOrderTotals(tInfo.items, tInfo.discount);
@@ -2099,6 +2137,7 @@ async function confirmCheckout() {
         if (typeof showToast === 'function') showToast("Transaction blocked: device revoked or pending authorization.");
         throw new Error('Device revoked; transaction aborted');
     }
+    if (typeof flushDebouncedTablePersist === 'function') flushDebouncedTablePersist();
     let tInfo = tablesInfo[activeTable]; 
     if(!tInfo || tInfo.items.length === 0) return showToast(`Table ${activeTable} is empty!`);
     

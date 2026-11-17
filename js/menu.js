@@ -158,7 +158,7 @@ function renderMenuUI() {
     if (!posGrid) return;
 
     // Zero phantom data: render welcoming empty slate if no active user-created menu items exist
-    const activeItems = (Array.isArray(menuItems) ? menuItems : []).filter(i => !i.is_template && i.source !== 'template' && i.is_active !== false);
+    const activeItems = (Array.isArray(menuItems) ? menuItems : []).filter(i => !i.isDeleted && i.isAvailable !== false && !i.is_template && i.source !== 'template' && i.is_active !== false);
     if (activeItems.length === 0) {
         posGrid.innerHTML = `
             <div id="posMenuEmptyState" style="grid-column: 1 / -1; text-align: center; padding: 40px 16px; background: #FFFFFF; border: 1.5px dashed #CBD5E1; border-radius: 16px; margin: 10px 0;">
@@ -190,7 +190,6 @@ function renderMenuUI() {
         if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
     }
 
-    posGrid.innerHTML = '';
     const searchInput = document.getElementById('menuSearchInput');
     const searchText = (searchInput ? searchInput.value : '').toLowerCase().trim();
     let filteredMenu = activeCategory === "All" ? activeItems : activeItems.filter(i => i.category === activeCategory);
@@ -213,7 +212,51 @@ function renderMenuUI() {
         return;
     }
 
-    filteredMenu.forEach(item => {
+    // ⚡ FLICKER-FREE TARGETED DOM DIFFING & IN-PLACE PATCHING
+    const existingCards = posGrid.querySelectorAll('.menu-card');
+    const existingCardIds = Array.from(existingCards).map(c => c.getAttribute('data-item-id'));
+    const targetCardIds = filteredMenu.map(i => String(i.id));
+
+    const canPatchInPlace = existingCardIds.length === targetCardIds.length &&
+                            existingCardIds.every((id, idx) => id === targetCardIds[idx]);
+
+    if (canPatchInPlace) {
+        filteredMenu.forEach(item => {
+            const cardEl = document.getElementById(`menu-card-${item.id}`);
+            if (!cardEl) return;
+            
+            // Patch rate/price directly
+            const priceEl = cardEl.querySelector('.card-price-col .price');
+            const expectedPrice = `₹ ${item.price}`;
+            if (priceEl && priceEl.textContent !== expectedPrice) {
+                priceEl.textContent = expectedPrice;
+            }
+
+            // Patch stock pill and stock badges
+            const stockBadge = cardEl.querySelector('.stock-badge');
+            if (item.trackStock && item.stockQty <= 5 && item.stockQty > 0) {
+                if (stockBadge) {
+                    stockBadge.className = 'stock-badge low';
+                    stockBadge.textContent = `${item.stockQty} left`;
+                    stockBadge.style.display = '';
+                }
+            } else if (item.trackStock && item.stockQty > 5) {
+                if (stockBadge) {
+                    stockBadge.className = 'stock-badge';
+                    stockBadge.textContent = `${item.stockQty} left`;
+                    stockBadge.style.display = '';
+                }
+            } else if (stockBadge) {
+                stockBadge.style.display = 'none';
+            }
+        });
+        syncMenuUIQuantities();
+        renderMenuCatalogUI();
+        return;
+    }
+
+    // Single-assignment DOM build (avoids O(N^2) innerHTML += layout destruction)
+    const cardsHtml = filteredMenu.map(item => {
         let popularBadge = item.badge ? `<div class="badge-popular">${escapeHtml(item.badge)}</div>` : '';
         let stockIndicator = '';
         if(item.trackStock) {
@@ -223,8 +266,8 @@ function renderMenuUI() {
         const thumbSrc = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
         const imageHtml = `<img src="${thumbSrc}" class="card-img" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">`;
 
-        posGrid.innerHTML += `
-        <div class="menu-card" onclick="addToCart(${item.id}, event)">
+        return `
+        <div class="menu-card" id="menu-card-${item.id}" data-item-id="${item.id}" onclick="addToCart(${item.id}, event)">
             <div class="card-img-wrapper">
                 ${imageHtml}
                 ${popularBadge}
@@ -247,6 +290,8 @@ function renderMenuUI() {
             </div>
         </div>`;
     });
+
+    posGrid.innerHTML = cardsHtml.join('');
     syncMenuUIQuantities();
     renderMenuCatalogUI();
 }
@@ -295,7 +340,7 @@ function renderMenuCatalogUI() {
     }
     const cleanCardsContainer = document.getElementById('cleanItemCardsList');
     const { mode: gstCurrentMode, defaultRate: gstStoreRate } = getStoreGstConfig();
-    const activeCatalogItems = (Array.isArray(menuItems) ? menuItems : []).filter(i => !i.is_template && i.source !== 'template' && i.is_active !== false);
+    const activeCatalogItems = (Array.isArray(menuItems) ? menuItems : []).filter(i => !i.isDeleted && i.isAvailable !== false && !i.is_template && i.source !== 'template' && i.is_active !== false);
 
     // 1. Update count badges
     const invCountEl = document.getElementById('menuInventoryCount');
@@ -1448,7 +1493,29 @@ function deleteMenuItem(id, bypassRoleCheck = false) {
         if (typeof recordDeletedMenuItemId === 'function') {
             recordDeletedMenuItemId(id);
         }
-        menuItems = menuItems.filter(item => String(item.id) !== String(id)); 
+        // Soft-delete to preserve item integrity for open tables, active KOTs, and historical billing
+        const targetItem = (Array.isArray(menuItems) ? menuItems : []).find(item => String(item.id) === String(id));
+        if (targetItem) {
+            targetItem.isDeleted = true;
+            targetItem.isAvailable = false;
+            targetItem.is_active = false;
+            targetItem.deletedAt = new Date().toISOString();
+        }
+        // Maintain referential integrity: retain item as soft-deleted if active table cart references it
+        menuItems = (Array.isArray(menuItems) ? menuItems : []).filter(item => {
+            if (String(item.id) === String(id)) {
+                let isReferencedInOpenTables = false;
+                if (typeof tablesInfo !== 'undefined' && tablesInfo) {
+                    Object.values(tablesInfo).forEach(t => {
+                        if (t && Array.isArray(t.items) && t.items.some(it => String(it.id) === String(id))) {
+                            isReferencedInOpenTables = true;
+                        }
+                    });
+                }
+                return isReferencedInOpenTables;
+            }
+            return true;
+        });
         if (typeof markMenuCustomized === 'function') {
             markMenuCustomized();
         } else if (typeof localStorage !== 'undefined') {

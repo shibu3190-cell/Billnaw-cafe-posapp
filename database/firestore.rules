@@ -155,7 +155,8 @@ service cloud.firestore {
       }
 
       // OPERATIONAL SUBCOLLECTIONS
-      match /menu/{menuId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
+      match /menu/{menuId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
+      match /menu_meta/{metaId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
       match /inventory/{itemId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /customers/{customerId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /expenses/{expenseId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
@@ -271,7 +272,8 @@ service cloud.firestore {
       }
 
       // OPERATIONAL SUBCOLLECTIONS
-      match /menu/{menuId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
+      match /menu/{menuId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
+      match /menu_meta/{metaId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
       match /inventory/{itemId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /customers/{customerId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /expenses/{expenseId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
@@ -289,11 +291,11 @@ service cloud.firestore {
 
     // Legacy Client Collection (/clients/{clientId})
     match /clients/{clientId} {
-      allow read: if isValidTenant(clientId);
-      allow write: if isValidTenant(clientId);
+      allow read: if isTenantStaff(clientId);
+      allow write: if isTenantAdmin(clientId);
       match /{allChildren=**} {
-        allow read: if isValidTenant(clientId);
-        allow write: if isValidTenant(clientId);
+        allow read: if isTenantStaff(clientId);
+        allow write: if isTenantStaff(clientId);
       }
     }
   }
