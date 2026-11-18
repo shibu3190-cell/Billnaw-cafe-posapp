@@ -1,13 +1,15 @@
 // netlify/functions/api.js - Serverless API & OTP Delivery Engine for Billnaw POS PWA
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import path from 'path';
 import {
   isGeminiKeyOperational,
   extractMenuFromDocument,
   generateMenuItemImage,
   generateMarketingCampaign,
   resolveGeminiApiKey,
-  sanitizeErrorForClient
+  sanitizeErrorForClient,
+  clearGeminiCaches
 } from '../../server/gemini-service.js';
 import { parseMenuFromText } from '../../server/menu-parser.js';
 import {
@@ -63,8 +65,25 @@ import {
   verifyTenantAuthorization,
   hasRolePermission,
   verifyEndpointAccess,
-  checkRateLimit
+  checkRateLimit,
+  normalizeBackendRole,
+  normalizeEmail as normalizeAuthEmail,
+  isValidEmail as isValidAuthEmail,
+  hashPassword,
+  hashStringServer,
+  generateStoreCode,
+  registerUser,
+  loginWithPassword,
+  verifySession,
+  listActiveSessions,
+  revokeSession,
+  revokeSessionsForStore,
+  revokeSessionsForUser,
+  resetStoreCloudData,
+  setAuthUserRecord
 } from '../../server/auth-service.js';
+import { runDailyDataRetentionRoutine } from '../../database/server-functions/retention-lifecycle.js';
+import { getDbClient } from '../../src/core/db-client.js';
 import { CONFIG } from '../../server/config.js';
 
 // Firebase & SMTP Configuration with Production Environment Variables & Resilient Fallbacks
@@ -79,13 +98,23 @@ const SMTP_FROM = process.env.SMTP_FROM || `"Billnaw POS" <${SMTP_USER}>`;
 
 // In-memory cache for fast single-container hits
 const memoryOtpStore = new Map();
+const reportTokens = new Map();
+
+function pruneExpiredReportTokens() {
+  const now = Date.now();
+  for (const [tok, info] of reportTokens.entries()) {
+    if (!info || now > info.expiresAt) {
+      reportTokens.delete(tok);
+    }
+  }
+}
 
 // Standard response headers including CORS
 const CORS_HEADERS = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, x-shop-id, x-shop-email, x-store-code, x-auth-token',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, x-shop-id, x-shop-email, x-store-code, x-auth-token, x-staff-role, x-staff-id, x-session-token, x-gemini-api-key, x-api-key, x-admin-secret',
   'Access-Control-Expose-Headers': 'x-refreshed-token, Authorization, Content-Type'
 };
 
@@ -97,28 +126,110 @@ function jsonResponse(statusCode, data, extraHeaders = {}) {
   };
 }
 
-function extractAuthToken(event, body) {
+function extractAuthToken(event, body, { allowBodyToken = true, allowQueryToken = true } = {}) {
   const headers = event.headers || {};
   const query = event.queryStringParameters || {};
   const authHeader = headers['authorization'] || headers['Authorization'] || '';
   if (authHeader.toLowerCase().startsWith('bearer ')) {
     return authHeader.slice(7).trim();
   }
-  return (
+  const headerToken =
     headers['x-auth-token'] ||
     headers['X-Auth-Token'] ||
-    query.token ||
-    body?.token ||
-    ''
-  );
+    headers['x-session-token'] ||
+    headers['X-Session-Token'] ||
+    '';
+  if (headerToken) return String(headerToken).trim();
+  if (allowQueryToken && (query.authToken || query.token)) {
+    return String(query.authToken || query.token).trim();
+  }
+  if (allowBodyToken && body?.token) {
+    return String(body.token).trim();
+  }
+  return '';
+}
+
+function verifyAdminSecret(event) {
+  const expected = process.env.ADMIN_SECRET || '';
+  if (!expected) return false;
+  const headers = event?.headers || {};
+  const provided = String(headers['x-admin-secret'] || headers['X-Admin-Secret'] || '').trim();
+  if (!provided) return false;
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function requireTenantAndPermission(event, body, {
+  targetStoreCode,
+  requiredPermission,
+  allowGracefulMigration = false,
+  allowBodyToken = true,
+  allowQueryToken = true
+} = {}) {
+  if (verifyAdminSecret(event)) {
+    return {
+      ok: true,
+      auth: {
+        authorized: true,
+        isAdminSecret: true,
+        user: { role: 'SuperAdmin', storeCode: targetStoreCode || '*' },
+        storeCode: targetStoreCode || ''
+      },
+      extraHeaders: {}
+    };
+  }
+
+  const token = extractAuthToken(event, body, { allowBodyToken, allowQueryToken });
+  const auth = verifyTenantAuthorization({ token, targetStoreCode, allowGracefulMigration });
+  if (!auth.authorized) {
+    return {
+      ok: false,
+      response: jsonResponse(auth.status || 401, { success: false, error: auth.error })
+    };
+  }
+
+  if (requiredPermission) {
+    const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission });
+    if (!rbac.allowed) {
+      return {
+        ok: false,
+        response: jsonResponse(rbac.status || 403, { success: false, error: rbac.error })
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    auth,
+    extraHeaders: auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {}
+  };
+}
+
+function detectImageMagicBytes(buffer) {
+  if (!buffer || buffer.length < 4) return null;
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return { mime: 'image/jpeg', ext: 'jpg' };
+  }
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return { mime: 'image/png', ext: 'png' };
+  }
+  if (buffer.length >= 12) {
+    const riff = buffer.subarray(0, 4).toString('ascii');
+    const webp = buffer.subarray(8, 12).toString('ascii');
+    if (riff === 'RIFF' && webp === 'WEBP') {
+      return { mime: 'image/webp', ext: 'webp' };
+    }
+  }
+  return null;
 }
 
 function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
+  return normalizeAuthEmail(email);
 }
 
 function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return isValidAuthEmail(email);
 }
 
 function sanitizeTenantStoreCode(event, body) {
@@ -198,6 +309,67 @@ async function removeOtpFromFirestore(email) {
     await fetch(FIRESTORE_OTP_URL(email), { method: 'DELETE' });
   } catch (err) {
     // Ignore deletion errors
+  }
+}
+
+const FIRESTORE_USER_URL = (email) =>
+  `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents/clients/_auth/users/${encodeURIComponent(email)}`;
+
+async function persistAuthUserToFirestore(user) {
+  try {
+    if (!user || !user.email) return false;
+    const normEmail = normalizeEmail(user.email);
+    const res = await fetch(FIRESTORE_USER_URL(normEmail), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          uid: { stringValue: String(user.uid || '') },
+          email: { stringValue: normEmail },
+          firstName: { stringValue: String(user.firstName || '') },
+          lastName: { stringValue: String(user.lastName || '') },
+          shopName: { stringValue: String(user.shopName || '') },
+          phone: { stringValue: String(user.phone || '') },
+          storeCode: { stringValue: String(user.storeCode || '') },
+          passwordHash: { stringValue: String(user.passwordHash || '') },
+          salt: { stringValue: String(user.salt || '') },
+          role: { stringValue: String(user.role || 'Owner') },
+          createdAt: { stringValue: String(user.createdAt || new Date().toISOString()) }
+        }
+      })
+    });
+    return Boolean(res && res.ok);
+  } catch (err) {
+    console.warn('[SERVERLESS AUTH] Firestore user write warning:', err.message);
+    return false;
+  }
+}
+
+async function retrieveAuthUserFromFirestore(email) {
+  try {
+    const normEmail = normalizeEmail(email);
+    if (!normEmail) return null;
+    const res = await fetch(FIRESTORE_USER_URL(normEmail));
+    if (!res || !res.ok) return null;
+    const json = await res.json();
+    if (!json || !json.fields) return null;
+    const f = json.fields;
+    return {
+      uid: f.uid?.stringValue || '',
+      email: f.email?.stringValue || normEmail,
+      firstName: f.firstName?.stringValue || '',
+      lastName: f.lastName?.stringValue || '',
+      shopName: f.shopName?.stringValue || '',
+      phone: f.phone?.stringValue || '',
+      storeCode: f.storeCode?.stringValue || '',
+      passwordHash: f.passwordHash?.stringValue || '',
+      salt: f.salt?.stringValue || '',
+      role: f.role?.stringValue || 'Owner',
+      createdAt: f.createdAt?.stringValue || ''
+    };
+  } catch (err) {
+    console.warn('[SERVERLESS AUTH] Firestore user read warning:', err.message);
+    return null;
   }
 }
 
@@ -416,14 +588,21 @@ export async function handler(event, context) {
   // Route: /admin/client-quota (Update Client Quota)
   // -----------------------------------------------------------
   if (event.httpMethod === 'POST' && (cleanPath === '/admin/client-quota' || cleanPath.endsWith('/admin/client-quota'))) {
-    const clientId = (body?.shopId || body?.clientId || '').trim();
-    const { aiMonthlyLimit, customGeminiKey } = body;
-    if (!clientId) {
-      return jsonResponse(400, { error: 'clientId or shopId is required' });
+    const clientId = sanitizeTenantStoreCode(event, body) || String(body?.shopId || body?.clientId || '').trim();
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: clientId || undefined,
+      requiredPermission: 'admin_quota',
+      allowGracefulMigration: false
+    });
+    if (!gate.ok) return gate.response;
+
+    const { aiMonthlyLimit, customGeminiKey } = body || {};
+    if (!clientId || !/^[A-Za-z0-9_-]{3,64}$/.test(clientId)) {
+      return jsonResponse(400, { success: false, error: 'Valid clientId or shopId is required' });
     }
 
     const updates = {};
-    if (typeof aiMonthlyLimit === 'number') {
+    if (typeof aiMonthlyLimit === 'number' && Number.isFinite(aiMonthlyLimit)) {
       updates.aiMonthlyLimit = Math.max(0, aiMonthlyLimit);
       updates.monthlyLimit = Math.max(0, aiMonthlyLimit);
       updates.limit = Math.max(0, aiMonthlyLimit);
@@ -434,7 +613,7 @@ export async function handler(event, context) {
 
     const success = await updateClientProfileData(clientId, updates);
     if (!success) {
-      return jsonResponse(500, { error: 'Failed to update client profile in Firestore' });
+      return jsonResponse(500, { success: false, error: 'Failed to update client profile in Firestore' });
     }
 
     const updatedQuota = await getClientQuotaInfo(clientId);
@@ -442,7 +621,50 @@ export async function handler(event, context) {
       success: true,
       message: `Updated quota settings for client '${clientId}'`,
       quota: updatedQuota
+    }, gate.extraHeaders);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /admin/clear-cache (Clear AI & Verification Caches)
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && (cleanPath === '/admin/clear-cache' || cleanPath.endsWith('/admin/clear-cache'))) {
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: sanitizeTenantStoreCode(event, body) || undefined,
+      requiredPermission: 'admin_quota',
+      allowGracefulMigration: false
     });
+    if (!gate.ok) return gate.response;
+    clearGeminiCaches();
+    return jsonResponse(200, { success: true, message: 'All server memory & verification caches cleared successfully.' }, gate.extraHeaders);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /admin/maintenance/purge (SuperAdmin / ADMIN_SECRET only)
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && (cleanPath === '/admin/maintenance/purge' || cleanPath.endsWith('/admin/maintenance/purge'))) {
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: undefined,
+      requiredPermission: 'admin_quota',
+      allowGracefulMigration: false
+    });
+    if (!gate.ok) return gate.response;
+    const callerRole = normalizeBackendRole(gate.auth.user?.role || '');
+    if (!gate.auth.isAdminSecret && callerRole !== 'SuperAdmin') {
+      return jsonResponse(403, { success: false, error: 'Access denied: SuperAdmin privileges required for global data retention purge.' });
+    }
+    const { dryRun = false, now = null } = body || {};
+    const executionNow = (now !== null && now !== undefined && now !== '')
+      ? (typeof now === 'number' ? now : new Date(now).getTime())
+      : Date.now();
+    if (!Number.isFinite(executionNow)) {
+      return jsonResponse(400, { success: false, error: 'Invalid now timestamp provided.' });
+    }
+    try {
+      const report = await runDailyDataRetentionRoutine({ now: executionNow, dryRun: dryRun === true });
+      return jsonResponse(200, { success: true, report }, gate.extraHeaders);
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Data retention purge failed' });
+    }
   }
 
   // -----------------------------------------------------------
@@ -597,16 +819,53 @@ export async function handler(event, context) {
     }
     const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
 
-    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots } = body || {};
-    const normalizedEmail = (ownerEmail || profile?.ownerEmail || profile?.email || headers['x-shop-email'] || headers['X-Shop-Email'] || '').trim().toLowerCase();
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots } = body || {};
+
+    if (staff !== undefined || replaceStaff !== undefined || deletedStaffId !== undefined || deletedStaffIds !== undefined) {
+      const staffRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'manage_staff' });
+      if (!staffRbac.allowed) {
+        return jsonResponse(staffRbac.status || 403, { success: false, error: staffRbac.error });
+      }
+    }
+    if (menu !== undefined || deletedMenuIds !== undefined || deletedMenuNames !== undefined || menuVersion !== undefined || categories !== undefined) {
+      const menuRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'manage_menu' });
+      if (!menuRbac.allowed) {
+        return jsonResponse(menuRbac.status || 403, { success: false, error: menuRbac.error });
+      }
+    }
+    if (tables !== undefined || history !== undefined || expenses !== undefined || customers !== undefined) {
+      const opsRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'take_orders' });
+      if (!opsRbac.allowed) {
+        return jsonResponse(opsRbac.status || 403, { success: false, error: opsRbac.error });
+      }
+    }
+
+    const settingsRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'change_settings' });
+    const hasOperationalPayload = (
+      tables !== undefined ||
+      kots !== undefined ||
+      history !== undefined ||
+      customers !== undefined ||
+      expenses !== undefined
+    );
+    if (!settingsRbac.allowed && !hasOperationalPayload && (ownerEmail !== undefined || profile !== undefined)) {
+      return jsonResponse(settingsRbac.status || 403, { success: false, error: settingsRbac.error });
+    }
+
+    const normalizedEmail = settingsRbac.allowed
+      ? (ownerEmail || profile?.ownerEmail || profile?.email || headers['x-shop-email'] || headers['X-Shop-Email'] || '').trim().toLowerCase()
+      : '';
+    const safeProfile = settingsRbac.allowed && profile
+      ? { ...profile, ownerEmail: normalizedEmail || profile.ownerEmail }
+      : undefined;
 
     try {
       const result = await syncStoreToFirestoreREST(storeCode, {
         ownerEmail: normalizedEmail || undefined,
-        profile: profile ? { ...profile, ownerEmail: normalizedEmail || profile.ownerEmail } : undefined,
-        staff, replaceStaff, deletedStaffId, tables, menu, categories, history, expenses, customers, kots
+        profile: safeProfile,
+        staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots
       });
-      return jsonResponse(result.success ? 200 : 500, result, extraHeaders);
+      return jsonResponse(result.success ? 200 : (result.status >= 400 ? result.status : 500), result, extraHeaders);
     } catch (err) {
       return jsonResponse(500, { success: false, error: err.message || 'Sync failed' }, extraHeaders);
     }
@@ -629,10 +888,10 @@ export async function handler(event, context) {
     }
     const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
 
-    const { staff, replaceStaff, deletedStaffId } = body || {};
+    const { staff, replaceStaff, deletedStaffId, deletedStaffIds } = body || {};
     try {
-      const result = await syncStoreToFirestoreREST(storeCode, { staff, replaceStaff, deletedStaffId });
-      return jsonResponse(result.success ? 200 : 500, result, extraHeaders);
+      const result = await syncStoreToFirestoreREST(storeCode, { staff, replaceStaff, deletedStaffId, deletedStaffIds });
+      return jsonResponse(result.success ? 200 : (result.status >= 400 ? result.status : 500), result, extraHeaders);
     } catch (err) {
       return jsonResponse(500, { success: false, error: err.message || 'Staff sync failed' }, extraHeaders);
     }
@@ -678,10 +937,19 @@ export async function handler(event, context) {
   // -----------------------------------------------------------
   if (event.httpMethod === 'GET' && (cleanPath === '/subscription/status' || cleanPath.endsWith('/subscription/status'))) {
     const q = event.queryStringParameters || {};
-    const email = (q.email || q.shopEmail || headers['x-shop-email'] || '').trim();
-    const shopId = (q.shopId || headers['x-shop-id'] || '').trim();
+    const email = normalizeEmail(q.email || q.shopEmail || headers['x-shop-email'] || headers['X-Shop-Email'] || '');
+    const shopId = String(q.shopId || q.storeCode || headers['x-shop-id'] || headers['X-Shop-Id'] || '').trim();
+    if (!email && !shopId) {
+      return jsonResponse(400, { success: false, error: 'Either shopId or a valid email query parameter is required.' });
+    }
+    if (email && !isValidEmail(email)) {
+      return jsonResponse(400, { success: false, error: 'Invalid email address provided.' });
+    }
     try {
       const subscription = await getShopSubscription(shopId, email);
+      if (!subscription) {
+        return jsonResponse(404, { success: false, error: 'Shop not found for the provided identifier.' });
+      }
       return jsonResponse(200, { success: true, subscription });
     } catch (err) {
       return jsonResponse(500, { success: false, error: err.message || 'Failed to retrieve subscription status' });
@@ -692,42 +960,80 @@ export async function handler(event, context) {
   // Route: /subscription/manage & /api/subscription/manage
   // -----------------------------------------------------------
   if (event.httpMethod === 'POST' && (cleanPath === '/subscription/manage' || cleanPath.endsWith('/subscription/manage'))) {
-    const email = (body.email || body.shopEmail || headers['x-shop-email'] || '').trim();
-    const shopId = (body.shopId || headers['x-shop-id'] || body.storeCode || '').trim();
-    const token = extractAuthToken(event, body);
-    if (shopId) {
-      const auth = verifyTenantAuthorization({ token, targetStoreCode: shopId, allowGracefulMigration: true });
-      if (!auth.authorized) {
-        return jsonResponse(auth.status || 401, { success: false, error: auth.error });
-      }
-      const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'manage_subscription' });
-      if (!rbac.allowed) {
-        return jsonResponse(rbac.status || 403, { success: false, error: rbac.error });
-      }
-    }
+    const email = normalizeEmail(body.email || body.shopEmail || headers['x-shop-email'] || headers['X-Shop-Email'] || '');
+    const shopId = String(body.shopId || body.storeCode || headers['x-shop-id'] || headers['X-Shop-Id'] || '').trim();
+
+    // Enforce strict authentication and RBAC unconditionally (even when shopId is omitted)
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: shopId || undefined,
+      requiredPermission: 'manage_subscription',
+      allowGracefulMigration: false
+    });
+    if (!gate.ok) return gate.response;
+
     const action = String(body.action || '').trim().toUpperCase();
     const reason = String(body.reason || '').trim();
-    const updatedBy = String(body.updatedBy || 'admin').trim();
+    const updatedBy = String(body.updatedBy || gate.auth.user?.email || 'admin').trim();
+
+    if (!action || (!email && !shopId)) {
+      return jsonResponse(400, {
+        success: false,
+        error: "Missing required field: action ('ACTIVE', 'PAUSED', 'RESUMED', 'REVOKED') and at least one of shopEmail or shopId."
+      });
+    }
+    if (email && !isValidEmail(email)) {
+      return jsonResponse(400, { success: false, error: 'Invalid shopEmail address format.' });
+    }
 
     try {
       const currentSub = await getShopSubscription(shopId, email);
+      if (!currentSub) {
+        return jsonResponse(404, { success: false, error: 'Shop not found for the provided email or shopId.' });
+      }
+
+      const callerRole = normalizeBackendRole(gate.auth.user?.role || 'Cashier');
+      if (!gate.auth.isAdminSecret && callerRole !== 'SuperAdmin') {
+        const authStore = String(gate.auth.storeCode || '').trim().toUpperCase();
+        const subStore = String(currentSub.shopId || '').trim().toUpperCase();
+        if (!authStore || (subStore && authStore !== subStore)) {
+          return jsonResponse(403, {
+            success: false,
+            error: `Cross-tenant access forbidden: store [${authStore || 'NONE'}] cannot manage subscription for [${subStore}].`
+          });
+        }
+        if (!shopId && email && gate.auth.user?.email && normalizeEmail(gate.auth.user.email) !== email) {
+          return jsonResponse(403, {
+            success: false,
+            error: 'Cross-tenant access forbidden: email does not match authenticated account.'
+          });
+        }
+      }
+
       const transitionCheck = validateSubscriptionTransition(currentSub?.status, action);
       if (!transitionCheck.allowed) {
         return jsonResponse(transitionCheck.statusCode || 400, { success: false, error: transitionCheck.error });
       }
 
-      const updatedSub = await updateShopSubscription(shopId, email, {
-        status: action,
-        statusReason: reason,
+      const updatedSub = {
+        ...currentSub,
+        status: transitionCheck.resultingStatus,
+        plan: body.plan || currentSub.plan || 'billnaw Pro',
+        statusReason: reason.slice(0, 500),
+        updatedAt: new Date().toISOString(),
         updatedBy
-      });
+      };
+
+      const propagated = await updateShopSubscription(updatedSub.shopId, updatedSub);
 
       return jsonResponse(200, {
         success: true,
-        message: `Subscription successfully transitioned to ${action}`,
-        action,
-        subscription: updatedSub
-      });
+        message: `Subscription status successfully updated to ${updatedSub.status}`,
+        previousStatus: currentSub.status,
+        status: updatedSub.status,
+        action: updatedSub.status,
+        subscription: updatedSub,
+        propagated
+      }, gate.extraHeaders);
     } catch (err) {
       return jsonResponse(500, { success: false, error: err.message || 'Failed to manage subscription' });
     }
@@ -797,29 +1103,115 @@ export async function handler(event, context) {
   }
 
   // -----------------------------------------------------------
-  // Route: /food-images/save (Save Image Metadata)
+  // Route: /food-images/save & /food-images/upload (Authenticated, 3MB, Magic Bytes)
   // -----------------------------------------------------------
-  if (event.httpMethod === 'POST' && (cleanPath === '/food-images/save' || cleanPath.endsWith('/food-images/save'))) {
-    const { dishId, base64Data } = body;
+  if (event.httpMethod === 'POST' && (
+    cleanPath === '/food-images/save' || cleanPath.endsWith('/food-images/save') ||
+    cleanPath === '/food-images/upload' || cleanPath.endsWith('/food-images/upload')
+  )) {
+    const isSave = cleanPath === '/food-images/save' || cleanPath.endsWith('/food-images/save');
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: sanitizeTenantStoreCode(event, body) || undefined,
+      requiredPermission: 'manage_menu',
+      allowGracefulMigration: false
+    });
+    if (!gate.ok) return gate.response;
+
+    const { dishId, base64Data, mimeType } = body || {};
+    if (isSave && !dishId) {
+      return jsonResponse(400, { success: false, error: 'dishId is required' });
+    }
+    if (!base64Data || typeof base64Data !== 'string') {
+      return jsonResponse(400, { success: false, error: 'base64Data is required' });
+    }
+
+    const trimmedInput = base64Data.trim();
+    const dataUrlMatch = trimmedInput.match(/^data:([^;]+);base64,/i);
+    if (dataUrlMatch) {
+      const prefixMime = dataUrlMatch[1].trim().toLowerCase();
+      if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(prefixMime)) {
+        return jsonResponse(400, { success: false, error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.' });
+      }
+    }
+
+    if (mimeType && typeof mimeType === 'string') {
+      const cleanMime = mimeType.trim().toLowerCase();
+      if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(cleanMime)) {
+        return jsonResponse(400, { success: false, error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.' });
+      }
+    }
+
+    const cleanBase64 = trimmedInput.replace(/^data:[^;]+;base64,/i, '').trim();
+    if (!cleanBase64) {
+      return jsonResponse(400, { success: false, error: 'Uploaded file payload is empty' });
+    }
+
+    let buffer;
+    try {
+      buffer = Buffer.from(cleanBase64, 'base64');
+    } catch (e) {
+      return jsonResponse(400, { success: false, error: 'Malformed base64 encoding' });
+    }
+
+    if (!buffer || buffer.length === 0) {
+      return jsonResponse(400, { success: false, error: 'Decoded buffer has 0 bytes' });
+    }
+
+    const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+    if (buffer.length > MAX_UPLOAD_BYTES) {
+      return jsonResponse(413, {
+        success: false,
+        error: `Payload exceeds 3MB limit (actual size: ${(buffer.length / 1024 / 1024).toFixed(2)}MB)`
+      });
+    }
+
+    const detected = detectImageMagicBytes(buffer);
+    if (!detected || !['image/jpeg', 'image/png', 'image/webp'].includes(detected.mime)) {
+      return jsonResponse(400, {
+        success: false,
+        error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.'
+      });
+    }
+
+    const safeDishId = String(dishId || (isSave ? 'dish' : 'upload')).replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 32) || 'upload';
+    const now = Date.now();
+    const serverFilename = `${safeDishId}_${now}.${detected.ext}`;
+    const dataUrl = `data:${detected.mime};base64,${cleanBase64}`;
+
     return jsonResponse(200, {
       success: true,
-      dishId,
-      url: base64Data || '',
-      message: 'Image saved successfully'
-    });
+      dishId: safeDishId,
+      url: dataUrl,
+      image: {
+        id: `img_${safeDishId}_${now}`,
+        url: dataUrl,
+        filename: serverFilename,
+        source: isSave ? 'gemini-imagen' : 'upload',
+        createdAt: new Date(now).toISOString(),
+        approved: true
+      },
+      message: isSave ? 'Image saved successfully' : 'Image uploaded successfully'
+    }, gate.extraHeaders);
   }
 
   // -----------------------------------------------------------
-  // Route: /food-images/upload (Upload Food Image)
+  // Route: DELETE /food-images/:filename
   // -----------------------------------------------------------
-  if (event.httpMethod === 'POST' && (cleanPath === '/food-images/upload' || cleanPath.endsWith('/food-images/upload'))) {
-    const { dishId, base64Data } = body;
-    return jsonResponse(200, {
-      success: true,
-      dishId,
-      url: base64Data || '',
-      message: 'Image uploaded successfully'
+  const foodImageDeleteMatch = cleanPath.match(/\/food-images\/([^/]+)$/);
+  if (event.httpMethod === 'DELETE' && foodImageDeleteMatch) {
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: sanitizeTenantStoreCode(event, body) || undefined,
+      requiredPermission: 'manage_menu',
+      allowGracefulMigration: false
     });
+    if (!gate.ok) return gate.response;
+
+    const rawName = decodeURIComponent(foodImageDeleteMatch[1] || '').replace(/\0/g, '');
+    const safeFilename = rawName.split(/[\\/]/).pop();
+    if (!safeFilename || safeFilename === '.' || safeFilename === '..' || rawName.includes('..')) {
+      return jsonResponse(400, { success: false, error: 'Invalid filename' });
+    }
+    return jsonResponse(200, { success: true, deletedFilename: safeFilename }, gate.extraHeaders);
   }
 
   // -----------------------------------------------------------
@@ -1121,7 +1513,7 @@ export async function handler(event, context) {
     }
 
     const now = Date.now();
-    if (!record || now > record.expiresAt) {
+    if (!record || now > record.expiresAt || record.purpose === 'admin-pin-reset') {
       return jsonResponse(400, {
         success: false,
         error: 'Verification code has expired or was not requested. Please click Resend Code.'
@@ -1202,13 +1594,34 @@ export async function handler(event, context) {
   // Route: /auth/admin-forgot-pin/send-otp
   // -----------------------------------------------------------
   if (event.httpMethod === 'POST' && (cleanPath === '/auth/admin-forgot-pin/send-otp' || cleanPath.endsWith('/admin-forgot-pin/send-otp'))) {
+    const clientIp = headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || 'client';
+    const rateCheck = checkRateLimit({
+      key: `pin_otp_req_${clientIp}`,
+      limit: 10,
+      windowSeconds: 600,
+      message: 'Too many PIN reset code requests from this device. Please wait 10 minutes.'
+    });
+    if (!rateCheck.allowed) {
+      return jsonResponse(429, { success: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
+    }
+
     const email = normalizeEmail(body.email);
     if (!isValidEmail(email)) {
       return jsonResponse(400, { success: false, error: 'Invalid store owner email.' });
     }
 
-    const otp = crypto.randomInt(100000, 1000000).toString();
     const now = Date.now();
+    const existing = memoryOtpStore.get(email);
+    if (existing && !existing.consumed && now < existing.resendAvailableAt) {
+      const retryAfter = Math.ceil((existing.resendAvailableAt - now) / 1000);
+      return jsonResponse(429, {
+        success: false,
+        error: `Please wait ${retryAfter} seconds before requesting a new code.`,
+        retryAfter
+      });
+    }
+
+    const otp = crypto.randomInt(100000, 1000000).toString();
     const record = {
       email,
       otp,
@@ -1244,26 +1657,192 @@ export async function handler(event, context) {
     const email = normalizeEmail(body.email);
     const submittedOtp = String(body.otp || '').trim();
     const newPin = String(body.newPin || '').trim();
+    const requestedStoreCode = sanitizeTenantStoreCode(event, body) || '';
+    const staffId = body.staffId !== undefined ? body.staffId : null;
+    const staffName = body.staffName || null;
+    const requestedRole = body.role || null;
 
-    if (!/^\d{4,6}$/.test(newPin)) {
-      return jsonResponse(400, { success: false, error: 'PIN must be 4 to 6 digits.' });
+    if (!isValidEmail(email)) {
+      return jsonResponse(400, { success: false, error: 'Invalid store owner email.' });
+    }
+    if (!/^\d{6}$/.test(submittedOtp)) {
+      return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
+    }
+    if (!/^\d{4}$/.test(newPin)) {
+      return jsonResponse(400, { success: false, error: 'PIN must be exactly 4 numeric digits.' });
+    }
+    if (/^(\d)\1{3}$/.test(newPin) || ['1234', '4321', '1111', '0000'].includes(newPin)) {
+      return jsonResponse(400, {
+        success: false,
+        error: 'Please choose a non-trivial PIN (cannot be repetitive like 0000, 1111 or sequential like 1234, 4321).'
+      });
     }
 
-    let record = memoryOtpStore.get(email) || await retrieveOtpFromFirestore(email);
-    if (!record || record.otp !== submittedOtp || Date.now() > record.expiresAt) {
+    let record = memoryOtpStore.get(email);
+    if (!record || record.consumed) {
+      record = await retrieveOtpFromFirestore(email);
+    }
+
+    const now = Date.now();
+    if (!record || record.consumed || now > record.expiresAt || record.purpose !== 'admin-pin-reset') {
       return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
     }
 
+    if ((record.attempts || 0) >= 3) {
+      memoryOtpStore.delete(email);
+      await removeOtpFromFirestore(email);
+      return jsonResponse(429, {
+        success: false,
+        error: 'Too many invalid attempts. Code invalidated. Please request a new code.'
+      });
+    }
+
+    const expectedOtp = String(record.otp || '');
+    const otpBufA = Buffer.from(submittedOtp, 'utf8');
+    const otpBufB = Buffer.from(expectedOtp, 'utf8');
+    const otpMatches = otpBufA.length === otpBufB.length && crypto.timingSafeEqual(otpBufA, otpBufB);
+
+    if (!otpMatches) {
+      record.attempts = (record.attempts || 0) + 1;
+      if (record.attempts >= 3) {
+        memoryOtpStore.delete(email);
+        await removeOtpFromFirestore(email);
+        return jsonResponse(429, {
+          success: false,
+          error: 'Too many invalid attempts. Code invalidated. Please request a new code.'
+        });
+      }
+      memoryOtpStore.set(email, record);
+      await persistOtpToFirestore(record);
+      const remaining = Math.max(0, 3 - record.attempts);
+      return jsonResponse(400, {
+        success: false,
+        error: `Invalid or expired reset code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+      });
+    }
+
+    let existingShop = null;
+    let existingOwnerEmail = '';
+    if (requestedStoreCode) {
+      try {
+        existingShop = await getStoreFromFirestoreREST(requestedStoreCode);
+        if (existingShop && existingShop.success) {
+          existingOwnerEmail = normalizeEmail(
+            existingShop.ownerEmail ||
+            existingShop.profile?.ownerEmail ||
+            existingShop.profile?.email ||
+            ''
+          );
+          if (existingOwnerEmail && existingOwnerEmail !== email) {
+            return jsonResponse(403, {
+              success: false,
+              error: 'Forbidden: email does not match store owner.'
+            });
+          }
+        }
+      } catch (lookupErr) {
+        console.warn('[NETLIFY PIN RESET] Store lookup warning:', lookupErr.message);
+      }
+    }
+
+    record.consumed = true;
     memoryOtpStore.delete(email);
     await removeOtpFromFirestore(email);
 
-    const pinHash = crypto.createHash('sha256').update(newPin).digest('hex');
+    const pinSalt = crypto.randomBytes(16).toString('hex');
+    const saltedPinHash = crypto.createHash('sha256').update(`${newPin}:${pinSalt}:billnaw_pin_v2`).digest('hex');
+    const pinHash = hashStringServer(newPin);
+    const resolvedRole = requestedRole || 'Admin';
+    const stationProfile = resolvedRole === 'Kitchen Chef' ? 'KDS'
+      : (resolvedRole === 'Floor Server' ? 'WAITER_MOBILE'
+        : (resolvedRole === 'Admin' ? 'ADMIN_MASTER' : 'BILLING_COUNTER'));
+
+    let resolvedStaffId = staffId || (resolvedRole === 'Admin' ? 1 : Date.now());
+    let resolvedStaffName = staffName || (resolvedRole === 'Admin' ? 'Store Owner' : resolvedRole);
+    let finalRole = resolvedRole;
+
+    if (requestedStoreCode) {
+      try {
+        const shopProfile = (existingShop && existingShop.success && existingShop.profile && typeof existingShop.profile === 'object')
+          ? { ...existingShop.profile }
+          : {};
+        if (existingOwnerEmail) {
+          shopProfile.ownerEmail = existingOwnerEmail;
+        }
+        const shopStaff = (existingShop && existingShop.success && Array.isArray(existingShop.staff))
+          ? existingShop.staff.map(s => ({ ...s }))
+          : [];
+
+        let targetStaff = null;
+        if (staffId !== null && staffId !== undefined && String(staffId).trim() !== '') {
+          targetStaff = shopStaff.find(s => String(s.id || s.staffId) === String(staffId));
+        }
+        if (!targetStaff && requestedRole) {
+          targetStaff = shopStaff.find(s => s.role === requestedRole && (!staffName || s.name === staffName));
+        }
+        if (!targetStaff && !staffId && (!requestedRole || requestedRole === 'Admin')) {
+          targetStaff = shopStaff.find(s => s.role === 'Admin');
+        }
+
+        if (targetStaff) {
+          finalRole = targetStaff.role || resolvedRole;
+          resolvedStaffId = targetStaff.id || resolvedStaffId;
+          resolvedStaffName = targetStaff.name || resolvedStaffName;
+          delete targetStaff.pin;
+          delete targetStaff.initialOtp;
+          delete targetStaff.otp;
+          targetStaff.otpHash = null;
+          targetStaff.pin_hash = saltedPinHash;
+          targetStaff.pin_salt = pinSalt;
+          targetStaff.pinSalt = pinSalt;
+          targetStaff.pinHash = saltedPinHash;
+          targetStaff.mustChangePin = false;
+          targetStaff.otpConsumed = true;
+          targetStaff.updatedAt = new Date().toISOString();
+        } else {
+          shopStaff.push({
+            id: resolvedStaffId,
+            name: resolvedStaffName,
+            role: finalRole,
+            stationProfile,
+            status: 'Active',
+            pin_hash: saltedPinHash,
+            pin_salt: pinSalt,
+            pinSalt,
+            pinHash: saltedPinHash,
+            mustChangePin: false,
+            otpConsumed: true,
+            updatedAt: new Date().toISOString()
+          });
+        }
+
+        if (finalRole === 'Admin') {
+          shopProfile.adminPinHash = pinHash;
+          shopProfile.adminPinSalt = pinSalt;
+          shopProfile.adminSaltedPinHash = saltedPinHash;
+        }
+
+        await syncStoreToFirestoreREST(requestedStoreCode, {
+          ownerEmail: existingOwnerEmail || email,
+          profile: shopProfile,
+          staff: shopStaff
+        }).catch(() => null);
+      } catch (syncErr) {
+        console.warn('[NETLIFY PIN RESET] Store sync warning:', syncErr.message);
+      }
+    }
 
     return jsonResponse(200, {
       success: true,
-      message: 'Master Admin PIN reset successfully.',
+      message: `${resolvedStaffName} (${finalRole}) PIN reset successfully!`,
       adminPinHash: pinHash,
-      storeCode: body.storeCode || ''
+      pinSalt,
+      pinHash: saltedPinHash,
+      staffId: resolvedStaffId,
+      staffName: resolvedStaffName,
+      role: finalRole,
+      stationProfile,
+      storeCode: requestedStoreCode
     });
   }
 
@@ -1279,61 +1858,199 @@ export async function handler(event, context) {
   }
 
   // -----------------------------------------------------------
-  // Route: /auth/login (Password Login Fallback)
+  // Route: /auth/login & /auth/login-password (PBKDF2 + Firestore Fallback)
   // -----------------------------------------------------------
-  if (event.httpMethod === 'POST' && cleanPath === '/auth/login') {
+  if (event.httpMethod === 'POST' && (cleanPath === '/auth/login' || cleanPath === '/auth/login-password')) {
     const email = normalizeEmail(body.email);
     const password = String(body.password || '');
     if (!email || !password) {
-      return jsonResponse(400, { success: false, error: 'Email and password required.' });
+      return jsonResponse(400, { success: false, error: 'Email and password are required.' });
     }
-    let storeCode = body.storeCode || '';
-    if (!storeCode) {
-      storeCode = 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 12);
+    if (!isValidEmail(email)) {
+      return jsonResponse(400, { success: false, error: 'Invalid email address.' });
     }
-    const token = createSignedAuthToken({ email, storeCode, role: 'owner' });
-    const sessionToken = 'billnaw_' + crypto.randomBytes(24).toString('hex');
+
+    // 1. Check in-memory auth-service userStore (includes demo@billnawcafe.com and warm-container signups)
+    const localAuth = loginWithPassword({ email, password });
+    let verifiedUser = null;
+    let storeCode = '';
+    let sessionToken = '';
+    let localShop = null;
+
+    if (localAuth.status === 200 && localAuth.data?.success) {
+      verifiedUser = localAuth.data.user;
+      storeCode = localAuth.data.storeCode;
+      sessionToken = localAuth.data.sessionToken;
+      localShop = localAuth.data.shop;
+    } else {
+      // 2. Serverless cold-start fallback via Firestore clients/_auth/users/{email}
+      const cloudUser = await retrieveAuthUserFromFirestore(email);
+      if (!cloudUser || !cloudUser.passwordHash || !cloudUser.salt) {
+        return jsonResponse(401, { success: false, error: 'Invalid credentials' });
+      }
+      const computedHash = hashPassword(password, cloudUser.salt);
+      const computedBuf = Buffer.from(computedHash, 'hex');
+      const storedBuf = Buffer.from(cloudUser.passwordHash, 'hex');
+      if (computedBuf.length !== storedBuf.length || !crypto.timingSafeEqual(computedBuf, storedBuf)) {
+        return jsonResponse(401, { success: false, error: 'Invalid credentials' });
+      }
+      setAuthUserRecord(cloudUser);
+      verifiedUser = {
+        uid: cloudUser.uid,
+        email: cloudUser.email,
+        firstName: cloudUser.firstName,
+        lastName: cloudUser.lastName,
+        shopName: cloudUser.shopName,
+        storeCode: cloudUser.storeCode,
+        role: cloudUser.role || 'Owner'
+      };
+      storeCode = cloudUser.storeCode || generateStoreCode(cloudUser.shopName, email);
+      sessionToken = 'billnaw_' + crypto.randomBytes(24).toString('hex');
+    }
+
+    const resolvedRole = verifiedUser.role || 'Owner';
+    const token = createSignedAuthToken({
+      uid: verifiedUser.uid,
+      email: verifiedUser.email,
+      storeCode,
+      role: resolvedRole
+    });
+
     let existingShop = null;
     try {
       existingShop = await getStoreFromFirestoreREST(storeCode);
-    } catch(e) {}
+    } catch (e) {}
+
+    const shopPayload = (existingShop && existingShop.success)
+      ? {
+          storeCode,
+          name: (existingShop.profile?.name && existingShop.profile.name !== 'My Cafe' && existingShop.profile.name !== 'billnaw')
+            ? existingShop.profile.name
+            : (existingShop.name && existingShop.name !== 'My Cafe' ? existingShop.name : (verifiedUser.shopName || storeCode)),
+          profile: existingShop.profile,
+          staff: existingShop.staff,
+          tables: existingShop.tables,
+          menu: existingShop.menu,
+          categories: existingShop.categories
+        }
+      : (localShop || { name: verifiedUser.shopName || body.shopName || storeCode, storeCode });
 
     return jsonResponse(200, {
       success: true,
+      message: 'Login successful',
       token,
       sessionToken,
       customToken: token,
       storeCode,
       isOwner: true,
-      user: { email, role: 'owner', isOwner: true },
-      shop: existingShop ? {
-        storeCode,
-        name: (existingShop.profile?.name && existingShop.profile.name !== 'My Cafe' && existingShop.profile.name !== 'billnaw') 
-          ? existingShop.profile.name 
-          : (existingShop.name && existingShop.name !== 'My Cafe' ? existingShop.name : (body.shopName || storeCode)),
-        profile: existingShop.profile,
-        staff: existingShop.staff,
-        tables: existingShop.tables,
-        menu: existingShop.menu,
-        categories: existingShop.categories
-      } : { name: body.shopName || storeCode, storeCode }
+      user: { ...verifiedUser, role: resolvedRole, isOwner: true },
+      shop: shopPayload
     });
   }
 
   // -----------------------------------------------------------
-  // Route: /auth/signup (Shop Signup)
+  // Route: /auth/signup & /auth/register (PBKDF2 + Firestore Persistence)
   // -----------------------------------------------------------
-  if (event.httpMethod === 'POST' && cleanPath === '/auth/signup') {
+  if (event.httpMethod === 'POST' && (cleanPath === '/auth/signup' || cleanPath === '/auth/register')) {
     const email = normalizeEmail(body.email);
-    const shopName = String(body.shopName || '').trim() || ('Shop ' + email.split('@')[0]);
-    const storeCode = shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16);
-    const token = createSignedAuthToken({ email, storeCode, role: 'owner' });
-    const sessionToken = 'billnaw_' + crypto.randomBytes(24).toString('hex');
+    const shopName = String(body.shopName || '').trim() || (email ? ('Shop ' + email.split('@')[0]) : '');
+    const firstName = String(body.firstName || 'Owner').trim();
+    const lastName = String(body.lastName || '').trim();
+    const password = body.password;
+    const confirmPassword = body.confirmPassword;
+    const adminPin = body.adminPin;
+    const phone = body.phone;
+    const submittedOtp = (body.otp !== undefined && body.otp !== null) ? String(body.otp).trim() : '';
 
-    // Automatically seed shop into Firestore with full profile, staff, tables, menu, categories & subcollections
+    if (!isValidEmail(email)) {
+      return jsonResponse(400, { success: false, error: 'Invalid email address' });
+    }
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return jsonResponse(400, { success: false, error: 'Password must be at least 6 characters' });
+    }
+    if (confirmPassword !== undefined && confirmPassword !== password) {
+      return jsonResponse(400, { success: false, error: 'Passwords do not match' });
+    }
+
+    // Check duplicate in Firestore as well as memory
+    const existingCloudUser = await retrieveAuthUserFromFirestore(email);
+    if (existingCloudUser && existingCloudUser.email === email) {
+      return jsonResponse(400, { success: false, error: 'An account with this email already exists' });
+    }
+
+    // Verify OTP against memory / Firestore if provided
+    if (submittedOtp !== '') {
+      if (!/^\d{6}$/.test(submittedOtp)) {
+        return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
+      }
+      let otpRecord = memoryOtpStore.get(email);
+      if (!otpRecord || otpRecord.consumed) {
+        otpRecord = await retrieveOtpFromFirestore(email);
+      }
+      if (!otpRecord || otpRecord.consumed || Date.now() > otpRecord.expiresAt) {
+        return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
+      }
+      if ((otpRecord.attempts || 0) >= 3) {
+        memoryOtpStore.delete(email);
+        await removeOtpFromFirestore(email);
+        return jsonResponse(429, { success: false, error: 'Too many invalid attempts. Code invalidated.' });
+      }
+      const otpBufA = Buffer.from(submittedOtp, 'utf8');
+      const otpBufB = Buffer.from(String(otpRecord.otp || ''), 'utf8');
+      if (otpBufA.length !== otpBufB.length || !crypto.timingSafeEqual(otpBufA, otpBufB)) {
+        otpRecord.attempts = (otpRecord.attempts || 0) + 1;
+        memoryOtpStore.set(email, otpRecord);
+        await persistOtpToFirestore(otpRecord);
+        return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
+      }
+      otpRecord.consumed = true;
+      memoryOtpStore.delete(email);
+      await removeOtpFromFirestore(email);
+    }
+
+    const regResult = registerUser({
+      firstName,
+      lastName,
+      shopName,
+      email,
+      password,
+      confirmPassword,
+      phone,
+      adminPin
+    });
+
+    if (regResult.status !== 200 || !regResult.data?.success) {
+      return jsonResponse(regResult.status || 400, regResult.data || { success: false, error: 'Signup failed' });
+    }
+
+    // Persist hashed user record to Firestore for cold-start login continuity
+    const regUser = regResult.data.user;
+    const storeCode = regResult.data.storeCode;
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = hashPassword(password, salt);
+    // Keep auth-service in-memory userStore and Firestore in sync with identical salt/hash
+    const persistentUserRecord = setAuthUserRecord({
+      ...regUser,
+      passwordHash,
+      salt,
+      role: 'Owner',
+      createdAt: new Date().toISOString()
+    });
+    await persistAuthUserToFirestore(persistentUserRecord);
+
+    const token = createSignedAuthToken({
+      uid: regUser.uid,
+      email: regUser.email,
+      storeCode,
+      role: 'Owner'
+    });
+
+    // Seed shop into Firestore using configured adminPin (never hardcoded '1234' when adminPin was provided)
     try {
-      const defaultPin = '1234';
-      const pinHash = crypto.createHash('sha256').update(defaultPin).digest('hex');
+      const effectivePin = (adminPin && /^\d{4}$/.test(String(adminPin).trim())) ? String(adminPin).trim() : '1234';
+      const pinSalt = crypto.randomBytes(16).toString('hex');
+      const saltedPinHash = crypto.createHash('sha256').update(`${effectivePin}:${pinSalt}:billnaw_pin_v2`).digest('hex');
+      const pinHash = hashStringServer(effectivePin);
       const defaultTables = {};
       for (let i = 1; i <= 10; i++) {
         defaultTables[String(i)] = { id: String(i), name: `Table ${i}`, status: 'available' };
@@ -1341,24 +2058,32 @@ export async function handler(event, context) {
       await syncStoreToFirestoreREST(storeCode, {
         ownerEmail: email,
         profile: {
+          ...regResult.data.shop?.profile,
           name: shopName,
           tableCount: 10,
-          phone: body.phone || '9876543210',
+          phone: regUser.phone || '9876543210',
           adminPinHash: pinHash,
+          adminPinSalt: pinSalt,
+          adminSaltedPinHash: saltedPinHash,
           gstMode: 'inclusive',
           defaultGstRate: 5
         },
         staff: [
-          { id: 1, name: 'Store Owner', role: 'Admin', status: 'Active', phone: body.phone || '9876543210' }
+          {
+            id: 1,
+            name: 'Store Owner',
+            role: 'Admin',
+            status: 'Active',
+            phone: regUser.phone || '9876543210',
+            pinSalt,
+            pinHash: saltedPinHash,
+            pin_salt: pinSalt,
+            pin_hash: saltedPinHash
+          }
         ],
         tables: defaultTables,
         categories: ['All', 'Snacks', 'Beverages', 'Main Course'],
-        menu: [
-          { id: 1, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
-          { id: 2, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5 },
-          { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5 },
-          { id: 4, name: 'Masala Coke', category: 'Beverages', price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5 }
-        ]
+        menu: regResult.data.shop?.menu || []
       });
     } catch (seedErr) {
       console.warn('[NETLIFY SIGNUP] Auto-seed note:', seedErr.message);
@@ -1366,13 +2091,14 @@ export async function handler(event, context) {
 
     return jsonResponse(200, {
       success: true,
+      message: 'Account created successfully',
       token,
-      sessionToken,
+      sessionToken: regResult.data.sessionToken,
       customToken: token,
       storeCode,
       isOwner: true,
-      user: { email, role: 'owner', isOwner: true },
-      shop: { name: shopName, storeCode }
+      user: { ...regUser, role: 'Owner', isOwner: true },
+      shop: regResult.data.shop || { name: shopName, storeCode }
     });
   }
 
@@ -1384,10 +2110,321 @@ export async function handler(event, context) {
   }
 
   // -----------------------------------------------------------
-  // Route: /auth/sessions
+  // Route: /auth/sessions (Authenticated, Tenant-Scoped, Redacted)
   // -----------------------------------------------------------
-  if (event.httpMethod === 'GET' && cleanPath.startsWith('/auth/sessions')) {
-    return jsonResponse(200, { success: true, sessions: [] });
+  if (event.httpMethod === 'GET' && cleanPath === '/auth/sessions') {
+    const requestedStore = sanitizeTenantStoreCode(event, body) || undefined;
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: requestedStore,
+      requiredPermission: 'manage_staff',
+      allowGracefulMigration: false,
+      allowBodyToken: false
+    });
+    if (!gate.ok) return gate.response;
+
+    const q = event.queryStringParameters || {};
+    const callerRole = normalizeBackendRole(gate.auth.user?.role || 'Cashier');
+    const isSuper = Boolean(gate.auth.isAdminSecret || callerRole === 'SuperAdmin');
+    const scopedStoreCode = isSuper ? (requestedStore || gate.auth.storeCode || undefined) : gate.auth.storeCode;
+    const scopedEmail = isSuper ? (q.email || undefined) : (q.email && normalizeEmail(q.email) === normalizeEmail(gate.auth.user?.email || '') ? q.email : undefined);
+
+    const sessions = listActiveSessions(scopedStoreCode, scopedEmail).map(({ token: _rawToken, ...safeSession }) => safeSession);
+    return jsonResponse(200, {
+      success: true,
+      storeCode: scopedStoreCode || null,
+      count: sessions.length,
+      sessions
+    }, gate.extraHeaders);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /auth/sessions/revoke
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && cleanPath === '/auth/sessions/revoke') {
+    const requestedStore = sanitizeTenantStoreCode(event, body) || undefined;
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: requestedStore,
+      requiredPermission: null,
+      allowGracefulMigration: false,
+      allowBodyToken: false
+    });
+    if (!gate.ok) return gate.response;
+
+    const { token: targetTok, sessionId, storeCode, email, revokeAll, keepCurrent } = body || {};
+    const callerToken = extractAuthToken(event, body, { allowBodyToken: false });
+    const callerRole = normalizeBackendRole(gate.auth.user?.role || 'Cashier');
+    const isSuper = Boolean(gate.auth.isAdminSecret || callerRole === 'SuperAdmin');
+
+    const targetId = targetTok || sessionId;
+    const isSelfRevoke = Boolean(
+      !revokeAll &&
+      targetId &&
+      callerToken &&
+      (targetId === callerToken ||
+        targetId === ('sess_' + crypto.createHash('sha256').update(callerToken).digest('hex').slice(0, 12)))
+    );
+
+    if (!isSelfRevoke) {
+      const rbac = verifyEndpointAccess({ authResult: gate.auth, eventOrReq: event, requiredPermission: 'manage_staff' });
+      if (!rbac.allowed) {
+        return jsonResponse(rbac.status || 403, { success: false, error: rbac.error });
+      }
+    }
+
+    if (revokeAll) {
+      const targetStore = isSuper ? (storeCode || gate.auth.storeCode) : gate.auth.storeCode;
+      const except = keepCurrent ? callerToken : null;
+      if (storeCode || !email) {
+        if (!isSuper && storeCode && String(storeCode).trim().toUpperCase() !== String(gate.auth.storeCode || '').trim().toUpperCase()) {
+          return jsonResponse(403, { success: false, error: 'Cross-tenant session revocation forbidden' });
+        }
+        const result = revokeSessionsForStore(targetStore, except);
+        return jsonResponse(result.status, result.data, gate.extraHeaders);
+      }
+      if (!isSuper && normalizeEmail(email) !== normalizeEmail(gate.auth.user?.email || '')) {
+        return jsonResponse(403, { success: false, error: 'Cross-tenant user session revocation forbidden' });
+      }
+      const result = revokeSessionsForUser(email, except);
+      return jsonResponse(result.status, result.data, gate.extraHeaders);
+    }
+
+    if (!targetId) {
+      return jsonResponse(400, { success: false, error: 'target token or sessionId is required' });
+    }
+    const result = revokeSession(targetId, isSuper ? null : (gate.auth.storeCode || '__MISSING_STORE__'));
+    return jsonResponse(result.status, result.data, gate.extraHeaders);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /devices/revoke & /devices/resume
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && (cleanPath === '/devices/revoke' || cleanPath === '/devices/resume')) {
+    const isRevoke = cleanPath === '/devices/revoke';
+    const code = sanitizeTenantStoreCode(event, body);
+    if (!code) {
+      return jsonResponse(400, { success: false, error: 'Valid storeCode is required' });
+    }
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: code,
+      requiredPermission: 'manage_devices',
+      allowGracefulMigration: false
+    });
+    if (!gate.ok) return gate.response;
+
+    const { deviceId } = body || {};
+    if (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) {
+      return jsonResponse(400, { success: false, error: 'deviceId is required' });
+    }
+
+    if (FIREBASE_PROJECT_ID && FIRESTORE_DATABASE_ID) {
+      const base = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents`;
+      const fieldName = isRevoke ? 'revokedAt' : 'resumedAt';
+      const newStatus = isRevoke ? 'REVOKED' : 'AUTHORIZED';
+      const url = `${base}/cafes/${encodeURIComponent(code)}/devices/${encodeURIComponent(deviceId.trim())}?updateMask.fieldPaths=status&updateMask.fieldPaths=${fieldName}`;
+      try {
+        const patchRes = await fetch(url, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              status: { stringValue: newStatus },
+              [fieldName]: { stringValue: new Date().toISOString() }
+            }
+          })
+        });
+        if (!patchRes || !patchRes.ok) {
+          return jsonResponse(patchRes?.status >= 400 ? patchRes.status : 502, {
+            success: false,
+            error: `Firestore device ${isRevoke ? 'revoke' : 'resume'} failed (${patchRes?.status || 502})`
+          });
+        }
+      } catch (err) {
+        return jsonResponse(502, { success: false, error: err.message || 'Firestore device update failed' });
+      }
+    }
+
+    return jsonResponse(200, {
+      success: true,
+      message: isRevoke ? `Device ${deviceId} revoked` : `Device ${deviceId} resumed & authorized`,
+      status: isRevoke ? 'REVOKED' : 'AUTHORIZED'
+    }, gate.extraHeaders);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /store/reset-data
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && cleanPath === '/store/reset-data') {
+    const requestedStore = sanitizeTenantStoreCode(event, body) || undefined;
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: requestedStore,
+      requiredPermission: 'change_settings',
+      allowGracefulMigration: false,
+      allowBodyToken: false
+    });
+    if (!gate.ok) return gate.response;
+
+    const targetCode = requestedStore || gate.auth.storeCode;
+    if (!targetCode) {
+      return jsonResponse(400, { success: false, error: 'Valid storeCode is required' });
+    }
+    const result = resetStoreCloudData(targetCode);
+    return jsonResponse(200, result, gate.extraHeaders);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /reports/generate-statement
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && cleanPath === '/reports/generate-statement') {
+    const code = sanitizeTenantStoreCode(event, body);
+    if (!code) {
+      return jsonResponse(400, { success: false, error: 'Valid storeCode is required' });
+    }
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: code,
+      requiredPermission: 'view_reports',
+      allowGracefulMigration: false
+    });
+    if (!gate.ok) return gate.response;
+
+    const { startDate, endDate, format = 'csv', transactions } = body || {};
+    pruneExpiredReportTokens();
+    const startMs = startDate ? Date.parse(startDate) : (Date.now() - 30 * 86400000);
+    const parseEndMs = (val) => {
+      if (!val) return Date.now();
+      const s = String(val).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return Date.parse(`${s}T23:59:59.999Z`);
+      return Date.parse(s);
+    };
+    const endMs = parseEndMs(endDate);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return jsonResponse(400, { success: false, error: 'Invalid startDate or endDate' });
+    }
+
+    let sourceHistory = Array.isArray(transactions) ? transactions : [];
+    if (sourceHistory.length === 0) {
+      const cloudStore = await getStoreFromFirestoreREST(code).catch(() => null);
+      if (cloudStore && cloudStore.success && Array.isArray(cloudStore.history)) {
+        sourceHistory = cloudStore.history;
+      }
+    }
+
+    const csvEscape = (v) => {
+      const s = String(v ?? '');
+      const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+
+    const filtered = sourceHistory.filter((tx) => {
+      if (!tx || typeof tx !== 'object') return false;
+      const st = String(tx.status || 'SETTLED').trim().toUpperCase();
+      if (st === 'VOID' || st === 'CANCELLED') return false;
+      const dt = Date.parse(tx.createdAt || tx.created_at || tx.date || tx.settled_at || '');
+      if (Number.isFinite(dt) && (dt < startMs || dt > endMs)) return false;
+      return true;
+    });
+
+    const header = 'Date,Bill No,Table,Customer,Items,Payment Mode,Gross (Rs),Tax (Rs),Net Total (Rs),Status';
+    const rows = [header];
+    for (const tx of filtered) {
+      const itemsStr = Array.isArray(tx.items)
+        ? tx.items.map(i => `${i.name || 'Item'} (x${i.qty || i.quantity || 1})`).join('; ')
+        : String(tx.items || '');
+      rows.push([
+        csvEscape(String(tx.date || tx.createdAt || tx.created_at || '').slice(0, 10)),
+        csvEscape(tx.billNo || tx.invoiceNo || tx.id || ''),
+        csvEscape(tx.table || tx.tableName || 'Counter'),
+        csvEscape(tx.customerName || tx.customer?.name || 'Walk-in'),
+        csvEscape(itemsStr),
+        csvEscape(tx.paymentMode || tx.paymentMethod || 'Cash'),
+        csvEscape(Number(tx.grossTotal ?? tx.subtotal ?? tx.total ?? 0).toFixed(2)),
+        csvEscape(Number(tx.tax ?? tx.gst ?? 0).toFixed(2)),
+        csvEscape(Number(tx.total ?? tx.amount ?? 0).toFixed(2)),
+        csvEscape(String(tx.status || 'SETTLED').toUpperCase())
+      ].join(','));
+    }
+
+    const safeExt = format === 'pdf' ? 'pdf' : 'csv';
+    const safeStoreSlug = code.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const filename = `statement_${safeStoreSlug}_${new Date(startMs).toISOString().slice(0, 10)}_to_${new Date(endMs).toISOString().slice(0, 10)}.${safeExt}`;
+    const token = crypto.randomBytes(32).toString('hex');
+    const csvContent = rows.join('\n');
+    const expiresAtMs = Date.now() + 15 * 60 * 1000;
+
+    reportTokens.set(token, {
+      storeCode: code,
+      filename,
+      format: safeExt,
+      content: csvContent,
+      expiresAt: expiresAtMs
+    });
+
+    return jsonResponse(200, {
+      success: true,
+      token,
+      downloadUrl: `/api/reports/download/${token}?filename=${encodeURIComponent(filename)}`,
+      filename,
+      totalRecords: filtered.length,
+      csvContent,
+      expiresAt: new Date(expiresAtMs).toISOString()
+    }, gate.extraHeaders);
+  }
+
+  // -----------------------------------------------------------
+  // Route: /reports/download/:token
+  // -----------------------------------------------------------
+  const reportDlMatch = event.httpMethod === 'GET' && cleanPath.match(/^\/reports\/download\/([^/]+)$/);
+  if (reportDlMatch) {
+    const gate = requireTenantAndPermission(event, body, {
+      targetStoreCode: undefined,
+      requiredPermission: 'view_reports',
+      allowGracefulMigration: false,
+      allowBodyToken: false,
+      allowQueryToken: true
+    });
+    if (!gate.ok) return gate.response;
+
+    const dlToken = decodeURIComponent(reportDlMatch[1] || '').trim();
+    const info = reportTokens.get(dlToken);
+    if (!info || Date.now() > info.expiresAt) {
+      if (info) reportTokens.delete(dlToken);
+      return {
+        statusCode: 404,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'text/plain' },
+        body: 'Download link expired or invalid.'
+      };
+    }
+
+    const callerRole = normalizeBackendRole(gate.auth.user?.role || 'Cashier');
+    if (!gate.auth.isAdminSecret && callerRole !== 'SuperAdmin') {
+      const authStore = String(gate.auth.storeCode || '').trim().toUpperCase();
+      const reportStore = String(info.storeCode || '').trim().toUpperCase();
+      if (!authStore || authStore !== reportStore) {
+        return jsonResponse(403, {
+          success: false,
+          error: `Cross-tenant access forbidden: store [${authStore}] cannot download report for [${reportStore}].`
+        });
+      }
+    }
+
+    const q = event.queryStringParameters || {};
+    const rawName = String(q.filename || info.filename || '');
+    const stripped = rawName.replace(/[\r\n\x00-\x1f"';\\\/]/g, '');
+    const baseName = path.basename(stripped);
+    const ext = info.format === 'pdf' ? '.pdf' : '.csv';
+    const safeStem = baseName.replace(/\.(csv|pdf)$/i, '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100) || `statement_${dlToken.slice(0, 8)}`;
+    const safeFilename = `${safeStem}${ext}`;
+
+    return {
+      statusCode: 200,
+      headers: {
+        ...CORS_HEADERS,
+        ...gate.extraHeaders,
+        'Content-Disposition': `attachment; filename="${safeFilename}"`,
+        'Content-Type': info.format === 'pdf' ? 'application/pdf' : 'text/csv',
+        'Cache-Control': 'no-store'
+      },
+      body: info.content || ''
+    };
   }
 
   // -----------------------------------------------------------

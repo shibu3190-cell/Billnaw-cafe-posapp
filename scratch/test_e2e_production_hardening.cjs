@@ -370,12 +370,13 @@ async function runSuite() {
     assert.ok(deviceBlockMatch, 'Client read and write must be unconditionally false for root /devices');
   });
 
-  await test('T1-RUL-04', 'Invoices ledger prohibits physical deletion and restricts updates strictly to PAID -> VOID within 30-day window', () => {
+  await test('T1-RUL-04', 'Invoices ledger prohibits physical deletion and restricts updates strictly to PAID/SETTLED -> VOID within 30-day window', () => {
     assert.ok(firestoreRules.includes('match /invoices/{invoiceId}'), 'Rules must declare invoices ledger rules');
     assert.ok(firestoreRules.includes('allow delete: if false;'), 'Invoices must forbid physical deletion');
-    assert.ok(firestoreRules.includes("resource.data.status == 'PAID'"), 'Invoice voiding requires initial PAID status');
+    assert.ok(firestoreRules.includes("resource.data.status == 'PAID'") && firestoreRules.includes("resource.data.status == 'SETTLED'"), 'Invoice voiding requires initial PAID or SETTLED status');
     assert.ok(firestoreRules.includes("request.resource.data.status == 'VOID'"), 'Invoice voiding targets VOID status');
     assert.ok(firestoreRules.includes('request.resource.data.void_audit.void_reason is string'), 'Void audit requires void_reason');
+    assert.ok(firestoreRules.includes('affectedKeys().hasOnly('), 'Invoice void must lock immutable financial fields');
     assert.ok(firestoreRules.includes('isWithin30DayEditWindow()'), 'Invoice modification locked to 30-day window');
   });
 

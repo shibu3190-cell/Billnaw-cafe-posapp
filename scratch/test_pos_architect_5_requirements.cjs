@@ -159,8 +159,10 @@ test("REQ4-03: Firestore Security Rules lock menu & menu_meta mutations to tenan
     assert.ok(rulesRoot.includes("match /menu_meta/{metaId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }"), "Admin write lock on /shops/{shopId}/menu_meta missing");
 });
 
-test("REQ4-04: Legacy /clients/{clientId} path secured against unauthenticated access", () => {
-    assert.ok(rulesRoot.includes("match /clients/{clientId} {\n      allow read: if isTenantStaff(clientId);\n      allow write: if isTenantAdmin(clientId);"), "Unauthenticated hole in /clients/{clientId} not closed");
+test("REQ4-04: Legacy /clients/{clientId} path secured against unauthenticated access and _auth bypass", () => {
+    assert.ok(rulesRoot.includes("match /clients/_auth/{allChildren=**} {\n      allow read, write: if false;\n    }"), "Internal /clients/_auth gate missing");
+    assert.ok(rulesRoot.includes("match /clients/{clientId} {\n      allow read: if clientId != '_auth' && isRootStaff(clientId);"), "Unauthenticated hole in /clients/{clientId} not closed");
+    assert.ok(rulesRoot.includes("isRootAdmin(clientId) && preservesOwnerEmailOnUpdate()"), "Admin update protection on /clients/{clientId} missing");
 });
 
 // ============================================================================

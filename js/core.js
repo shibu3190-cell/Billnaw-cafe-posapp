@@ -1926,13 +1926,34 @@ function triggerBillingReadyAlert(tableId, tableName, staffName) {
 }
 window.triggerBillingReadyAlert = triggerBillingReadyAlert;
 
+function isBillingAlertEligibleRole() {
+    const activeStaffObj = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
+    const rawRole = (activeStaffObj && activeStaffObj.role)
+        ? activeStaffObj.role
+        : ((typeof window !== 'undefined' && window.currentRole) ? window.currentRole : 'Admin');
+    const norm = String(rawRole || '').trim().toLowerCase();
+    return norm === 'cashier' || norm === 'admin' || norm === 'manager' || norm === 'owner' || norm === 'billing cashier';
+}
+
+function isOrderVoided(o) {
+    return Boolean(o && (String(o.status || '').toUpperCase() === 'VOID' || Boolean(o.void_audit)));
+}
+
+function sanitizeStaffRecordForCloud(staffRecord) {
+    if (!staffRecord || typeof staffRecord !== 'object') return staffRecord;
+    const clone = { ...staffRecord };
+    delete clone.initialOtp;
+    delete clone.otp;
+    delete clone.pin;
+    return clone;
+}
+
 if (posMeshChannel) {
     posMeshChannel.onmessage = (event) => {
         const data = event?.data;
         if (!data || !data.type) return;
         if (data.type === 'READY_FOR_BILLING') {
-            const role = (typeof currentStaff !== 'undefined' && currentStaff?.role) ? currentStaff.role : (window.currentRole || 'Admin');
-            if (role === 'Cashier' || role === 'Admin' || role === 'Manager') {
+            if (isBillingAlertEligibleRole()) {
                 triggerBillingReadyAlert(data.tableNumber, data.tableName, data.staffName);
             }
         } else if (data.type === 'TABLES_UPDATED' && data.tables) {
@@ -2357,6 +2378,8 @@ if (typeof document !== 'undefined') {
 }
 
 // Firestore Sync Integration
+let _lastPersistedTableState = {};
+
 function handleRemoteFirestoreUpdate(data) {
     if (!data || typeof data !== 'object') return;
     console.log("⚡ Received Firestore live store snapshot for:", myClientID);
@@ -2474,7 +2497,7 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
         if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
     }
-    if (Array.isArray(data.menu) && data.menu.length > 0) {
+    if (Array.isArray(data.menu)) {
         const incomingMenuVersion = Number(data.menuVersion || (data.menuMeta && data.menuMeta.version) || 0);
         const localMenuVersion = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 0);
 
@@ -2508,23 +2531,40 @@ function handleRemoteFirestoreUpdate(data) {
 
         const isLocalCustomized = (typeof isMenuCustomized === 'function') ? isMenuCustomized() : (localStorage.getItem('billnaw_menu_customized') === 'true');
         const isLocalTemplate = (typeof isDefaultTemplateMenu === 'function') && isDefaultTemplateMenu(menuItems);
+        const isAuthMode = (typeof isStoreAuthenticated === 'function')
+            ? isStoreAuthenticated()
+            : Boolean(localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_shop_session') || localStorage.getItem('billnaw_auth_mode') === 'authenticated');
 
+        // Uninitialized empty remote document (menu: [], version: 0):
+        // Preserve demo seeding only for unauthenticated, non-customized empty stores; never wipe existing local items.
+        if (data.menu.length === 0 && incomingMenuVersion === 0) {
+            if (!isAuthMode && !isLocalCustomized && (!Array.isArray(menuItems) || menuItems.length === 0)) {
+                const cleanDefaultMenu = [
+                    { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80&fm=webp" },
+                    { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80&fm=webp" },
+                    { id: 3, name: "Chicken Curry", category: "Main Course", price: 140, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80&fm=webp" },
+                    { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80&fm=webp" }
+                ];
+                menuItems = cleanDefaultMenu;
+                window.menuItems = menuItems;
+            }
+        }
         // Zero-Lag Optimization: If menu version has not changed and local catalog is populated, avoid full DOM wipe
-        // CASE 1: Local is authoritative with higher or equal version, AND local has items
+        // CASE 1: Local is authoritative with higher or equal version
         // (Prevents stale snapshots, background health checks, or legacy docs from overwriting local edits/deletes!)
-        if (localMenuVersion > 0 && incomingMenuVersion <= localMenuVersion && Array.isArray(menuItems) && menuItems.length > 0) {
+        else if (localMenuVersion > 0 && incomingMenuVersion <= localMenuVersion && ((Array.isArray(menuItems) && menuItems.length > 0) || incomingMenuVersion < localMenuVersion || cleanRemoteMenu.length === 0)) {
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
             // If cloud document is unversioned (legacy existing shop doc), push local version and catalog back to cloud
             if (incomingMenuVersion === 0 && isLocalCustomized && typeof dispatchBackendStoreSync === 'function') {
                 dispatchBackendStoreSync({
-                    menu: menuItems.map(item => sanitizeMenuItemForStorage(item)),
+                    menu: (menuItems || []).map(item => sanitizeMenuItemForStorage(item)),
                     menuVersion: localMenuVersion,
                     deletedMenuIds: Array.from(deletedIdSet),
                     deletedMenuNames: Array.from(deletedNameSet)
                 }, true);
             }
         }
-        // CASE 2: Remote has a strictly newer version bumped by another device/admin
+        // CASE 2: Remote has a strictly newer version bumped by another device/admin (including full menu clear [])
         else if (incomingMenuVersion > localMenuVersion) {
             localStorage.setItem('billnaw_menu_version', String(incomingMenuVersion));
             if (shopProfile) shopProfile.menuVersion = incomingMenuVersion;
@@ -2539,8 +2579,8 @@ function handleRemoteFirestoreUpdate(data) {
             if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
         }
-        // CASE 3: Local was only the pristine 4-item default template: adopt clean remote menu
-        else if (isLocalTemplate) {
+        // CASE 3: Local was only the pristine 4-item default template: adopt non-empty clean remote menu
+        else if (isLocalTemplate && data.menu.length > 0) {
             const adoptedVer = incomingMenuVersion > 0 ? incomingMenuVersion : 1;
             localStorage.setItem('billnaw_menu_version', String(adoptedVer));
             if (shopProfile) shopProfile.menuVersion = adoptedVer;
@@ -2556,7 +2596,7 @@ function handleRemoteFirestoreUpdate(data) {
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
         }
         // CASE 4: Reconcile unversioned legacy catalog (incomingMenuVersion === 0 && localMenuVersion === 0)
-        else {
+        else if (data.menu.length > 0 || incomingMenuVersion > 0) {
             const mergedMap = new Map();
             cleanRemoteMenu.forEach(rm => {
                 if (rm && rm.name) {
@@ -2650,55 +2690,118 @@ function handleRemoteFirestoreUpdate(data) {
         if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
 
         const newlyReadyTables = [];
-        const role = (typeof currentStaff !== 'undefined' && currentStaff?.role) ? currentStaff.role : (window.currentRole || 'Admin');
-        const isAdminOrCashier = role === 'Cashier' || role === 'Admin' || role === 'Manager';
+        const isAdminOrCashier = isBillingAlertEligibleRole();
+        const remoteHistoryList = Array.isArray(data.history)
+            ? data.history
+            : (data.history && typeof data.history === 'object' ? Object.values(data.history) : []);
 
         for (const [tId, tData] of Object.entries(data.tables)) {
-            if (tData) {
-                const prevTable = tablesInfo[tId];
-                const prevStatus = prevTable?.status;
-                const newStatus = tData.status;
+            if (!tData || typeof tData !== 'object') continue;
+            const prevTable = tablesInfo[tId];
+            const prevStatus = prevTable?.status;
+            const newStatus = tData.status;
+            const prevItems = Array.isArray(prevTable?.items) ? prevTable.items : [];
+            const remoteItems = Array.isArray(tData.items) ? tData.items : [];
 
-                // Detect remote table transitioning to ready_for_billing
-                if (newStatus === 'ready_for_billing' && prevStatus !== 'ready_for_billing') {
-                    newlyReadyTables.push({
-                        tableId: tId,
-                        tableName: tData.name || (typeof getTableName === 'function' ? getTableName(tId) : `Table ${tId}`),
-                        staffName: tData.readyForBillingBy || 'Floor Server'
-                    });
-                }
-
-                // Preserve qtyKotPrinted & kotPrintedMap across devices for running orders so add-on KOTs stay accurate
-                if (prevTable && Array.isArray(tData.items) && tData.items.length > 0 && newStatus !== 'empty' && newStatus !== 'billed') {
-                    const mergedMap = { ...(prevTable.kotPrintedMap || {}), ...(tData.kotPrintedMap || {}) };
-                    tData.items = tData.items.map(rItem => {
-                        const lItem = Array.isArray(prevTable.items)
-                            ? prevTable.items.find(li => String(li.id) === String(rItem.id) || li.name === rItem.name)
-                            : null;
-                        const mapQty = Number(mergedMap[String(rItem.id)] ?? mergedMap[rItem.name] ?? 0);
-                        const maxPrinted = Math.max(
-                            Number(lItem?.qtyKotPrinted || 0),
-                            Number(rItem.qtyKotPrinted || 0),
-                            mapQty
-                        );
-                        if (maxPrinted > 0) {
-                            const clamped = Math.min(Number(rItem.qty || rItem.quantity || 1), maxPrinted);
-                            if (rItem.id !== undefined) mergedMap[String(rItem.id)] = clamped;
-                            if (rItem.name) mergedMap[rItem.name] = clamped;
-                            return { ...rItem, qtyKotPrinted: clamped };
-                        }
-                        return rItem;
-                    });
-                    tData.kotPrintedMap = mergedMap;
-                }
-
-                if (!tablesInfo[tId]) {
-                    tablesInfo[tId] = tData;
-                } else {
-                    tablesInfo[tId] = { ...tablesInfo[tId], ...tData };
+            // Guard against stale remote empty boot snapshots overwriting a locally active sibling table
+            if (prevTable && prevItems.length > 0 && remoteItems.length === 0 && (newStatus === 'empty' || newStatus === 'vacant' || !newStatus)) {
+                const remoteClearedTs = Number(tData.clearedAt || (tData.updatedAt ? new Date(tData.updatedAt).getTime() : 0) || 0);
+                const localActiveTs = Number(prevTable.updatedAt || prevTable.savedTime || 0);
+                const hasNewerCheckoutInHistory = remoteHistoryList.some(o => {
+                    if (!o) return false;
+                    const oTable = String(o.tableId || o.table_id || o.table || '').replace(/^Table\s+/i, '').trim();
+                    if (oTable !== String(tId)) return false;
+                    const oTs = Number(o.settled_at ? new Date(o.settled_at).getTime() : (o.created_at ? new Date(o.created_at).getTime() : (o.id || 0))) || 0;
+                    return oTs >= localActiveTs;
+                });
+                if (!(newStatus === 'billed' || (remoteClearedTs > 0 && remoteClearedTs >= localActiveTs) || hasNewerCheckoutInHistory)) {
+                    continue;
                 }
             }
+
+            // Detect remote table transitioning to ready_for_billing
+            if (newStatus === 'ready_for_billing' && prevStatus !== 'ready_for_billing') {
+                newlyReadyTables.push({
+                    tableId: tId,
+                    tableName: tData.name || (typeof getTableName === 'function' ? getTableName(tId) : `Table ${tId}`),
+                    staffName: tData.readyForBillingBy || 'Floor Server'
+                });
+            }
+
+            // Non-mutating clone for merge
+            let mergedTable = prevTable ? { ...prevTable, ...tData } : { ...tData };
+
+            // Preserve qtyKotPrinted, kotPrintedMap & frozen price snapshots across devices for running orders
+            if (remoteItems.length > 0 && newStatus !== 'empty' && newStatus !== 'billed') {
+                const mergedMap = { ...(prevTable?.kotPrintedMap || {}), ...(tData.kotPrintedMap || {}) };
+                const rTime = Number(tData.updatedAt ? new Date(tData.updatedAt).getTime() : (tData.savedTime || 0)) || 0;
+                const lTime = Number(prevTable?.updatedAt || prevTable?.savedTime || 0) || 0;
+                const useLocalAsBase = Boolean(prevTable && prevItems.length > 0 && lTime > rTime && rTime > 0);
+                const baseItems = useLocalAsBase ? prevItems : remoteItems;
+                const otherItems = useLocalAsBase ? remoteItems : prevItems;
+
+                mergedTable.items = baseItems.map(baseItem => {
+                    if (!baseItem || typeof baseItem !== 'object') return baseItem;
+                    const otherItem = otherItems.find(oi => oi && ((oi.id !== undefined && String(oi.id) === String(baseItem.id)) || oi.name === baseItem.name));
+                    const lItem = useLocalAsBase ? baseItem : otherItem;
+                    const rItem = useLocalAsBase ? otherItem : baseItem;
+
+                    const mapQty = Number(mergedMap[String(baseItem.id)] ?? mergedMap[baseItem.name] ?? 0);
+                    const maxPrinted = Math.max(
+                        Number(lItem?.qtyKotPrinted || 0),
+                        Number(rItem?.qtyKotPrinted || 0),
+                        mapQty
+                    );
+                    const orderedQty = Number(baseItem.qty || baseItem.quantity || 1);
+                    const clampedPrinted = maxPrinted > 0 ? Math.min(orderedQty, maxPrinted) : Number(baseItem.qtyKotPrinted || 0);
+                    if (clampedPrinted > 0) {
+                        if (baseItem.id !== undefined) mergedMap[String(baseItem.id)] = clampedPrinted;
+                        if (baseItem.name) mergedMap[baseItem.name] = clampedPrinted;
+                    }
+
+                    // Preserve frozen price/rate/priceSnapshotAt (earliest active order price snapshot wins)
+                    let frozenPrice = baseItem.price;
+                    let frozenRate = baseItem.rate !== undefined ? baseItem.rate : baseItem.price;
+                    let frozenSnapAt = baseItem.priceSnapshotAt;
+                    if (lItem && lItem.priceSnapshotAt !== undefined && lItem.priceSnapshotAt !== null) {
+                        if (!rItem || rItem.priceSnapshotAt === undefined || rItem.priceSnapshotAt === null || Number(lItem.priceSnapshotAt) <= Number(rItem.priceSnapshotAt)) {
+                            frozenPrice = lItem.price;
+                            frozenRate = lItem.rate !== undefined ? lItem.rate : lItem.price;
+                            frozenSnapAt = lItem.priceSnapshotAt;
+                        }
+                    }
+
+                    const nextItem = {
+                        ...baseItem,
+                        price: frozenPrice,
+                        rate: frozenRate
+                    };
+                    if (frozenSnapAt !== undefined) nextItem.priceSnapshotAt = frozenSnapAt;
+                    if (clampedPrinted > 0) nextItem.qtyKotPrinted = clampedPrinted;
+                    return nextItem;
+                });
+                mergedTable.kotPrintedMap = mergedMap;
+                if (useLocalAsBase && prevTable.status) {
+                    mergedTable.status = prevTable.status;
+                }
+            } else if (!Array.isArray(mergedTable.items)) {
+                mergedTable.items = [];
+            }
+
+            tablesInfo[tId] = mergedTable;
+            _lastPersistedTableState[tId] = {
+                hasItems: Array.isArray(mergedTable.items) && mergedTable.items.length > 0,
+                hash: JSON.stringify(mergedTable.items || []) + '|' + (mergedTable.status || '')
+            };
         }
+
+        const totalTableSlots = (shopProfile && Number(shopProfile.tableCount)) || 10;
+        for (let i = 1; i <= totalTableSlots; i++) {
+            if (!tablesInfo[i]) {
+                tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
+            }
+        }
+
         window.tablesInfo = tablesInfo;
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_tables', tablesInfo);
@@ -2745,6 +2848,13 @@ function handleRemoteFirestoreUpdate(data) {
                         o.filterDate = (typeof getOrderFilterDate === 'function') ? getOrderFilterDate(o) : (o.date ? o.date.split(',')[0].trim() : getLocalISODate());
                     }
                     orderMap.set(key, o);
+                } else {
+                    const existing = orderMap.get(key);
+                    if (isOrderVoided(o) && !isOrderVoided(existing)) {
+                        orderMap.set(key, { ...existing, ...o, status: 'VOID', void_audit: o.void_audit || existing.void_audit });
+                    } else if (!isOrderVoided(existing) && !isOrderVoided(o) && Number(o.updatedAt || o.editedAt || 0) > Number(existing.updatedAt || existing.editedAt || 0)) {
+                        orderMap.set(key, o);
+                    }
                 }
             }
         });
@@ -2781,17 +2891,6 @@ function handleRemoteFirestoreUpdate(data) {
         window.dailyExpenses = dailyExpenses;
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_expenses', dailyExpenses);
-        }
-    }
-    if (data.tables && typeof data.tables === 'object') {
-        const fetchedTables = data.tables;
-        for(let i = 1; i <= shopProfile.tableCount; i++) {
-            if(fetchedTables[i]) { 
-                tablesInfo[i] = { ...(tablesInfo[i] || {}), ...fetchedTables[i] }; 
-                if(!tablesInfo[i].items) tablesInfo[i].items = []; 
-            } else { 
-                if (!tablesInfo[i]) tablesInfo[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null }; 
-            }
         }
     }
 
@@ -3180,7 +3279,8 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
                 let hasNewInvoices = false;
                 invoices.forEach(inv => {
                     const key = String(inv.id || inv.bill_no || inv.billNo || '');
-                    if (key && !orderMap.has(key)) {
+                    if (!key) return;
+                    if (!orderMap.has(key)) {
                         hasNewInvoices = true;
                         const totalAmount = inv.amount !== undefined ? Number(inv.amount) : (inv.final_payable_paise !== undefined ? inv.final_payable_paise / 100 : 0);
                         const rawItems = inv.rawItems || inv.items || [];
@@ -3200,9 +3300,46 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
                             grossSubtotal: inv.grossSubtotal || totalAmount,
                             subtotal: inv.subtotal || totalAmount,
                             tax: inv.tax || 0,
-                            discountAmount: inv.discountAmount || 0
+                            discountAmount: inv.discountAmount || 0,
+                            status: inv.status,
+                            void_audit: inv.void_audit,
+                            void_reason: inv.void_reason,
+                            voided_by: inv.voided_by,
+                            voided_at: inv.voided_at,
+                            created_at: inv.created_at,
+                            settled_at: inv.settled_at,
+                            updatedAt: inv.updatedAt,
+                            edit_audit: inv.edit_audit
                         };
                         orderMap.set(key, formattedOrder);
+                    } else {
+                        const existing = orderMap.get(key);
+                        if (isOrderVoided(inv) && !isOrderVoided(existing)) {
+                            hasNewInvoices = true;
+                            orderMap.set(key, {
+                                ...existing,
+                                status: 'VOID',
+                                void_audit: inv.void_audit || existing.void_audit || (inv.void_reason ? { void_reason: inv.void_reason, voided_by_staff_id: inv.voided_by || '', voided_at: inv.voided_at || '' } : null),
+                                void_reason: inv.void_reason || inv.void_audit?.void_reason || existing.void_reason,
+                                voided_by: inv.voided_by || inv.void_audit?.voided_by_staff_id || existing.voided_by,
+                                voided_at: inv.voided_at || inv.void_audit?.voided_at || existing.voided_at
+                            });
+                        } else if (!isOrderVoided(existing) && !isOrderVoided(inv)) {
+                            const invTs = Number(inv.updatedAt || inv.editedAt || 0);
+                            const exTs = Number(existing.updatedAt || existing.editedAt || 0);
+                            if (invTs > exTs) {
+                                hasNewInvoices = true;
+                                const totalAmount = inv.amount !== undefined ? Number(inv.amount) : (inv.final_payable_paise !== undefined ? inv.final_payable_paise / 100 : existing.amount);
+                                const rawItems = inv.rawItems || inv.items || existing.rawItems || [];
+                                orderMap.set(key, {
+                                    ...existing,
+                                    ...inv,
+                                    rawItems,
+                                    items: Array.isArray(rawItems) ? rawItems.map(it => `${it.qty || it.quantity || 1}x ${it.name || 'Item'}`).join(', ') : existing.items,
+                                    amount: totalAmount
+                                });
+                            }
+                        }
                     }
                 });
                 if (hasNewInvoices) {
@@ -3253,7 +3390,7 @@ function subscribeMenuMetaCloudListener(targetStoreCode = null) {
         const storeCode = targetStoreCode || getActiveStoreIdentifier();
         if (!storeCode) return null;
 
-        const rootCol = (storeCode.startsWith('STORE-') || storeCode.startsWith('SHOP-')) ? 'shops' : 'cafes';
+        const rootCol = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
         const metaDocRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode, 'menu_meta', 'version');
         if (!metaDocRef) return null;
 
@@ -3265,9 +3402,6 @@ function subscribeMenuMetaCloudListener(targetStoreCode = null) {
 
                 if (incomingVer > localVer) {
                     console.log(`⚡ [MenuMeta] New menu version detected: v${incomingVer} (local: v${localVer}). Syncing bundled menu...`);
-                    localStorage.setItem('billnaw_menu_version', String(incomingVer));
-                    if (shopProfile) shopProfile.menuVersion = incomingVer;
-                    window.currentMenuVersion = incomingVer;
                     syncBundledMenuFromCloud(storeCode, incomingVer);
                 }
             }
@@ -3287,16 +3421,18 @@ async function syncBundledMenuFromCloud(storeCode, expectedVersion = null) {
     if (!storeCode) return;
     try {
         if (window.firestoreDB && window.firestoreDoc && window.firestoreGetDoc) {
-            const rootCol = (storeCode.startsWith('STORE-') || storeCode.startsWith('SHOP-')) ? 'shops' : 'cafes';
+            const rootCol = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
             const storeRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode);
             const snap = await window.firestoreGetDoc(storeRef);
             if (snap.exists()) {
                 const data = snap.data();
                 if (Array.isArray(data.menu)) {
+                    const resolvedVer = Math.max(Number(expectedVersion || 0), Number(data.menuVersion || 0)) || expectedVersion || data.menuVersion;
                     handleRemoteFirestoreUpdate({
                         menu: data.menu,
-                        menuVersion: expectedVersion || data.menuVersion,
+                        menuVersion: resolvedVer,
                         deletedMenuIds: data.deletedMenuIds,
+                        deletedMenuNames: data.deletedMenuNames,
                         categories: data.categories
                     });
                     return;
@@ -3308,10 +3444,12 @@ async function syncBundledMenuFromCloud(storeCode, expectedVersion = null) {
         if (res.ok) {
             const data = await res.json();
             if (data && Array.isArray(data.menu)) {
+                const resolvedVer = Math.max(Number(expectedVersion || 0), Number(data.menuVersion || 0)) || expectedVersion || data.menuVersion;
                 handleRemoteFirestoreUpdate({
                     menu: data.menu,
-                    menuVersion: expectedVersion || data.menuVersion,
+                    menuVersion: resolvedVer,
                     deletedMenuIds: data.deletedMenuIds,
+                    deletedMenuNames: data.deletedMenuNames,
                     categories: data.categories
                 });
             }
@@ -3376,6 +3514,7 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
     if (!staffRecord || (!staffRecord.id && !staffRecord.staffId)) return;
     const storeCode = targetStoreCode || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (shopProfile && shopProfile.storeCode) || null;
     if (!storeCode) return;
+    const safeStaffRecord = sanitizeStaffRecordForCloud(staffRecord);
     try {
         if (typeof idb !== 'undefined' && idb.set) {
             try {
@@ -3385,10 +3524,10 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
             }
         }
         if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
-            const subdocRef = getStoreSubdocRef('staff', String(staffRecord.id || staffRecord.staffId), storeCode);
+            const subdocRef = getStoreSubdocRef('staff', String(safeStaffRecord.id || safeStaffRecord.staffId), storeCode);
             if (subdocRef) {
                 await window.firestoreSetDoc(subdocRef, {
-                    ...staffRecord,
+                    ...safeStaffRecord,
                     updatedAt: new Date().toISOString()
                 }, { merge: true });
             }
@@ -3402,7 +3541,7 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
         await fetch('/api/sync/staff', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-shop-id': storeCode },
-            body: JSON.stringify({ storeCode, staff: [staffRecord] })
+            body: JSON.stringify({ storeCode, staff: [safeStaffRecord] })
         }).catch(() => {});
     } catch (e) {}
 }
@@ -3579,39 +3718,98 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports.subscribeInvoicesCloudListener = subscribeInvoicesCloudListener;
 }
 
-let backendSyncTimeout = null;
-let pendingBackendSyncPayload = {};
+let backendSyncTimers = {};
+let pendingBackendSyncByStore = {};
+
+function readOfflineSyncQueueMap() {
+    try {
+        const raw = localStorage.getItem('billnaw_offline_sync_queue');
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        // Normalize legacy flat single-object queue ({ storeCode: 'STORE-A', menu: [...] })
+        if (typeof parsed.storeCode === 'string' && parsed.storeCode.trim() !== '') {
+            return { [parsed.storeCode.trim()]: parsed };
+        }
+        return parsed;
+    } catch (e) {
+        return {};
+    }
+}
+
+function writeOfflineSyncQueueMap(map) {
+    try {
+        if (!map || typeof map !== 'object' || Object.keys(map).length === 0) {
+            localStorage.removeItem('billnaw_offline_sync_queue');
+        } else {
+            localStorage.setItem('billnaw_offline_sync_queue', JSON.stringify(map));
+        }
+    } catch (e) {}
+}
 
 async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) {
     if (!partialPayload || typeof partialPayload !== 'object') return false;
-    const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+    const activeStoreCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
                       localStorage.getItem('billnaw_store_code') ||
                       localStorage.getItem('billnaw_shop_code') ||
                       (shopProfile && (shopProfile.storeCode || shopProfile.id)) ||
                       null;
 
-    if (!storeCode) {
+    if (!activeStoreCode) {
         console.warn('[BACKEND SYNC] No active storeCode found. Deferring sync to prevent cross-tenant contamination.');
         return false;
     }
 
-    Object.assign(pendingBackendSyncPayload, partialPayload);
-    pendingBackendSyncPayload.storeCode = storeCode;
+    if (partialPayload.storeCode && String(partialPayload.storeCode).trim().toUpperCase() !== String(activeStoreCode).trim().toUpperCase()) {
+        console.warn(`[BACKEND SYNC] Store mismatch rejected (${partialPayload.storeCode} !== ${activeStoreCode}). Preventing cross-tenant overwrite.`);
+        return false;
+    }
+
+    const sanitizedPartial = { ...partialPayload };
+    if (Array.isArray(sanitizedPartial.staff)) {
+        sanitizedPartial.staff = sanitizedPartial.staff.map(sanitizeStaffRecordForCloud);
+    }
+
+    const storeBucket = { ...(pendingBackendSyncByStore[activeStoreCode] || {}), ...sanitizedPartial, storeCode: activeStoreCode };
     const activeOwnerEmail = (typeof shopProfile !== 'undefined' && (shopProfile?.ownerEmail || shopProfile?.email)) ||
                              localStorage.getItem('billnaw_auth_email') ||
                              localStorage.getItem('billnaw_owner_email') ||
                              localStorage.getItem('billnaw_shop_email') || '';
-    if (activeOwnerEmail && !pendingBackendSyncPayload.ownerEmail) {
-        pendingBackendSyncPayload.ownerEmail = activeOwnerEmail.trim().toLowerCase();
+    if (activeOwnerEmail && !storeBucket.ownerEmail) {
+        storeBucket.ownerEmail = activeOwnerEmail.trim().toLowerCase();
     }
+    pendingBackendSyncByStore[activeStoreCode] = storeBucket;
 
-    const doSync = async () => {
-        const payloadToSend = { ...pendingBackendSyncPayload };
-        pendingBackendSyncPayload = {};
-        if (backendSyncTimeout) {
-            clearTimeout(backendSyncTimeout);
-            backendSyncTimeout = null;
+    const doSync = async (targetStoreCode = activeStoreCode) => {
+        const payloadToSend = { ...(pendingBackendSyncByStore[targetStoreCode] || {}) };
+        delete pendingBackendSyncByStore[targetStoreCode];
+        if (backendSyncTimers[targetStoreCode]) {
+            clearTimeout(backendSyncTimers[targetStoreCode]);
+            delete backendSyncTimers[targetStoreCode];
         }
+
+        // Verify store is still active before dispatching over the network
+        const currentActiveCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+                                  localStorage.getItem('billnaw_store_code') ||
+                                  localStorage.getItem('billnaw_shop_code') ||
+                                  (shopProfile && (shopProfile.storeCode || shopProfile.id)) ||
+                                  null;
+        if (!currentActiveCode || String(currentActiveCode).trim().toUpperCase() !== String(targetStoreCode).trim().toUpperCase()) {
+            const qMap = readOfflineSyncQueueMap();
+            if (Object.keys(payloadToSend).length > 0) {
+                qMap[targetStoreCode] = { ...(qMap[targetStoreCode] || {}), ...payloadToSend, storeCode: targetStoreCode };
+                writeOfflineSyncQueueMap(qMap);
+            }
+            console.warn(`[BACKEND SYNC] Active store changed during sync (${targetStoreCode} -> ${currentActiveCode}). Preserving queued payload under original storeCode.`);
+            return false;
+        }
+
+        const qMapBefore = readOfflineSyncQueueMap();
+        const existingQueueKey = Object.keys(qMapBefore).find(k =>
+            String(qMapBefore[k]?.storeCode || k).trim().toUpperCase() === String(targetStoreCode).trim().toUpperCase()
+        );
+        const queuedForStore = existingQueueKey ? qMapBefore[existingQueueKey] : null;
+        const finalPayload = { ...(queuedForStore || {}), ...payloadToSend, storeCode: targetStoreCode };
 
         let timeoutId = null;
         let signal = undefined;
@@ -3626,39 +3824,52 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-shop-id': storeCode,
-                    'x-shop-email': payloadToSend.ownerEmail || ''
+                    'x-shop-id': targetStoreCode,
+                    'x-store-code': targetStoreCode,
+                    'x-shop-email': finalPayload.ownerEmail || ''
                 },
-                body: JSON.stringify(payloadToSend),
+                body: JSON.stringify(finalPayload),
                 signal
             });
             if (timeoutId) clearTimeout(timeoutId);
-            if (res.ok) {
+            if (res && res.ok) {
+                let respJson = null;
+                if (typeof res.json === 'function') {
+                    try { respJson = await res.json(); } catch (e) {}
+                }
+                if (respJson && respJson.success === false) {
+                    throw new Error(respJson.error || 'Sync rejected by server');
+                }
                 lastCloudSyncTime = Date.now();
                 setCloudSyncStatus('synced', 'Real-Time Synced');
-                try { localStorage.removeItem('billnaw_offline_sync_queue'); } catch(e) {}
+                const qMapAfter = readOfflineSyncQueueMap();
+                Object.keys(qMapAfter).forEach(k => {
+                    if (String(qMapAfter[k]?.storeCode || k).trim().toUpperCase() === String(targetStoreCode).trim().toUpperCase()) {
+                        delete qMapAfter[k];
+                    }
+                });
+                writeOfflineSyncQueueMap(qMapAfter);
                 return true;
             } else {
-                throw new Error(`Sync HTTP ${res.status}`);
+                throw new Error(`Sync HTTP ${res ? res.status : 'unknown'}`);
             }
         } catch (err) {
             if (timeoutId) clearTimeout(timeoutId);
             console.warn('[BACKEND SYNC] Network defer / offline:', err.message);
-            try {
-                const existingQueue = JSON.parse(localStorage.getItem('billnaw_offline_sync_queue') || '{}');
-                const mergedQueue = { ...existingQueue, ...payloadToSend };
-                localStorage.setItem('billnaw_offline_sync_queue', JSON.stringify(mergedQueue));
-            } catch(e) {}
+            const qMapErr = readOfflineSyncQueueMap();
+            const qKey = existingQueueKey || targetStoreCode;
+            qMapErr[qKey] = { ...(qMapErr[qKey] || {}), ...finalPayload, storeCode: targetStoreCode };
+            writeOfflineSyncQueueMap(qMapErr);
             setCloudSyncStatus('offline', 'Offline (Saved Locally)');
         }
         return false;
     };
 
     if (immediate) {
-        return await doSync();
+        return await doSync(activeStoreCode);
     } else {
-        if (backendSyncTimeout) clearTimeout(backendSyncTimeout);
-        backendSyncTimeout = setTimeout(doSync, 350);
+        if (backendSyncTimers[activeStoreCode]) clearTimeout(backendSyncTimers[activeStoreCode]);
+        backendSyncTimers[activeStoreCode] = setTimeout(() => doSync(activeStoreCode), 350);
         return true;
     }
 }
@@ -3666,15 +3877,31 @@ window.dispatchBackendStoreSync = dispatchBackendStoreSync;
 
 async function flushOfflineSyncQueue() {
     try {
-        const rawQueue = localStorage.getItem('billnaw_offline_sync_queue');
-        if (!rawQueue) return;
-        const queue = JSON.parse(rawQueue);
-        if (queue && typeof queue === 'object' && Object.keys(queue).length > 0) {
-            console.info('[OFFLINE SYNC] Resuming connectivity: flushing queued changes to cloud...');
-            localStorage.removeItem('billnaw_offline_sync_queue');
-            await dispatchBackendStoreSync(queue, true);
+        const activeStoreCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+                                localStorage.getItem('billnaw_store_code') ||
+                                localStorage.getItem('billnaw_shop_code') ||
+                                (shopProfile && (shopProfile.storeCode || shopProfile.id)) ||
+                                null;
+        if (!activeStoreCode) return false;
+
+        const qMap = readOfflineSyncQueueMap();
+        const matchedKey = Object.keys(qMap).find(k => {
+            const entry = qMap[k];
+            if (!entry || typeof entry !== 'object') return false;
+            const entryCode = String(entry.storeCode || k || '').trim().toUpperCase();
+            return entryCode !== '' && entryCode === String(activeStoreCode).trim().toUpperCase();
+        });
+        if (!matchedKey) return false;
+
+        const matchedEntry = qMap[matchedKey];
+        if (matchedEntry && typeof matchedEntry === 'object' && Object.keys(matchedEntry).length > 0) {
+            console.info(`[OFFLINE SYNC] Resuming connectivity: flushing queued changes for ${activeStoreCode} to cloud...`);
+            return await dispatchBackendStoreSync({ ...matchedEntry, storeCode: activeStoreCode }, true);
         }
-    } catch(e) {}
+        return false;
+    } catch (e) {
+        return false;
+    }
 }
 window.flushOfflineSyncQueue = flushOfflineSyncQueue;
 
@@ -3739,11 +3966,12 @@ async function persistAllToFirestore() {
     const deletedMenuNames = (typeof getDeletedMenuItemNames === 'function') ? getDeletedMenuItemNames() : [];
     const deletedStaffIds = (typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds() : [];
     const currentMenuVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 1);
+    const sanitizedStaff = Array.isArray(staffList) ? staffList.map(sanitizeStaffRecordForCloud) : staffList;
     const fullPayload = {
         storeCode: targetStoreCode,
         replaceStaff: true,
         profile: safeProfile,
-        staff: staffList,
+        staff: sanitizedStaff,
         deletedStaffIds: deletedStaffIds,
         menu: sanitizedMenu,
         menuVersion: currentMenuVer,
@@ -3790,6 +4018,22 @@ async function persistAllToFirestore() {
 window.persistAllToFirestore = persistAllToFirestore;
 
 function persistTables() { 
+    if (tablesInfo && typeof tablesInfo === 'object') {
+        const nowTs = Date.now();
+        for (const [tId, tbl] of Object.entries(tablesInfo)) {
+            if (!tbl || typeof tbl !== 'object') continue;
+            const hasItems = Array.isArray(tbl.items) && tbl.items.length > 0;
+            const prevState = _lastPersistedTableState[tId];
+            const curHash = JSON.stringify(tbl.items || []) + '|' + (tbl.status || '');
+            if (!hasItems && prevState && prevState.hasItems) {
+                tbl.clearedAt = nowTs;
+                tbl.updatedAt = nowTs;
+            } else if (hasItems && (!prevState || prevState.hash !== curHash)) {
+                tbl.updatedAt = nowTs;
+            }
+            _lastPersistedTableState[tId] = { hasItems, hash: curHash };
+        }
+    }
     idb.set('cafe_tables', tablesInfo); 
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
@@ -3841,7 +4085,7 @@ function persistMenu() {
             try {
                 const storeCode = getActiveStoreIdentifier();
                 if (storeCode) {
-                    const rootCol = (storeCode.startsWith('STORE-') || storeCode.startsWith('SHOP-')) ? 'shops' : 'cafes';
+                    const rootCol = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
                     const metaDocRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode, 'menu_meta', 'version');
                     if (metaDocRef) {
                         window.firestoreSetDoc(metaDocRef, {
@@ -4111,10 +4355,11 @@ function persistStaffToFirestore(newStaff = null) {
     idb.set('cafe_staff', staffList);
     try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
     const deletedStaffIds = (typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds() : [];
+    const sanitizedStaffList = Array.isArray(staffList) ? staffList.map(sanitizeStaffRecordForCloud) : staffList;
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { staff: staffList, deletedStaffIds, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, { staff: sanitizedStaffList, deletedStaffIds, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
         if (newStaff && (newStaff.id || newStaff.staffId)) {
             syncStaffRecordToCloud(newStaff).catch(() => {});
@@ -4127,7 +4372,7 @@ function persistStaffToFirestore(newStaff = null) {
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ staff: staffList, deletedStaffIds }, true);
+        dispatchBackendStoreSync({ staff: sanitizedStaffList, deletedStaffIds }, true);
     }
 }
 window.persistStaffToFirestore = persistStaffToFirestore;
@@ -4778,8 +5023,63 @@ window.runBackgroundHealthCheck = runBackgroundHealthCheck;
 window.startBackgroundSync = startBackgroundSync;
 window.stopBackgroundSync = stopBackgroundSync;
 
+const TENANT_CACHE_LOCALSTORAGE_KEYS = [
+    // R1.4 mandatory keys
+    'billnaw_menu_version', 'billnaw_deleted_menu_ids', 'billnaw_deleted_menu_names',
+    'billnaw_menu_customized', 'billnaw_offline_sync_queue',
+    // Tombstones & KOT/Menu/History/POS caches
+    'billnaw_deleted_staff_ids', 'billnaw_active_kots', 'billnaw_last_kot_no',
+    'billnaw_menu', 'billnaw_active_cart', 'billnaw_offline_orders',
+    'billnaw_authorized_devices', 'billnaw_active_sessions', 'billnaw_active_staff',
+    'billnaw_last_staff_id', 'billnaw_current_session_id', 'billnaw_terminal_locked',
+    'billnaw_pin_verified_at', 'billnaw_session_revoked',
+    'cafe_khata', 'billnaw_culinary_materials', 'billnaw_culinary_batches',
+    'billnaw_culinary_recipes', 'billnaw_culinary_subs',
+    'billnaw_station_profile', 'billnaw_station_name', 'billnaw_admin_pin_hash',
+    'billnaw_store_staff', 'billnaw_shop_name', 'billnaw_store_profile',
+    'billnaw_shop_phone', 'billnaw_shop_address', 'billnaw_shop_logo',
+    'billnaw_shop_fssai', 'billnaw_shop_gstin', 'billnaw_shop_upi_id',
+    'billnaw_shop_show_qr', 'billnaw_shop_email', 'billnaw_shop_owner',
+    'billnaw_shop_code', 'billnaw_gst_mode', 'billnaw_default_gst_rate',
+    'billnaw_table_count', 'billnaw_subscription_status', 'billnaw_subscription_record',
+    'billnaw_voice_buffer', 'billnaw_voice_history', 'bongbhoj_voice_buffer',
+    'pos_current_staff', 'pos_order_history', 'pos_failed_print_jobs',
+    'billnaw_license_active', 'billnaw_license_key', 'billnaw_active_store_id',
+    'storeCode', 'storeId'
+];
+
+const TENANT_AUTH_LOCALSTORAGE_KEYS = [
+    'billnaw_auth_token', 'billnaw_shop_session', 'billnaw_auth_email',
+    'billnaw_auth_phone', 'billnaw_auth_mode', 'billnaw_store_code',
+    'billnaw_active_user', 'billnaw_owner_email', 'ownerEmail',
+    'billnaw_last_device_email', 'billnaw_last_store_code',
+    'billnaw_is_master', 'billnaw_device_status', 'billnaw_device_auth_timestamp',
+    'billnaw_pairing_code', 'bongbhoj_client_id', 'cafeLicenseKey'
+];
+
+const TENANT_IDB_STORES = [
+    'cafe_menu', 'cafe_categories', 'cafe_history', 'cafe_tables',
+    'cafe_customers', 'cafe_expenses', 'cafe_staff', 'cafe_profile',
+    'cafe_logo', 'cafe_khata', 'cafe_raw_materials', 'cafe_sub_recipes',
+    'cafe_unsettled_orders', 'billnaw_devices', 'billnaw_sessions'
+];
+
 function clearAllTenantLocalData() {
     try {
+        if (typeof detachFirestoreListener === 'function') {
+            try { detachFirestoreListener(); } catch (e) {}
+        }
+        if (typeof stopBackgroundSync === 'function') {
+            try { stopBackgroundSync(); } catch (e) {}
+        }
+        if (typeof window !== 'undefined' && typeof window.stopSessionHeartbeat === 'function') {
+            try { window.stopSessionHeartbeat(); } catch (e) {}
+        }
+        if (typeof window !== 'undefined' && typeof window.stopStaffPresenceHeartbeat === 'function') {
+            try { window.stopStaffPresenceHeartbeat(); } catch (e) {}
+        }
+
+        // Explicit removals preserved for static/runtime test contracts
         localStorage.removeItem('billnaw_auth_token');
         localStorage.removeItem('billnaw_active_staff');
         localStorage.removeItem('billnaw_last_staff_id');
@@ -4801,21 +5101,80 @@ function clearAllTenantLocalData() {
         localStorage.removeItem('billnaw_station_name');
         localStorage.removeItem('billnaw_admin_pin_hash');
         localStorage.removeItem('billnaw_store_staff');
+        localStorage.removeItem('billnaw_menu_version');
+        localStorage.removeItem('billnaw_deleted_menu_ids');
+        localStorage.removeItem('billnaw_deleted_menu_names');
+        localStorage.removeItem('billnaw_menu_customized');
+        localStorage.removeItem('billnaw_offline_sync_queue');
+        localStorage.removeItem('billnaw_deleted_staff_ids');
+        localStorage.removeItem('billnaw_active_kots');
+
+        TENANT_CACHE_LOCALSTORAGE_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+        TENANT_AUTH_LOCALSTORAGE_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+
+        Object.keys(backendSyncTimers || {}).forEach(k => {
+            try { clearTimeout(backendSyncTimers[k]); } catch (e) {}
+            delete backendSyncTimers[k];
+        });
+        pendingBackendSyncByStore = {};
+        _lastPersistedTableState = {};
+
         if (typeof shopProfile !== 'undefined') {
             shopProfile = { name: 'billnaw', address: '', phone: '', fssai: '', gstin: '', upiId: '', showQr: false, gstMode: 'inclusive', defaultGstRate: 5, tableCount: 10, startInvoiceNo: 1001 };
             if (typeof window !== 'undefined') window.shopProfile = shopProfile;
         }
-        if (typeof window !== 'undefined' && typeof window.stopSessionHeartbeat === 'function') {
-            try { window.stopSessionHeartbeat(); } catch (e) {}
-        }
+        if (typeof menuItems !== 'undefined') menuItems = [];
+        if (typeof window !== 'undefined') window.menuItems = [];
+        if (typeof menuCategories !== 'undefined') menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
+        if (typeof window !== 'undefined') window.menuCategories = menuCategories;
+        if (typeof orderHistory !== 'undefined') orderHistory = [];
+        if (typeof window !== 'undefined') window.orderHistory = [];
+        if (typeof dailyExpenses !== 'undefined') dailyExpenses = [];
+        if (typeof window !== 'undefined') window.dailyExpenses = [];
+        if (typeof customersList !== 'undefined') customersList = [];
+        if (typeof window !== 'undefined') window.customersList = [];
+        if (typeof staffList !== 'undefined') staffList = [];
+        if (typeof window !== 'undefined') window.staffList = [];
         if (typeof currentCart !== 'undefined') currentCart = [];
         if (typeof tablesInfo !== 'undefined') tablesInfo = {};
-        if (typeof window.cart !== 'undefined') window.cart = [];
-        if (typeof window.clearCart === 'function') window.clearCart();
+        if (typeof window !== 'undefined') {
+            window.tablesInfo = {};
+            window.cart = [];
+            window.currentStaff = null;
+            window.currentRole = null;
+            window.currentMenuVersion = 0;
+            window.authorizedDevices = [];
+            window.activeStaffSessions = [];
+            window.currentDeviceRecord = null;
+            window.currentSessionId = null;
+            window.myClientID = null;
+        }
+        if (typeof myClientID !== 'undefined') myClientID = null;
+        if (typeof window !== 'undefined' && typeof window.clearCart === 'function') window.clearCart();
         if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+
         if (typeof idb !== 'undefined' && idb.clear) {
-            const stores = ['cafe_menu', 'cafe_history', 'cafe_tables', 'cafe_customers', 'cafe_expenses', 'cafe_staff', 'cafe_profile', 'cafe_khata', 'cafe_raw_materials', 'cafe_sub_recipes'];
+            const stores = [...TENANT_IDB_STORES];
             stores.forEach(s => { try { idb.clear(s); } catch (e) {} });
+            try {
+                if (typeof idbMemoryStore === 'object' && idbMemoryStore) {
+                    Object.keys(idbMemoryStore).forEach(k => {
+                        if (k.startsWith('billnaw_device_') || k.startsWith('billnaw_session_')) {
+                            delete idbMemoryStore[k];
+                        }
+                    });
+                }
+                if (idb.db && idb.db.objectStoreNames) {
+                    ['orders', 'kot_records', 'menu_items'].forEach(storeName => {
+                        if (idb.db.objectStoreNames.contains(storeName)) {
+                            try {
+                                const tx = idb.db.transaction(storeName, 'readwrite');
+                                tx.objectStore(storeName).clear();
+                            } catch (e) {}
+                        }
+                    });
+                }
+            } catch (e) {}
         }
     } catch (e) {}
 }
@@ -5227,6 +5586,97 @@ window.updateAllUI = updateAllUI;
 async function initDatabase() {
     await idb.init();
 
+    // Multi-Account Device Isolation: Run BEFORE hydrating or self-healing old tenant data into shopProfile/IDB
+    try {
+        let sessionObj = null;
+        try {
+            const sessionRawPre = localStorage.getItem('billnaw_shop_session');
+            if (sessionRawPre) sessionObj = JSON.parse(sessionRawPre);
+        } catch (e) {}
+
+        let currentEmail = (
+            localStorage.getItem('billnaw_auth_email') ||
+            sessionObj?.user?.email ||
+            sessionObj?.shop?.ownerEmail ||
+            sessionObj?.shop?.email ||
+            ''
+        ).toLowerCase().trim();
+        let lastDeviceEmail = (localStorage.getItem('billnaw_last_device_email') || '').toLowerCase().trim();
+        let currentStoreCode = (
+            sessionObj?.storeCode ||
+            localStorage.getItem('billnaw_store_code') ||
+            (shopProfile && shopProfile.storeCode) ||
+            ''
+        ).toUpperCase().trim();
+        let lastStoreCode = (localStorage.getItem('billnaw_last_store_code') || '').toUpperCase().trim();
+
+        const isPlaceholder = (c) => !c || c === 'BILLNAW' || c === 'DEFAULT_SHOP' || c === 'CAFE';
+        const isGenuineEmailSwitch = Boolean(lastDeviceEmail && currentEmail && lastDeviceEmail !== currentEmail);
+        const isGenuineStoreSwitch = Boolean(!isPlaceholder(lastStoreCode) && !isPlaceholder(currentStoreCode) && lastStoreCode !== currentStoreCode);
+
+        if (isGenuineEmailSwitch || isGenuineStoreSwitch) {
+            console.log(`[AUTH ISOLATION] Account switch detected (${lastDeviceEmail}/${lastStoreCode} -> ${currentEmail}/${currentStoreCode}). Wiping previous tenant cache.`);
+            if (typeof idb !== 'undefined' && idb.clear) {
+                await idb.clear('cafe_menu').catch(() => {});
+                await idb.clear('cafe_history').catch(() => {});
+                await Promise.all(TENANT_IDB_STORES.map(s => idb.clear(s).catch(() => {})));
+                try {
+                    if (typeof idbMemoryStore === 'object' && idbMemoryStore) {
+                        Object.keys(idbMemoryStore).forEach(k => {
+                            if (k.startsWith('billnaw_device_') || k.startsWith('billnaw_session_')) {
+                                delete idbMemoryStore[k];
+                            }
+                        });
+                    }
+                    if (idb.db && idb.db.objectStoreNames) {
+                        ['orders', 'kot_records', 'menu_items'].forEach(storeName => {
+                            if (idb.db.objectStoreNames.contains(storeName)) {
+                                try {
+                                    const tx = idb.db.transaction(storeName, 'readwrite');
+                                    tx.objectStore(storeName).clear();
+                                } catch (e) {}
+                            }
+                        });
+                    }
+                } catch (e) {}
+            }
+            TENANT_CACHE_LOCALSTORAGE_KEYS.forEach(k => {
+                try { localStorage.removeItem(k); } catch (e) {}
+            });
+            pendingBackendSyncByStore = {};
+            _lastPersistedTableState = {};
+            shopProfile = { name: '', storeCode: currentStoreCode };
+            menuItems = [];
+            window.menuItems = menuItems;
+            menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
+            window.menuCategories = menuCategories;
+            orderHistory = [];
+            window.orderHistory = orderHistory;
+            dailyExpenses = [];
+            window.dailyExpenses = dailyExpenses;
+            customersList = [];
+            window.customersList = customersList;
+            staffList = [];
+            window.staffList = staffList;
+            tablesInfo = {};
+            window.tablesInfo = tablesInfo;
+            currentCart = [];
+            window.cart = [];
+            window.currentMenuVersion = 0;
+            window.authorizedDevices = [];
+            window.activeStaffSessions = [];
+            window.currentDeviceRecord = null;
+        }
+        if (currentEmail) {
+            localStorage.setItem('billnaw_last_device_email', currentEmail);
+        }
+        if (currentStoreCode && !isPlaceholder(currentStoreCode)) {
+            localStorage.setItem('billnaw_last_store_code', currentStoreCode);
+        }
+    } catch (err) {
+        console.warn('Device isolation error:', err);
+    }
+
     // 0. Supreme Authority: Authenticated Cloud Shop Session
     try {
         const authMode = localStorage.getItem('billnaw_auth_mode');
@@ -5340,49 +5790,6 @@ async function initDatabase() {
             localStorage.setItem('billnaw_shop_name', shopProfile.name);
         }
     } catch(e) {}
-
-    // Multi-Account Device Isolation: Clear device cache ONLY when an authentic different account logs in
-    try {
-        let currentEmail = (localStorage.getItem('billnaw_auth_email') || '').toLowerCase().trim();
-        let lastDeviceEmail = (localStorage.getItem('billnaw_last_device_email') || '').toLowerCase().trim();
-        let currentStoreCode = (localStorage.getItem('billnaw_store_code') || (shopProfile && shopProfile.storeCode) || '').toUpperCase().trim();
-        let lastStoreCode = (localStorage.getItem('billnaw_last_store_code') || '').toUpperCase().trim();
-        
-        const isPlaceholder = (c) => !c || c === 'BILLNAW' || c === 'DEFAULT_SHOP' || c === 'CAFE';
-        const isGenuineEmailSwitch = Boolean(lastDeviceEmail && currentEmail && lastDeviceEmail !== currentEmail);
-        const isGenuineStoreSwitch = Boolean(!isPlaceholder(lastStoreCode) && !isPlaceholder(currentStoreCode) && lastStoreCode !== currentStoreCode);
-
-        if (isGenuineEmailSwitch || isGenuineStoreSwitch) {
-            console.log(`[AUTH ISOLATION] Account switch detected (${lastDeviceEmail}/${lastStoreCode} -> ${currentEmail}/${currentStoreCode}). Wiping previous tenant cache.`);
-            if (typeof idb !== 'undefined' && idb.clear) {
-                await idb.clear('cafe_menu');
-                await idb.clear('cafe_history');
-                await idb.clear('cafe_tables');
-                await idb.clear('cafe_customers');
-                await idb.clear('cafe_expenses');
-                await idb.clear('cafe_staff');
-                await idb.clear('cafe_categories');
-                await idb.clear('cafe_profile');
-                await idb.clear('cafe_logo');
-            }
-            localStorage.removeItem('billnaw_shop_name');
-            localStorage.removeItem('billnaw_store_profile');
-            localStorage.removeItem('billnaw_shop_phone');
-            localStorage.removeItem('billnaw_shop_address');
-            localStorage.removeItem('billnaw_shop_logo');
-            localStorage.removeItem('billnaw_admin_pin_hash');
-            localStorage.removeItem('billnaw_store_staff');
-            shopProfile = { name: '', storeCode: currentStoreCode };
-        }
-        if (currentEmail) {
-            localStorage.setItem('billnaw_last_device_email', currentEmail);
-        }
-        if (currentStoreCode && !isPlaceholder(currentStoreCode)) {
-            localStorage.setItem('billnaw_last_store_code', currentStoreCode);
-        }
-    } catch(err) {
-        console.warn('Device isolation error:', err);
-    }
 
     // 4. Proactive Cloud Rehydration: Reconcile latest store identity from Firestore
     try {

@@ -134,6 +134,117 @@ export function jsonToFirestoreFields(obj) {
   return fields;
 }
 
+function parseComparableTimestamp(val) {
+  if (typeof val === 'number' && Number.isFinite(val)) return val;
+  if (typeof val === 'string' && val.trim() !== '') {
+    const parsed = Date.parse(val);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return null;
+}
+
+function isExplicitTableReset(tData) {
+  if (!tData || typeof tData !== 'object' || Array.isArray(tData)) return false;
+  if (tData.items !== undefined && (!Array.isArray(tData.items) || tData.items.length > 0)) return false;
+  if (tData.occupied === false) return true;
+  const status = String(tData.status || '').trim().toLowerCase();
+  return ['empty', 'available', 'vacant', 'cleared', 'billed'].includes(status);
+}
+
+function mergeTableEntry(existingTable, incomingTable) {
+  if (!incomingTable || typeof incomingTable !== 'object' || Array.isArray(incomingTable)) {
+    return existingTable ?? incomingTable;
+  }
+  if (!existingTable || typeof existingTable !== 'object' || Array.isArray(existingTable)) {
+    return { ...incomingTable };
+  }
+
+  if (isExplicitTableReset(incomingTable)) {
+    const incomingTs = parseComparableTimestamp(incomingTable.updatedAt ?? incomingTable.clearedAt ?? incomingTable.savedTime);
+    const existingTs = parseComparableTimestamp(existingTable.updatedAt ?? existingTable.savedTime);
+    if (incomingTs !== null && existingTs !== null && incomingTs < existingTs) {
+      return { ...existingTable };
+    }
+    return {
+      ...incomingTable,
+      id: incomingTable.id ?? existingTable.id,
+      name: incomingTable.name ?? existingTable.name,
+      items: [],
+      kotPrintedMap: {}
+    };
+  }
+
+  if (Array.isArray(incomingTable.items) && incomingTable.items.length > 0) {
+    const existingMap = (existingTable.kotPrintedMap && typeof existingTable.kotPrintedMap === 'object' && !Array.isArray(existingTable.kotPrintedMap))
+      ? existingTable.kotPrintedMap
+      : {};
+    const incomingMap = (incomingTable.kotPrintedMap && typeof incomingTable.kotPrintedMap === 'object' && !Array.isArray(incomingTable.kotPrintedMap))
+      ? incomingTable.kotPrintedMap
+      : {};
+
+    const combinedLookupMap = { ...existingMap };
+    for (const [k, val] of Object.entries(incomingMap)) {
+      const nPrev = Number(combinedLookupMap[k] || 0);
+      const nInc = Number(val || 0);
+      combinedLookupMap[k] = Math.max(Number.isFinite(nPrev) ? nPrev : 0, Number.isFinite(nInc) ? nInc : 0);
+    }
+    const prunedMap = {};
+
+    const existingItems = Array.isArray(existingTable.items) ? existingTable.items : [];
+    const mergedItems = incomingTable.items.map((item) => {
+      if (!item || typeof item !== 'object') return item;
+      const itemIdStr = (item.id !== undefined && item.id !== null) ? String(item.id) : '';
+      const prevItem = existingItems.find((pi) => {
+        if (!pi || typeof pi !== 'object') return false;
+        if (itemIdStr && pi.id !== undefined && pi.id !== null && String(pi.id) === itemIdStr) return true;
+        return Boolean(pi.name && item.name && pi.name === item.name);
+      });
+
+      const rawQty = Number(item.qty ?? item.quantity ?? 1);
+      const qty = (Number.isFinite(rawQty) && rawQty >= 0) ? rawQty : 1;
+      const prevPrinted = Number(prevItem?.qtyKotPrinted || 0);
+      const incPrinted = Number(item.qtyKotPrinted || 0);
+      const mapById = itemIdStr ? Number(combinedLookupMap[itemIdStr] ?? 0) : 0;
+      const mapByName = item.name ? Number(combinedLookupMap[item.name] ?? 0) : 0;
+      const maxPrinted = Math.max(
+        Number.isFinite(prevPrinted) ? prevPrinted : 0,
+        Number.isFinite(incPrinted) ? incPrinted : 0,
+        Number.isFinite(mapById) ? mapById : 0,
+        Number.isFinite(mapByName) ? mapByName : 0
+      );
+
+      if (maxPrinted > 0) {
+        const clamped = Math.min(qty, maxPrinted);
+        if (itemIdStr) prunedMap[itemIdStr] = Math.max(prunedMap[itemIdStr] || 0, clamped);
+        if (item.name) prunedMap[item.name] = Math.max(prunedMap[item.name] || 0, clamped);
+        return { ...item, qtyKotPrinted: clamped };
+      }
+      return { ...item };
+    });
+
+    const anyKotPrinted = mergedItems.some(it => Number(it?.qtyKotPrinted || 0) > 0);
+    const existingStatus = String(existingTable.status || '').trim().toLowerCase();
+    const incomingStatus = String(incomingTable.status || '').trim().toLowerCase();
+    let finalStatus = incomingTable.status ?? existingTable.status;
+    if (existingStatus === 'kot' && (!incomingStatus || incomingStatus === 'occupied') && anyKotPrinted) {
+      finalStatus = 'kot';
+    }
+
+    return {
+      ...existingTable,
+      ...incomingTable,
+      status: finalStatus,
+      items: mergedItems,
+      kotPrintedMap: prunedMap
+    };
+  }
+
+  return {
+    ...existingTable,
+    ...incomingTable
+  };
+}
+
 /**
  * High-Reliability Native Server Sync directly into Cloud Firestore REST API.
  * Replicates root shop document and operational subcollections (staff, tables).
@@ -169,37 +280,80 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     fieldsToPatch.ownerEmail = resolvedOwnerEmail;
   }
 
+  // Deduplicate deletedStaffId + deletedStaffIds
+  const deletedStaffIdSet = new Set();
+  if (payload.deletedStaffId !== undefined && payload.deletedStaffId !== null && String(payload.deletedStaffId).trim() !== '') {
+    deletedStaffIdSet.add(String(payload.deletedStaffId).trim());
+  }
+  if (Array.isArray(payload.deletedStaffIds)) {
+    for (const rawId of payload.deletedStaffIds) {
+      if (rawId !== undefined && rawId !== null && String(rawId).trim() !== '') {
+        deletedStaffIdSet.add(String(rawId).trim());
+      }
+    }
+  }
+  const deletedIdStr = (payload.deletedStaffId !== undefined && payload.deletedStaffId !== null && String(payload.deletedStaffId).trim() !== '')
+    ? String(payload.deletedStaffId).trim()
+    : null;
+
+  const hasTablesPayload = Boolean(
+    payload.tables &&
+    typeof payload.tables === 'object' &&
+    !Array.isArray(payload.tables) &&
+    Object.keys(payload.tables).length > 0
+  );
+  const needsStaffMerge = Array.isArray(payload.staff) && payload.staff.length > 0 && !payload.replaceStaff;
+  const needsDeletedStaffMerge = deletedStaffIdSet.size > 0 && !Array.isArray(payload.deletedStaffIds);
+
+  // Single optional GET rootUrl fetch for concurrent staff/tables/deletedStaffIds merge
+  let existingRootFields = null;
+  if (needsStaffMerge || hasTablesPayload || needsDeletedStaffMerge) {
+    try {
+      const rootCheck = await fetch(rootUrl);
+      if (rootCheck && rootCheck.ok && typeof rootCheck.json === 'function') {
+        const rootData = await rootCheck.json();
+        existingRootFields = (rootData && rootData.fields && typeof rootData.fields === 'object') ? rootData.fields : null;
+      }
+    } catch (e) {
+      existingRootFields = null;
+    }
+  }
+
   // Safe Staff Handling: Merge with existing staff if partial sync, or replace/remove when requested
   let finalStaffArray = payload.staff;
-  const deletedIdStr = payload.deletedStaffId ? String(payload.deletedStaffId) : null;
+  const existingStaffRaw = existingRootFields?.staff?.arrayValue?.values || [];
+  const existingStaff = existingStaffRaw.map(v => firestoreValueToJson(v)).filter(Boolean);
+
   if (Array.isArray(payload.staff)) {
-    if (payload.staff.length > 0 && !payload.replaceStaff) {
-      try {
-        const rootCheck = await fetch(rootUrl);
-        if (rootCheck.ok) {
-          const rootData = await rootCheck.json();
-          const existingStaffRaw = rootData.fields?.staff?.arrayValue?.values || [];
-          const existingStaff = existingStaffRaw.map(v => firestoreValueToJson(v)).filter(Boolean);
-          if (existingStaff.length > 0) {
-            const staffMap = new Map();
-            existingStaff.forEach(s => {
-              const sid = String(s.id || s.staffId || '');
-              if (sid && sid !== deletedIdStr) staffMap.set(sid, s);
-            });
-            payload.staff.forEach(s => {
-              const sid = String(s.id || s.staffId || '');
-              if (sid && sid !== deletedIdStr) staffMap.set(sid, s);
-            });
-            finalStaffArray = Array.from(staffMap.values());
-          }
-        }
-      } catch (e) {
-        // Fallback to payload.staff
-      }
-    } else if (deletedIdStr) {
-      finalStaffArray = payload.staff.filter(s => String(s?.id || s?.staffId || '') !== deletedIdStr);
+    if (needsStaffMerge && existingStaff.length > 0) {
+      const staffMap = new Map();
+      existingStaff.forEach(s => {
+        const sid = String(s?.id || s?.staffId || '').trim();
+        if (sid && !deletedStaffIdSet.has(sid)) staffMap.set(sid, s);
+      });
+      payload.staff.forEach(s => {
+        const sid = String(s?.id || s?.staffId || '').trim();
+        if (sid && !deletedStaffIdSet.has(sid)) staffMap.set(sid, s);
+      });
+      finalStaffArray = Array.from(staffMap.values());
+    } else if (deletedStaffIdSet.size > 0) {
+      finalStaffArray = payload.staff.filter(s => {
+        const sid = String(s?.id || s?.staffId || '').trim();
+        return !sid || !deletedStaffIdSet.has(sid);
+      });
     }
     fieldsToPatch.staff = finalStaffArray;
+  }
+
+  if (Array.isArray(payload.deletedStaffIds)) {
+    fieldsToPatch.deletedStaffIds = Array.from(deletedStaffIdSet);
+  } else if (deletedStaffIdSet.size > 0) {
+    const existingDeletedStaff = existingRootFields?.deletedStaffIds ? firestoreValueToJson(existingRootFields.deletedStaffIds) : [];
+    const combinedDeleted = new Set([
+      ...(Array.isArray(existingDeletedStaff) ? existingDeletedStaff.map(id => String(id).trim()).filter(Boolean) : []),
+      ...deletedStaffIdSet
+    ]);
+    fieldsToPatch.deletedStaffIds = Array.from(combinedDeleted);
   }
 
   if (Array.isArray(payload.menu)) fieldsToPatch.menu = payload.menu;
@@ -207,10 +361,28 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   if (Array.isArray(payload.deletedMenuNames)) fieldsToPatch.deletedMenuNames = payload.deletedMenuNames;
   if (typeof payload.menuVersion === 'number' || typeof payload.menuVersion === 'string') {
     const v = Number(payload.menuVersion);
-    if (!isNaN(v) && v >= 0) fieldsToPatch.menuVersion = v;
+    if (Number.isFinite(v) && v >= 0 && String(payload.menuVersion).trim() !== '') {
+      fieldsToPatch.menuVersion = v;
+    }
   }
   if (Array.isArray(payload.categories)) fieldsToPatch.categories = payload.categories;
-  if (payload.tables && typeof payload.tables === 'object') fieldsToPatch.tables = payload.tables;
+
+  let mergedTables = null;
+  if (hasTablesPayload) {
+    const existingTablesRaw = existingRootFields?.tables ? firestoreValueToJson(existingRootFields.tables) : {};
+    mergedTables = (existingTablesRaw && typeof existingTablesRaw === 'object' && !Array.isArray(existingTablesRaw))
+      ? { ...existingTablesRaw }
+      : {};
+    for (const [tId, tData] of Object.entries(payload.tables)) {
+      if (tData !== undefined && tData !== null) {
+        mergedTables[tId] = mergeTableEntry(mergedTables[tId], tData);
+      }
+    }
+    fieldsToPatch.tables = mergedTables;
+  } else if (payload.tables && typeof payload.tables === 'object' && !Array.isArray(payload.tables) && payload.replaceTables) {
+    fieldsToPatch.tables = {};
+  }
+
   if (Array.isArray(payload.history)) fieldsToPatch.history = payload.history;
   if (Array.isArray(payload.expenses)) fieldsToPatch.expenses = payload.expenses;
   if (Array.isArray(payload.customers)) fieldsToPatch.customers = payload.customers;
@@ -225,6 +397,8 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     .join('&');
   const patchUrl = `${rootUrl}?${updateMaskParams}`;
 
+  let rootPatchError = null;
+  let rootPatchStatus = null;
   try {
     const rootRes = await fetch(patchUrl, {
       method: 'PATCH',
@@ -232,39 +406,73 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
       body: JSON.stringify({ fields: jsonToFirestoreFields(fieldsToPatch) })
     });
 
-    if (!rootRes.ok) {
-      const errText = await rootRes.text();
-      console.warn(`[SYNC REST] Root doc patch warning (${rootRes.status}):`, errText);
+    if (!rootRes || !rootRes.ok) {
+      const errText = (rootRes && typeof rootRes.text === 'function') ? await rootRes.text().catch(() => '') : '';
+      rootPatchStatus = rootRes?.status || 502;
+      rootPatchError = errText || `Root doc patch failed (${rootPatchStatus})`;
+      console.warn(`[SYNC REST] Root doc patch failed (${rootPatchStatus}):`, errText);
     }
   } catch (err) {
-    console.warn('[SYNC REST] Root doc fetch error:', err.message);
+    rootPatchStatus = 502;
+    rootPatchError = err?.message || 'Root doc fetch error';
+    console.warn('[SYNC REST] Root doc fetch error:', rootPatchError);
+  }
+
+  if (rootPatchError) {
+    return {
+      success: false,
+      status: rootPatchStatus,
+      error: rootPatchError,
+      storeCode: code
+    };
   }
 
   // 2. Sync Staff Subcollection (/{collection}/{storeCode}/staff/{staffId})
-  if (deletedIdStr) {
-    const delUrl = `${base}/${collection}/${encodeURIComponent(code)}/staff/${encodeURIComponent(deletedIdStr)}`;
-    await fetch(delUrl, { method: 'DELETE' }).catch(() => null);
-    const revokeSessionUrl = `${base}/${collection}/${encodeURIComponent(code)}/staffSessions/${encodeURIComponent(deletedIdStr)}`;
-    await fetch(revokeSessionUrl, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fields: jsonToFirestoreFields({
-          staffId: deletedIdStr,
-          status: 'REVOKED',
-          isLocked: true,
-          revokedAt: timestamp,
-          revokedReason: 'Staff profile removed by Admin'
+  if (deletedStaffIdSet.size > 0) {
+    const existingStaffIds = new Set(
+      existingStaff.map(s => String(s?.id || s?.staffId || '').trim()).filter(Boolean)
+    );
+    let idsToDelete = [];
+    if (deletedStaffIdSet.size <= 10) {
+      idsToDelete = Array.from(deletedStaffIdSet);
+    } else {
+      const bounded = new Set();
+      if (deletedIdStr) bounded.add(deletedIdStr);
+      for (const id of deletedStaffIdSet) {
+        if (existingStaffIds.has(id)) bounded.add(id);
+      }
+      // Also include the most recent 10 entries in case existingStaff wasn't fetched (e.g. replaceStaff: true)
+      const recentSlice = Array.from(deletedStaffIdSet).slice(-10);
+      for (const id of recentSlice) bounded.add(id);
+      idsToDelete = Array.from(bounded);
+    }
+
+    const deletePromises = idsToDelete.map(async (delId) => {
+      const delUrl = `${base}/${collection}/${encodeURIComponent(code)}/staff/${encodeURIComponent(delId)}`;
+      await fetch(delUrl, { method: 'DELETE' }).catch(() => null);
+      const revokeSessionUrl = `${base}/${collection}/${encodeURIComponent(code)}/staffSessions/${encodeURIComponent(delId)}`;
+      await fetch(revokeSessionUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: jsonToFirestoreFields({
+            staffId: delId,
+            status: 'REVOKED',
+            isLocked: true,
+            revokedAt: timestamp,
+            revokedReason: 'Staff profile removed by Admin'
+          })
         })
-      })
-    }).catch(() => null);
+      }).catch(() => null);
+    });
+    await Promise.allSettled(deletePromises);
   }
 
   const staffToSubdoc = Array.isArray(finalStaffArray) ? finalStaffArray : (Array.isArray(payload.staff) ? payload.staff : []);
   const staffPromises = staffToSubdoc.map(async (s) => {
     if (s && (s.id || s.staffId)) {
-      const sId = String(s.id || s.staffId);
-      if (sId === deletedIdStr) return;
+      const sId = String(s.id || s.staffId).trim();
+      if (!sId || deletedStaffIdSet.has(sId)) return;
       const subdocUrl = `${base}/${collection}/${encodeURIComponent(code)}/staff/${encodeURIComponent(sId)}`;
       try {
         await fetch(subdocUrl, {
@@ -278,12 +486,15 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   await Promise.allSettled(staffPromises);
 
   // 3. Sync Tables Subcollection (/{collection}/{storeCode}/tables/{tableId})
-  if (payload.tables && typeof payload.tables === 'object') {
+  if (hasTablesPayload) {
     const tablePromises = Object.entries(payload.tables).map(async ([tId, tData]) => {
-      if (tData) {
+      if (tData !== undefined && tData !== null) {
+        const mergedTData = (mergedTables && mergedTables[tId] !== undefined) ? mergedTables[tId] : tData;
         const tableDocUrl = `${base}/${collection}/${encodeURIComponent(code)}/tables/${encodeURIComponent(tId)}`;
         try {
-          const itemPayload = (typeof tData === 'object') ? { id: String(tId), ...tData, updatedAt: timestamp } : { id: String(tId), status: tData, updatedAt: timestamp };
+          const itemPayload = (typeof mergedTData === 'object')
+            ? { id: String(tId), ...mergedTData, updatedAt: timestamp }
+            : { id: String(tId), status: mergedTData, updatedAt: timestamp };
           await fetch(tableDocUrl, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -301,7 +512,8 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     syncedFields: Object.keys(fieldsToPatch),
     staffCount: staffToSubdoc.length,
     deletedStaffId: deletedIdStr || undefined,
-    tableCount: (payload.tables && typeof payload.tables === 'object') ? Object.keys(payload.tables).length : undefined
+    deletedStaffIds: deletedStaffIdSet.size > 0 ? Array.from(deletedStaffIdSet) : undefined,
+    tableCount: hasTablesPayload ? Object.keys(payload.tables).length : undefined
   };
 }
 
@@ -358,6 +570,7 @@ export async function getStoreFromFirestoreREST(storeCode) {
       ownerEmail,
       profile: profileObj,
       staff: fields.staff ? firestoreValueToJson(fields.staff) : [],
+      deletedStaffIds: fields.deletedStaffIds ? firestoreValueToJson(fields.deletedStaffIds) : [],
       menu: fields.menu ? firestoreValueToJson(fields.menu) : [],
       deletedMenuIds: fields.deletedMenuIds ? firestoreValueToJson(fields.deletedMenuIds) : [],
       deletedMenuNames: fields.deletedMenuNames ? firestoreValueToJson(fields.deletedMenuNames) : [],

@@ -2,6 +2,48 @@
 // 🍽️ JS/MENU.JS - Menu Catalog, Categories, AI OCR & Visuals
 // ============================================================
 
+const _menuEsc = (str) => (typeof escapeHtml === 'function')
+    ? escapeHtml(str)
+    : String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+
+function _sanitizeMenuImgUrl(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+    if (/^(https?:\/\/|data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);|\/uploads\/|\.\/|assets\/)/i.test(raw)) {
+        return raw;
+    }
+    return '';
+}
+
+function canCurrentStaffManageMenu() {
+    if (typeof currentStaff === 'undefined') {
+        return (typeof hasPermission !== 'function');
+    }
+    const active = currentStaff || (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (!active || !active.role) {
+        return (typeof hasPermission !== 'function' && !active);
+    }
+    if (typeof hasPermission === 'function') {
+        return hasPermission(active, 'can_manage_menu');
+    }
+    const r = String(active.role).trim().toLowerCase();
+    return r === 'admin' || r === 'owner' || r === 'manager';
+}
+
+function _requireMenuPermission(actionLabel, onAuthorized) {
+    if (canCurrentStaffManageMenu()) return true;
+    if (typeof requestManagerOverride === 'function') {
+        requestManagerOverride({
+            title: 'Manager Authorization Required',
+            actionDescription: `Enter Manager or Admin PIN to ${actionLabel}:`,
+            onSuccess: () => { if (typeof onAuthorized === 'function') onAuthorized(); }
+        });
+    } else if (typeof showToast === 'function') {
+        showToast('Permission denied: Manager or Admin authorization required.', 'error');
+    }
+    return false;
+}
+
 let pendingAiItems = [];
 let pendingAiImageTargetIndex = null;
 let pendingAiFallbackNotice = null;
@@ -56,10 +98,9 @@ window.openAddDishModal = openAddDishModal;
 function renderCategoryFilters() {
     const el = document.getElementById('categoryFiltersUI');
     if (!el) return;
-    el.innerHTML = '';
-    (Array.isArray(menuCategories) ? menuCategories : []).forEach(cat => {
-        el.innerHTML += `<div class="cat-chip ${cat === activeCategory ? 'active' : ''}" onclick="filterMenu('${escapeHtml(cat)}')">${escapeHtml(cat)}</div>`;
-    });
+    el.innerHTML = (Array.isArray(menuCategories) ? menuCategories : []).map(cat =>
+        `<div class="cat-chip ${cat === activeCategory ? 'active' : ''}" data-category="${_menuEsc(cat)}" onclick="filterMenu(this.dataset.category)">${_menuEsc(cat)}</div>`
+    ).join('');
 }
 window.renderCategoryFilters = renderCategoryFilters;
 
@@ -69,8 +110,8 @@ function renderCategoryListUI() {
     if (container) {
         container.innerHTML = validCats.map(c => `
             <span class="category-manage-chip">
-                <span>${escapeHtml(c)}</span>
-                ${c !== 'All' ? `<button type="button" class="del-btn" onclick="deleteCategory('${escapeHtml(c)}')" title="Delete Category ${escapeHtml(c)}" style="display:inline-flex;align-items:center;justify-content:center;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
+                <span>${_menuEsc(c)}</span>
+                ${c !== 'All' ? `<button type="button" class="del-btn" data-category="${_menuEsc(c)}" onclick="deleteCategory(this.dataset.category)" title="Delete Category ${_menuEsc(c)}" style="display:inline-flex;align-items:center;justify-content:center;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
             </span>
         `).join('');
     }
@@ -86,7 +127,10 @@ function renderCategoryListUI() {
 }
 window.renderCategoryListUI = renderCategoryListUI;
 
-function addCategory(customName) {
+function addCategory(customName, bypassRoleCheck = false) {
+    if (!bypassRoleCheck && !_requireMenuPermission('add menu categories', () => addCategory(customName, true))) {
+        return false;
+    }
     const catInput = document.getElementById('newCategoryName');
     let cat = (customName && typeof customName === 'string') ? customName.trim() : (catInput ? catInput.value.trim() : '');
     if (!cat) {
@@ -121,7 +165,8 @@ function addCategory(customName) {
 }
 window.addCategory = addCategory;
 
-function deleteCategory(cat) {
+function deleteCategory(cat, bypassRoleCheck = false) {
+    if (!bypassRoleCheck && !_requireMenuPermission('delete menu categories', () => deleteCategory(cat, true))) return;
     if (cat === 'All') return;
     if (confirm(`Delete category "${cat}"?`)) {
         menuCategories = (Array.isArray(menuCategories) ? menuCategories : []).filter(c => c !== cat);
@@ -222,7 +267,8 @@ function renderMenuUI() {
 
     if (canPatchInPlace) {
         filteredMenu.forEach(item => {
-            const cardEl = document.getElementById(`menu-card-${item.id}`);
+            const safeIdAttr = String(item.id);
+            const cardEl = Array.from(existingCards).find(c => c.getAttribute('data-item-id') === safeIdAttr) || document.getElementById(`menu-card-${safeIdAttr}`);
             if (!cardEl) return;
             
             // Patch rate/price directly
@@ -263,11 +309,13 @@ function renderMenuUI() {
             stockIndicator = item.stockQty > 0 ? `<span class="stock-indicator green"><i></i> In Stock</span>` : `<span class="stock-indicator red"><i></i> Out of Stock</span>`;
         }
 
-        const thumbSrc = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
-        const imageHtml = `<img src="${thumbSrc}" class="card-img" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">`;
+        const rawThumb = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
+        const thumbSrc = _sanitizeMenuImgUrl(rawThumb) || generateFallbackImage(item.name, item.category);
+        const safeItemId = _menuEsc(String(item.id));
+        const imageHtml = `<img src="${_menuEsc(thumbSrc)}" class="card-img" alt="${_menuEsc(item.name)}" loading="lazy" decoding="async" data-item-name="${_menuEsc(item.name || '')}" data-item-cat="${_menuEsc(item.category || '')}" onerror="this.onerror=null; this.src=generateFallbackImage(this.dataset.itemName, this.dataset.itemCat);">`;
 
         return `
-        <div class="menu-card" id="menu-card-${item.id}" data-item-id="${item.id}" onclick="addToCart(${item.id}, event)">
+        <div class="menu-card" id="menu-card-${item.id}" data-item-id="${item.id}" onclick="addToCart(this.dataset.itemId, event)">
             <div class="card-img-wrapper">
                 ${imageHtml}
                 ${popularBadge}
@@ -276,16 +324,16 @@ function renderMenuUI() {
             </div>
             <div class="card-content">
                 <div class="card-top-row">
-                    <span class="cat-label">${escapeHtml(item.category)}</span>
+                    <span class="cat-label">${_menuEsc(item.category)}</span>
                     ${item.trackStock && item.stockQty > 0 ? `<span class="stock-pill">+${item.stockQty}pc</span>` : ''}
                 </div>
-                <div class="name">${escapeHtml(item.name)}</div>
+                <div class="name">${_menuEsc(item.name)}</div>
                 <div class="card-bottom-row">
                     <div class="card-price-col">
                         <span class="price">₹ ${item.price}</span>
                         ${stockIndicator}
                     </div>
-                    <div id="menu-action-wrap-${item.id}"></div>
+                    <div id="menu-action-wrap-${safeItemId}"></div>
                 </div>
             </div>
         </div>`;
@@ -361,8 +409,8 @@ function renderMenuCatalogUI() {
     const chipsContainer = document.getElementById('catalogCategoryChips');
     if (chipsContainer) {
         const chipsHtml = (Array.isArray(menuCategories) ? menuCategories : []).map(cat => `
-            <button type="button" class="btn btn-outline" onclick="filterCatalogByCategory('${escapeHtml(cat)}')" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; ${catalogActiveCategoryFilter === cat ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'color: #4B5563; background: #FFFFFF;'}">
-                ${escapeHtml(cat)}
+            <button type="button" class="btn btn-outline" data-category="${_menuEsc(cat)}" onclick="filterCatalogByCategory(this.dataset.category)" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; ${catalogActiveCategoryFilter === cat ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'color: #4B5563; background: #FFFFFF;'}">
+                ${_menuEsc(cat)}
             </button>
         `).join('');
         const addBtnHtml = `
@@ -433,15 +481,17 @@ function renderMenuCatalogUI() {
                     }
                 }
 
-                const thumbSrc = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
+                const rawThumb = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
+                const thumbSrc = _sanitizeMenuImgUrl(rawThumb) || generateFallbackImage(item.name, item.category);
+                const safeItemId = _menuEsc(String(item.id));
                 return `
                 <div class="clean-item-card">
                     <div class="clean-item-left">
-                        <img src="${thumbSrc}" class="clean-item-thumb" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src=generateFallbackImage('${escapeHtml(item.name)}', '${escapeHtml(item.category || '')}');">
+                        <img src="${_menuEsc(thumbSrc)}" class="clean-item-thumb" alt="${_menuEsc(item.name)}" loading="lazy" decoding="async" data-item-name="${_menuEsc(item.name || '')}" data-item-cat="${_menuEsc(item.category || '')}" onerror="this.onerror=null; this.src=generateFallbackImage(this.dataset.itemName, this.dataset.itemCat);">
                         <div class="clean-item-info">
                             <div class="clean-item-title-row">
-                                <span class="clean-item-name">${escapeHtml(item.name)}</span>
-                                <span class="clean-item-category-tag">${escapeHtml(item.category || 'General')}</span>
+                                <span class="clean-item-name">${_menuEsc(item.name)}</span>
+                                <span class="clean-item-category-tag">${_menuEsc(item.category || 'General')}</span>
                             </div>
                             <div class="clean-item-meta-row">
                                 <span class="clean-item-price">₹ ${Number(item.price).toFixed(2)}</span>
@@ -451,23 +501,23 @@ function renderMenuCatalogUI() {
                     </div>
                     <div class="clean-item-right">
                         <div class="action-dropdown" style="position: relative; display: inline-block;">
-                            <button type="button" class="action-dropdown-btn clean-item-more-btn" onclick="event.stopPropagation(); toggleMenuItemDropdown(event, ${item.id})" title="Item Options" aria-label="Item options" aria-haspopup="true">
+                            <button type="button" class="action-dropdown-btn clean-item-more-btn" data-item-id="${safeItemId}" onclick="event.stopPropagation(); toggleMenuItemDropdown(event, this.dataset.itemId)" title="Item Options" aria-label="Item options" aria-haspopup="true">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="12" cy="12" r="1.5"></circle>
                                     <circle cx="12" cy="5" r="1.5"></circle>
                                     <circle cx="12" cy="19" r="1.5"></circle>
                                 </svg>
                             </button>
-                            <div class="action-dropdown-menu" id="menuItemDropdown-${item.id}" style="display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 1050; min-width: 155px;">
-                                <button type="button" class="action-dropdown-item" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); openQuickAdjustStockModal(${item.id});">
+                            <div class="action-dropdown-menu" id="menuItemDropdown-${safeItemId}" style="display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 1050; min-width: 155px;">
+                                <button type="button" class="action-dropdown-item" data-item-id="${safeItemId}" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); openQuickAdjustStockModal(this.dataset.itemId);">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
                                     <span>Adjust Stock</span>
                                 </button>
-                                <button type="button" class="action-dropdown-item" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); editMenuItem(${item.id});">
+                                <button type="button" class="action-dropdown-item" data-item-id="${safeItemId}" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); editMenuItem(this.dataset.itemId);">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                                     <span>Edit Item</span>
                                 </button>
-                                <button type="button" class="action-dropdown-item danger" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); deleteMenuItem(${item.id});">
+                                <button type="button" class="action-dropdown-item danger" data-item-id="${safeItemId}" onclick="event.stopPropagation(); closeAllMenuActionDropdowns(); deleteMenuItem(this.dataset.itemId);">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                     <span>Delete Item</span>
                                 </button>
@@ -549,6 +599,7 @@ async function refreshAiMenuQuotaPill() {
 window.refreshAiMenuQuotaPill = refreshAiMenuQuotaPill;
 
 function openUploadMenuChoiceModal() {
+    if (!_requireMenuPermission('import menu items', () => openUploadMenuChoiceModal())) return;
     const modal = document.getElementById('uploadMenuChoiceModal');
     if (modal) modal.style.display = 'flex';
     if (typeof refreshAiMenuQuotaPill === 'function') {
@@ -575,6 +626,11 @@ window.openMenuFilePicker = openMenuFilePicker;
 
 // 📊 Excel / Spreadsheet Menu Upload Handler
 async function handleExcelMenuUpload(event) {
+    if (!canCurrentStaffManageMenu()) {
+        _requireMenuPermission('import menu items');
+        if (event && event.target) event.target.value = '';
+        return;
+    }
     const file = event.target.files && event.target.files[0];
     if (!file) return;
     closeUploadMenuChoiceModal();
@@ -584,6 +640,7 @@ async function handleExcelMenuUpload(event) {
         const text = await file.text();
         const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
         let importedCount = 0;
+        if (!Array.isArray(menuItems)) menuItems = [];
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -592,19 +649,47 @@ async function handleExcelMenuUpload(event) {
                 const name = parts[0];
                 const price = parseFloat(parts[1]);
                 const category = parts[2] || 'Imported';
-                if (name && !isNaN(price) && price > 0 && name.toLowerCase() !== 'dish' && name.toLowerCase() !== 'item') {
-                    const newItem = {
-                        id: Date.now() + i,
-                        name,
-                        price,
-                        category,
-                        stock: 50,
-                        stockQty: 50,
-                        trackStock: true,
-                        gstRate: 5,
-                        image: (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name, category) : generateFallbackImage(name, category))
-                    };
-                    menuItems.push(newItem);
+                if (name && Number.isFinite(price) && price > 0 && name.toLowerCase() !== 'dish' && name.toLowerCase() !== 'item') {
+                    const existingIdx = menuItems.findIndex(m => m && m.name && m.name.trim().toLowerCase() === name.toLowerCase());
+                    const imgUrl = (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name, category) : generateFallbackImage(name, category));
+                    let targetId = null;
+                    if (existingIdx >= 0) {
+                        const existing = menuItems[existingIdx];
+                        existing.price = price;
+                        existing.category = category;
+                        if (!existing.image) existing.image = imgUrl;
+                        existing.is_active = true;
+                        existing.isDeleted = false;
+                        existing.isAvailable = true;
+                        existing.deletedAt = null;
+                        existing.updatedAt = Date.now();
+                        targetId = existing.id;
+                    } else {
+                        targetId = Date.now() + i;
+                        const newItem = {
+                            id: targetId,
+                            name,
+                            price,
+                            category,
+                            stock: 50,
+                            stockQty: 50,
+                            trackStock: true,
+                            gstRate: 5,
+                            image: imgUrl,
+                            is_active: true,
+                            isDeleted: false,
+                            isAvailable: true,
+                            deletedAt: null,
+                            updatedAt: Date.now()
+                        };
+                        menuItems.push(newItem);
+                    }
+                    if (targetId && typeof removeDeletedMenuItemId === 'function') {
+                        removeDeletedMenuItemId(targetId);
+                    }
+                    if (typeof removeDeletedMenuItemName === 'function') {
+                        removeDeletedMenuItemName(name);
+                    }
                     if (!menuCategories.includes(category)) {
                         menuCategories.push(category);
                     }
@@ -614,6 +699,7 @@ async function handleExcelMenuUpload(event) {
         }
 
         if (importedCount > 0) {
+            window.menuItems = menuItems;
             persistMenu();
             persistCategories();
             renderCategoryDropdown();
@@ -638,7 +724,8 @@ window.handleExcelMenuUpload = handleExcelMenuUpload;
 let activeAdjustingItem = null;
 
 function openQuickAdjustStockModal(itemId) {
-    const item = menuItems.find(i => i.id === itemId);
+    if (!_requireMenuPermission('adjust menu stock', () => openQuickAdjustStockModal(itemId))) return;
+    const item = (Array.isArray(menuItems) ? menuItems : []).find(i => String(i.id) === String(itemId));
     if (!item) return;
     activeAdjustingItem = item;
 
@@ -682,6 +769,10 @@ function setStockQuick(amount) {
 window.setStockQuick = setStockQuick;
 
 function toggleStockUnlimited() {
+    if (!canCurrentStaffManageMenu()) {
+        if (typeof showToast === 'function') showToast('Permission denied: Manager or Admin authorization required.', 'error');
+        return;
+    }
     if (!activeAdjustingItem) {
         const idEl = document.getElementById('quickAdjustItemId');
         if (idEl && idEl.value && Array.isArray(menuItems)) {
@@ -702,6 +793,10 @@ function toggleStockUnlimited() {
 window.toggleStockUnlimited = toggleStockUnlimited;
 
 function saveQuickStockAdjustment() {
+    if (!canCurrentStaffManageMenu()) {
+        if (typeof showToast === 'function') showToast('Permission denied: Manager or Admin authorization required.', 'error');
+        return;
+    }
     if (!activeAdjustingItem) {
         const idEl = document.getElementById('quickAdjustItemId');
         if (idEl && idEl.value && Array.isArray(menuItems)) {
@@ -748,16 +843,17 @@ function syncMenuUIQuantities() {
         const wrapper = document.getElementById(`menu-action-wrap-${item.id}`);
         if(!wrapper) return;
         let qtyInCart = 0; 
-        const existing = currentCart.find(i => i.id === item.id); 
+        const existing = currentCart.find(i => String(i.id) === String(item.id)); 
         if(existing) qtyInCart = existing.qty;
 
+        const safeItemId = _menuEsc(String(item.id));
         let buttonHtml = '';
         if (item.trackStock && item.stockQty <= 0) {
             buttonHtml = `<button type="button" class="add-btn" style="background:var(--border); color:var(--text-muted); cursor:not-allowed;" disabled>OUT</button>`;
         } else if (qtyInCart > 0) {
-            buttonHtml = `<div class="item-qty-control" onclick="event.stopPropagation()"><button type="button" onclick="modifyQty(${item.id}, -1, event)" aria-label="Decrease quantity">−</button><span>${qtyInCart}</span><button type="button" onclick="addToCart(${item.id}, event)" aria-label="Increase quantity">+</button></div>`;
+            buttonHtml = `<div class="item-qty-control" onclick="event.stopPropagation()"><button type="button" data-item-id="${safeItemId}" onclick="modifyQty(this.dataset.itemId, -1, event)" aria-label="Decrease quantity">−</button><span>${qtyInCart}</span><button type="button" data-item-id="${safeItemId}" onclick="addToCart(this.dataset.itemId, event)" aria-label="Increase quantity">+</button></div>`;
         } else {
-            buttonHtml = `<button type="button" class="add-btn" onclick="addToCart(${item.id}, event)">+ ADD</button>`;
+            buttonHtml = `<button type="button" class="add-btn" data-item-id="${safeItemId}" onclick="addToCart(this.dataset.itemId, event)">+ ADD</button>`;
         }
         if (wrapper.innerHTML !== buttonHtml) { wrapper.innerHTML = buttonHtml; }
     });
@@ -1090,7 +1186,7 @@ async function generateAIImage() {
             if (noticeEl) {
                 if (serverData.isFreeTierQuota && serverData.notice) {
                     noticeEl.style.display = 'flex';
-                    noticeEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>${serverData.notice}</span>`;
+                    noticeEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg><span>${_menuEsc(serverData.notice)}</span>`;
                 } else {
                     noticeEl.style.display = 'none';
                 }
@@ -1252,6 +1348,7 @@ function closeAddMenuItemModal() {
 window.closeAddMenuItemModal = closeAddMenuItemModal;
 
 function openAddMenuItemModal() {
+    if (!_requireMenuPermission('add menu items', () => openAddMenuItemModal())) return;
     editingMenuItemId = null; 
     renderCategoryDropdown();
     document.getElementById('menuFormTitle').innerText = "Add New Menu Item"; 
@@ -1314,6 +1411,7 @@ function openAddMenuItemModal() {
 window.openAddMenuItemModal = openAddMenuItemModal;
 
 function editMenuItem(id) {
+    if (!_requireMenuPermission('edit menu items', () => editMenuItem(id))) return;
     const item = (Array.isArray(menuItems) ? menuItems : []).find(i => String(i.id) === String(id));
     if(item) {
         renderCategoryDropdown();
@@ -1393,18 +1491,25 @@ function editMenuItem(id) {
 }
 window.editMenuItem = editMenuItem;
 
-function addMenuItem() {
+function addMenuItem(bypassRoleCheck = false) {
+    if (!bypassRoleCheck && !canCurrentStaffManageMenu()) {
+        _requireMenuPermission('save menu items', () => addMenuItem(true));
+        return;
+    }
     const name = document.getElementById('newItemName')?.value?.trim() || ''; 
-    const price = parseFloat(document.getElementById('newItemPrice')?.value); 
+    const rawPriceStr = document.getElementById('newItemPrice')?.value?.trim() || '';
+    const price = rawPriceStr === '' ? NaN : Number(rawPriceStr);
     const category = document.getElementById('newItemCategory')?.value || ''; 
-    const gstRate = parseFloat(document.getElementById('newItemGst')?.value) || 0; 
+    const rawGst = parseFloat(document.getElementById('newItemGst')?.value);
+    const gstRate = (Number.isFinite(rawGst) && rawGst >= 0) ? rawGst : 0; 
     const trackStock = Boolean(document.getElementById('newItemTrackStock')?.checked); 
-    const stockQty = parseInt(document.getElementById('newItemStock')?.value) || 0;
+    const rawStock = parseInt(document.getElementById('newItemStock')?.value, 10);
+    const stockQty = (Number.isFinite(rawStock) && rawStock >= 0) ? rawStock : 0;
     const cuisine = document.getElementById('newItemCuisine')?.value.trim() || '';
     const servingStyle = document.getElementById('newItemServingStyle')?.value.trim() || '';
     const dietary = getSelectedDietaryTags();
 
-    if(name && !isNaN(price)) { 
+    if (name && Number.isFinite(price) && price >= 0) { 
         let savedDishId = null;
         const previewEl = document.getElementById('newItemImagePreview');
         const previewSrc = (previewEl && previewEl.src && !previewEl.src.includes('placeholder') && !previewEl.src.startsWith('data:image/svg+xml')) ? previewEl.src : '';
@@ -1440,8 +1545,10 @@ function addMenuItem() {
                     image: dishPhoto,
                     imageMetadata: imgMeta,
                     updatedAt: now,
+                    is_active: true,
                     isDeleted: false,
-                    isAvailable: true
+                    isAvailable: true,
+                    deletedAt: null
                 }; 
                 savedDishId = menuItems[index].id;
             } else {
@@ -1460,8 +1567,10 @@ function addMenuItem() {
                     image: dishPhoto,
                     imageMetadata: imgMeta,
                     updatedAt: now,
+                    is_active: true,
                     isDeleted: false,
-                    isAvailable: true
+                    isAvailable: true,
+                    deletedAt: null
                 });
             }
             showToast("✅ Item updated!");
@@ -1482,8 +1591,10 @@ function addMenuItem() {
                     image: dishPhoto,
                     imageMetadata: imgMeta,
                     updatedAt: now,
+                    is_active: true,
                     isDeleted: false,
-                    isAvailable: true
+                    isAvailable: true,
+                    deletedAt: null
                 };
                 savedDishId = menuItems[existingIndex].id;
                 showToast("✅ Existing item updated!");
@@ -1503,14 +1614,19 @@ function addMenuItem() {
                     image: dishPhoto,
                     imageMetadata: imgMeta,
                     updatedAt: now,
+                    is_active: true,
                     isDeleted: false,
-                    isAvailable: true
+                    isAvailable: true,
+                    deletedAt: null
                 }); 
                 showToast("✅ Item added!"); 
             }
         }
         if (savedDishId && typeof removeDeletedMenuItemId === 'function') {
             removeDeletedMenuItemId(savedDishId);
+        }
+        if (editingMenuItemId && String(editingMenuItemId) !== String(savedDishId) && typeof removeDeletedMenuItemId === 'function') {
+            removeDeletedMenuItemId(editingMenuItemId);
         }
         if (name && typeof removeDeletedMenuItemName === 'function') {
             removeDeletedMenuItemName(name);
@@ -1534,23 +1650,15 @@ function addMenuItem() {
         }
         closeAddMenuItemModal();
     } else { 
-        showToast("⚠️ Name and Price required."); 
+        showToast("⚠️ Valid item Name and non-negative Price required."); 
     }
 }
 window.addMenuItem = addMenuItem;
 
 function deleteMenuItem(id, bypassRoleCheck = false) { 
-    if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role !== 'Admin' && currentStaff.role !== 'Manager') {
-        if (typeof requestManagerOverride === 'function') {
-            requestManagerOverride({
-                title: "Manager Authorization Required",
-                actionDescription: "Enter Manager or Admin PIN to delete this menu item:",
-                onSuccess: () => {
-                    deleteMenuItem(id, true);
-                }
-            });
-            return;
-        }
+    if (!bypassRoleCheck && !canCurrentStaffManageMenu()) {
+        _requireMenuPermission('delete this menu item', () => deleteMenuItem(id, true));
+        return;
     }
     if(confirm("Delete this item permanently?")) { 
         if (typeof recordDeletedMenuItemId === 'function') {
@@ -1620,6 +1728,10 @@ function handleMenuDrop(event) {
         event.preventDefault();
         event.stopPropagation();
     }
+    if (!canCurrentStaffManageMenu()) {
+        _requireMenuPermission('import menu items', () => processAIMenu(event));
+        return;
+    }
     processAIMenu(event);
 }
 window.handleMenuDrop = handleMenuDrop;
@@ -1668,6 +1780,10 @@ function parseLocalMenuFallback(payload) {
 }
 
 async function processAIMenu(event) {
+    if (!canCurrentStaffManageMenu()) {
+        _requireMenuPermission('import menu items', () => processAIMenu(event));
+        return;
+    }
     const file = (event && event.target && event.target.files && event.target.files[0]) || 
                  (event && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]);
     if (!file) return;
@@ -2035,15 +2151,17 @@ function renderAiPreviewModal() {
     }
 
     pendingAiItems.forEach((item, index) => {
-        const safeName = escapeHtml(item.name || '');
-        const safeCat = escapeHtml(item.category || '');
-        const safePrice = (item.price !== undefined && item.price !== null) ? item.price : 0;
-        const imgDisplay = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name || 'Item', item.category) : generateFallbackImage(item.name || 'Item', item.category));
+        const safeName = _menuEsc(item.name || '');
+        const safeCat = _menuEsc(item.category || '');
+        const parsedPreviewPrice = Number(item.price);
+        const safePrice = (Number.isFinite(parsedPreviewPrice) && parsedPreviewPrice >= 0) ? parsedPreviewPrice : 0;
+        const rawImg = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name || 'Item', item.category) : generateFallbackImage(item.name || 'Item', item.category));
+        const imgDisplay = _sanitizeMenuImgUrl(rawImg) || generateFallbackImage(item.name || 'Item', item.category);
 
         html += `
         <div class="ai-review-item" id="ai-item-row-${index}">
             <div class="ai-item-thumb" onclick="triggerAiItemImageUpload(${index})" title="Click to upload or replace dish photo">
-                <img id="ai-item-img-${index}" src="${imgDisplay}" alt="${safeName}" loading="lazy" decoding="async" onerror="this.onerror=null; this.src=generateFallbackImage('${safeName}', '${safeCat}');">
+                <img id="ai-item-img-${index}" src="${_menuEsc(imgDisplay)}" alt="${safeName}" loading="lazy" decoding="async" data-item-name="${safeName}" data-item-cat="${safeCat}" onerror="this.onerror=null; this.src=generateFallbackImage(this.dataset.itemName, this.dataset.itemCat);">
                 <div class="ai-thumb-badge" title="Upload dish photo"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></div>
             </div>
 
@@ -2211,7 +2329,11 @@ function closeAiPreviewModal() {
 }
 window.closeAiPreviewModal = closeAiPreviewModal;
 
-async function confirmAiImport() {
+async function confirmAiImport(bypassRoleCheck = false) {
+    if (!bypassRoleCheck && !canCurrentStaffManageMenu()) {
+        _requireMenuPermission('import AI menu items', () => confirmAiImport(true));
+        return;
+    }
     const btn = document.getElementById('btnConfirmAiImport') || document.querySelector('#aiPreviewModal .btn-success');
     try {
         if (btn) { btn.disabled = true; btn.innerText = "Importing Items..."; }
@@ -2246,11 +2368,13 @@ async function confirmAiImport() {
                 catName = existingCat;
             }
 
-            const itemRate = parseFloat(item.price) || 0;
+            const parsedRate = parseFloat(item.price);
+            const itemRate = (Number.isFinite(parsedRate) && parsedRate >= 0) ? parsedRate : 0;
             const finalImage = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(rawName, catName) : generateFallbackImage(rawName, catName));
 
             // Intelligent Deduplication & Upsert: check if item with same name exists (case-insensitive)
             const existingItemIndex = menuItems.findIndex(m => m.name && m.name.trim().toLowerCase() === rawName.toLowerCase());
+            let importedId = null;
 
             if (existingItemIndex >= 0) {
                 const existing = menuItems[existingItemIndex];
@@ -2259,8 +2383,11 @@ async function confirmAiImport() {
                 if (item.image) existing.image = item.image;
                 if (item.gstRate !== undefined) existing.gstRate = Number(item.gstRate);
                 existing.updatedAt = Date.now();
+                existing.is_active = true;
                 existing.isDeleted = false;
                 existing.isAvailable = true;
+                existing.deletedAt = null;
+                importedId = existing.id;
                 itemsUpdated++;
             } else {
                 const newItem = {
@@ -2273,11 +2400,17 @@ async function confirmAiImport() {
                     stockQty: 0,
                     image: finalImage,
                     updatedAt: Date.now(),
+                    is_active: true,
                     isDeleted: false,
-                    isAvailable: true
+                    isAvailable: true,
+                    deletedAt: null
                 };
                 menuItems.push(newItem);
+                importedId = newItem.id;
                 itemsAdded++;
+            }
+            if (importedId && typeof removeDeletedMenuItemId === 'function') {
+                removeDeletedMenuItemId(importedId);
             }
             if (typeof removeDeletedMenuItemName === 'function') {
                 removeDeletedMenuItemName(rawName);

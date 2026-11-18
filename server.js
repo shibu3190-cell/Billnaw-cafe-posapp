@@ -26,7 +26,7 @@ import {
 } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
 import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle, syncStoreToFirestoreREST, getStoreFromFirestoreREST, deleteStaffFromFirestoreREST } from './server/sync-service.js';
-import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot, normalizeShopId } from './server/quota-service.js';
+import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot, normalizeShopId, getClientProfileData, getCurrentYearMonth } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
 import {
   sendOtp,
@@ -42,8 +42,10 @@ import {
   resetStoreCloudData,
   requestAdminPinResetOtp,
   resetAdminPinWithOtp,
+  getShopRecord,
   normalizeEmail,
   isValidEmail,
+  normalizeBackendRole,
   createSignedAuthToken,
   verifySignedAuthToken,
   verifyTenantAuthorization,
@@ -224,14 +226,20 @@ app.get('/api/ai/quota', async (req, res) => {
 // Allows updating aiMonthlyLimit and dedicated customGeminiKey for any specific client/shop
 app.post('/api/admin/client-quota', async (req, res) => {
   try {
-    const clientId = (req.body?.shopId || req.body?.clientId || '').trim();
-    const { aiMonthlyLimit, customGeminiKey } = req.body;
-    if (!clientId) {
-      return res.status(400).json({ error: 'clientId or shopId is required' });
+    const rawId = sanitizeTenantStoreCode(req) || String(req.body?.shopId || req.body?.clientId || '').trim();
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: rawId || undefined,
+      requiredPermission: 'admin_quota'
+    });
+    if (!auth) return;
+
+    const { aiMonthlyLimit, customGeminiKey } = req.body || {};
+    if (!rawId || !/^[A-Za-z0-9_-]{3,64}$/.test(rawId)) {
+      return res.status(400).json({ success: false, error: 'Valid clientId or shopId is required' });
     }
 
     const updates = {};
-    if (typeof aiMonthlyLimit === 'number') {
+    if (typeof aiMonthlyLimit === 'number' && Number.isFinite(aiMonthlyLimit)) {
       updates.aiMonthlyLimit = Math.max(0, aiMonthlyLimit);
       updates.monthlyLimit = Math.max(0, aiMonthlyLimit);
       updates.limit = Math.max(0, aiMonthlyLimit);
@@ -240,29 +248,35 @@ app.post('/api/admin/client-quota', async (req, res) => {
       updates.customGeminiKey = customGeminiKey.trim();
     }
 
-    const success = await updateClientProfileData(clientId, updates);
+    const success = await updateClientProfileData(rawId, updates);
     if (!success) {
-      return res.status(500).json({ error: 'Failed to update client profile in Firestore' });
+      return res.status(500).json({ success: false, error: 'Failed to update client profile in Firestore' });
     }
 
-    const updatedQuota = await getClientQuotaInfo(clientId);
+    const updatedQuota = await getClientQuotaInfo(rawId);
     res.json({
       success: true,
-      message: `Updated quota settings for client '${clientId}'`,
+      message: `Updated quota settings for client '${rawId}'`,
       quota: updatedQuota
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 // Clear Server-side AI & Runtime Verification Caches
 app.post('/api/admin/clear-cache', (req, res) => {
   try {
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: sanitizeTenantStoreCode(req) || undefined,
+      requiredPermission: 'admin_quota'
+    });
+    if (!auth) return;
+
     clearGeminiCaches();
     res.json({ success: true, message: 'All server memory & verification caches cleared successfully.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -693,6 +707,12 @@ export function detectImageMagicBytes(buffer) {
 // Saves approved AI-generated base64 image data to persistent disk storage under uploads/food-images/
 app.post('/api/food-images/save', (req, res) => {
   try {
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: sanitizeTenantStoreCode(req) || undefined,
+      requiredPermission: 'manage_menu'
+    });
+    if (!auth) return;
+
     const { dishId, dishName, base64Data, mimeType } = req.body || {};
     if (!dishId) {
       return res.status(400).json({ success: false, error: 'dishId is required' });
@@ -701,7 +721,23 @@ app.post('/api/food-images/save', (req, res) => {
       return res.status(400).json({ success: false, error: 'base64Data is required' });
     }
 
-    const cleanBase64 = base64Data.replace(/^data:image\/[a-zA-Z+]+;base64,/, '').trim();
+    const trimmedInput = base64Data.trim();
+    const dataUrlMatch = trimmedInput.match(/^data:([^;]+);base64,/i);
+    if (dataUrlMatch) {
+      const prefixMime = dataUrlMatch[1].trim().toLowerCase();
+      if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(prefixMime)) {
+        return res.status(400).json({ success: false, error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.' });
+      }
+    }
+
+    if (mimeType && typeof mimeType === 'string') {
+      const cleanMime = mimeType.trim().toLowerCase();
+      if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(cleanMime)) {
+        return res.status(400).json({ success: false, error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.' });
+      }
+    }
+
+    const cleanBase64 = trimmedInput.replace(/^data:[^;]+;base64,/i, '').trim();
     if (!cleanBase64) {
       return res.status(400).json({ success: false, error: 'base64Data content is empty' });
     }
@@ -713,13 +749,29 @@ app.post('/api/food-images/save', (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid base64 payload' });
     }
 
-    if (buffer.length === 0) {
+    if (!buffer || buffer.length === 0) {
       return res.status(400).json({ success: false, error: 'Decoded buffer has 0 bytes' });
+    }
+
+    const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+    if (buffer.length > MAX_UPLOAD_BYTES) {
+      return res.status(413).json({
+        success: false,
+        error: `Payload exceeds 3MB limit (actual size: ${(buffer.length / 1024 / 1024).toFixed(2)}MB)`
+      });
+    }
+
+    const detected = detectImageMagicBytes(buffer);
+    if (!detected || !['image/jpeg', 'image/png', 'image/webp'].includes(detected.mime)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.'
+      });
     }
 
     const safeDishId = String(dishId).replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 32) || 'dish';
     const now = Date.now();
-    const filename = `${safeDishId}_${now}.jpg`;
+    const filename = `${safeDishId}_${now}.${detected.ext}`;
     const targetPath = path.join(uploadsFoodImagesDir, filename);
 
     fs.writeFileSync(targetPath, buffer);
@@ -746,12 +798,27 @@ app.post('/api/food-images/save', (req, res) => {
 // Direct upload with <= 3MB limit, MIME whitelisting, and strict binary magic byte verification
 app.post('/api/food-images/upload', (req, res) => {
   try {
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: sanitizeTenantStoreCode(req) || undefined,
+      requiredPermission: 'manage_menu'
+    });
+    if (!auth) return;
+
     const { dishId, base64Data, mimeType, filename: clientFilename } = req.body || {};
     if (!base64Data || typeof base64Data !== 'string') {
       return res.status(400).json({ success: false, error: 'base64Data is required' });
     }
 
-    const cleanBase64 = base64Data.replace(/^data:image\/[a-zA-Z+]+;base64,/, '').trim();
+    const trimmedInput = base64Data.trim();
+    const dataUrlMatch = trimmedInput.match(/^data:([^;]+);base64,/i);
+    if (dataUrlMatch) {
+      const prefixMime = dataUrlMatch[1].trim().toLowerCase();
+      if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(prefixMime)) {
+        return res.status(400).json({ success: false, error: 'Invalid file format or header. Allowed types: JPEG, PNG, WebP.' });
+      }
+    }
+
+    const cleanBase64 = trimmedInput.replace(/^data:[^;]+;base64,/i, '').trim();
     if (!cleanBase64) {
       return res.status(400).json({ success: false, error: 'Uploaded file payload is empty' });
     }
@@ -821,6 +888,12 @@ app.post('/api/food-images/upload', (req, res) => {
 // Path traversal protection with path.basename, unlink target file from uploads/food-images/
 app.delete('/api/food-images/:filename', (req, res) => {
   try {
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: sanitizeTenantStoreCode(req) || undefined,
+      requiredPermission: 'manage_menu'
+    });
+    if (!auth) return;
+
     const rawFilename = req.params.filename;
     if (!rawFilename || typeof rawFilename !== 'string') {
       return res.status(400).json({ success: false, error: 'Filename is required' });
@@ -830,7 +903,7 @@ app.delete('/api/food-images/:filename', (req, res) => {
     const cleanRaw = rawFilename.replace(/\0/g, '');
     const safeFilename = path.basename(cleanRaw);
 
-    if (!safeFilename || safeFilename === '.' || safeFilename === '..') {
+    if (!safeFilename || safeFilename === '.' || safeFilename === '..' || cleanRaw.includes('..')) {
       return res.status(400).json({ success: false, error: 'Invalid filename' });
     }
 
@@ -839,7 +912,7 @@ app.delete('/api/food-images/:filename', (req, res) => {
     const resolvedPath = path.resolve(targetPath);
     const resolvedUploads = path.resolve(uploadsFoodImagesDir);
 
-    if (!resolvedPath.startsWith(resolvedUploads)) {
+    if (!resolvedPath.startsWith(resolvedUploads + path.sep)) {
       return res.status(403).json({ success: false, error: 'Access forbidden: Path traversal rejected' });
     }
 
@@ -992,11 +1065,25 @@ app.post('/api/auth/admin-forgot-pin/send-otp', (req, res) => {
 });
 
 // 2C. Admin / Selective Staff Forgot PIN: Verify OTP & Reset PIN with Selective Role
-app.post('/api/auth/admin-forgot-pin/reset', (req, res) => {
+app.post('/api/auth/admin-forgot-pin/reset', async (req, res) => {
   try {
     const { email, otp, newPin, storeCode, staffId, staffName, role } = req.body || {};
+    const normEmail = normalizeEmail(email);
+    const cleanCode = storeCode ? String(storeCode).trim() : '';
+    if (cleanCode && !getShopRecord(cleanCode)) {
+      const cloudShop = await getStoreFromFirestoreREST(cleanCode).catch(() => null);
+      if (cloudShop && cloudShop.success) {
+        const cloudOwner = normalizeEmail(cloudShop.ownerEmail || cloudShop.profile?.ownerEmail || cloudShop.profile?.email || '');
+        if (cloudOwner && cloudOwner !== normEmail) {
+          return res.status(403).json({
+            success: false,
+            error: 'Forbidden: email does not match store owner.'
+          });
+        }
+      }
+    }
     const result = resetAdminPinWithOtp(email, otp, newPin, storeCode, staffId, staffName, role);
-    res.status(result.status).json(result.data);
+    res.status(result.status || (result.data?.success ? 200 : 400)).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to reset PIN' });
   }
@@ -1032,14 +1119,24 @@ app.post(['/api/auth/validate-device', '/api/auth/validate-device-and-login'], a
 // 2E. Backend Device Access Management: Revoke & Resume
 app.post('/api/devices/revoke', async (req, res) => {
   try {
-    const { storeCode, deviceId, reason } = req.body || {};
-    if (!deviceId) return res.status(400).json({ success: false, error: 'deviceId is required' });
-    const code = storeCode || 'default';
-    
+    const code = sanitizeTenantStoreCode(req);
+    if (!code) return res.status(400).json({ success: false, error: 'Valid storeCode is required' });
+
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: code,
+      requiredPermission: 'manage_devices'
+    });
+    if (!auth) return;
+
+    const { deviceId } = req.body || {};
+    if (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) {
+      return res.status(400).json({ success: false, error: 'deviceId is required' });
+    }
+
     if (CONFIG?.firebase?.projectId && CONFIG?.firebase?.firestoreDatabaseId) {
       const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
-      const url = `${base}/cafes/${encodeURIComponent(code)}/devices/${encodeURIComponent(deviceId)}?updateMask.fieldPaths=status&updateMask.fieldPaths=revokedAt`;
-      await fetch(url, {
+      const url = `${base}/cafes/${encodeURIComponent(code)}/devices/${encodeURIComponent(deviceId.trim())}?updateMask.fieldPaths=status&updateMask.fieldPaths=revokedAt`;
+      const patchRes = await fetch(url, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1048,25 +1145,41 @@ app.post('/api/devices/revoke', async (req, res) => {
             revokedAt: { stringValue: new Date().toISOString() }
           }
         })
-      }).catch(() => null);
+      });
+      if (!patchRes || !patchRes.ok) {
+        return res.status(patchRes?.status >= 400 ? patchRes.status : 502).json({
+          success: false,
+          error: `Firestore device revoke failed (${patchRes?.status || 502})`
+        });
+      }
     }
-    
+
     res.json({ success: true, message: `Device ${deviceId} revoked`, status: 'REVOKED' });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(502).json({ success: false, error: err.message });
   }
 });
 
 app.post('/api/devices/resume', async (req, res) => {
   try {
-    const { storeCode, deviceId } = req.body || {};
-    if (!deviceId) return res.status(400).json({ success: false, error: 'deviceId is required' });
-    const code = storeCode || 'default';
-    
+    const code = sanitizeTenantStoreCode(req);
+    if (!code) return res.status(400).json({ success: false, error: 'Valid storeCode is required' });
+
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: code,
+      requiredPermission: 'manage_devices'
+    });
+    if (!auth) return;
+
+    const { deviceId } = req.body || {};
+    if (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) {
+      return res.status(400).json({ success: false, error: 'deviceId is required' });
+    }
+
     if (CONFIG?.firebase?.projectId && CONFIG?.firebase?.firestoreDatabaseId) {
       const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
-      const url = `${base}/cafes/${encodeURIComponent(code)}/devices/${encodeURIComponent(deviceId)}?updateMask.fieldPaths=status&updateMask.fieldPaths=resumedAt`;
-      await fetch(url, {
+      const url = `${base}/cafes/${encodeURIComponent(code)}/devices/${encodeURIComponent(deviceId.trim())}?updateMask.fieldPaths=status&updateMask.fieldPaths=resumedAt`;
+      const patchRes = await fetch(url, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1075,12 +1188,18 @@ app.post('/api/devices/resume', async (req, res) => {
             resumedAt: { stringValue: new Date().toISOString() }
           }
         })
-      }).catch(() => null);
+      });
+      if (!patchRes || !patchRes.ok) {
+        return res.status(patchRes?.status >= 400 ? patchRes.status : 502).json({
+          success: false,
+          error: `Firestore device resume failed (${patchRes?.status || 502})`
+        });
+      }
     }
-    
+
     res.json({ success: true, message: `Device ${deviceId} resumed & authorized`, status: 'AUTHORIZED' });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(502).json({ success: false, error: err.message });
   }
 });
 
@@ -1134,23 +1253,26 @@ app.post('/api/auth/logout', (req, res) => {
 // 6. Active Sessions Management (List and Revoke per store / user)
 app.get('/api/auth/sessions', (req, res) => {
   try {
-    let { storeCode, email } = req.query || {};
+    const requestedStore = sanitizeTenantStoreCode(req) || '';
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: requestedStore || undefined,
+      requiredPermission: 'manage_staff',
+      allowBodyToken: false
+    });
+    if (!auth) return;
 
-    // If neither storeCode nor email is provided in query, attempt to resolve from auth header
-    if (!storeCode && !email) {
-      const authHeader = req.headers.authorization || req.headers['x-session-token'];
-      if (authHeader) {
-        const sessRes = verifySession(authHeader);
-        if (sessRes.status === 200 && sessRes.data?.storeCode) {
-          storeCode = sessRes.data.storeCode;
-        }
-      }
-    }
+    const callerRole = normalizeBackendRole(auth.user?.role || 'Cashier');
+    const isSuper = Boolean(auth.isAdminSecret || callerRole === 'SuperAdmin');
+    const scopedStoreCode = isSuper ? (requestedStore || auth.storeCode || undefined) : auth.storeCode;
+    const rawEmail = req.query?.email;
+    const scopedEmail = isSuper
+      ? (rawEmail || undefined)
+      : (rawEmail && normalizeEmail(rawEmail) === normalizeEmail(auth.user?.email || '') ? rawEmail : undefined);
 
-    const sessions = listActiveSessions(storeCode, email);
+    const sessions = listActiveSessions(scopedStoreCode, scopedEmail).map(({ token: _rawToken, ...safeSession }) => safeSession);
     res.json({
       success: true,
-      storeCode: storeCode || null,
+      storeCode: scopedStoreCode || null,
       count: sessions.length,
       sessions
     });
@@ -1161,26 +1283,61 @@ app.get('/api/auth/sessions', (req, res) => {
 
 app.post('/api/auth/sessions/revoke', (req, res) => {
   try {
+    const requestedStore = sanitizeTenantStoreCode(req) || '';
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: requestedStore || undefined,
+      requiredPermission: null,
+      allowBodyToken: false
+    });
+    if (!auth) return;
+
     const { token, sessionId, storeCode, email, revokeAll, keepCurrent } = req.body || {};
-    const callerToken = req.headers.authorization || req.headers['x-session-token'];
+    const authHeader = req.headers.authorization || '';
+    const callerToken = authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7).trim()
+      : (req.headers['x-auth-token'] || req.headers['x-session-token'] || '');
+    const callerRole = normalizeBackendRole(auth.user?.role || 'Cashier');
+    const isSuper = Boolean(auth.isAdminSecret || callerRole === 'SuperAdmin');
+
+    const targetToken = token || sessionId;
+    const isSelfRevoke = Boolean(
+      !revokeAll &&
+      targetToken &&
+      callerToken &&
+      (targetToken === callerToken ||
+        targetToken === ('sess_' + crypto.createHash('sha256').update(callerToken).digest('hex').slice(0, 12)))
+    );
+
+    if (!isSelfRevoke) {
+      const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'manage_staff' });
+      if (!rbac.allowed) {
+        return res.status(rbac.status || 403).json({ success: false, error: rbac.error });
+      }
+    }
 
     if (revokeAll) {
-      const except = keepCurrent ? (token || callerToken) : null;
-      if (storeCode) {
-        const result = revokeSessionsForStore(storeCode, except);
+      const except = keepCurrent ? callerToken : null;
+      if (storeCode || !email) {
+        if (!isSuper && storeCode && String(storeCode).trim().toUpperCase() !== String(auth.storeCode || '').trim().toUpperCase()) {
+          return res.status(403).json({ success: false, error: 'Cross-tenant session revocation forbidden' });
+        }
+        const targetStore = isSuper ? (storeCode || auth.storeCode) : auth.storeCode;
+        const result = revokeSessionsForStore(targetStore, except);
         return res.status(result.status).json(result.data);
       } else if (email) {
+        if (!isSuper && normalizeEmail(email) !== normalizeEmail(auth.user?.email || '')) {
+          return res.status(403).json({ success: false, error: 'Cross-tenant user session revocation forbidden' });
+        }
         const result = revokeSessionsForUser(email, except);
         return res.status(result.status).json(result.data);
       }
     }
 
-    const targetToken = token || sessionId;
     if (!targetToken) {
       return res.status(400).json({ success: false, error: 'target token or sessionId is required' });
     }
 
-    const result = revokeSession(targetToken);
+    const result = revokeSession(targetToken, isSuper ? null : (auth.storeCode || '__MISSING_STORE__'));
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to revoke session' });
@@ -1190,15 +1347,19 @@ app.post('/api/auth/sessions/revoke', (req, res) => {
 // 6B. Store Reset Data (Wipes server & cloud database and reseeds clean demo items)
 app.post('/api/store/reset-data', (req, res) => {
   try {
-    const authHeader = req.headers.authorization || req.headers['x-session-token'];
-    let storeCode = req.body?.storeCode;
-    if (!storeCode && authHeader) {
-      const sessRes = verifySession(authHeader);
-      if (sessRes.status === 200 && sessRes.data?.storeCode) {
-        storeCode = sessRes.data.storeCode;
-      }
+    const requestedStore = sanitizeTenantStoreCode(req) || '';
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: requestedStore || undefined,
+      requiredPermission: 'change_settings',
+      allowBodyToken: false
+    });
+    if (!auth) return;
+
+    const targetCode = requestedStore || auth.storeCode;
+    if (!targetCode) {
+      return res.status(400).json({ success: false, error: 'Valid storeCode is required' });
     }
-    const result = resetStoreCloudData(storeCode);
+    const result = resetStoreCloudData(targetCode);
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to reset store data' });
@@ -1222,15 +1383,60 @@ function sanitizeTenantStoreCode(req) {
   return clean;
 }
 
+function verifyAdminSecret(req) {
+  const expected = process.env.ADMIN_SECRET || '';
+  if (!expected) return false;
+  const provided = String(req.headers['x-admin-secret'] || '').trim();
+  if (!provided) return false;
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 // Authoritative Tenant Auth Gate Middleware / Helper
-function checkTenantAuth(req, res, targetStoreCode, allowGracefulMigration = true) {
+function checkTenantAuth(req, res, targetStoreCode, allowGracefulMigration = true, options = {}) {
+  const { allowBodyToken = true, allowQueryToken = true } = options;
   const authHeader = req.headers['authorization'] || '';
-  const token = authHeader.toLowerCase().startsWith('bearer ')
-    ? authHeader.slice(7).trim()
-    : (req.headers['x-auth-token'] || req.query?.token || req.body?.token || '');
+  let token = '';
+  if (authHeader.toLowerCase().startsWith('bearer ')) {
+    token = authHeader.slice(7).trim();
+  } else if (req.headers['x-auth-token']) {
+    token = String(req.headers['x-auth-token']).trim();
+  } else if (req.headers['x-session-token']) {
+    token = String(req.headers['x-session-token']).trim();
+  } else if (allowQueryToken && (req.query?.authToken || req.query?.token)) {
+    token = String(req.query.authToken || req.query.token).trim();
+  } else if (allowBodyToken && req.body?.token) {
+    token = String(req.body.token).trim();
+  }
+
   const auth = verifyTenantAuthorization({ token, targetStoreCode, allowGracefulMigration });
   if (auth.refreshedToken) {
     res.setHeader('x-refreshed-token', auth.refreshedToken);
+  }
+  return auth;
+}
+
+function requireStrictTenantRbac(req, res, { targetStoreCode, requiredPermission, allowBodyToken = true, allowQueryToken = true } = {}) {
+  if (verifyAdminSecret(req)) {
+    return {
+      authorized: true,
+      isAdminSecret: true,
+      user: { role: 'SuperAdmin', storeCode: targetStoreCode || '*' },
+      storeCode: targetStoreCode || ''
+    };
+  }
+  const auth = checkTenantAuth(req, res, targetStoreCode || '', false, { allowBodyToken, allowQueryToken });
+  if (!auth.authorized) {
+    res.status(auth.status || 401).json({ success: false, error: auth.error });
+    return null;
+  }
+  if (requiredPermission) {
+    const rbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission });
+    if (!rbac.allowed) {
+      res.status(rbac.status || 403).json({ success: false, error: rbac.error });
+      return null;
+    }
   }
   return auth;
 }
@@ -1247,7 +1453,8 @@ app.get('/api/sync/store-data', async (req, res) => {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
     const result = await getStoreFromFirestoreREST(storeCode);
-    res.json(result);
+    const status = result.status || (result.success ? 200 : 500);
+    res.status(status).json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Fetch failed' });
   }
@@ -1263,17 +1470,53 @@ app.post('/api/sync/store-data', async (req, res) => {
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
-    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots } = req.body || {};
-    
-    // Normalize and link ownerEmail with shop profile
-    const normalizedEmail = (ownerEmail || profile?.ownerEmail || profile?.email || req.headers['x-shop-email'] || '').trim().toLowerCase();
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots } = req.body || {};
+
+    if (staff !== undefined || replaceStaff !== undefined || deletedStaffId !== undefined || deletedStaffIds !== undefined) {
+      const staffRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'manage_staff' });
+      if (!staffRbac.allowed) {
+        return res.status(staffRbac.status || 403).json({ success: false, error: staffRbac.error });
+      }
+    }
+    if (menu !== undefined || deletedMenuIds !== undefined || deletedMenuNames !== undefined || menuVersion !== undefined || categories !== undefined) {
+      const menuRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'manage_menu' });
+      if (!menuRbac.allowed) {
+        return res.status(menuRbac.status || 403).json({ success: false, error: menuRbac.error });
+      }
+    }
+    if (tables !== undefined || history !== undefined || expenses !== undefined || customers !== undefined) {
+      const opsRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'take_orders' });
+      if (!opsRbac.allowed) {
+        return res.status(opsRbac.status || 403).json({ success: false, error: opsRbac.error });
+      }
+    }
+
+    const settingsRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'change_settings' });
+    const hasOperationalPayload = (
+      tables !== undefined ||
+      kots !== undefined ||
+      history !== undefined ||
+      customers !== undefined ||
+      expenses !== undefined
+    );
+    if (!settingsRbac.allowed && !hasOperationalPayload && (ownerEmail !== undefined || profile !== undefined)) {
+      return res.status(settingsRbac.status || 403).json({ success: false, error: settingsRbac.error });
+    }
+
+    // Normalize and link ownerEmail with shop profile only for callers permitted to change settings
+    const normalizedEmail = settingsRbac.allowed
+      ? (ownerEmail || profile?.ownerEmail || profile?.email || req.headers['x-shop-email'] || '').trim().toLowerCase()
+      : '';
+    const safeProfile = settingsRbac.allowed && profile
+      ? { ...profile, ownerEmail: normalizedEmail || profile.ownerEmail }
+      : undefined;
 
     const result = await syncStoreToFirestoreREST(code, {
       ownerEmail: normalizedEmail || undefined,
-      profile: profile ? { ...profile, ownerEmail: normalizedEmail || profile.ownerEmail } : undefined,
-      staff, replaceStaff, deletedStaffId, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots
+      profile: safeProfile,
+      staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots
     });
-    res.json(result);
+    res.status(result.success ? 200 : (result.status >= 400 ? result.status : 500)).json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Sync failed' });
   }
@@ -1293,9 +1536,9 @@ app.post('/api/sync/staff', async (req, res) => {
     if (!rbac.allowed) {
       return res.status(rbac.status || 403).json({ success: false, error: rbac.error });
     }
-    const { staff, replaceStaff, deletedStaffId } = req.body || {};
-    const result = await syncStoreToFirestoreREST(code, { staff, replaceStaff, deletedStaffId });
-    res.json(result);
+    const { staff, replaceStaff, deletedStaffId, deletedStaffIds } = req.body || {};
+    const result = await syncStoreToFirestoreREST(code, { staff, replaceStaff, deletedStaffId, deletedStaffIds });
+    res.status(result.success ? 200 : (result.status >= 400 ? result.status : 500)).json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Staff sync failed' });
   }
@@ -1317,7 +1560,7 @@ app.post('/api/sync/staff/delete', async (req, res) => {
     }
     const { staffId, staff } = req.body || {};
     const result = await deleteStaffFromFirestoreREST(code, staffId, staff);
-    res.json(result);
+    res.status(result.success ? 200 : (result.status >= 400 ? result.status : 500)).json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Staff deletion sync failed' });
   }
@@ -1368,10 +1611,17 @@ app.get('/api/subscription/status', async (req, res) => {
 // POST /api/subscription/manage
 app.post('/api/subscription/manage', async (req, res) => {
   try {
-    const { shopEmail, shopId, action, reason, updatedBy } = req.body || {};
+    const { shopEmail, email: bodyEmail, shopId, storeCode: bodyStoreCode, action, reason, updatedBy } = req.body || {};
 
-    const email = shopEmail ? normalizeEmail(shopEmail) : '';
-    const cleanShopId = shopId ? String(shopId).trim() : '';
+    const email = (shopEmail || bodyEmail || req.headers['x-shop-email']) ? normalizeEmail(shopEmail || bodyEmail || req.headers['x-shop-email']) : '';
+    const cleanShopId = (shopId || bodyStoreCode || req.headers['x-shop-id']) ? String(shopId || bodyStoreCode || req.headers['x-shop-id']).trim() : '';
+
+    // Enforce strict authentication and RBAC unconditionally (allowGracefulMigration = false)
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: cleanShopId || undefined,
+      requiredPermission: 'manage_subscription'
+    });
+    if (!auth) return;
 
     if (!action || (!email && !cleanShopId)) {
       return res.status(400).json({
@@ -1393,6 +1643,24 @@ app.post('/api/subscription/manage', async (req, res) => {
         success: false,
         error: 'Shop not found for the provided email or shopId.'
       });
+    }
+
+    const callerRole = normalizeBackendRole(auth.user?.role || 'Cashier');
+    if (!auth.isAdminSecret && callerRole !== 'SuperAdmin') {
+      const authStore = String(auth.storeCode || '').trim().toUpperCase();
+      const subStore = String(currentSub.shopId || '').trim().toUpperCase();
+      if (!authStore || (subStore && authStore !== subStore)) {
+        return res.status(403).json({
+          success: false,
+          error: `Cross-tenant access forbidden: store [${authStore || 'NONE'}] cannot manage subscription for [${subStore}].`
+        });
+      }
+      if (!cleanShopId && email && auth.user?.email && normalizeEmail(auth.user.email) !== email) {
+        return res.status(403).json({
+          success: false,
+          error: 'Cross-tenant access forbidden: email does not match authenticated account.'
+        });
+      }
     }
 
     const transition = validateSubscriptionTransition(currentSub.status, action);
@@ -1682,8 +1950,28 @@ app.post('/api/inventory/audit', (req, res) => {
 // Admin Data Retention & Maintenance Purge Endpoint (Requirement R2)
 app.post('/api/admin/maintenance/purge', async (req, res) => {
   try {
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: undefined,
+      requiredPermission: 'admin_quota'
+    });
+    if (!auth) return;
+
+    const callerRole = normalizeBackendRole(auth.user?.role || 'Cashier');
+    if (!auth.isAdminSecret && callerRole !== 'SuperAdmin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: SuperAdmin privileges required for global data retention purge.'
+      });
+    }
+
     const { dryRun = false, now = null } = req.body || {};
-    const executionNow = now ? (typeof now === 'number' ? now : new Date(now).getTime()) : Date.now();
+    const executionNow = (now !== null && now !== undefined && now !== '')
+      ? (typeof now === 'number' ? now : new Date(now).getTime())
+      : Date.now();
+    if (!Number.isFinite(executionNow)) {
+      return res.status(400).json({ success: false, error: 'Invalid now timestamp provided.' });
+    }
+
     const report = await runDailyDataRetentionRoutine({
       now: executionNow,
       dryRun: dryRun === true
@@ -1698,31 +1986,126 @@ app.post('/api/admin/maintenance/purge', async (req, res) => {
 // Statement generation cache / metadata map (Requirement R3)
 const reportTokens = new Map();
 
+function pruneExpiredReportTokens() {
+  const now = Date.now();
+  for (const [tok, info] of reportTokens.entries()) {
+    if (!info || now > info.expiresAt) {
+      reportTokens.delete(tok);
+      if (info?.filePath && fs.existsSync(info.filePath)) {
+        try { fs.unlinkSync(info.filePath); } catch (_) {}
+      }
+    }
+  }
+}
+
+function escapeCsvCell(val) {
+  const str = String(val ?? '');
+  const formulaSafe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  return `"${formulaSafe.replace(/"/g, '""')}"`;
+}
+
 // Offloaded Analytical Reports Generation Endpoint (Requirement R3)
 app.post('/api/reports/generate-statement', async (req, res) => {
   try {
-    const { startDate, endDate, format = 'csv', storeCode } = req.body || {};
-    const start = startDate ? new Date(startDate).toISOString() : new Date(Date.now() - 30 * 86400000).toISOString();
-    const end = endDate ? new Date(endDate).toISOString() : new Date().toISOString();
+    const code = sanitizeTenantStoreCode(req);
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'A valid storeCode is required.' });
+    }
 
-    const token = crypto.randomBytes(16).toString('hex');
-    const filename = `statement_${(storeCode || 'store').toLowerCase()}_${start.slice(0, 10)}_to_${end.slice(0, 10)}.${format === 'pdf' ? 'pdf' : 'csv'}`;
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: code,
+      requiredPermission: 'view_reports'
+    });
+    if (!auth) return;
+
+    pruneExpiredReportTokens();
+
+    const { startDate, endDate, format = 'csv', transactions } = req.body || {};
+    const startMs = startDate ? Date.parse(startDate) : (Date.now() - 30 * 86400000);
+    const parseEndMs = (val) => {
+      if (!val) return Date.now();
+      const s = String(val).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return Date.parse(`${s}T23:59:59.999Z`);
+      return Date.parse(s);
+    };
+    const endMs = parseEndMs(endDate);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return res.status(400).json({ success: false, error: 'Invalid startDate or endDate provided.' });
+    }
+    const start = new Date(startMs).toISOString();
+    const end = new Date(endMs).toISOString();
+
+    // Collect real settled non-void transactions from request payload, Firestore REST, and in-memory DB
+    const seenIds = new Set();
+    const collected = [];
+    const addTx = (tx) => {
+      if (!tx || typeof tx !== 'object') return;
+      const st = String(tx.status || 'SETTLED').trim().toUpperCase();
+      if (st === 'VOID' || st === 'CANCELLED') return;
+      const dt = Date.parse(tx.createdAt || tx.created_at || tx.settled_at || tx.date || '');
+      if (Number.isFinite(dt) && (dt < startMs || dt > endMs)) return;
+      const txKey = String(tx.id || tx.invoiceNo || tx.billNo || `${dt}_${tx.total || tx.amount || 0}`);
+      if (seenIds.has(txKey)) return;
+      seenIds.add(txKey);
+      collected.push(tx);
+    };
+
+    if (Array.isArray(transactions)) {
+      transactions.forEach(addTx);
+    }
+
+    const cloudStore = await getStoreFromFirestoreREST(code).catch(() => null);
+    if (cloudStore && cloudStore.success && Array.isArray(cloudStore.history)) {
+      cloudStore.history.forEach(addTx);
+    }
+
+    try {
+      const db = getDbClient();
+      if (db?.memoryStore instanceof Map) {
+        for (const [k, v] of db.memoryStore.entries()) {
+          if ((k.startsWith(`shops/${code}/invoices/`) || k.startsWith(`cafes/${code}/invoices/`)) && v && typeof v === 'object') {
+            addTx(v);
+          }
+        }
+      }
+    } catch (_) {}
+
+    const safeFormat = format === 'pdf' ? 'pdf' : 'csv';
+    const token = crypto.randomBytes(32).toString('hex');
+    const safeStoreSlug = code.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const filename = `statement_${safeStoreSlug}_${start.slice(0, 10)}_to_${end.slice(0, 10)}.${safeFormat}`;
     const filePath = path.join(uploadsReportsDir, `${token}_${filename}`);
 
-    // Generate CSV content from settled transactions
-    const rows = [
-      'Date,Bill No,Table,Customer,Items,Payment Mode,Gross (Rs),Tax (Rs),Net Total (Rs),Status',
-      `${start.slice(0, 10)},BN-SAMPLE-01,Table 1,Walk-in,Tea (x2),Cash,20.00,1.00,21.00,SETTLED`
-    ];
+    const header = 'Date,Bill No,Table,Customer,Items,Payment Mode,Gross (Rs),Tax (Rs),Net Total (Rs),Status';
+    const rows = [header];
+    for (const tx of collected) {
+      const itemsStr = Array.isArray(tx.items)
+        ? tx.items.map(i => `${i.name || 'Item'} (x${i.qty || i.quantity || 1})`).join('; ')
+        : String(tx.items || '');
+      rows.push([
+        escapeCsvCell(String(tx.date || tx.createdAt || tx.created_at || tx.settled_at || '').slice(0, 10)),
+        escapeCsvCell(tx.billNo || tx.invoiceNo || tx.id || ''),
+        escapeCsvCell(tx.table || tx.tableName || 'Counter'),
+        escapeCsvCell(tx.customerName || tx.customer?.name || 'Walk-in'),
+        escapeCsvCell(itemsStr),
+        escapeCsvCell(tx.paymentMode || tx.paymentMethod || 'Cash'),
+        escapeCsvCell(Number(tx.grossTotal ?? tx.subtotal ?? tx.total ?? tx.amount ?? 0).toFixed(2)),
+        escapeCsvCell(Number(tx.tax ?? tx.gst ?? 0).toFixed(2)),
+        escapeCsvCell(Number(tx.total ?? tx.amount ?? 0).toFixed(2)),
+        escapeCsvCell(String(tx.status || 'SETTLED').toUpperCase())
+      ].join(','));
+    }
+
     const csvContent = rows.join('\n');
     fs.writeFileSync(filePath, csvContent, 'utf8');
 
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const expiresAtMs = Date.now() + 15 * 60 * 1000;
     reportTokens.set(token, {
       filePath,
       filename,
-      format,
-      expiresAt: Date.now() + 15 * 60 * 1000
+      format: safeFormat,
+      storeCode: code,
+      expiresAt: expiresAtMs
     });
 
     res.json({
@@ -1730,8 +2113,8 @@ app.post('/api/reports/generate-statement', async (req, res) => {
       token,
       downloadUrl: `/api/reports/download/${token}?filename=${encodeURIComponent(filename)}`,
       filename,
-      totalRecords: 1,
-      expiresAt
+      totalRecords: collected.length,
+      expiresAt: new Date(expiresAtMs).toISOString()
     });
   } catch (err) {
     console.error('[Reports:GenerateStatement] Error:', err);
@@ -1742,20 +2125,58 @@ app.post('/api/reports/generate-statement', async (req, res) => {
 // Download Route for Offloaded Reports (Requirement R3)
 app.get('/api/reports/download/:token', (req, res) => {
   try {
+    const auth = requireStrictTenantRbac(req, res, {
+      targetStoreCode: undefined,
+      requiredPermission: 'view_reports',
+      allowBodyToken: false,
+      allowQueryToken: true
+    });
+    if (!auth) return;
+
     const { token } = req.params;
     const info = reportTokens.get(token);
 
     if (!info || Date.now() > info.expiresAt) {
-      if (info) reportTokens.delete(token);
+      if (info) {
+        reportTokens.delete(token);
+        if (info.filePath && fs.existsSync(info.filePath)) {
+          try { fs.unlinkSync(info.filePath); } catch (_) {}
+        }
+      }
       return res.status(404).send('Download link expired or invalid.');
     }
 
-    const customFilename = req.query.filename || info.filename || `statement_${token}.csv`;
-    res.setHeader('Content-Disposition', `attachment; filename="${customFilename}"`);
-    res.setHeader('Content-Type', info.format === 'pdf' ? 'application/pdf' : 'text/csv');
+    const callerRole = normalizeBackendRole(auth.user?.role || 'Cashier');
+    if (!auth.isAdminSecret && callerRole !== 'SuperAdmin') {
+      const authStore = String(auth.storeCode || '').trim().toUpperCase();
+      const reportStore = String(info.storeCode || '').trim().toUpperCase();
+      if (!authStore || authStore !== reportStore) {
+        return res.status(403).json({
+          success: false,
+          error: `Cross-tenant access forbidden: store [${authStore}] cannot download report for [${reportStore}].`
+        });
+      }
+    }
 
-    if (fs.existsSync(info.filePath)) {
-      const stream = fs.createReadStream(info.filePath);
+    const resolvedFile = path.resolve(info.filePath);
+    const resolvedDir = path.resolve(uploadsReportsDir);
+    if (!resolvedFile.startsWith(resolvedDir + path.sep)) {
+      return res.status(403).send('Access forbidden: invalid report path.');
+    }
+
+    const rawName = String(req.query.filename || info.filename || '');
+    const stripped = rawName.replace(/[\r\n\x00-\x1f"';\\\/]/g, '');
+    const baseName = path.basename(stripped);
+    const ext = info.format === 'pdf' ? '.pdf' : '.csv';
+    const safeStem = baseName.replace(/\.(csv|pdf)$/i, '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100) || `statement_${token.slice(0, 8)}`;
+    const safeFilename = `${safeStem}${ext}`;
+
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.setHeader('Content-Type', info.format === 'pdf' ? 'application/pdf' : 'text/csv');
+    res.setHeader('Cache-Control', 'no-store');
+
+    if (fs.existsSync(resolvedFile)) {
+      const stream = fs.createReadStream(resolvedFile);
       stream.pipe(res);
     } else {
       res.send('Date,Bill No,Table,Customer,Items,Payment Mode,Gross (Rs),Tax (Rs),Net Total (Rs),Status\n');

@@ -134,11 +134,12 @@ challenge('S1-PARITY', 'Adversarial Sensitivity: In-memory 1-byte mutation MUST 
 // ============================================================================
 console.log('\n📍 SUITE 2: TENANT BOUNDARY ADVERSARIAL PROBING (isValidTenant)');
 
-// Rule definition: id is string && id.size() >= 3 && !id.matches('^\\s+$')
+// Rule definition: id is string && id.size() >= 3 && !id.matches('^\\s+$') && id != '_auth'
 function evalIsValidTenant(id) {
   if (typeof id !== 'string') return false;
   if (id.length < 3) return false;
   if (/^\s+$/.test(id)) return false;
+  if (id === '_auth') return false;
   return true;
 }
 
@@ -212,42 +213,73 @@ challenge('S2-BOUNDARY', 'isValidTenant accepts valid tenant IDs with leading/tr
 // ============================================================================
 console.log('\n📍 SUITE 3: MULTI-TENANT ROLE & CLAIM BOUNDARY PROBING');
 
-// Implement simulated rule evaluation adhering exactly to firestore.rules logic
+// Implement simulated rule evaluation adhering exactly to hardened firestore.rules logic
+function evalHasVerifiedEmail(auth) {
+  if (!auth || !auth.token) return false;
+  const t = auth.token;
+  return (
+    'email' in t &&
+    typeof t.email === 'string' &&
+    t.email.length > 0 &&
+    'email_verified' in t &&
+    t.email_verified === true
+  );
+}
+
 function evalMatchesTenantId(auth, tenantId) {
   if (!auth || !auth.token) return false;
   const t = auth.token;
   return (
     ('storeCode' in t && typeof t.storeCode === 'string' && t.storeCode === tenantId) ||
     ('cafe_id' in t && typeof t.cafe_id === 'string' && t.cafe_id === tenantId) ||
+    ('cafeId' in t && typeof t.cafeId === 'string' && t.cafeId === tenantId) ||
     ('shopId' in t && typeof t.shopId === 'string' && t.shopId === tenantId)
   );
 }
 
-function evalMatchesOwnerEmail(auth, resource, requestResource) {
-  if (!auth || !auth.token || typeof auth.token.email !== 'string') return false;
-  const email = auth.token.email;
-  const r1 = resource && resource.data && ('ownerEmail' in resource.data) && resource.data.ownerEmail === email;
-  const r2 = requestResource && requestResource.data && ('ownerEmail' in requestResource.data) && requestResource.data.ownerEmail === email;
-  return Boolean(r1 || r2);
+function evalMatchesExistingOwnerEmail(auth, resource) {
+  if (!evalHasVerifiedEmail(auth)) return false;
+  if (!resource || !resource.data || typeof resource.data.ownerEmail !== 'string' || resource.data.ownerEmail.length === 0) return false;
+  return resource.data.ownerEmail.toLowerCase() === auth.token.email.toLowerCase();
 }
 
-function evalIsTenantStaff(auth, tenantId, resource, requestResource) {
-  if (!evalIsValidTenant(tenantId)) return false;
-  if (!auth || !auth.token) return false;
-  return (
-    evalMatchesTenantId(auth, tenantId) ||
-    evalMatchesOwnerEmail(auth, resource, requestResource)
-  );
+function evalMatchesParentOwnerEmail(auth, parentDoc) {
+  if (!evalHasVerifiedEmail(auth)) return false;
+  if (!parentDoc || !parentDoc.data || typeof parentDoc.data.ownerEmail !== 'string' || parentDoc.data.ownerEmail.length === 0) return false;
+  return parentDoc.data.ownerEmail.toLowerCase() === auth.token.email.toLowerCase();
 }
 
-function evalIsTenantAdmin(auth, tenantId, resource, requestResource) {
-  if (!evalIsTenantStaff(auth, tenantId, resource, requestResource)) return false;
+function evalHasAdminOrOwnerClaim(auth) {
   if (!auth || !auth.token) return false;
   const t = auth.token;
   const hasAdminRole = 'role' in t && typeof t.role === 'string' && (t.role === 'admin' || t.role === 'owner');
   const isOwnerFlag = 'isOwner' in t && t.isOwner === true;
-  const ownerEmailMatch = evalMatchesOwnerEmail(auth, resource, requestResource);
-  return hasAdminRole || isOwnerFlag || ownerEmailMatch;
+  return hasAdminRole || isOwnerFlag;
+}
+
+function evalIsTenantStaff(auth, tenantId, parentDoc) {
+  if (!evalIsValidTenant(tenantId)) return false;
+  if (!auth || !auth.token) return false;
+  return (
+    evalMatchesTenantId(auth, tenantId) ||
+    evalMatchesParentOwnerEmail(auth, parentDoc)
+  );
+}
+
+function evalIsTenantAdmin(auth, tenantId, parentDoc) {
+  if (!evalIsTenantStaff(auth, tenantId, parentDoc)) return false;
+  return evalHasAdminOrOwnerClaim(auth) || evalMatchesParentOwnerEmail(auth, parentDoc);
+}
+
+function evalIsRootStaff(auth, tenantId, resource) {
+  if (!evalIsValidTenant(tenantId)) return false;
+  if (!auth || !auth.token) return false;
+  return evalMatchesTenantId(auth, tenantId) || evalMatchesExistingOwnerEmail(auth, resource);
+}
+
+function evalIsRootAdmin(auth, tenantId, resource) {
+  if (!evalIsRootStaff(auth, tenantId, resource)) return false;
+  return evalHasAdminOrOwnerClaim(auth) || evalMatchesExistingOwnerEmail(auth, resource);
 }
 
 // Adversarial Attack Scenarios
@@ -318,38 +350,54 @@ challenge('S3-RBAC', 'Type Confusion Attack: Non-string role e.g. { role: ["admi
   });
 });
 
-challenge('S3-RBAC', 'Owner Email Recognition: Valid ownerEmail grants admin access even without storeCode in token', () => {
-  const ownerAuth = { token: { email: 'boss@mycafe.com' } };
+challenge('S3-RBAC', 'Owner Email Recognition: Verified ownerEmail grants admin access even without storeCode in token', () => {
+  const ownerAuth = { token: { email: 'Boss@MyCafe.com', email_verified: true } };
   const existingDoc = { data: { ownerEmail: 'boss@mycafe.com' } };
 
-  assert.strictEqual(evalIsTenantStaff(ownerAuth, 'cafe_101', existingDoc, null), true);
-  assert.strictEqual(evalIsTenantAdmin(ownerAuth, 'cafe_101', existingDoc, null), true);
+  assert.strictEqual(evalIsRootStaff(ownerAuth, 'cafe_101', existingDoc), true);
+  assert.strictEqual(evalIsRootAdmin(ownerAuth, 'cafe_101', existingDoc), true);
+  assert.strictEqual(evalIsTenantStaff(ownerAuth, 'cafe_101', existingDoc), true);
+  assert.strictEqual(evalIsTenantAdmin(ownerAuth, 'cafe_101', existingDoc), true);
+});
+
+challenge('S3-RBAC', 'Owner Email Anti-Hijack: Unverified email or spoofed request.resource.data.ownerEmail cannot hijack existing doc or subcollection', () => {
+  const unverifiedAuth = { token: { email: 'boss@mycafe.com', email_verified: false } };
+  const existingDoc = { data: { ownerEmail: 'boss@mycafe.com' } };
+  assert.strictEqual(evalIsRootStaff(unverifiedAuth, 'cafe_101', existingDoc), false);
+  assert.strictEqual(evalIsTenantStaff(unverifiedAuth, 'cafe_101', existingDoc), false);
+
+  const attackerAuth = { token: { email: 'attacker@evil.com', email_verified: true } };
+  assert.strictEqual(evalIsRootStaff(attackerAuth, 'cafe_101', existingDoc), false);
+  assert.strictEqual(evalIsRootAdmin(attackerAuth, 'cafe_101', existingDoc), false);
+  assert.strictEqual(evalIsTenantStaff(attackerAuth, 'cafe_101', existingDoc), false);
+  assert.strictEqual(evalIsTenantAdmin(attackerAuth, 'cafe_101', existingDoc), false);
 });
 
 challenge('S3-RBAC', 'Owner Email Spoofing Attack: Token with mismatched email cannot claim owner privileges', () => {
-  const hackerAuth = { token: { email: 'hacker@evil.com', role: 'admin' } }; // Admin of another system
+  const hackerAuth = { token: { email: 'hacker@evil.com', email_verified: true, role: 'admin' } }; // Admin of another system
   const victimDoc = { data: { ownerEmail: 'legit@mycafe.com' } };
 
-  assert.strictEqual(evalIsTenantStaff(hackerAuth, 'cafe_victim', victimDoc, null), false);
-  assert.strictEqual(evalIsTenantAdmin(hackerAuth, 'cafe_victim', victimDoc, null), false);
+  assert.strictEqual(evalIsTenantStaff(hackerAuth, 'cafe_victim', victimDoc), false);
+  assert.strictEqual(evalIsTenantAdmin(hackerAuth, 'cafe_victim', victimDoc), false);
 });
 
 challenge('S3-RBAC', 'Invalid Tenant ID with Valid Auth: isValidTenant failure blocks access completely', () => {
-  const validAdmin = { token: { storeCode: '   ', role: 'admin', email: 'admin@shop.com' } };
+  const validAdmin = { token: { storeCode: '   ', role: 'admin', email: 'admin@shop.com', email_verified: true } };
   const doc = { data: { ownerEmail: 'admin@shop.com' } };
 
-  assert.strictEqual(evalIsTenantStaff(validAdmin, '   ', doc, null), false);
-  assert.strictEqual(evalIsTenantAdmin(validAdmin, '   ', doc, null), false);
+  assert.strictEqual(evalIsTenantStaff(validAdmin, '   ', doc), false);
+  assert.strictEqual(evalIsTenantAdmin(validAdmin, '   ', doc), false);
+  assert.strictEqual(evalIsTenantStaff(validAdmin, '_auth', doc), false);
 });
 
 // ============================================================================
-// SUITE 4: DUAL-PATH STRUCTURAL & RULE PARITY (/cafes/{cafeId} vs /shops/{shopId})
+// SUITE 4: DUAL-PATH STRUCTURAL & RULE PARITY (/cafes/{cafeId}, /shops/{shopId}, /clients/{clientId})
 // ============================================================================
 console.log('\n📍 SUITE 4: DUAL-PATH STRUCTURAL & RULE PARITY');
 
 const rulesContent = b1.toString('utf8');
 
-// Extract /cafes/{cafeId} block and /shops/{shopId} block cleanly
+// Extract /cafes/{cafeId}, /shops/{shopId}, and /clients/{clientId} blocks cleanly
 function extractMatchBlock(content, matchPattern) {
   const startIdx = content.indexOf(matchPattern);
   assert.ok(startIdx !== -1, `Could not find pattern: ${matchPattern}`);
@@ -380,6 +428,7 @@ function stripComments(code) {
 
 const cafeBlock = extractMatchBlock(rulesContent, 'match /cafes/{cafeId}');
 const shopBlock = extractMatchBlock(rulesContent, 'match /shops/{shopId}');
+const clientBlock = extractMatchBlock(rulesContent, 'match /clients/{clientId}');
 
 const expectedSubcollections = [
   'invoices/{invoiceId}',
@@ -393,24 +442,31 @@ const expectedSubcollections = [
   'printQueue/{jobId}',
   'staff/{staffId}',
   'menu/{menuId}',
+  'menu_items/{menuId}',
+  'menu_meta/{metaId}',
   'inventory/{itemId}',
   'customers/{customerId}',
+  'khata_payments/{paymentId}',
   'expenses/{expenseId}',
   'settings/{settingId}',
   'counters/{counterId}',
   'khata/{khataId}',
   'history/{historyId}',
   'raw_materials/{matId}',
+  'recipes/{recipeId}',
+  'stock_logs/{logId}',
   'sub_recipes/{recId}',
   'reports/{reportId}',
   'daily_summaries/{summaryId}',
-  'marketing_logs/{logId}'
+  'marketing_logs/{logId}',
+  'quota/{quotaId}'
 ];
 
 expectedSubcollections.forEach(sub => {
-  challenge('S4-DUALPATH', `Both /cafes/{cafeId} and /shops/{shopId} must define subcollection: ${sub}`, () => {
+  challenge('S4-DUALPATH', `/cafes/{cafeId}, /shops/{shopId}, and /clients/{clientId} must define subcollection: ${sub}`, () => {
     assert.ok(cafeBlock.includes(`match /${sub}`), `/cafes/{cafeId} missing subcollection: ${sub}`);
     assert.ok(shopBlock.includes(`match /${sub}`), `/shops/{shopId} missing subcollection: ${sub}`);
+    assert.ok(clientBlock.includes(`match /${sub}`), `/clients/{clientId} missing subcollection: ${sub}`);
   });
 });
 
@@ -438,58 +494,128 @@ challenge('S4-DUALPATH', 'Root Hardware Devices gate (/devices/{deviceId}) stric
 // ============================================================================
 console.log('\n📍 SUITE 5: INVOICES ANTI-TAMPERING & PRINT QUEUE SECURITY PROBING');
 
-challenge('S5-INTEGRITY', 'Invoices ledger: Deletion is permanently forbidden in both paths', () => {
+challenge('S5-INTEGRITY', 'Invoices ledger: Deletion is permanently forbidden across all three paths', () => {
   assert.ok(cafeBlock.includes('match /invoices/{invoiceId}') && cafeBlock.includes('allow delete: if false;'));
   assert.ok(shopBlock.includes('match /invoices/{invoiceId}') && shopBlock.includes('allow delete: if false;'));
+  assert.ok(clientBlock.includes('match /invoices/{invoiceId}') && clientBlock.includes('allow delete: if false;'));
 });
 
-// Simulate invoice update rules:
-// allow update: if isTenantStaff(cafeId) && isWithin30DayEditWindow() &&
-//   resource.data.status == 'PAID' && request.resource.data.status == 'VOID' &&
-//   request.resource.data.void_audit.void_reason is string &&
-//   request.resource.data.void_audit.voided_by_staff_id is string &&
-//   request.resource.data.void_audit.voided_at is string;
+// Simulate hardened invoice update rules:
+// isWithin30DayEditWindow() (no missing-field bypass) +
+// (resource.data.status == 'PAID' || resource.data.status == 'SETTLED') &&
+// request.resource.data.status == 'VOID' &&
+// diff(resource.data).affectedKeys().hasOnly(['status', 'void_audit', 'void_reason', 'voided_by', 'voided_at', 'updatedAt', 'updated_at']) &&
+// isValidInvoiceVoidAudit()
+const ALLOWED_INVOICE_VOID_KEYS = new Set([
+  'status', 'void_audit', 'void_reason', 'voided_by', 'voided_at', 'updatedAt', 'updated_at'
+]);
+
 function evalInvoiceUpdate(currentDoc, requestDoc, requestTime, createdAt) {
-  // Check 30-day window
-  const msIn30Days = 30 * 24 * 60 * 60 * 1000;
-  if (createdAt && (requestTime - createdAt) >= msIn30Days) {
+  // Check 30-day window — must have valid numeric timestamp (no missing-field bypass)
+  if (typeof createdAt !== 'number' || !Number.isFinite(createdAt)) {
     return false;
   }
-  // Check status transition PAID -> VOID
-  if (currentDoc.status !== 'PAID') return false;
+  const msIn30Days = 30 * 24 * 60 * 60 * 1000;
+  if ((requestTime - createdAt) >= msIn30Days) {
+    return false;
+  }
+  // Check status transition PAID/SETTLED -> VOID
+  if (currentDoc.status !== 'PAID' && currentDoc.status !== 'SETTLED') return false;
   if (requestDoc.status !== 'VOID') return false;
 
-  // Check audit metadata
-  if (!requestDoc.void_audit) return false;
-  const audit = requestDoc.void_audit;
-  if (typeof audit.void_reason !== 'string' || audit.void_reason.length === 0) return false;
-  if (typeof audit.voided_by_staff_id !== 'string' || audit.voided_by_staff_id.length === 0) return false;
-  if (typeof audit.voided_at !== 'string' || audit.voided_at.length === 0) return false;
+  // Check affectedKeys lock on immutable financial & identity fields
+  const allKeys = new Set([...Object.keys(currentDoc), ...Object.keys(requestDoc)]);
+  for (const k of allKeys) {
+    const inCur = Object.prototype.hasOwnProperty.call(currentDoc, k);
+    const inReq = Object.prototype.hasOwnProperty.call(requestDoc, k);
+    const changed = inCur !== inReq || JSON.stringify(currentDoc[k]) !== JSON.stringify(requestDoc[k]);
+    if (changed && !ALLOWED_INVOICE_VOID_KEYS.has(k)) {
+      return false;
+    }
+  }
 
-  return true;
+  // Check nested or flat void audit metadata
+  const nestedOk =
+    requestDoc.void_audit &&
+    typeof requestDoc.void_audit === 'object' &&
+    !Array.isArray(requestDoc.void_audit) &&
+    typeof requestDoc.void_audit.void_reason === 'string' &&
+    requestDoc.void_audit.void_reason.length >= 3 &&
+    typeof requestDoc.void_audit.voided_by_staff_id === 'string' &&
+    requestDoc.void_audit.voided_by_staff_id.length > 0 &&
+    typeof requestDoc.void_audit.voided_at === 'string' &&
+    requestDoc.void_audit.voided_at.length > 0;
+
+  const flatOk =
+    typeof requestDoc.void_reason === 'string' &&
+    requestDoc.void_reason.length >= 3 &&
+    typeof requestDoc.voided_by === 'string' &&
+    requestDoc.voided_by.length > 0 &&
+    typeof requestDoc.voided_at === 'string' &&
+    requestDoc.voided_at.length > 0;
+
+  return Boolean(nestedOk || flatOk);
 }
 
-challenge('S5-INTEGRITY', 'Invoices: Valid VOID mutation within 30-day window with complete audit metadata succeeds', () => {
+challenge('S5-INTEGRITY', 'Invoices: Valid PAID->VOID and SETTLED->VOID mutations within 30-day window succeed', () => {
   const now = Date.now();
   const created = now - 5 * 24 * 60 * 60 * 1000; // 5 days ago
-  const cur = { status: 'PAID', amount: 450 };
-  const req = {
+  const curPaid = { status: 'PAID', amount: 450, items: ['Tea'] };
+  const reqNested = {
     status: 'VOID',
     amount: 450,
+    items: ['Tea'],
     void_audit: {
       void_reason: 'Customer cancelled table',
       voided_by_staff_id: 'staff_102',
       voided_at: new Date().toISOString()
     }
   };
-  assert.strictEqual(evalInvoiceUpdate(cur, req, now, created), true);
+  assert.strictEqual(evalInvoiceUpdate(curPaid, reqNested, now, created), true);
+
+  const curSettled = { status: 'SETTLED', final_payable_paise: 45000 };
+  const reqFlat = {
+    status: 'VOID',
+    final_payable_paise: 45000,
+    void_reason: 'Customer cancelled',
+    voided_by: 'staff_102',
+    voided_at: new Date().toISOString()
+  };
+  assert.strictEqual(evalInvoiceUpdate(curSettled, reqFlat, now, created), true);
 });
 
-challenge('S5-INTEGRITY', 'Invoices Tampering Attack: Modifying bill amount without VOID is rejected', () => {
+challenge('S5-INTEGRITY', 'Invoices Tampering Attack: Modifying bill amount during or without VOID is rejected', () => {
   const now = Date.now();
   const cur = { status: 'PAID', amount: 450 };
-  const req = { status: 'PAID', amount: 150 }; // Fraudulent reduction
-  assert.strictEqual(evalInvoiceUpdate(cur, req, now, now), false);
+  const reqNoVoid = { status: 'PAID', amount: 150 }; // Fraudulent reduction
+  assert.strictEqual(evalInvoiceUpdate(cur, reqNoVoid, now, now), false);
+
+  const reqTamperDuringVoid = {
+    status: 'VOID',
+    amount: 1,
+    void_audit: {
+      void_reason: 'Customer cancelled',
+      voided_by_staff_id: 'staff_102',
+      voided_at: new Date().toISOString()
+    }
+  };
+  assert.strictEqual(evalInvoiceUpdate(cur, reqTamperDuringVoid, now, now), false);
+});
+
+challenge('S5-INTEGRITY', 'Invoices Tampering Attack: Missing createdAt/created_at bypass is rejected', () => {
+  const now = Date.now();
+  const cur = { status: 'PAID', amount: 450 };
+  const req = {
+    status: 'VOID',
+    amount: 450,
+    void_audit: {
+      void_reason: 'Customer cancelled',
+      voided_by_staff_id: 'staff_102',
+      voided_at: new Date().toISOString()
+    }
+  };
+  assert.strictEqual(evalInvoiceUpdate(cur, req, now, null), false);
+  assert.strictEqual(evalInvoiceUpdate(cur, req, now, undefined), false);
 });
 
 challenge('S5-INTEGRITY', 'Invoices Tampering Attack: Resurrecting VOID invoice back to PAID is rejected', () => {
@@ -499,11 +625,12 @@ challenge('S5-INTEGRITY', 'Invoices Tampering Attack: Resurrecting VOID invoice 
   assert.strictEqual(evalInvoiceUpdate(cur, req, now, now), false);
 });
 
-challenge('S5-INTEGRITY', 'Invoices Tampering Attack: VOID without audit reason is rejected', () => {
+challenge('S5-INTEGRITY', 'Invoices Tampering Attack: VOID without valid audit reason is rejected', () => {
   const now = Date.now();
   const cur = { status: 'PAID', amount: 450 };
   const req = {
     status: 'VOID',
+    amount: 450,
     void_audit: { void_reason: null, voided_by_staff_id: 'staff_1', voided_at: 'now' }
   };
   assert.strictEqual(evalInvoiceUpdate(cur, req, now, now), false);
@@ -515,22 +642,26 @@ challenge('S5-INTEGRITY', 'Invoices Tampering Attack: VOID past 30-day window (3
   const cur = { status: 'PAID', amount: 450 };
   const req = {
     status: 'VOID',
+    amount: 450,
     void_audit: { void_reason: 'Late dispute', voided_by_staff_id: 'staff_1', voided_at: 'now' }
   };
   assert.strictEqual(evalInvoiceUpdate(cur, req, now, created31DaysAgo), false);
 });
 
-// Print Queue Isolation Rules
-// allow create: if isTenantStaff(id) && request.resource.data.jobType == 'KOT' &&
-//   !('invoice' in request.resource.data) && !('billNo' in request.resource.data) &&
-//   !('amount' in request.resource.data) && !('final_payable_paise' in request.resource.data) &&
-//   request.resource.data.status in ['queued', 'pending'];
+// Print Queue Isolation Rules (20 forbidden billing fields)
+const FORBIDDEN_PRINT_QUEUE_FIELDS = [
+  'invoice', 'billNo', 'amount', 'final_payable_paise',
+  'bill_no', 'invoice_id', 'invoiceNo', 'invoice_no',
+  'final_total_paise', 'grandTotal', 'grand_total',
+  'paymentMode', 'payment_mode', 'subtotal', 'grossSubtotal',
+  'totalTax', 'tax', 'total', 'discount', 'discountAmount'
+];
+
 function evalPrintQueueCreate(data) {
   if (data.jobType !== 'KOT') return false;
-  if ('invoice' in data) return false;
-  if ('billNo' in data) return false;
-  if ('amount' in data) return false;
-  if ('final_payable_paise' in data) return false;
+  for (const field of FORBIDDEN_PRINT_QUEUE_FIELDS) {
+    if (field in data) return false;
+  }
   if (!['queued', 'pending'].includes(data.status)) return false;
   return true;
 }
@@ -546,18 +677,22 @@ challenge('S5-INTEGRITY', 'Print Queue: Valid KOT print job succeeds', () => {
   assert.strictEqual(evalPrintQueueCreate(kotJob), true);
 });
 
-challenge('S5-INTEGRITY', 'Print Queue Billing Injection Attack: Job containing invoice / billNo / amount is blocked', () => {
+challenge('S5-INTEGRITY', 'Print Queue Billing Injection Attack: Job containing any billing field is blocked', () => {
   const injection1 = { jobType: 'KOT', invoice: { id: 1 }, status: 'queued' };
   const injection2 = { jobType: 'KOT', billNo: 'BILL-999', status: 'queued' };
   const injection3 = { jobType: 'KOT', amount: 500, status: 'queued' };
   const injection4 = { jobType: 'KOT', final_payable_paise: 50000, status: 'queued' };
   const injection5 = { jobType: 'RECEIPT', status: 'queued' };
+  const injection6 = { jobType: 'KOT', grandTotal: 500, status: 'queued' };
+  const injection7 = { jobType: 'KOT', invoice_id: 'INV-1', status: 'queued' };
 
   assert.strictEqual(evalPrintQueueCreate(injection1), false);
   assert.strictEqual(evalPrintQueueCreate(injection2), false);
   assert.strictEqual(evalPrintQueueCreate(injection3), false);
   assert.strictEqual(evalPrintQueueCreate(injection4), false);
   assert.strictEqual(evalPrintQueueCreate(injection5), false);
+  assert.strictEqual(evalPrintQueueCreate(injection6), false);
+  assert.strictEqual(evalPrintQueueCreate(injection7), false);
 });
 
 // ============================================================================

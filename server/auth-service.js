@@ -141,30 +141,74 @@ export function hasRolePermission(role, permission) {
   return allowed.includes(permission);
 }
 
-export function verifyEndpointAccess({ authResult, eventOrReq, requiredPermission }) {
-  if (!requiredPermission) return { allowed: true };
+const ROLE_HIERARCHY_RANK = {
+  SuperAdmin: 100,
+  Owner: 90,
+  Admin: 80,
+  Manager: 60,
+  Cashier: 40,
+  'Floor Server': 30,
+  'Kitchen Chef': 20
+};
 
-  // Resolve role from authResult token claims or headers
-  let role = authResult?.user?.role || 'Owner';
+export function verifyEndpointAccess({ authResult, eventOrReq, requiredPermission }) {
+  if (!authResult || authResult.authorized === false || !authResult.user) {
+    return {
+      allowed: false,
+      status: 401,
+      error: 'Authentication required.'
+    };
+  }
+
+  // Resolve role strictly from verified token/session claims; never default a real user's missing role to Owner
+  const tokenRole = authResult.user.role
+    ? normalizeBackendRole(authResult.user.role)
+    : (authResult.migrated ? 'Owner' : 'Cashier');
+
+  if (!requiredPermission) {
+    return { allowed: true, role: tokenRole };
+  }
+
+  if (!hasRolePermission(tokenRole, requiredPermission)) {
+    return {
+      allowed: false,
+      status: 403,
+      error: `Access denied: Role [${tokenRole}] is not authorized to perform [${requiredPermission}].`
+    };
+  }
 
   let staffRoleHeader = '';
   if (eventOrReq) {
     const headers = eventOrReq.headers || {};
-    staffRoleHeader = headers['x-staff-role'] || headers['X-Staff-Role'] || '';
+    staffRoleHeader = String(headers['x-staff-role'] || headers['X-Staff-Role'] || '').trim();
   }
 
-  // If a delegated staff member is operating on the terminal, validate their role permissions
-  const effectiveRole = staffRoleHeader || role;
+  // If a delegated staff member is operating on the terminal, enforce rank ceiling AND permission intersection
+  if (staffRoleHeader) {
+    const normStaffRole = normalizeBackendRole(staffRoleHeader);
+    const tokenRank = ROLE_HIERARCHY_RANK[tokenRole] || 0;
+    const staffRank = ROLE_HIERARCHY_RANK[normStaffRole] || 0;
 
-  if (!hasRolePermission(effectiveRole, requiredPermission)) {
-    return {
-      allowed: false,
-      status: 403,
-      error: `Access denied: Role [${effectiveRole}] is not authorized to perform [${requiredPermission}].`
-    };
+    if (staffRank > tokenRank) {
+      return {
+        allowed: false,
+        status: 403,
+        error: `Access denied: Requested staff role [${normStaffRole}] cannot exceed token role [${tokenRole}].`
+      };
+    }
+
+    if (!hasRolePermission(normStaffRole, requiredPermission)) {
+      return {
+        allowed: false,
+        status: 403,
+        error: `Access denied: Role [${normStaffRole}] is not authorized to perform [${requiredPermission}].`
+      };
+    }
+
+    return { allowed: true, role: normStaffRole };
   }
 
-  return { allowed: true, role: effectiveRole };
+  return { allowed: true, role: tokenRole };
 }
 
 export function saveAuthStoreToDisk() {
@@ -404,13 +448,14 @@ export function verifyTenantAuthorization({ token, targetStoreCode, allowGracefu
 
     const payload = verification.payload || {};
     const tokenStore = payload.storeCode ? String(payload.storeCode).trim().toUpperCase() : '';
+    const tokenRole = payload.role ? normalizeBackendRole(payload.role) : 'Cashier';
 
-    // Enforce Tenant Isolation: token tenant MUST match target storeCode
-    if (normTargetStore && tokenStore && normTargetStore !== tokenStore && payload.role !== 'SuperAdmin') {
+    // Enforce Tenant Isolation: token tenant MUST match target storeCode (reject empty tokenStore for non-SuperAdmin)
+    if (normTargetStore && tokenRole !== 'SuperAdmin' && (!tokenStore || normTargetStore !== tokenStore)) {
       return {
         authorized: false,
         status: 403,
-        error: `Cross-tenant access forbidden: token for store [${tokenStore}] cannot access store [${normTargetStore}].`
+        error: `Cross-tenant access forbidden: token for store [${tokenStore || 'NONE'}] cannot access store [${normTargetStore}].`
       };
     }
 
@@ -428,17 +473,19 @@ export function verifyTenantAuthorization({ token, targetStoreCode, allowGracefu
       sessionStore.delete(cleanToken);
       return { authorized: false, status: 401, error: 'Session has expired.' };
     }
+    const resolvedRole = session.role || (session.email ? userStore.get(normalizeEmail(session.email))?.role : null) || 'Cashier';
+    const normSessionRole = normalizeBackendRole(resolvedRole);
     const sessionStoreCode = String(session.storeCode || '').trim().toUpperCase();
-    if (normTargetStore && sessionStoreCode && normTargetStore !== sessionStoreCode && session.role !== 'SuperAdmin') {
+    if (normTargetStore && normSessionRole !== 'SuperAdmin' && (!sessionStoreCode || normTargetStore !== sessionStoreCode)) {
       return {
         authorized: false,
         status: 403,
-        error: `Cross-tenant access forbidden: session for store [${sessionStoreCode}] cannot access store [${normTargetStore}].`
+        error: `Cross-tenant access forbidden: session for store [${sessionStoreCode || 'NONE'}] cannot access store [${normTargetStore}].`
       };
     }
     return {
       authorized: true,
-      user: session,
+      user: { ...session, role: resolvedRole },
       storeCode: normTargetStore || sessionStoreCode
     };
   }
@@ -850,7 +897,7 @@ export async function sendActualOtpEmail(toEmail, otp, purpose = 'login') {
  * Validates user-submitted OTP.
  * Enforces max 3 attempts, single-use consumption, and resolves user/shop tenant.
  */
-export function verifyOtp(email, otp, shopName) {
+export function verifyOtp(email, otp, shopName, expectedPurpose = null) {
   const normalizedEmail = normalizeEmail(email);
   if (!isValidEmail(normalizedEmail)) {
     return {
@@ -878,6 +925,20 @@ export function verifyOtp(email, otp, shopName) {
     return {
       status: 400,
       data: { success: false, error: 'Invalid or expired OTP' }
+    };
+  }
+
+  if (expectedPurpose) {
+    if (record.purpose !== expectedPurpose) {
+      return {
+        status: 400,
+        data: { success: false, error: 'Invalid OTP purpose for this operation.' }
+      };
+    }
+  } else if (record.purpose === 'admin-pin-reset') {
+    return {
+      status: 400,
+      data: { success: false, error: 'Invalid OTP purpose for login/signup.' }
     };
   }
 
@@ -958,13 +1019,14 @@ export function verifyOtp(email, otp, shopName) {
     uid: user.uid,
     email: user.email,
     storeCode: user.storeCode,
+    role: user.role || 'Owner',
     createdAt: now,
     expiresAt: now + (SESSION_TTL_SECONDS * 1000)
   });
 
   saveAuthStoreToDisk();
 
-  const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode });
+  const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode, role: user.role || 'Owner' });
 
   return {
     status: 200,
@@ -1093,13 +1155,14 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
     uid: user.uid,
     email: user.email,
     storeCode: user.storeCode,
+    role: user.role || 'Owner',
     createdAt: now,
     expiresAt: now + (SESSION_TTL_SECONDS * 1000)
   });
 
   saveAuthStoreToDisk();
 
-  const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode });
+  const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode, role: user.role || 'Owner' });
 
   return {
     status: 200,
@@ -1163,13 +1226,14 @@ export function loginWithPassword({ email, password }) {
     uid: user.uid,
     email: user.email,
     storeCode: user.storeCode,
+    role: user.role || 'Owner',
     createdAt: now,
     expiresAt: now + (SESSION_TTL_SECONDS * 1000)
   });
 
   saveAuthStoreToDisk();
 
-  const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode });
+  const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode, role: user.role || 'Owner' });
 
   return {
     status: 200,
@@ -1339,19 +1403,32 @@ export function listActiveSessions(storeCode, email) {
   return sessions;
 }
 
+export function setAuthUserRecord(user) {
+  if (!user || !user.email) return null;
+  const normEmail = normalizeEmail(user.email);
+  if (!normEmail) return null;
+  userStore.set(normEmail, { ...user, email: normEmail });
+  return userStore.get(normEmail);
+}
+
 /**
  * Revokes a single session by token or session id.
+ * If targetStoreCode is supplied, enforces tenant scoping before deletion.
  */
-export function revokeSession(tokenOrId) {
+export function revokeSession(tokenOrId, targetStoreCode = null) {
   if (!tokenOrId || typeof tokenOrId !== 'string') {
     return { status: 400, data: { success: false, error: 'Token or Session ID is required' } };
   }
 
+  const normScopeStore = targetStoreCode ? String(targetStoreCode).trim().toUpperCase() : null;
   let clean = tokenOrId.startsWith('Bearer ') ? tokenOrId.slice(7).trim() : tokenOrId.trim();
 
   // Try direct delete
   if (sessionStore.has(clean)) {
     const sess = sessionStore.get(clean);
+    if (normScopeStore && String(sess?.storeCode || '').trim().toUpperCase() !== normScopeStore) {
+      return { status: 403, data: { success: false, error: 'Cross-tenant session revocation forbidden' } };
+    }
     if (sess?.email) otpStore.delete(normalizeEmail(sess.email));
     sessionStore.delete(clean);
     saveAuthStoreToDisk();
@@ -1362,6 +1439,9 @@ export function revokeSession(tokenOrId) {
   for (const [token, sess] of sessionStore.entries()) {
     const id = 'sess_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
     if (id === clean) {
+      if (normScopeStore && String(sess?.storeCode || '').trim().toUpperCase() !== normScopeStore) {
+        return { status: 403, data: { success: false, error: 'Cross-tenant session revocation forbidden' } };
+      }
       if (sess?.email) otpStore.delete(normalizeEmail(sess.email));
       sessionStore.delete(token);
       saveAuthStoreToDisk();
@@ -1439,14 +1519,43 @@ export function requestAdminPinResetOtp(ownerEmail, storeCode) {
   return sendOtp(normEmail, 'admin-pin-reset');
 }
 
+export function getShopRecord(storeCode) {
+  if (!storeCode || typeof storeCode !== 'string') return null;
+  return shopStore.get(storeCode.trim()) || null;
+}
+
 /**
  * Verifies email OTP and securely updates the Master Admin PIN or selective Staff PIN in store profile and Firestore.
  */
 export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode, staffId = null, staffName = null, role = null) {
   const normEmail = normalizeEmail(ownerEmail);
-  const verifyRes = verifyOtp(normEmail, otp);
+  if (!isValidEmail(normEmail)) {
+    return { status: 400, data: { success: false, error: 'Invalid store owner email.' } };
+  }
+
+  const otpRecord = otpStore.get(normEmail);
+  if (!otpRecord || otpRecord.consumed || Date.now() > otpRecord.expiresAt) {
+    return { status: 400, data: { success: false, error: 'Invalid or expired OTP code' } };
+  }
+  if (otpRecord.purpose !== 'admin-pin-reset') {
+    return { status: 400, data: { success: false, error: 'Invalid OTP purpose for PIN reset.' } };
+  }
+
+  const code = storeCode ? String(storeCode).trim() : generateStoreCode('Default', normEmail);
+  let shop = shopStore.get(code);
+  if (shop) {
+    const existingOwnerEmail = normalizeEmail(shop.ownerEmail || shop.profile?.ownerEmail || shop.profile?.email || '');
+    if (existingOwnerEmail && existingOwnerEmail !== normEmail) {
+      return {
+        status: 403,
+        data: { success: false, error: 'Forbidden: email does not match store owner.' }
+      };
+    }
+  }
+
+  const verifyRes = verifyOtp(normEmail, otp, undefined, 'admin-pin-reset');
   if (verifyRes.status !== 200 || !verifyRes.data.success) {
-    return { status: 400, data: { success: false, error: verifyRes.data.error || 'Invalid or expired OTP code' } };
+    return { status: verifyRes.status === 429 ? 429 : 400, data: { success: false, error: verifyRes.data.error || 'Invalid or expired OTP code' } };
   }
 
   const cleanPin = String(newPin || '').trim();
@@ -1460,8 +1569,6 @@ export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode, staffId
   const pinHash = hashStringServer(cleanPin);
   const pinSalt = crypto.randomBytes(16).toString('hex');
   const saltedPinHash = crypto.createHash('sha256').update(`${cleanPin}:${pinSalt}:billnaw_pin_v2`).digest('hex');
-  const code = storeCode || generateStoreCode('Default', normEmail);
-  let shop = shopStore.get(code);
   if (!shop) {
     shop = createDefaultShopDocument(code, 'Billnaw Cafe', normEmail, 'user_' + normEmail, cleanPin);
     shopStore.set(code, shop);

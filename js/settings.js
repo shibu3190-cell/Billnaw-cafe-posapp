@@ -2,6 +2,54 @@
 // ⚙️ JS/SETTINGS.JS - Shop Profile, Backup/Restore, Settings & Quota
 // ============================================================
 
+const _settingsEsc = (str) => (typeof escapeHtml === 'function')
+    ? escapeHtml(str)
+    : String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+
+function _isValidStoreImageUrl(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return false;
+    return /^(https?:\/\/|data:image\/(png|jpeg|jpg|webp|gif);base64,|\/uploads\/|\.\/|assets\/)/i.test(raw);
+}
+
+function _getNormalizedCurrentRole() {
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (!active || !active.role) return null;
+    return (typeof normalizeRole === 'function') ? normalizeRole(active.role) : String(active.role).trim();
+}
+
+function _requireAdminAccess(actionLabel, modalName = 'settings') {
+    if (checkFloorServerModalBlock(modalName)) return false;
+    const normRole = _getNormalizedCurrentRole();
+    if (normRole !== 'Admin') {
+        if (typeof showToast === 'function') showToast(`Permission denied: Only Store Admin can ${actionLabel}.`, 'error');
+        return false;
+    }
+    return true;
+}
+
+function _sanitizeStaticDbPlaceholders() {
+    try {
+        if (typeof document === 'undefined') return;
+        const dbEl = document.getElementById('settingsFirestoreDbDisplay');
+        if (dbEl && dbEl.innerText && dbEl.innerText.includes('ai-studio-billnawcafepos')) {
+            dbEl.innerText = 'Billnaw Cloud (Encrypted)';
+        }
+        const switchModal = document.getElementById('switchStoreModal');
+        if (switchModal) {
+            switchModal.querySelectorAll('strong, code, span').forEach(el => {
+                if (el.innerText && el.innerText.includes('ai-studio-billnawcafepos')) {
+                    el.innerText = 'Billnaw Cloud (Encrypted)';
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('DOMContentLoaded', _sanitizeStaticDbPlaceholders);
+}
+
 function updateProfileVisuals() {
     let currentName = (shopProfile && shopProfile.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') 
         ? shopProfile.name 
@@ -193,8 +241,12 @@ function updateProfileVisuals() {
     if (settingsStorePhone && shopProfile.phone) settingsStorePhone.innerText = shopProfile.phone;
     const settingsStoreAvatar = document.getElementById('settingsStoreAvatar');
     if (settingsStoreAvatar) {
-        if (shopProfile.logo) {
-            settingsStoreAvatar.innerHTML = `<img src="${shopProfile.logo}" alt="Logo" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+        if (shopProfile.logo && _isValidStoreImageUrl(shopProfile.logo)) {
+            const img = document.createElement('img');
+            img.src = shopProfile.logo;
+            img.alt = 'Logo';
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;';
+            settingsStoreAvatar.replaceChildren(img);
         } else {
             settingsStoreAvatar.innerText = (shopProfile.name || 'B').charAt(0).toUpperCase();
         }
@@ -304,6 +356,11 @@ function generateSettingsQRPreview() {
 window.generateSettingsQRPreview = generateSettingsQRPreview;
 
 function saveSettings() {
+    if (checkFloorServerModalBlock('storeProfileModal')) return;
+    if (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role && typeof normalizeRole === 'function' && normalizeRole(currentStaff.role) !== 'Admin') {
+        if (typeof showToast === 'function') showToast('Permission denied: Only Store Admin can modify store settings.', 'error');
+        return;
+    }
     if (typeof ensureShopProfileHydrated === 'function') {
         try { ensureShopProfileHydrated(); } catch (e) {}
     }
@@ -536,7 +593,14 @@ async function refreshAiQuotaDisplay() {
 window.refreshAiQuotaDisplay = refreshAiQuotaDisplay;
 
 function checkFloorServerModalBlock(modalName) {
-    if (typeof isFloorServerRole === 'function' && isFloorServerRole()) {
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    const normRole = (active && active.role)
+        ? (typeof normalizeRole === 'function' ? normalizeRole(active.role) : String(active.role).trim())
+        : null;
+    const isBlocked = (typeof isFloorServerRole === 'function' && isFloorServerRole()) ||
+        !normRole ||
+        (normRole !== 'Admin' && normRole !== 'Manager');
+    if (isBlocked) {
         if (typeof showToast === 'function') {
             showToast('Access restricted: Only Admin or Manager can modify this setting.', 'error');
         }
@@ -547,21 +611,23 @@ function checkFloorServerModalBlock(modalName) {
 window.checkFloorServerModalBlock = checkFloorServerModalBlock;
 
 function applySettingsRoleRestrictions() {
-    const role = (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role) 
-        ? (typeof normalizeRole === 'function' ? normalizeRole(currentStaff.role) : currentStaff.role)
-        : 'Admin';
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    const role = (active && active.role)
+        ? (typeof normalizeRole === 'function' ? normalizeRole(active.role) : active.role)
+        : 'Floor Server';
+    const isRestricted = (role !== 'Admin');
     const isFloorServer = (role === 'Floor Server');
 
     // 1. Profile header button ("Business & GST Settings")
     const storeProfileBtn = document.querySelector('#settings .settings-profile-header-card button');
     if (storeProfileBtn) {
-        storeProfileBtn.style.display = isFloorServer ? 'none' : 'inline-flex';
+        storeProfileBtn.style.display = isRestricted ? 'none' : 'inline-flex';
     }
 
     // 2. Subscription crown card
     const subCrownCard = document.querySelector('.subscription-crown-card');
     if (subCrownCard) {
-        subCrownCard.style.display = isFloorServer ? 'none' : 'block';
+        subCrownCard.style.display = isRestricted ? 'none' : 'block';
     }
 
     // 3. Settings tiles in .settings-tiles-grid
@@ -571,8 +637,8 @@ function applySettingsRoleRestrictions() {
         tiles.forEach(tile => {
             const isPrinterTile = tile.id === 'settingTilePrinterConfig' || 
                                   (tile.getAttribute('onclick') && tile.getAttribute('onclick').includes('openPrinterSettingsModal'));
-            if (isFloorServer) {
-                if (isPrinterTile) {
+            if (isRestricted) {
+                if (isFloorServer && isPrinterTile) {
                     tile.style.display = 'flex';
                 } else {
                     tile.style.display = 'none';
@@ -587,7 +653,7 @@ function applySettingsRoleRestrictions() {
     const dangerCards = document.querySelectorAll('#settings .card');
     dangerCards.forEach(card => {
         if (card.querySelector('button[onclick*="openClearAllDataModal"]') || (card.innerText && card.innerText.includes('Reset & Clear All Data'))) {
-            card.style.display = isFloorServer ? 'none' : 'block';
+            card.style.display = isRestricted ? 'none' : 'block';
         }
     });
 }
@@ -713,6 +779,7 @@ function toggleApiKeyVisibility() {
 window.toggleApiKeyVisibility = toggleApiKeyVisibility;
 
 async function saveClientQuotaSettings() {
+    if (!_requireAdminAccess('update AI quota settings', 'clientQuotaModal')) return;
     const clientId = document.getElementById('quotaTargetClientId').value.trim() || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : '') || '';
     const limitVal = parseInt(document.getElementById('quotaMonthlyLimitInput').value, 10);
     const keyVal = document.getElementById('quotaCustomKeyInput').value.trim();
@@ -907,6 +974,7 @@ function prefillAdminSubTarget() {
 window.prefillAdminSubTarget = prefillAdminSubTarget;
 
 async function lookupAdminClientSubscription() {
+    if (!_requireAdminAccess('lookup subscriptions', 'subscriptionDetailModal')) return;
     const shopId = (document.getElementById('adminSubTargetShopId')?.value || '').trim();
     const email = (document.getElementById('adminSubTargetEmail')?.value || '').trim();
 
@@ -965,6 +1033,7 @@ async function lookupAdminClientSubscription() {
 window.lookupAdminClientSubscription = lookupAdminClientSubscription;
 
 async function submitAdminSubscriptionUpdate() {
+    if (!_requireAdminAccess('update subscriptions', 'subscriptionDetailModal')) return;
     const shopId = (document.getElementById('adminSubTargetShopId')?.value || '').trim();
     const email = (document.getElementById('adminSubTargetEmail')?.value || '').trim();
     const action = document.getElementById('adminSubActionSelect')?.value || 'ACTIVE';
@@ -1112,6 +1181,7 @@ function closeDiscountSettingsModal() {
 window.closeDiscountSettingsModal = closeDiscountSettingsModal;
 
 function saveDiscountSettings() {
+    if (!_requireAdminAccess('save discount settings', 'discountConfigModal')) return;
     const enableInput = document.getElementById('settingDiscountsEnabled');
     if (enableInput) shopProfile.discountsEnabled = enableInput.checked;
 
@@ -1367,7 +1437,7 @@ function openCloudSyncDetailModal() {
         if (codeEl) codeEl.innerText = storeCode;
 
         const dbEl = document.getElementById('settingsFirestoreDbDisplay');
-        if (dbEl) dbEl.innerText = 'ai-studio-billnawcafepos-3ac17879-08c8-4e15-9a3d-a965f7d92fda';
+        if (dbEl) dbEl.innerText = 'Billnaw Cloud (Encrypted)';
 
         const lastSyncEl = document.getElementById('settingsLastSyncTime');
         if (lastSyncEl) {
@@ -1413,6 +1483,7 @@ function closeCloudSyncDetailModal() {
 window.closeCloudSyncDetailModal = closeCloudSyncDetailModal;
 
 function openContactModal() {
+    if (checkFloorServerModalBlock('contactSupportModal')) return;
     const el = document.getElementById('contactSupportModal');
     if (el) el.style.display = 'flex';
 }
@@ -1424,15 +1495,42 @@ function closeContactModal() {
 }
 window.closeContactModal = closeContactModal;
 
+function _stripProtoPollutionKeys(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(_stripProtoPollutionKeys);
+    const clean = {};
+    for (const key of Object.keys(obj)) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+        clean[key] = _stripProtoPollutionKeys(obj[key]);
+    }
+    return clean;
+}
+
 function exportFullShopBackupJSON() {
+    if (!_requireAdminAccess('export shop backups', 'cloudSyncDetailModal')) return;
+
+    const safeProfile = shopProfile ? JSON.parse(JSON.stringify(shopProfile)) : {};
+    ['adminPinHash', 'openAiKey', 'customGeminiKey', 'token', 'authToken', 'customToken', 'sessionToken'].forEach(k => delete safeProfile[k]);
+
+    const safeStaff = (Array.isArray(staffList) ? staffList : []).map(member => {
+        if (!member || typeof member !== 'object') return member;
+        const copy = { ...member };
+        ['pin_salt', 'pinSalt', 'pin_hash', 'pinHash', 'pin', 'initialOtp', 'otp', 'token', 'passwordHash', 'salt'].forEach(k => delete copy[k]);
+        return copy;
+    });
+
     const fullBackup = {
         version: "2.4.0",
         exportDate: new Date().toISOString(),
-        profile: shopProfile,
+        menuVersion: Number(localStorage.getItem('billnaw_menu_version') || shopProfile?.menuVersion || 1),
+        deletedMenuIds: (typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds() : [],
+        deletedMenuNames: (typeof getDeletedMenuItemNames === 'function') ? getDeletedMenuItemNames() : [],
+        deletedStaffIds: (typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds() : [],
+        profile: safeProfile,
         menu: menuItems,
         categories: menuCategories,
         customers: customersList,
-        staff: staffList,
+        staff: safeStaff,
         expenses: dailyExpenses,
         history: orderHistory,
         tables: tablesInfo
@@ -1449,28 +1547,133 @@ function exportFullShopBackupJSON() {
 window.exportFullShopBackupJSON = exportFullShopBackupJSON;
 
 function handleRestoreShopBackup(event) {
-    const file = event.target.files[0];
+    if (!_requireAdminAccess('restore shop backups', 'cloudSyncDetailModal')) {
+        if (event && event.target) event.target.value = '';
+        return;
+    }
+    const file = event && event.target && event.target.files ? event.target.files[0] : null;
     if (!file) return;
+    if (typeof file.size === 'number' && file.size > 10 * 1024 * 1024) {
+        if (typeof showToast === 'function') showToast('Backup file exceeds 10MB limit.', 'error');
+        if (event && event.target) event.target.value = '';
+        return;
+    }
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
-            const data = JSON.parse(e.target.result);
-            if (data.profile) shopProfile = { ...shopProfile, ...data.profile };
-            if (Array.isArray(data.menu)) menuItems = data.menu;
-            if (Array.isArray(data.categories)) menuCategories = data.categories;
-            if (Array.isArray(data.customers)) customersList = data.customers;
-            if (Array.isArray(data.staff)) staffList = data.staff;
-            if (Array.isArray(data.expenses)) dailyExpenses = data.expenses;
-            if (Array.isArray(data.history)) orderHistory = data.history;
-            if (data.tables && typeof data.tables === 'object') tablesInfo = data.tables;
-            
-            saveToLocal();
+            const rawParsed = JSON.parse(e.target.result);
+            if (!rawParsed || typeof rawParsed !== 'object' || Array.isArray(rawParsed)) {
+                throw new Error('Invalid backup structure: root must be a JSON object.');
+            }
+            const data = _stripProtoPollutionKeys(rawParsed);
+            const recognizedKeys = ['profile', 'menu', 'categories', 'customers', 'staff', 'expenses', 'history', 'tables'];
+            const hasRecognized = recognizedKeys.some(k => data[k] !== undefined);
+            if (!hasRecognized) {
+                throw new Error('Invalid backup file: no recognized store data fields found.');
+            }
+            if (data.profile !== undefined && (!data.profile || typeof data.profile !== 'object' || Array.isArray(data.profile))) {
+                throw new Error('Invalid backup schema: profile must be an object.');
+            }
+            ['menu', 'categories', 'customers', 'staff', 'expenses', 'history'].forEach(arrKey => {
+                if (data[arrKey] !== undefined && !Array.isArray(data[arrKey])) {
+                    throw new Error(`Invalid backup schema: ${arrKey} must be an array.`);
+                }
+            });
+            if (data.tables !== undefined && (!data.tables || typeof data.tables !== 'object' || Array.isArray(data.tables))) {
+                throw new Error('Invalid backup schema: tables must be an object.');
+            }
+
+            if (data.profile) {
+                const safeIncoming = { ...data.profile };
+                ['storeCode', 'id', 'shopId', 'ownerEmail', 'email', 'ownerUid', 'adminPinHash',
+                 'openAiKey', 'customGeminiKey', 'token', 'authToken', 'customToken', 'sessionToken', 'menuVersion'].forEach(k => delete safeIncoming[k]);
+                shopProfile = { ...(shopProfile || {}), ...safeIncoming };
+                window.shopProfile = shopProfile;
+            }
+            if (Array.isArray(data.menu)) {
+                menuItems = data.menu
+                    .filter(item => item && typeof item === 'object' && String(item.name || '').trim() !== '' && Number.isFinite(Number(item.price)) && Number(item.price) >= 0)
+                    .map((item, idx) => ({
+                        ...item,
+                        id: item.id || (Date.now() + idx),
+                        name: String(item.name).trim(),
+                        price: Number(item.price),
+                        isDeleted: false,
+                        isAvailable: item.isAvailable !== false,
+                        is_active: item.is_active !== false,
+                        deletedAt: null,
+                        updatedAt: Date.now()
+                    }));
+                window.menuItems = menuItems;
+            }
+            if (Array.isArray(data.categories)) {
+                const cleanedCats = data.categories.map(c => String(c || '').trim()).filter(Boolean);
+                const uniqueCats = Array.from(new Set(cleanedCats.filter(c => c !== 'All')));
+                menuCategories = ['All', ...uniqueCats];
+                window.menuCategories = menuCategories;
+            }
+            if (Array.isArray(data.customers)) {
+                customersList = data.customers.filter(c => c && typeof c === 'object');
+                window.customersList = customersList;
+            }
+            if (Array.isArray(data.staff)) {
+                const existingAdmins = Array.isArray(staffList) ? staffList.filter(s => s && s.role === 'Admin' && (s.pin_hash || s.pinHash)) : [];
+                const cleanedStaff = data.staff
+                    .filter(s => s && typeof s === 'object' && String(s.name || '').trim() !== '' && String(s.role || '').trim() !== '')
+                    .map(s => {
+                        const copy = { ...s };
+                        delete copy.pin;
+                        delete copy.initialOtp;
+                        delete copy.otp;
+                        return copy;
+                    });
+                if (!cleanedStaff.some(s => s.role === 'Admin') && existingAdmins.length > 0) {
+                    cleanedStaff.unshift(existingAdmins[0]);
+                }
+                staffList = cleanedStaff;
+                window.staffList = staffList;
+            }
+            if (Array.isArray(data.expenses)) {
+                dailyExpenses = data.expenses.filter(ex => ex && typeof ex === 'object');
+                window.dailyExpenses = dailyExpenses;
+            }
+            if (Array.isArray(data.history)) {
+                orderHistory = data.history.filter(o => o && typeof o === 'object');
+                window.orderHistory = orderHistory;
+            }
+            if (data.tables) {
+                const cleanTables = {};
+                Object.entries(data.tables).forEach(([tKey, tVal]) => {
+                    if (tVal && typeof tVal === 'object' && Array.isArray(tVal.items)) {
+                        cleanTables[tKey] = tVal;
+                    }
+                });
+                tablesInfo = cleanTables;
+                window.tablesInfo = tablesInfo;
+            }
+
+            // Clear tombstones, mark menu customized, and bump menuVersion so cloud sync does not re-delete restored items
+            localStorage.removeItem('billnaw_deleted_menu_ids');
+            localStorage.removeItem('billnaw_deleted_menu_names');
+            localStorage.removeItem('billnaw_deleted_staff_ids');
+            if (typeof markMenuCustomized === 'function') markMenuCustomized();
+            else localStorage.setItem('billnaw_menu_customized', 'true');
+            const prevVer = Number(localStorage.getItem('billnaw_menu_version') || shopProfile?.menuVersion || 1);
+            const nextVer = prevVer + 1;
+            localStorage.setItem('billnaw_menu_version', String(nextVer));
+            if (shopProfile) shopProfile.menuVersion = nextVer;
+            window.currentMenuVersion = nextVer;
+
+            if (typeof persistProfile === 'function') persistProfile();
+            if (typeof saveToLocal === 'function') saveToLocal();
             if (typeof updateAllUI === 'function') updateAllUI();
-            if (typeof persistAllToFirestore === 'function') persistAllToFirestore();
+            if (typeof persistAllToFirestore === 'function') await persistAllToFirestore();
             showToast("✅ Store backup restored successfully!");
             closeCloudSyncDetailModal();
         } catch (err) {
             alert("Failed to parse backup file: " + err.message);
+        } finally {
+            if (event && event.target) event.target.value = '';
         }
     };
     reader.readAsText(file);
@@ -1492,9 +1695,10 @@ function switchTab(tabId) {
         return;
     }
 
-    // Role-Based Access Control (RBAC) Guard with Spot Manager PIN Override
-    if (typeof canStaffAccessTab === 'function' && typeof currentStaff !== 'undefined' && currentStaff && !canStaffAccessTab(currentStaff, tabId)) {
-        if (typeof requestManagerOverride === 'function') {
+    // Role-Based Access Control (RBAC) Guard with Spot Manager PIN Override (Fail-Closed when currentStaff is null)
+    const activeStaffForTab = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (typeof canStaffAccessTab === 'function' && !canStaffAccessTab(activeStaffForTab, tabId)) {
+        if (activeStaffForTab && typeof requestManagerOverride === 'function') {
             const tabNames = {
                 dashboard: 'Reports & Business Insights',
                 settings: 'Terminal Settings',
@@ -1508,7 +1712,7 @@ function switchTab(tabId) {
             const isAdminOnlyTab = ['dashboard', 'settings', 'staff', 'devices', 'whatsapp'].includes(tabId);
             requestManagerOverride({
                 title: isAdminOnlyTab ? 'Admin Authorization Required' : 'Manager Approval Required',
-                actionDescription: `Staff role (${currentStaff.role}) is restricted from accessing ${tabNames[tabId] || tabId}. Enter ${isAdminOnlyTab ? 'Admin' : 'Manager or Admin'} PIN:`,
+                actionDescription: `Staff role (${activeStaffForTab.role}) is restricted from accessing ${tabNames[tabId] || tabId}. Enter ${isAdminOnlyTab ? 'Admin' : 'Manager or Admin'} PIN:`,
                 requiredRole: isAdminOnlyTab ? 'Admin' : 'Manager',
                 onSuccess: () => {
                     switchTabDirect(tabId);
@@ -1516,6 +1720,8 @@ function switchTab(tabId) {
             });
             return;
         }
+        if (typeof showToast === 'function') showToast('Access restricted for your role.', 'error');
+        return;
     }
 
     switchTabDirect(tabId);
@@ -1605,7 +1811,12 @@ window.switchTab = switchTab;
 window.switchTabDirect = switchTabDirect;
 
 function factoryReset() {
+    if (!_requireAdminAccess('perform factory reset', 'settings')) return;
     if (confirm("⚠️ EXTREME WARNING: This will permanently wipe all Menu, Orders, Customers, Expenses and Settings on this browser. Proceed?")) {
+        if (typeof window.detachFirestoreListener === 'function') try { window.detachFirestoreListener(); } catch (e) {}
+        if (typeof window.stopBackgroundSync === 'function') try { window.stopBackgroundSync(); } catch (e) {}
+        if (typeof window.stopSessionHeartbeat === 'function') try { window.stopSessionHeartbeat(); } catch (e) {}
+        if (typeof window.stopStaffPresenceHeartbeat === 'function') try { window.stopStaffPresenceHeartbeat(); } catch (e) {}
         indexedDB.deleteDatabase('CafePOS_DB');
         localStorage.clear();
         location.reload();
@@ -1614,7 +1825,7 @@ function factoryReset() {
 window.factoryReset = factoryReset;
 
 function openClearAllDataModal() {
-    if (checkFloorServerModalBlock('clearAllDataConfirmModal')) return;
+    if (!_requireAdminAccess('clear all store data', 'clearAllDataConfirmModal')) return;
     const modal = document.getElementById('clearAllDataConfirmModal');
     if (modal) modal.style.display = 'flex';
 }
@@ -1627,25 +1838,124 @@ function closeClearAllDataModal() {
 window.closeClearAllDataModal = closeClearAllDataModal;
 
 async function confirmClearAllData() {
+    if (!_requireAdminAccess('clear all store data', 'clearAllDataConfirmModal')) return;
     closeClearAllDataModal();
     try {
-        const activeToken = localStorage.getItem('billnaw_auth_token');
-        const activeStoreCode = (window.shopProfile && window.shopProfile.storeCode) || localStorage.getItem('billnaw_store_code') || window.myClientID;
+        const activeToken = localStorage.getItem('billnaw_auth_token') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('billnaw_auth_token') : null);
+        const isAuthenticatedShop = Boolean(activeToken && localStorage.getItem('billnaw_auth_mode') === 'authenticated');
+        const activeStoreCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (window.shopProfile && window.shopProfile.storeCode) || localStorage.getItem('billnaw_store_code') || window.myClientID;
+        const prevVer = Number(localStorage.getItem('billnaw_menu_version') || shopProfile?.menuVersion || 1);
 
-        // 1. Wipe cloud server store collections & reseed on server
-        if (typeof fetch === 'function') {
-            await fetch('/api/store/reset-data', {
+        // 1. Wipe cloud server store collections if authenticated
+        if (isAuthenticatedShop && typeof fetch === 'function') {
+            const res = await fetch('/api/store/reset-data', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+                    'Authorization': `Bearer ${activeToken}`
                 },
                 body: JSON.stringify({ storeCode: activeStoreCode })
-            }).catch(e => console.warn('Server reset-data error:', e));
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                if (typeof showToast === 'function') {
+                    showToast(errData.error || `Server rejected reset (HTTP ${res.status}).`, 'error');
+                }
+                return;
+            }
         }
 
-        // 2. Wipe local IndexedDB tables & re-seed exactly 2 demo items
+        // 2. Clear transactional, table, KOT, khata, tombstone, version & sync queue state
+        if (typeof tablesInfo !== 'undefined') tablesInfo = {};
+        window.tablesInfo = {};
+        if (typeof currentCart !== 'undefined') currentCart = [];
+        window.cart = [];
+        if (typeof clearCart === 'function') { try { clearCart(); } catch (e) {} }
+        if (typeof orderHistory !== 'undefined') orderHistory = [];
+        window.orderHistory = [];
+        if (typeof dailyExpenses !== 'undefined') dailyExpenses = [];
+        window.dailyExpenses = [];
+        if (typeof customersList !== 'undefined') customersList = [];
+        window.customersList = [];
+
+        [
+            'billnaw_active_kots', 'billnaw_last_kot_no', 'billnaw_active_cart',
+            'billnaw_offline_orders', 'cafe_khata', 'billnaw_culinary_materials',
+            'billnaw_culinary_batches', 'billnaw_culinary_recipes', 'billnaw_culinary_subs',
+            'billnaw_deleted_menu_ids', 'billnaw_deleted_menu_names', 'billnaw_deleted_staff_ids',
+            'billnaw_menu_version', 'billnaw_menu_customized', 'billnaw_offline_sync_queue',
+            'pos_order_history'
+        ].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+
         if (typeof idb !== 'undefined') {
+            const clearKeys = ['cafe_history', 'cafe_expenses', 'cafe_customers', 'cafe_tables', 'cafe_khata', 'cafe_unsettled_orders', 'cafe_raw_materials', 'cafe_sub_recipes'];
+            await Promise.all(clearKeys.map(k => (typeof idb.clear === 'function' ? idb.clear(k).catch(() => {}) : Promise.resolve())));
+            if (idb.db && idb.db.objectStoreNames) {
+                ['orders', 'kot_records', 'menu_items'].forEach(storeName => {
+                    if (idb.db.objectStoreNames.contains(storeName)) {
+                        try {
+                            const tx = idb.db.transaction(storeName, 'readwrite');
+                            tx.objectStore(storeName).clear();
+                        } catch (e) {}
+                    }
+                });
+            }
+        }
+
+        if (isAuthenticatedShop) {
+            // Authenticated shops: leave menu empty (NEVER reseed demo Samosa/Tea items)
+            const nextVer = prevVer + 1;
+            if (typeof menuItems !== 'undefined') menuItems = [];
+            window.menuItems = [];
+            if (typeof menuCategories !== 'undefined') menuCategories = ['All'];
+            window.menuCategories = ['All'];
+            if (shopProfile) shopProfile.menuVersion = nextVer;
+            window.currentMenuVersion = nextVer;
+            localStorage.setItem('billnaw_menu_version', String(nextVer));
+            if (typeof markMenuCustomized === 'function') markMenuCustomized();
+            else localStorage.setItem('billnaw_menu_customized', 'true');
+
+            if (typeof idb !== 'undefined' && idb.set) {
+                await idb.set('cafe_menu', []);
+                await idb.set('cafe_categories', ['All']);
+                await idb.set('cafe_tables', {});
+            }
+
+            const cleanPayload = {
+                menu: [],
+                categories: ['All'],
+                tables: {},
+                history: [],
+                expenses: [],
+                customers: [],
+                kots: [],
+                deletedMenuIds: [],
+                deletedMenuNames: [],
+                menuVersion: nextVer,
+                updatedAt: new Date().toISOString()
+            };
+            if (typeof dispatchBackendStoreSync === 'function') {
+                await dispatchBackendStoreSync(cleanPayload, true);
+            }
+            if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc && typeof getStoreDocRef === 'function') {
+                const storeDocRef = getStoreDocRef();
+                if (storeDocRef) {
+                    await window.firestoreSetDoc(storeDocRef, cleanPayload, { merge: true }).catch(() => {});
+                }
+                if (activeStoreCode && typeof getStoreCollectionName === 'function') {
+                    const rootCol = getStoreCollectionName(activeStoreCode);
+                    const metaDocRef = window.firestoreDoc(window.firestoreDB, rootCol, activeStoreCode, 'menu_meta', 'version');
+                    if (metaDocRef) {
+                        await window.firestoreSetDoc(metaDocRef, {
+                            version: nextVer,
+                            itemCount: 0,
+                            updatedAt: new Date().toISOString()
+                        }, { merge: true }).catch(() => {});
+                    }
+                }
+            }
+        } else {
+            // Unauthenticated / demo mode: reset to clean demo items
             const cleanDemoItems = [
                 { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80" },
                 { id: 2, name: "Tea", category: "Beverages", price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80" },
@@ -1653,21 +1963,19 @@ async function confirmClearAllData() {
                 { id: 4, name: "Masala Coke", category: "Beverages", price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80" }
             ];
             const cleanCats = ["All", "Snacks", "Beverages", "Main Course"];
-
-            await idb.set('cafe_menu', cleanDemoItems);
-            await idb.set('cafe_categories', cleanCats);
-            await idb.set('cafe_history', []);
-            await idb.set('cafe_expenses', []);
-            await idb.set('cafe_customers', []);
-
+            if (typeof menuItems !== 'undefined') menuItems = cleanDemoItems;
             window.menuItems = cleanDemoItems;
+            if (typeof menuCategories !== 'undefined') menuCategories = cleanCats;
             window.menuCategories = cleanCats;
-            window.orderHistory = [];
-            window.dailyExpenses = [];
-            window.customersList = [];
+            if (typeof idb !== 'undefined' && idb.set) {
+                await idb.set('cafe_menu', cleanDemoItems);
+                await idb.set('cafe_categories', cleanCats);
+                await idb.set('cafe_tables', {});
+            }
         }
 
         if (typeof renderMenuUI === 'function') renderMenuUI();
+        if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
         if (typeof showToast === 'function') {
             showToast('All store data deleted from local terminal and cloud server.', 'success');
         }
@@ -1785,11 +2093,16 @@ window.skipOnboardingWizard = skipOnboardingWizard;
 
 function openAuthorizedDevicesModal(targetDeviceId = null) {
     if (checkFloorServerModalBlock('authorizedDevicesModal')) return;
-    if (typeof hasPermission === 'function' && typeof currentStaff !== 'undefined' && currentStaff) {
-        if (!hasPermission(currentStaff, 'can_manage_devices') && (!currentStaff.role || currentStaff.role.toLowerCase() !== 'admin')) {
-            showToast('Permission denied: Admin access required to manage devices.');
-            return;
-        }
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (!active || !active.role) {
+        if (typeof showToast === 'function') showToast('Permission denied: Admin access required to manage devices.', 'error');
+        return;
+    }
+    const canManage = (typeof hasPermission === 'function' && hasPermission(active, 'can_manage_devices')) ||
+        (typeof normalizeRole === 'function' ? normalizeRole(active.role) === 'Admin' : String(active.role).toLowerCase() === 'admin');
+    if (!canManage) {
+        showToast('Permission denied: Admin access required to manage devices.');
+        return;
     }
     const devices = window.authorizedDevices || [];
     const pendingDevices = devices.filter(d => d.status === 'PENDING');
@@ -1868,25 +2181,27 @@ function renderAuthorizedDevicesHub() {
         } else {
             pendingListEl.innerHTML = pendingDevices.map(dev => {
                 const defaultName = `Counter ${authorizedDevices.length + 1}`;
+                const safeDevId = _settingsEsc(String(dev.deviceId || ''));
+                const safePairCode = _settingsEsc(String(dev.pairingCode || '------'));
                 return `
                     <div class="pending-device-card" style="background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 12px; padding: 14px 16px;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
                             <div>
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <strong style="font-size: 14px; color: #92400E; font-family: monospace;">${dev.deviceId}</strong>
-                                    <span style="font-size: 11px; font-weight: 700; background: #FEF3C7; color: #B45309; padding: 2px 8px; border-radius: 6px;">Pairing Code: ${dev.pairingCode || '------'}</span>
+                                    <strong style="font-size: 14px; color: #92400E; font-family: monospace;">${safeDevId}</strong>
+                                    <span style="font-size: 11px; font-weight: 700; background: #FEF3C7; color: #B45309; padding: 2px 8px; border-radius: 6px;">Pairing Code: ${safePairCode}</span>
                                 </div>
-                                <p style="font-size: 11px; color: #B45309; margin: 4px 0 0 0;">Requested: ${new Date(dev.registeredAt || dev.lastSeenAt || Date.now()).toLocaleTimeString()}</p>
+                                <p style="font-size: 11px; color: #B45309; margin: 4px 0 0 0;">Requested: ${_settingsEsc(new Date(dev.registeredAt || dev.lastSeenAt || Date.now()).toLocaleTimeString())}</p>
                             </div>
                         </div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center; margin-top: 10px;">
                             <div>
                                 <label style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #92400E; margin-bottom: 4px;">Station Name</label>
-                                <input type="text" id="devName_${dev.deviceId}" value="${defaultName}" style="width: 100%; padding: 7px 10px; font-size: 12px; font-weight: 600; border: 1px solid #FCD34D; border-radius: 8px; background: #FFFFFF;">
+                                <input type="text" id="devName_${safeDevId}" value="${_settingsEsc(defaultName)}" style="width: 100%; padding: 7px 10px; font-size: 12px; font-weight: 600; border: 1px solid #FCD34D; border-radius: 8px; background: #FFFFFF;">
                             </div>
                             <div>
                                 <label style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #92400E; margin-bottom: 4px;">Station Profile</label>
-                                <select id="devProfile_${dev.deviceId}" style="width: 100%; padding: 7px 10px; font-size: 12px; font-weight: 600; border: 1px solid #FCD34D; border-radius: 8px; background: #FFFFFF;">
+                                <select id="devProfile_${safeDevId}" style="width: 100%; padding: 7px 10px; font-size: 12px; font-weight: 600; border: 1px solid #FCD34D; border-radius: 8px; background: #FFFFFF;">
                                     <option value="BILLING_COUNTER" selected>Billing Counter</option>
                                     <option value="KDS">Kitchen Display (KDS)</option>
                                     <option value="WAITER_MOBILE">Waiter Mobile</option>
@@ -1895,11 +2210,11 @@ function renderAuthorizedDevicesHub() {
                                 </select>
                             </div>
                             <div style="display: flex; gap: 6px; align-self: flex-end;">
-                                <button type="button" class="btn btn-success" style="padding: 7px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;" onclick="openDeviceApprovalModal('${dev.deviceId}')">
+                                <button type="button" class="btn btn-success js-approve-device-btn" data-device-id="${safeDevId}" style="padding: 7px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     <span>Approve</span>
                                 </button>
-                                <button type="button" class="btn btn-outline" style="padding: 7px 10px; font-size: 12px; border-radius: 8px; color: var(--danger); border-color: rgba(220, 38, 38, 0.3);" onclick="rejectPendingDevice('${dev.deviceId}')" title="Reject Pairing">
+                                <button type="button" class="btn btn-outline js-reject-device-btn" data-device-id="${safeDevId}" style="padding: 7px 10px; font-size: 12px; border-radius: 8px; color: var(--danger); border-color: rgba(220, 38, 38, 0.3);" title="Reject Pairing">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                 </button>
                             </div>
@@ -1907,6 +2222,14 @@ function renderAuthorizedDevicesHub() {
                     </div>
                 `;
             }).join('');
+            if (typeof pendingListEl.querySelectorAll === 'function') {
+                pendingListEl.querySelectorAll('.js-approve-device-btn').forEach(btn => {
+                    btn.addEventListener('click', () => openDeviceApprovalModal(btn.getAttribute('data-device-id')));
+                });
+                pendingListEl.querySelectorAll('.js-reject-device-btn').forEach(btn => {
+                    btn.addEventListener('click', () => rejectPendingDevice(btn.getAttribute('data-device-id')));
+                });
+            }
         }
     }
 
@@ -1923,7 +2246,8 @@ function renderAuthorizedDevicesHub() {
                 const isMaster = Boolean(dev.isMaster);
                 const isRevoked = (dev.status === 'REVOKED');
                 const profileBadge = dev.stationProfile || 'GENERAL_STATION';
-                const nameDisplay = typeof escapeHtml === 'function' ? escapeHtml(dev.deviceName || 'Terminal') : (dev.deviceName || 'Terminal');
+                const nameDisplay = _settingsEsc(dev.deviceName || 'Terminal');
+                const safeDevId = _settingsEsc(String(dev.deviceId || ''));
 
                 // Cross-reference with active staff sessions to display current staff
                 const sessions = (typeof window !== 'undefined' && Array.isArray(window.activeStaffSessions)) ? window.activeStaffSessions : [];
@@ -1960,19 +2284,19 @@ function renderAuthorizedDevicesHub() {
                             <div>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <strong style="font-size: 14px; color: var(--text-dark);">${nameDisplay}</strong>
-                                    ${isMaster ? '<span style="font-size: 10px; font-weight: 700; background: #DCFCE7; color: #15803D; padding: 2px 7px; border-radius: 10px;">Master Terminal</span>' : (isRevoked ? '<span style="font-size: 10px; font-weight: 700; background: #FEE2E2; color: #B91C1C; padding: 2px 7px; border-radius: 10px;">REVOKED</span>' : `<span style="font-size: 10px; font-weight: 700; background: #EFF6FF; color: #1D4ED8; padding: 2px 7px; border-radius: 10px;">${profileBadge}</span>`)}
+                                    ${isMaster ? '<span style="font-size: 10px; font-weight: 700; background: #DCFCE7; color: #15803D; padding: 2px 7px; border-radius: 10px;">Master Terminal</span>' : (isRevoked ? '<span style="font-size: 10px; font-weight: 700; background: #FEE2E2; color: #B91C1C; padding: 2px 7px; border-radius: 10px;">REVOKED</span>' : `<span style="font-size: 10px; font-weight: 700; background: #EFF6FF; color: #1D4ED8; padding: 2px 7px; border-radius: 10px;">${_settingsEsc(profileBadge)}</span>`)}
                                 </div>
-                                <p style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; font-family: monospace;">ID: ${dev.deviceId} • ${telemetryText}${staffInfoStr}</p>
+                                <p style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; font-family: monospace;">ID: ${safeDevId} • ${_settingsEsc(telemetryText)}${_settingsEsc(staffInfoStr)}</p>
                             </div>
                         </div>
                         <div>
                             ${isMaster ? '' : (isRevoked ? `
-                                <button type="button" class="btn btn-outline" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: #16A34A; border-color: rgba(22, 163, 74, 0.3); display: inline-flex; align-items: center; gap: 6px;" onclick="resumeAuthorizedDevice('${dev.deviceId}')">
+                                <button type="button" class="btn btn-outline js-resume-device-btn" data-device-id="${safeDevId}" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: #16A34A; border-color: rgba(22, 163, 74, 0.3); display: inline-flex; align-items: center; gap: 6px;">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     <span>Resume</span>
                                 </button>
                             ` : `
-                                <button type="button" class="btn btn-outline" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: var(--danger); border-color: rgba(220, 38, 38, 0.3); display: inline-flex; align-items: center; gap: 6px;" onclick="revokeAuthorizedDevice('${dev.deviceId}')">
+                                <button type="button" class="btn btn-outline js-revoke-device-btn" data-device-id="${safeDevId}" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: var(--danger); border-color: rgba(220, 38, 38, 0.3); display: inline-flex; align-items: center; gap: 6px;">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
                                     <span>Revoke</span>
                                 </button>
@@ -1981,12 +2305,21 @@ function renderAuthorizedDevicesHub() {
                     </div>
                 `;
             }).join('');
+            if (typeof authListEl.querySelectorAll === 'function') {
+                authListEl.querySelectorAll('.js-resume-device-btn').forEach(btn => {
+                    btn.addEventListener('click', () => resumeAuthorizedDevice(btn.getAttribute('data-device-id')));
+                });
+                authListEl.querySelectorAll('.js-revoke-device-btn').forEach(btn => {
+                    btn.addEventListener('click', () => revokeAuthorizedDevice(btn.getAttribute('data-device-id')));
+                });
+            }
         }
     }
 }
 window.renderAuthorizedDevicesHub = renderAuthorizedDevicesHub;
 
 function openDeviceApprovalModal(deviceId) {
+    if (!_requireAdminAccess('approve devices', 'deviceApprovalPinModal')) return;
     if (!deviceId) return;
     const dev = (window.authorizedDevices || []).find(d => d.deviceId === deviceId || d.id === deviceId);
     const modal = document.getElementById('deviceApprovalPinModal');
@@ -2039,6 +2372,7 @@ window.closeDeviceApprovalModal = closeDeviceApprovalModal;
 
 async function confirmApproveDevicePairing(e) {
     if (e && e.preventDefault) e.preventDefault();
+    if (!_requireAdminAccess('approve device pairings', 'deviceApprovalPinModal')) return;
 
     const targetDeviceId = document.getElementById('approvalTargetDeviceId')?.value;
     const enteredPairingCode = document.getElementById('approvalPairingCodeInput')?.value.trim();
@@ -2064,10 +2398,15 @@ async function confirmApproveDevicePairing(e) {
         return;
     }
 
-    // 2. Verify Master Admin PIN
+    // 2. Verify Master Admin PIN (do not fall back to '1234' when a custom Admin PIN hash exists)
+    const hasStoredAdminPin = Boolean(
+        shopProfile?.adminPinHash ||
+        localStorage.getItem('billnaw_admin_pin_hash') ||
+        (Array.isArray(staffList) && staffList.some(s => s && s.role === 'Admin' && (s.pin_hash || s.pinHash || s.pin)))
+    );
     let isPinValid = (typeof verifyAdminPin === 'function')
         ? await verifyAdminPin(enteredAdminPin)
-        : ((typeof hashString === 'function' && hashString(enteredAdminPin) === shopProfile?.adminPinHash) || (enteredAdminPin === '1234'));
+        : ((typeof hashString === 'function' && (shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash')) && hashString(enteredAdminPin) === (shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash'))) || (!hasStoredAdminPin && enteredAdminPin === '1234'));
     if (!isPinValid && Array.isArray(staffList)) {
         for (const s of staffList) {
             if (s.role === 'Admin') {
@@ -2103,6 +2442,7 @@ async function confirmApproveDevicePairing(e) {
 window.confirmApproveDevicePairing = confirmApproveDevicePairing;
 
 async function approveDevicePairing(deviceId, options = {}) {
+    if (!_requireAdminAccess('approve devices', 'authorizedDevicesModal')) return;
     if (!deviceId) return;
     const nameInput = document.getElementById(`devName_${deviceId}`);
     const profileSelect = document.getElementById(`devProfile_${deviceId}`);
@@ -2151,6 +2491,7 @@ async function approveDevicePairing(deviceId, options = {}) {
 window.approveDevicePairing = approveDevicePairing;
 
 async function revokeAuthorizedDevice(deviceId) {
+    if (!_requireAdminAccess('revoke devices', 'authorizedDevicesModal')) return;
     if (!deviceId) return;
 
     // Safety: Master cannot be revoked
@@ -2196,6 +2537,7 @@ async function revokeAuthorizedDevice(deviceId) {
 window.revokeAuthorizedDevice = revokeAuthorizedDevice;
 
 async function resumeAuthorizedDevice(deviceId) {
+    if (!_requireAdminAccess('resume devices', 'authorizedDevicesModal')) return;
     if (!deviceId) return;
     const dev = (window.authorizedDevices || []).find(d => d.deviceId === deviceId || d.id === deviceId);
 
@@ -2229,6 +2571,7 @@ async function resumeAuthorizedDevice(deviceId) {
 window.resumeAuthorizedDevice = resumeAuthorizedDevice;
 
 async function rejectPendingDevice(deviceId) {
+    if (!_requireAdminAccess('reject pending devices', 'authorizedDevicesModal')) return;
     if (!deviceId) return;
     const updates = { status: 'REVOKED', revokedAt: new Date().toISOString() };
     if (window.authorizedDevices) {
@@ -2251,6 +2594,8 @@ window.rejectPendingDevice = rejectPendingDevice;
 // ============================================================
 
 function openSwitchStoreModal() {
+    if (!_requireAdminAccess('switch stores', 'switchStoreModal')) return;
+    _sanitizeStaticDbPlaceholders();
     const modal = document.getElementById('switchStoreModal');
     if (modal) {
         modal.style.display = 'flex';
@@ -2263,28 +2608,100 @@ function openSwitchStoreModal() {
 }
 window.openSwitchStoreModal = openSwitchStoreModal;
 
+async function switchActiveShopCloudStore(newCode) {
+    const cleanCode = String(newCode || '').trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,64}$/.test(cleanCode)) {
+        if (typeof showToast === 'function') showToast('Invalid Shop Store Code format (3-64 alphanumeric, _ or -).', 'error');
+        return false;
+    }
+
+    if (!_requireAdminAccess('switch stores', 'switchStoreModal')) return false;
+
+    const activeToken = localStorage.getItem('billnaw_auth_token') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('billnaw_auth_token') : null);
+    const authMode = localStorage.getItem('billnaw_auth_mode');
+    if (!activeToken || authMode !== 'authenticated') {
+        if (typeof showToast === 'function') showToast('Authentication required: Please sign in before switching cloud stores.', 'error');
+        if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
+        return false;
+    }
+
+    const currentCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || localStorage.getItem('billnaw_store_code') || '';
+    if (currentCode && currentCode.toUpperCase() === cleanCode) {
+        if (typeof showToast === 'function') showToast(`Already connected to store: ${cleanCode}`, 'info');
+        return true;
+    }
+
+    // Verify current token is authorized by the backend for target storeCode
+    if (typeof fetch === 'function') {
+        try {
+            const res = await fetch(`/api/sync/store-data?storeCode=${encodeURIComponent(cleanCode)}`, {
+                headers: { 'Authorization': `Bearer ${activeToken}`, 'x-shop-id': cleanCode }
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                if (typeof showToast === 'function') {
+                    showToast(errData.error || `Not authorized for store ${cleanCode}. Please log out and sign in with that store's account.`, 'error');
+                }
+                return false;
+            }
+        } catch (netErr) {
+            if (typeof showToast === 'function') showToast('Cannot verify store access while offline.', 'error');
+            return false;
+        }
+    }
+
+    // Authorized switch: stop listeners/heartbeats and wipe previous tenant data (R1.4)
+    const prevEmail = localStorage.getItem('billnaw_auth_email') || '';
+    const prevIsMaster = localStorage.getItem('billnaw_is_master') || 'false';
+    if (typeof window.detachFirestoreListener === 'function') try { window.detachFirestoreListener(); } catch (e) {}
+    if (typeof window.stopBackgroundSync === 'function') try { window.stopBackgroundSync(); } catch (e) {}
+    if (typeof window.stopSessionHeartbeat === 'function') try { window.stopSessionHeartbeat(); } catch (e) {}
+    if (typeof window.stopStaffPresenceHeartbeat === 'function') try { window.stopStaffPresenceHeartbeat(); } catch (e) {}
+
+    if (typeof clearAllTenantLocalData === 'function') {
+        await clearAllTenantLocalData();
+    }
+
+    // Re-apply only verified auth & target store identity
+    localStorage.setItem('billnaw_auth_mode', 'authenticated');
+    localStorage.setItem('billnaw_auth_token', activeToken);
+    if (prevEmail) {
+        localStorage.setItem('billnaw_auth_email', prevEmail);
+        localStorage.setItem('billnaw_last_device_email', prevEmail);
+    }
+    localStorage.setItem('billnaw_is_master', prevIsMaster);
+    localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
+    localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
+    localStorage.setItem('billnaw_store_code', cleanCode);
+    localStorage.setItem('billnaw_last_store_code', cleanCode);
+    localStorage.setItem('bongbhoj_client_id', cleanCode);
+    if (typeof shopProfile !== 'undefined') {
+        shopProfile = { name: '', storeCode: cleanCode };
+        window.shopProfile = shopProfile;
+    }
+
+    if (typeof showToast === 'function') showToast(`Connected to store: ${cleanCode}. Syncing...`, 'success');
+    setTimeout(() => window.location.reload(), 300);
+    return true;
+}
+window.switchActiveShopCloudStore = switchActiveShopCloudStore;
+
 async function confirmSwitchShopCode() {
+    if (!_requireAdminAccess('switch stores', 'switchStoreModal')) return;
     const input = document.getElementById('targetStoreCodeInput');
     const newCode = (input ? input.value : '').trim().toUpperCase();
-    if (!newCode) {
-        if (typeof showToast === 'function') showToast('Please enter a valid Shop Store Code.', 'error');
+    if (!/^[A-Z0-9_-]{3,64}$/.test(newCode)) {
+        if (typeof showToast === 'function') showToast('Please enter a valid Shop Store Code (3-64 alphanumeric, _ or -).', 'error');
         return;
     }
     const modal = document.getElementById('switchStoreModal');
     if (modal) modal.style.display = 'none';
-    if (typeof switchActiveShopCloudStore === 'function') {
-        await switchActiveShopCloudStore(newCode);
-    } else {
-        if (typeof shopProfile !== 'undefined') shopProfile.storeCode = newCode;
-        localStorage.setItem('bongbhoj_client_id', newCode);
-        localStorage.setItem('billnaw_store_code', newCode);
-        if (typeof showToast === 'function') showToast(`Connected to store: ${newCode}. Syncing...`, 'success');
-        setTimeout(() => window.location.reload(), 400);
-    }
+    await switchActiveShopCloudStore(newCode);
 }
 window.confirmSwitchShopCode = confirmSwitchShopCode;
 
 function openStatementModal() {
+    if (!_requireAdminAccess('view financial statements', 'statementModal')) return;
     const modal = document.getElementById('statementModal');
     if (modal) {
         modal.style.display = 'flex';

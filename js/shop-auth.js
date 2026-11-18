@@ -27,9 +27,11 @@
 
     function closeShopAuthModal(force = false) {
         const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
+        const authMode = localStorage.getItem('billnaw_auth_mode');
+        const isAuthed = Boolean(activeToken && authMode === 'authenticated');
         const modal = document.getElementById('shopAuthModal');
         const isExplicitLogin = (window.location.search && window.location.search.includes('auth=login')) || (modal && modal.dataset.relogin === 'true');
-        if (!force && !activeToken) {
+        if (!force && !isAuthed) {
             if (typeof showToast === 'function') {
                 showToast("Please log in or sign up to access your POS terminal.");
             }
@@ -306,6 +308,21 @@
                     digitInputs.forEach(input => { input.value = ''; });
 
                     try {
+                        // Multi-Account Device Isolation: check tenant switch BEFORE writing new auth/device keys
+                        const prevStoreCode = (localStorage.getItem('billnaw_store_code') || localStorage.getItem('billnaw_last_store_code') || '').trim();
+                        const prevEmail = (localStorage.getItem('billnaw_auth_email') || localStorage.getItem('billnaw_last_device_email') || '').trim().toLowerCase();
+                        const prevAuthMode = localStorage.getItem('billnaw_auth_mode');
+                        const incomingEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
+                        const isTenantSwitch = Boolean(
+                            (prevStoreCode && data.storeCode && prevStoreCode !== data.storeCode) ||
+                            (prevEmail && incomingEmail && prevEmail !== incomingEmail) ||
+                            prevAuthMode === 'demo'
+                        );
+                        if (isTenantSwitch) {
+                            console.log(`[AUTH] Switching store tenant: ${prevStoreCode || 'demo'} -> ${data.storeCode}. Purging previous tenant cache.`);
+                            await clearAllTenantLocalData();
+                        }
+
                         localStorage.setItem('billnaw_auth_mode', 'authenticated');
                         const isOwner = Boolean(data && (data.isOwner || (data.user && (data.user.role === 'owner' || data.user.isOwner))));
                         if (isOwner) {
@@ -318,16 +335,16 @@
                             localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                         }
 
-                        // Multi-Account Device Isolation: check if tenant switched
-                        const prevStoreCode = localStorage.getItem('billnaw_store_code');
-                        if (prevStoreCode && data.storeCode && prevStoreCode !== data.storeCode) {
-                            console.log(`[AUTH] Switching store tenant: ${prevStoreCode} -> ${data.storeCode}. Purging previous tenant cache.`);
-                            await clearAllTenantLocalData();
-                        }
-
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
-                        if (email) localStorage.setItem('billnaw_auth_email', email);
-                        if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
+                        if (incomingEmail || email) {
+                            const finalEmail = incomingEmail || email.trim().toLowerCase();
+                            localStorage.setItem('billnaw_auth_email', finalEmail);
+                            localStorage.setItem('billnaw_last_device_email', finalEmail);
+                        }
+                        if (data.storeCode) {
+                            localStorage.setItem('billnaw_store_code', data.storeCode);
+                            localStorage.setItem('billnaw_last_store_code', data.storeCode);
+                        }
                         localStorage.setItem('billnaw_shop_session', JSON.stringify({
                             token: data.token,
                             customToken: data.customToken,
@@ -482,9 +499,28 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
-            }).then(res => res.json()).then(async data => {
+            }).then(async res => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) return { ...data, success: false, _httpStatus: res.status };
+                return data;
+            }).then(async data => {
                 if (data && data.success) {
                     try {
+                        // Multi-Account Device Isolation: check tenant switch BEFORE writing new auth/device keys
+                        const prevStoreCode = (localStorage.getItem('billnaw_store_code') || localStorage.getItem('billnaw_last_store_code') || '').trim();
+                        const prevEmail = (localStorage.getItem('billnaw_auth_email') || localStorage.getItem('billnaw_last_device_email') || '').trim().toLowerCase();
+                        const prevAuthMode = localStorage.getItem('billnaw_auth_mode');
+                        const incomingEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
+                        const isTenantSwitch = Boolean(
+                            (prevStoreCode && data.storeCode && prevStoreCode !== data.storeCode) ||
+                            (prevEmail && incomingEmail && prevEmail !== incomingEmail) ||
+                            prevAuthMode === 'demo'
+                        );
+                        if (isTenantSwitch) {
+                            console.log(`[AUTH] Switching store tenant: ${prevStoreCode || 'demo'} -> ${data.storeCode}. Purging previous tenant cache.`);
+                            await clearAllTenantLocalData();
+                        }
+
                         localStorage.setItem('billnaw_auth_mode', 'authenticated');
                         const isOwner = Boolean(data && (data.isOwner || (data.user && (data.user.role === 'owner' || data.user.isOwner))));
                         if (isOwner) {
@@ -497,15 +533,15 @@
                             localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
                         }
 
-                        // Multi-Account Device Isolation: check if tenant switched
-                        const prevStoreCode = localStorage.getItem('billnaw_store_code');
-                        if (prevStoreCode && data.storeCode && prevStoreCode !== data.storeCode) {
-                            console.log(`[AUTH] Switching store tenant: ${prevStoreCode} -> ${data.storeCode}. Purging previous tenant cache.`);
-                            await clearAllTenantLocalData();
-                        }
-
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
-                        if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
+                        if (data.storeCode) {
+                            localStorage.setItem('billnaw_store_code', data.storeCode);
+                            localStorage.setItem('billnaw_last_store_code', data.storeCode);
+                        }
+                        if (incomingEmail) {
+                            localStorage.setItem('billnaw_auth_email', incomingEmail);
+                            localStorage.setItem('billnaw_last_device_email', incomingEmail);
+                        }
                         localStorage.setItem('billnaw_shop_session', JSON.stringify({
                             token: data.token,
                             customToken: data.customToken,
@@ -631,21 +667,15 @@
                         if (sEmail && email) sEmail.value = email;
                     }
                 }
-            }).catch(() => {
-                try {
-                    localStorage.setItem('billnaw_auth_mode', 'authenticated');
-                } catch (e) {}
-                updateShopAuthUI();
-                if (typeof updateCloudStoreTopbar === 'function') updateCloudStoreTopbar(email, true);
-                if (typeof showToast === 'function') showToast('Signed in successfully', 'success');
-                closeShopAuthModal();
+            }).catch(err => {
+                const errMsg = 'Sign-in failed: ' + (err && err.message ? err.message : 'Network error. Please check your connection and try again.');
+                if (typeof showToast === 'function') showToast(errMsg, 'error');
+                else alert(errMsg);
             });
         } else {
-            try {
-                localStorage.setItem('billnaw_auth_mode', 'authenticated');
-            } catch (e) {}
-            updateShopAuthUI();
-            closeShopAuthModal();
+            const msg = 'Network connection unavailable';
+            if (typeof showToast === 'function') showToast(msg, 'error');
+            else alert(msg);
         }
     }
     window.handlePasswordSignIn = handlePasswordSignIn;
@@ -897,10 +927,37 @@
                     adminPin,
                     otp
                 })
-            }).then(res => res.json()).then(async data => {
+            }).then(async res => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) return { ...data, success: false, _httpStatus: res.status };
+                return data;
+            }).then(async data => {
                 if (data && data.success) {
                     digitInputs.forEach(i => { i.value = ''; });
                     try {
+                        // Purge any previous tenant / demo state before initializing the new shop
+                        await clearAllTenantLocalData();
+
+                        const resolvedEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
+                        shopProfile = {
+                            name: data.shop?.name || shop || '',
+                            storeCode: data.storeCode || '',
+                            ownerEmail: resolvedEmail,
+                            email: resolvedEmail,
+                            phone,
+                            ownerPhone: phone,
+                            tableCount: Number(data.shop?.profile?.tableCount || 5),
+                            gstMode: 'inclusive',
+                            defaultGstRate: 5,
+                            startInvoiceNo: 1001
+                        };
+                        if (adminPin && typeof hashString === 'function') {
+                            shopProfile.adminPinHash = hashString(adminPin);
+                        }
+                        window.shopProfile = shopProfile;
+                        myClientID = data.storeCode || null;
+                        window.myClientID = myClientID;
+
                         localStorage.setItem('billnaw_auth_mode', 'authenticated');
                         localStorage.setItem('billnaw_is_master', 'true');
                         localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
@@ -925,9 +982,17 @@
                             }
                         }
                         if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
-                        if (email) localStorage.setItem('billnaw_auth_email', email);
+                        if (resolvedEmail) {
+                            localStorage.setItem('billnaw_auth_email', resolvedEmail);
+                            localStorage.setItem('billnaw_owner_email', resolvedEmail);
+                            localStorage.setItem('billnaw_shop_email', resolvedEmail);
+                            localStorage.setItem('billnaw_last_device_email', resolvedEmail);
+                        }
                         if (phone) localStorage.setItem('billnaw_auth_phone', phone);
-                        if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
+                        if (data.storeCode) {
+                            localStorage.setItem('billnaw_store_code', data.storeCode);
+                            localStorage.setItem('billnaw_last_store_code', data.storeCode);
+                        }
                         localStorage.setItem('billnaw_shop_session', JSON.stringify({
                             token: data.token,
                             customToken: data.customToken,
@@ -936,16 +1001,25 @@
                             user: data.user,
                             loginAt: Date.now()
                         }));
-                        localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email, phone }));
-                        if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
-                            shopProfile.name = data.shop.name;
-                            shopProfile.phone = phone;
-                            shopProfile.ownerPhone = phone;
-                            if (adminPin && typeof hashString === 'function') {
-                                shopProfile.adminPinHash = hashString(adminPin);
-                            }
-                            if (typeof persistProfile === 'function') persistProfile();
+                        localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email: resolvedEmail, phone }));
+
+                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0) {
+                            menuItems = data.shop.menu;
+                            window.menuItems = menuItems;
+                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
+                        } else {
+                            if (typeof menuItems !== 'undefined') menuItems = [];
+                            window.menuItems = [];
                         }
+                        if (Array.isArray(data.shop?.categories) && data.shop.categories.length > 0) {
+                            menuCategories = data.shop.categories;
+                            window.menuCategories = menuCategories;
+                            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_categories', menuCategories);
+                        } else {
+                            if (typeof menuCategories !== 'undefined') menuCategories = ['All'];
+                            window.menuCategories = ['All'];
+                        }
+                        if (typeof persistProfile === 'function') persistProfile();
                     } catch (e) {}
 
                     if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
@@ -987,130 +1061,10 @@
     window.handleVerifyAndCreateAccount = handleVerifyAndCreateAccount;
 
     function handleDirectSignupWithoutOtp() {
-        const fn = document.getElementById('signupFirstName') ? document.getElementById('signupFirstName').value.trim() : '';
-        const ln = document.getElementById('signupLastName') ? document.getElementById('signupLastName').value.trim() : '';
-        const shop = document.getElementById('signupShopName') ? document.getElementById('signupShopName').value.trim() : '';
-        const email = document.getElementById('signupEmail') ? document.getElementById('signupEmail').value.trim() : '';
-        const phoneEl = document.getElementById('signupPhone');
-        const phone = phoneEl ? phoneEl.value.replace(/\D/g, '') : '';
-        const pass = document.getElementById('signupPassword') ? document.getElementById('signupPassword').value : '';
-        const confirm = document.getElementById('signupConfirmPassword') ? document.getElementById('signupConfirmPassword').value : '';
-        const adminPin = document.getElementById('signupAdminPin') ? document.getElementById('signupAdminPin').value.trim() : '';
-
-        if (!fn || !shop || !email || !pass || !confirm) {
-            alert('Please fill out all required fields');
-            return;
+        if (typeof showToast === 'function') {
+            showToast('Email OTP verification is required to create a shop account.', 'info');
         }
-        if (!phone || phone.length < 10) {
-            alert('Mobile phone number is mandatory (minimum 10 digits required)');
-            if (phoneEl) phoneEl.focus();
-            return;
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email) || email.includes('..')) {
-            alert('Please enter a valid email address');
-            return;
-        }
-        if (pass.length < 6) {
-            alert('Password must be at least 6 characters');
-            return;
-        }
-        if (pass !== confirm) {
-            alert('Passwords do not match');
-            return;
-        }
-
-        if (typeof fetch === 'function') {
-            fetch('/api/auth/signup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    firstName: fn,
-                    lastName: ln,
-                    shopName: shop,
-                    email,
-                    phone,
-                    password: pass,
-                    confirmPassword: confirm,
-                    adminPin
-                })
-            }).then(res => res.json()).then(async data => {
-                if (data && data.success) {
-                    try {
-                        localStorage.setItem('billnaw_auth_mode', 'authenticated');
-                        localStorage.setItem('billnaw_is_master', 'true');
-                        localStorage.setItem('billnaw_device_status', 'AUTHORIZED');
-                        localStorage.setItem('billnaw_station_profile', 'BILLING_COUNTER');
-                        localStorage.setItem('billnaw_device_auth_timestamp', Date.now().toString());
-                        const masterDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : 'DEV_MASTER';
-                        if (typeof window.firestoreDB !== 'undefined' && typeof window.firestoreDoc !== 'undefined') {
-                            const masterDocRef = typeof getStoreSubdocRef === 'function' ? getStoreSubdocRef('devices', masterDevId) : null;
-                            if (masterDocRef && window.firestoreSetDoc) {
-                                window.firestoreSetDoc(masterDocRef, {
-                                    deviceId: masterDevId,
-                                    pairingCode: '000000',
-                                    deviceName: 'Master Admin Terminal',
-                                    stationProfile: 'BILLING_COUNTER',
-                                    status: 'AUTHORIZED',
-                                    isMaster: true,
-                                    registeredAt: new Date().toISOString(),
-                                    approvedAt: new Date().toISOString(),
-                                    revokedAt: null,
-                                    lastSeenAt: new Date().toISOString()
-                                }, { merge: true }).catch(err => console.warn('Master device write notice:', err));
-                            }
-                        }
-                        if (data.token) localStorage.setItem('billnaw_auth_token', data.token);
-                        if (email) localStorage.setItem('billnaw_auth_email', email);
-                        if (phone) localStorage.setItem('billnaw_auth_phone', phone);
-                        if (data.storeCode) localStorage.setItem('billnaw_store_code', data.storeCode);
-                        localStorage.setItem('billnaw_shop_session', JSON.stringify({
-                            token: data.token,
-                            customToken: data.customToken,
-                            storeCode: data.storeCode,
-                            shop: data.shop,
-                            user: data.user,
-                            loginAt: Date.now()
-                        }));
-                        localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email, phone }));
-                        if (data.shop && data.shop.name && typeof shopProfile !== 'undefined') {
-                            shopProfile.name = data.shop.name;
-                            shopProfile.phone = phone;
-                            shopProfile.ownerPhone = phone;
-                            if (adminPin && typeof hashString === 'function') {
-                                shopProfile.adminPinHash = hashString(adminPin);
-                            }
-                            if (typeof persistProfile === 'function') persistProfile();
-                        }
-                    } catch (e) {}
-
-                    if (data.customToken && window.auth && typeof window.firebaseSignInWithCustomToken === 'function') {
-                        if (typeof window.isGoogleFirebaseCustomToken === 'function' && window.isGoogleFirebaseCustomToken(data.customToken)) {
-                            try {
-                                await window.firebaseSignInWithCustomToken(window.auth, data.customToken);
-                            } catch (fbErr) {}
-                        } else {
-                            console.info("⚡ Authenticated via Billnaw Cloud Session (Local & Backend Sync active)");
-                        }
-                    }
-
-                    if (typeof attachFirestoreListener === 'function') {
-                        attachFirestoreListener(data.storeCode);
-                    }
-
-                    updateShopAuthUI();
-                    if (typeof updateCloudStoreTopbar === 'function') {
-                        updateCloudStoreTopbar(email, true);
-                    }
-                    if (typeof showToast === 'function') showToast('Shop Profile Created! Welcome, ' + fn, 'success');
-                    closeShopAuthModal();
-                } else {
-                    alert((data && data.error) ? data.error : 'Failed to create shop account');
-                }
-            }).catch(err => {
-                alert('Signup error: ' + (err.message || 'Please check your connection and retry.'));
-            });
-        }
+        return handleCreateShopAccount();
     }
     window.handleDirectSignupWithoutOtp = handleDirectSignupWithoutOtp;
 
@@ -1125,37 +1079,88 @@
 
     async function clearAllTenantLocalData() {
         try {
-            localStorage.removeItem('billnaw_shop_session');
+            if (typeof window !== 'undefined') {
+                if (typeof window.detachFirestoreListener === 'function') {
+                    try { window.detachFirestoreListener(); } catch (e) {}
+                }
+                if (typeof window.stopBackgroundSync === 'function') {
+                    try { window.stopBackgroundSync(); } catch (e) {}
+                }
+                if (typeof window.stopSessionHeartbeat === 'function') {
+                    try { window.stopSessionHeartbeat(); } catch (e) {}
+                }
+                if (typeof window.stopStaffPresenceHeartbeat === 'function') {
+                    try { window.stopStaffPresenceHeartbeat(); } catch (e) {}
+                }
+            }
+
+            // Preserve hardware device IDs & printer pairings across shop switches:
+            // billnaw_device_id, bongbhoj_device_id, billnaw_printers_config, pos_dual_printers,
+            // billnaw_single_printer_mode, billnaw_master_print_hub, billnaw_kot_relay_mode
+            const TENANT_LS_KEYS = [
+                'billnaw_shop_session', 'billnaw_auth_token', 'billnaw_auth_email', 'billnaw_auth_phone',
+                'billnaw_store_code', 'billnaw_shop_code', 'billnaw_active_store_id', 'billnaw_active_user',
+                'billnaw_auth_mode', 'billnaw_last_staff_id', 'billnaw_active_staff', 'billnaw_terminal_locked',
+                'billnaw_current_session_id', 'billnaw_active_sessions', 'billnaw_active_cart',
+                'billnaw_offline_orders', 'billnaw_authorized_devices', 'billnaw_station_profile',
+                'billnaw_station_name', 'billnaw_is_master', 'billnaw_device_status',
+                'billnaw_device_auth_timestamp', 'billnaw_pairing_code', 'billnaw_pin_verified_at',
+                'billnaw_session_revoked', 'billnaw_last_device_email', 'billnaw_last_store_code',
+                // R1.4 & tombstone / queue keys
+                'billnaw_menu_version', 'billnaw_deleted_menu_ids', 'billnaw_deleted_menu_names',
+                'billnaw_menu_customized', 'billnaw_offline_sync_queue', 'billnaw_deleted_staff_ids',
+                'billnaw_active_kots', 'billnaw_last_kot_no',
+                // Shop profile & legacy keys
+                'billnaw_shop_name', 'billnaw_store_profile', 'billnaw_shop_phone', 'billnaw_shop_address',
+                'billnaw_shop_logo', 'billnaw_admin_pin_hash', 'billnaw_shop_fssai', 'billnaw_shop_gstin',
+                'billnaw_shop_upi_id', 'billnaw_shop_show_qr', 'billnaw_gst_mode', 'billnaw_default_gst_rate',
+                'billnaw_table_count', 'billnaw_owner_email', 'billnaw_shop_email', 'billnaw_shop_owner',
+                'billnaw_store_staff', 'billnaw_menu', 'billnaw_culinary_materials', 'billnaw_culinary_batches',
+                'billnaw_culinary_recipes', 'billnaw_culinary_subs', 'billnaw_subscription_record',
+                'billnaw_subscription_status', 'billnaw_voice_buffer', 'billnaw_voice_history',
+                'bongbhoj_voice_buffer', 'billnaw_license_active', 'billnaw_license_key',
+                'cafe_khata', 'cafeLicenseKey', 'bongbhoj_client_id',
+                'ownerEmail', 'storeCode', 'storeId', 'pos_current_staff',
+                'pos_failed_print_jobs', 'pos_order_history'
+            ];
+            // Keep explicit calls expected by static audits:
             localStorage.removeItem('billnaw_auth_token');
             localStorage.removeItem('billnaw_auth_email');
-            localStorage.removeItem('billnaw_auth_phone');
-            localStorage.removeItem('billnaw_store_code');
-            localStorage.removeItem('billnaw_active_user');
-            localStorage.removeItem('billnaw_auth_mode');
-            localStorage.removeItem('billnaw_last_staff_id');
-            localStorage.removeItem('billnaw_active_staff');
-            localStorage.removeItem('billnaw_terminal_locked');
-            localStorage.removeItem('cafe_khata');
-            localStorage.removeItem('billnaw_culinary_materials');
-            localStorage.removeItem('billnaw_culinary_batches');
+            localStorage.removeItem('billnaw_shop_session');
             localStorage.removeItem('billnaw_shop_name');
             localStorage.removeItem('billnaw_store_profile');
-            localStorage.removeItem('billnaw_shop_phone');
-            localStorage.removeItem('billnaw_shop_address');
-            localStorage.removeItem('billnaw_shop_logo');
-            localStorage.removeItem('billnaw_admin_pin_hash');
-            localStorage.removeItem('billnaw_shop_fssai');
-            localStorage.removeItem('billnaw_shop_gstin');
-            localStorage.removeItem('billnaw_shop_upi_id');
-            localStorage.removeItem('billnaw_store_staff');
-            localStorage.removeItem('billnaw_last_device_email');
-            localStorage.removeItem('billnaw_last_store_code');
-            localStorage.removeItem('cafeLicenseKey');
-            localStorage.removeItem('bongbhoj_client_id');
+            TENANT_LS_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+
             if (typeof shopProfile !== 'undefined') {
                 shopProfile = { name: '', storeCode: '' };
                 window.shopProfile = shopProfile;
             }
+            if (typeof myClientID !== 'undefined') { myClientID = null; }
+            window.myClientID = null;
+            if (typeof menuItems !== 'undefined') { menuItems = []; }
+            window.menuItems = [];
+            if (typeof menuCategories !== 'undefined') { menuCategories = ['All']; }
+            window.menuCategories = ['All'];
+            if (typeof tablesInfo !== 'undefined') { tablesInfo = {}; }
+            window.tablesInfo = {};
+            if (typeof orderHistory !== 'undefined') { orderHistory = []; }
+            window.orderHistory = [];
+            if (typeof dailyExpenses !== 'undefined') { dailyExpenses = []; }
+            window.dailyExpenses = [];
+            if (typeof customersList !== 'undefined') { customersList = []; }
+            window.customersList = [];
+            if (typeof staffList !== 'undefined') { staffList = []; }
+            window.staffList = [];
+            if (typeof currentCart !== 'undefined') { currentCart = []; }
+            window.cart = [];
+            if (typeof window.clearCart === 'function') { try { window.clearCart(); } catch (e) {} }
+            window.currentMenuVersion = 0;
+            window.authorizedDevices = [];
+            window.activeStaffSessions = [];
+            window.currentDeviceRecord = null;
+            window.currentSessionId = null;
+            window.currentStaff = null;
+            window.currentRole = null;
             if (typeof sessionStorage !== 'undefined') {
                 sessionStorage.clear();
             }
@@ -1163,18 +1168,24 @@
 
         try {
             if (typeof idb !== 'undefined' && typeof idb.clear === 'function') {
-                await idb.clear('cafe_menu').catch(() => {});
-                await idb.clear('cafe_categories').catch(() => {});
-                await idb.clear('cafe_history').catch(() => {});
-                await idb.clear('cafe_tables').catch(() => {});
-                await idb.clear('cafe_customers').catch(() => {});
-                await idb.clear('cafe_expenses').catch(() => {});
-                await idb.clear('cafe_staff').catch(() => {});
-                await idb.clear('cafe_profile').catch(() => {});
-                await idb.clear('cafe_logo').catch(() => {});
-                await idb.clear('cafe_khata').catch(() => {});
-                await idb.clear('cafe_raw_materials').catch(() => {});
-                await idb.clear('cafe_sub_recipes').catch(() => {});
+                const stores = [
+                    'cafe_menu', 'cafe_categories', 'cafe_history', 'cafe_tables',
+                    'cafe_customers', 'cafe_expenses', 'cafe_staff', 'cafe_profile',
+                    'cafe_logo', 'cafe_khata', 'cafe_raw_materials', 'cafe_sub_recipes',
+                    'cafe_unsettled_orders', 'billnaw_devices', 'billnaw_sessions'
+                ];
+                await Promise.all(stores.map(s => idb.clear(s).catch(() => {})));
+                await idb.clear().catch(() => {});
+                if (idb.db && idb.db.objectStoreNames) {
+                    ['orders', 'kot_records', 'menu_items'].forEach(storeName => {
+                        if (idb.db.objectStoreNames.contains(storeName)) {
+                            try {
+                                const tx = idb.db.transaction(storeName, 'readwrite');
+                                tx.objectStore(storeName).clear();
+                            } catch (e) {}
+                        }
+                    });
+                }
             }
         } catch(e) {}
     }
@@ -1184,25 +1195,39 @@
         const activeToken = localStorage.getItem('billnaw_auth_token');
         const activeEmail = localStorage.getItem('billnaw_auth_email') || (document.getElementById('shopAuthEmail') ? document.getElementById('shopAuthEmail').value.trim() : '');
 
-        // 1. Unsubscribe real-time Firestore listeners immediately
+        // 1. Unsubscribe real-time Firestore listeners & stop heartbeats immediately
         if (typeof window.detachFirestoreListener === 'function') {
             window.detachFirestoreListener();
         }
         if (typeof window.unsubscribeFirestoreListeners === 'function') {
             window.unsubscribeFirestoreListeners();
         }
+        if (typeof window.stopBackgroundSync === 'function') {
+            try { window.stopBackgroundSync(); } catch (e) {}
+        }
+        if (typeof window.stopSessionHeartbeat === 'function') {
+            try { window.stopSessionHeartbeat(); } catch (e) {}
+        }
+        if (typeof window.stopStaffPresenceHeartbeat === 'function') {
+            try { window.stopStaffPresenceHeartbeat(); } catch (e) {}
+        }
 
-        // 2. Invalidate session on backend
+        // 2. Invalidate session on backend (bounded await so redirect does not cancel request)
         try {
             if (typeof fetch === 'function') {
-                fetch('/api/auth/logout', {
+                const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                const timer = controller ? setTimeout(() => controller.abort(), 1500) : null;
+                await fetch('/api/auth/logout', {
                     method: 'POST',
-                    headers: { 
+                    keepalive: true,
+                    signal: controller ? controller.signal : undefined,
+                    headers: {
                         'Content-Type': 'application/json',
                         ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
                     },
                     body: JSON.stringify({ token: activeToken, email: activeEmail })
                 }).catch(() => {});
+                if (timer) clearTimeout(timer);
             }
         } catch (e) {}
 
@@ -1217,16 +1242,28 @@
         // 4. Purge storage & IndexedDB
         await clearAllTenantLocalData();
 
-        // 5. Reset reactive in-memory state
+        // 5. Reset reactive in-memory state (tablesInfo MUST be an Object {}, never [])
         window.currentStaff = null;
         window.currentRole = null;
         if (typeof staffList !== 'undefined') staffList = [];
-        if (typeof tablesInfo !== 'undefined') tablesInfo = [];
+        if (typeof tablesInfo !== 'undefined') tablesInfo = {};
+        window.tablesInfo = {};
+        if (typeof menuItems !== 'undefined') menuItems = [];
+        window.menuItems = [];
+        if (typeof menuCategories !== 'undefined') menuCategories = ['All'];
+        window.menuCategories = ['All'];
+        if (typeof currentCart !== 'undefined') currentCart = [];
+        window.cart = [];
         if (typeof orderHistory !== 'undefined') orderHistory = [];
         if (typeof customersList !== 'undefined') customersList = [];
         if (typeof dailyExpenses !== 'undefined') dailyExpenses = [];
         if (typeof inventoryRawMaterials !== 'undefined') inventoryRawMaterials = [];
         if (typeof culinaryBatches !== 'undefined') culinaryBatches = [];
+        window.authorizedDevices = [];
+        window.activeStaffSessions = [];
+        window.currentDeviceRecord = null;
+        window.currentSessionId = null;
+        window.currentMenuVersion = 0;
 
         // Reset login and signup OTP states & wipe digit inputs so no stale OTP can ever be used
         if (typeof resetLoginOtpView === 'function') resetLoginOtpView();
@@ -1239,14 +1276,10 @@
         }
 
         // Reset password input fields & validation errors
-        const passField = document.getElementById('shopAuthPassword');
-        if (passField) passField.value = '';
-        const passEmailField = document.getElementById('shopAuthPasswordEmail');
-        if (passEmailField) passEmailField.value = '';
-        const signupPass = document.getElementById('signupPassword');
-        if (signupPass) signupPass.value = '';
-        const signupConfirm = document.getElementById('signupConfirmPassword');
-        if (signupConfirm) signupConfirm.value = '';
+        ['shopAuthPasswordInput', 'shopAuthPassword', 'shopAuthEmail', 'shopAuthPasswordEmail', 'signupPassword', 'signupConfirmPassword', 'signupAdminPin', 'signupConfirmAdminPin'].forEach(id => {
+            const field = document.getElementById(id);
+            if (field) field.value = '';
+        });
 
         const loginFeedback = document.getElementById('loginValidationFeedback');
         if (loginFeedback) { loginFeedback.style.display = 'none'; loginFeedback.innerText = ''; }
@@ -1329,9 +1362,14 @@
                     return;
                 }
 
+                const safeEsc = (v) => (typeof escapeHtml === 'function')
+                    ? escapeHtml(v)
+                    : String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+
                 container.innerHTML = res.sessions.map(s => {
                     const isCurrent = activeToken && s.token === activeToken;
                     const createdDate = new Date(s.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    const sessionKey = safeEsc(s.id || s.token || '');
 
                     return `
                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #FAF7F4; border: 1.5px solid #E6DCCD; border-radius: 10px;">
@@ -1341,21 +1379,21 @@
                                 </div>
                                 <div>
                                     <div style="font-weight: 800; font-size: 13px; color: var(--text-dark);">
-                                        ${escapeHtml(s.device || 'POS Terminal')}
+                                        ${safeEsc(s.device || 'POS Terminal')}
                                         ${isCurrent ? '<span style="color: #047857; background: #D1FAE5; font-size: 10px; padding: 2px 6px; border-radius: 8px; margin-left: 6px;">Current Device</span>' : ''}
                                     </div>
                                     <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
-                                        IP: ${escapeHtml(s.ip || '127.0.0.1')} • Connected: ${createdDate}
+                                        IP: ${safeEsc(s.ip || '127.0.0.1')} • Connected: ${safeEsc(createdDate)}
                                     </div>
                                 </div>
                             </div>
                             <div>
                                 ${!isCurrent ? `
-                                    <button type="button" class="btn btn-outline" style="color: var(--danger); border-color: var(--danger); font-size: 11px; padding: 4px 8px; border-radius: 8px;" onclick="revokeSessionItem('${s.id || s.token}')">
+                                    <button type="button" class="btn btn-outline js-revoke-session-btn" data-session-id="${sessionKey}" style="color: var(--danger); border-color: var(--danger); font-size: 11px; padding: 4px 8px; border-radius: 8px;">
                                         Revoke
                                     </button>
                                 ` : `
-                                    <button type="button" class="btn btn-outline" style="color: var(--danger); border-color: var(--danger); font-size: 11px; padding: 4px 8px; border-radius: 8px;" onclick="revokeCurrentSessionAndLogout('${s.id || s.token}')">
+                                    <button type="button" class="btn btn-outline js-logout-session-btn" data-session-id="${sessionKey}" style="color: var(--danger); border-color: var(--danger); font-size: 11px; padding: 4px 8px; border-radius: 8px;">
                                         Sign Out
                                     </button>
                                 `}
@@ -1363,6 +1401,12 @@
                         </div>
                     `;
                 }).join('');
+                container.querySelectorAll('.js-revoke-session-btn').forEach(btn => {
+                    btn.addEventListener('click', () => revokeSessionItem(btn.getAttribute('data-session-id')));
+                });
+                container.querySelectorAll('.js-logout-session-btn').forEach(btn => {
+                    btn.addEventListener('click', () => revokeCurrentSessionAndLogout(btn.getAttribute('data-session-id')));
+                });
             } else if (typeof renderLiveSessionCards === 'function' && ((window.activeStaffSessions && window.activeStaffSessions.length > 0) || (function(){ try { return Boolean(localStorage.getItem('billnaw_active_sessions')); }catch(e){return false;} })())) {
                 renderLiveSessionCards();
             } else {
@@ -1390,11 +1434,19 @@
         if (!tokenId) return;
         const activeToken = localStorage.getItem('billnaw_auth_token');
         try {
-            await fetch('/api/auth/sessions/revoke', {
+            const res = await fetch('/api/auth/sessions/revoke', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+                },
                 body: JSON.stringify({ token: tokenId })
             });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                if (typeof showToast === 'function') showToast(errData.error || 'Failed to revoke session.', 'error');
+                return;
+            }
             if (activeToken && (tokenId === activeToken || (tokenId.startsWith('sess_') && activeToken.includes(tokenId)))) {
                 if (typeof showToast === 'function') showToast('Current session revoked.');
                 logoutShop();
@@ -1403,17 +1455,21 @@
             if (typeof showToast === 'function') showToast('Remote terminal session revoked.');
             loadActiveSessions();
         } catch (e) {
-            if (typeof showToast === 'function') showToast('Session revoked.');
+            if (typeof showToast === 'function') showToast('Failed to revoke session: network error.', 'error');
         }
     }
     window.revokeSessionItem = revokeSessionItem;
 
     async function revokeCurrentSessionAndLogout(tokenId) {
         if (tokenId) {
+            const activeToken = localStorage.getItem('billnaw_auth_token');
             try {
                 await fetch('/api/auth/sessions/revoke', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+                    },
                     body: JSON.stringify({ token: tokenId })
                 });
             } catch (e) {}
@@ -1426,9 +1482,12 @@
         const activeToken = localStorage.getItem('billnaw_auth_token');
         const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || localStorage.getItem('billnaw_store_code') || '';
         try {
-            await fetch('/api/auth/sessions/revoke', {
+            const res = await fetch('/api/auth/sessions/revoke', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {})
+                },
                 body: JSON.stringify({
                     storeCode,
                     revokeAll: true,
@@ -1436,10 +1495,15 @@
                     token: activeToken
                 })
             });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                if (typeof showToast === 'function') showToast(errData.error || 'Failed to revoke remote sessions.', 'error');
+                return;
+            }
             if (typeof showToast === 'function') showToast('All other remote terminals revoked.');
             loadActiveSessions();
         } catch (e) {
-            if (typeof showToast === 'function') showToast('Other sessions revoked.');
+            if (typeof showToast === 'function') showToast('Failed to revoke sessions: network error.', 'error');
         }
     }
     window.revokeAllOtherSessions = revokeAllOtherSessions;

@@ -46,11 +46,24 @@ function evalIsValidTenant(id) {
   if (typeof id !== 'string') return false;
   if (id.length < 3) return false;
   if (/^\s+$/.test(id)) return false;
+  if (id === '_auth') return false;
   return true;
 }
 
 function evalIsAuthenticated(auth) {
   return auth !== null && auth !== undefined;
+}
+
+function evalHasVerifiedEmail(auth) {
+  if (!auth || !auth.token) return false;
+  const t = auth.token;
+  return (
+    'email' in t &&
+    typeof t.email === 'string' &&
+    t.email.length > 0 &&
+    'email_verified' in t &&
+    t.email_verified === true
+  );
 }
 
 function evalMatchesTenantId(auth, tenantId) {
@@ -59,34 +72,62 @@ function evalMatchesTenantId(auth, tenantId) {
   return (
     ('storeCode' in t && typeof t.storeCode === 'string' && t.storeCode === tenantId) ||
     ('cafe_id' in t && typeof t.cafe_id === 'string' && t.cafe_id === tenantId) ||
+    ('cafeId' in t && typeof t.cafeId === 'string' && t.cafeId === tenantId) ||
     ('shopId' in t && typeof t.shopId === 'string' && t.shopId === tenantId)
   );
 }
 
-function evalMatchesOwnerEmail(auth, resource, requestResource) {
-  if (!auth || !auth.token || typeof auth.token.email !== 'string') return false;
-  const email = auth.token.email;
-  const r1 = resource && resource.data && ('ownerEmail' in resource.data) && resource.data.ownerEmail === email;
-  const r2 = requestResource && requestResource.data && ('ownerEmail' in requestResource.data) && requestResource.data.ownerEmail === email;
-  return Boolean(r1 || r2);
-}
-
-function evalIsTenantStaff(auth, tenantId, resource, requestResource) {
-  return (
-    evalIsValidTenant(tenantId) &&
-    evalIsAuthenticated(auth) &&
-    (evalMatchesTenantId(auth, tenantId) || evalMatchesOwnerEmail(auth, resource, requestResource))
-  );
-}
-
-function evalIsTenantAdmin(auth, tenantId, resource, requestResource) {
-  if (!evalIsTenantStaff(auth, tenantId, resource, requestResource)) return false;
+function evalHasAdminOrOwnerClaim(auth) {
   if (!auth || !auth.token) return false;
   const t = auth.token;
   const hasAdminRole = 'role' in t && typeof t.role === 'string' && (t.role === 'admin' || t.role === 'owner');
   const isOwnerFlag = 'isOwner' in t && t.isOwner === true;
-  const ownerEmailMatch = evalMatchesOwnerEmail(auth, resource, requestResource);
-  return hasAdminRole || isOwnerFlag || ownerEmailMatch;
+  return hasAdminRole || isOwnerFlag;
+}
+
+function evalMatchesExistingOwnerEmail(auth, resource) {
+  if (!evalHasVerifiedEmail(auth)) return false;
+  if (!resource || !resource.data || typeof resource.data.ownerEmail !== 'string' || resource.data.ownerEmail.length === 0) return false;
+  return resource.data.ownerEmail.toLowerCase() === auth.token.email.toLowerCase();
+}
+
+function evalMatchesCreateOwnerEmail(auth, resource, requestResource) {
+  if (!evalHasVerifiedEmail(auth)) return false;
+  if (resource != null) return false;
+  if (!requestResource || !requestResource.data || typeof requestResource.data.ownerEmail !== 'string' || requestResource.data.ownerEmail.length === 0) return false;
+  return requestResource.data.ownerEmail.toLowerCase() === auth.token.email.toLowerCase();
+}
+
+function evalMatchesParentOwnerEmail(auth, parentDoc) {
+  if (!evalHasVerifiedEmail(auth)) return false;
+  if (!parentDoc || !parentDoc.data || typeof parentDoc.data.ownerEmail !== 'string' || parentDoc.data.ownerEmail.length === 0) return false;
+  return parentDoc.data.ownerEmail.toLowerCase() === auth.token.email.toLowerCase();
+}
+
+function evalIsTenantStaff(auth, tenantId, parentDoc) {
+  return (
+    evalIsValidTenant(tenantId) &&
+    evalIsAuthenticated(auth) &&
+    (evalMatchesTenantId(auth, tenantId) || evalMatchesParentOwnerEmail(auth, parentDoc))
+  );
+}
+
+function evalIsTenantAdmin(auth, tenantId, parentDoc) {
+  if (!evalIsTenantStaff(auth, tenantId, parentDoc)) return false;
+  return evalHasAdminOrOwnerClaim(auth) || evalMatchesParentOwnerEmail(auth, parentDoc);
+}
+
+function evalIsRootStaff(auth, tenantId, resource) {
+  return (
+    evalIsValidTenant(tenantId) &&
+    evalIsAuthenticated(auth) &&
+    (evalMatchesTenantId(auth, tenantId) || evalMatchesExistingOwnerEmail(auth, resource))
+  );
+}
+
+function evalIsRootAdmin(auth, tenantId, resource) {
+  if (!evalIsRootStaff(auth, tenantId, resource)) return false;
+  return evalHasAdminOrOwnerClaim(auth) || evalMatchesExistingOwnerEmail(auth, resource);
 }
 
 console.log('====================================================================');
@@ -218,14 +259,14 @@ const crossTenantVectors = [
     res: { data: { ownerEmail: 'owner@shop101.com' } }
   },
   {
-    name: 'Mismatched owner email: attacker@evil.com targeting cafe with owner owner@mycafe.com',
-    auth: { token: { email: 'attacker@evil.com', role: 'admin' } },
+    name: 'Mismatched owner email (verified): attacker@evil.com targeting cafe with owner owner@mycafe.com',
+    auth: { token: { email: 'attacker@evil.com', email_verified: true, role: 'admin' } },
     target: 'cafe_target',
     res: { data: { ownerEmail: 'owner@mycafe.com' } }
   },
   {
-    name: 'Owner email case mismatch: "Owner@Cafe.com" in token vs "owner@cafe.com" in doc',
-    auth: { token: { email: 'Owner@Cafe.com', role: 'admin' } },
+    name: 'Unverified owner email rejected even when email matches doc ownerEmail',
+    auth: { token: { email: 'owner@cafe.com', email_verified: false, role: 'admin' } },
     target: 'cafe_target',
     res: { data: { ownerEmail: 'owner@cafe.com' } }
   },
@@ -310,24 +351,37 @@ console.log('\n📍 MATRIX D: LEGITIMATE ACCESS & IDENTITY PERMISSIBILITY');
 const legitimateStaffVectors = [
   { name: 'token.storeCode match', auth: { token: { storeCode: validTenant } } },
   { name: 'token.cafe_id match', auth: { token: { cafe_id: validTenant } } },
+  { name: 'token.cafeId match', auth: { token: { cafeId: validTenant } } },
   { name: 'token.shopId match', auth: { token: { shopId: validTenant } } },
   { name: 'token with storeCode and cashier role', auth: { token: { storeCode: validTenant, role: 'cashier' } } },
   { name: 'token with cafe_id and server role', auth: { token: { cafe_id: validTenant, role: 'server' } } },
   { name: 'token with shopId and waiter role', auth: { token: { shopId: validTenant, role: 'waiter' } } },
-  { name: 'token matching resource ownerEmail', auth: { token: { email: 'proprietor@cafe101.com' } } },
-  { name: 'token matching request.resource ownerEmail on create', auth: { token: { email: 'newowner@cafe101.com' } }, reqRes: { data: { ownerEmail: 'newowner@cafe101.com' } } }
+  { name: 'verified token matching resource ownerEmail (case-insensitive)', auth: { token: { email: 'Proprietor@Cafe101.com', email_verified: true } } },
+  { name: 'verified token matching request.resource ownerEmail on root create (resource == null)', auth: { token: { email: 'newowner@cafe101.com', email_verified: true } }, res: null, reqRes: { data: { ownerEmail: 'newowner@cafe101.com' } }, isCreate: true }
 ];
 
 legitimateStaffVectors.forEach(v => {
   runCheck('MATRIX-D', `Permits legitimate staff: ${v.name}`, () => {
-    const res = evalIsTenantStaff(v.auth, validTenant, validDoc, v.reqRes || null);
+    const res = v.isCreate
+      ? evalMatchesCreateOwnerEmail(v.auth, v.res, v.reqRes)
+      : evalIsTenantStaff(v.auth, validTenant, v.res !== undefined ? v.res : validDoc);
     assert.strictEqual(res, true, `Legitimate staff rejected: ${v.name}`);
   });
+});
+
+// Anti-hijack check: supplying request.resource.ownerEmail on existing doc or subcollection MUST fail
+runCheck('MATRIX-D', 'Rejects request.resource.ownerEmail hijack when existing resource != null or on subcollections', () => {
+  const attackerAuth = { token: { email: 'attacker@evil.com', email_verified: true } };
+  const reqRes = { data: { ownerEmail: 'attacker@evil.com' } };
+  assert.strictEqual(evalMatchesCreateOwnerEmail(attackerAuth, validDoc, reqRes), false);
+  assert.strictEqual(evalIsRootStaff(attackerAuth, validTenant, validDoc), false);
+  assert.strictEqual(evalIsTenantStaff(attackerAuth, validTenant, validDoc), false);
 });
 
 const legitimateAdminVectors = [
   { name: 'token.storeCode + role: "admin"', auth: { token: { storeCode: validTenant, role: 'admin' } } },
   { name: 'token.cafe_id + role: "admin"', auth: { token: { cafe_id: validTenant, role: 'admin' } } },
+  { name: 'token.cafeId + role: "admin"', auth: { token: { cafeId: validTenant, role: 'admin' } } },
   { name: 'token.shopId + role: "admin"', auth: { token: { shopId: validTenant, role: 'admin' } } },
   { name: 'token.storeCode + role: "owner"', auth: { token: { storeCode: validTenant, role: 'owner' } } },
   { name: 'token.cafe_id + role: "owner"', auth: { token: { cafe_id: validTenant, role: 'owner' } } },
@@ -335,13 +389,15 @@ const legitimateAdminVectors = [
   { name: 'token.storeCode + isOwner: true', auth: { token: { storeCode: validTenant, isOwner: true } } },
   { name: 'token.cafe_id + isOwner: true', auth: { token: { cafe_id: validTenant, isOwner: true } } },
   { name: 'token.shopId + isOwner: true', auth: { token: { shopId: validTenant, isOwner: true } } },
-  { name: 'token matching ownerEmail in resource.data', auth: { token: { email: 'proprietor@cafe101.com' } } },
-  { name: 'token matching ownerEmail in request.resource.data', auth: { token: { email: 'newowner@cafe101.com' } }, reqRes: { data: { ownerEmail: 'newowner@cafe101.com' } } }
+  { name: 'verified token matching ownerEmail in resource.data', auth: { token: { email: 'proprietor@cafe101.com', email_verified: true } } },
+  { name: 'verified token matching ownerEmail on root create (resource == null)', auth: { token: { email: 'newowner@cafe101.com', email_verified: true } }, res: null, reqRes: { data: { ownerEmail: 'newowner@cafe101.com' } }, isCreate: true }
 ];
 
 legitimateAdminVectors.forEach(v => {
   runCheck('MATRIX-D', `Permits legitimate admin: ${v.name}`, () => {
-    const res = evalIsTenantAdmin(v.auth, validTenant, validDoc, v.reqRes || null);
+    const res = v.isCreate
+      ? evalMatchesCreateOwnerEmail(v.auth, v.res, v.reqRes)
+      : evalIsTenantAdmin(v.auth, validTenant, v.res !== undefined ? v.res : validDoc);
     assert.strictEqual(res, true, `Legitimate admin rejected: ${v.name}`);
   });
 });
@@ -435,8 +491,9 @@ runCheck('MATRIX-F', 'Security Invariant: /devices/{deviceId} completely blocks 
 });
 
 runCheck('MATRIX-F', 'Security Invariant: Invoices ledger permanently forbids physical deletion', () => {
-  assert.ok(rulesText.includes('match /invoices/{invoiceId} {\n        allow read, create: if isTenantStaff(cafeId);\n        \n        // PHYSICAL DELETION IS PERMANENTLY FORBIDDEN\n        allow delete: if false;'));
-  assert.ok(rulesText.includes('match /invoices/{invoiceId} {\n        allow read, create: if isTenantStaff(shopId);\n        allow delete: if false;'));
+  assert.ok(rulesText.includes('match /invoices/{invoiceId} {\n        allow read: if isTenantStaff(cafeId);\n        allow create: if isTenantStaff(cafeId) && isValidInvoiceCreate();\n        \n        // PHYSICAL DELETION IS PERMANENTLY FORBIDDEN\n        allow delete: if false;'));
+  assert.ok(rulesText.includes('match /invoices/{invoiceId} {\n        allow read: if isTenantStaff(shopId);\n        allow create: if isTenantStaff(shopId) && isValidInvoiceCreate();\n        allow delete: if false;'));
+  assert.ok(rulesText.includes('match /invoices/{invoiceId} {\n        allow read: if isTenantStaff(clientId);\n        allow create: if isTenantStaff(clientId) && isValidInvoiceCreate();\n        allow delete: if false;'));
 });
 
 runCheck('MATRIX-F', 'Security Invariant: Print queue forbids billing data injection', () => {

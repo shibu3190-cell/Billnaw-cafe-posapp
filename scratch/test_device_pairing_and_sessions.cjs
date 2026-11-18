@@ -239,8 +239,9 @@ async function runSuite() {
     assert.ok(databaseRulesContent.includes('isTenantAdmin'), 'Missing isTenantAdmin check in database/firestore.rules');
   });
 
-  await test('T1-F01-03', 'Subcollections inherit tenant validation for reads and writes', () => {
-    assert.ok(firestoreRulesContent.includes('match /{allChildren=**}'), 'Missing recursive subcollection match in firestore.rules');
+  await test('T1-F01-03', 'Subcollections use explicit tenant validation with zero wildcard bypasses', () => {
+    assert.ok(!firestoreRulesContent.includes('match /clients/{clientId} {\n      allow read: if isTenantStaff(clientId);\n      allow write: if isTenantAdmin(clientId);\n      match /{allChildren=**}'), 'Wildcard {allChildren=**} bypass under /clients/{clientId} must be removed');
+    assert.ok(firestoreRulesContent.includes('match /tables/{tableId}'), 'Missing explicit subcollection match in firestore.rules');
     assert.ok(firestoreRulesContent.includes('allow read: if isTenantStaff(cafeId);') || firestoreRulesContent.includes('allow read, write: if isTenantStaff(cafeId);'), 'Missing subcollection read rule');
   });
 

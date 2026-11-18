@@ -45,7 +45,7 @@ async function runTest(testId, name, fn) {
 }
 
 // HTTP request helper
-function sendHttpRequest(port, method, reqPath, body = null) {
+function sendHttpRequest(port, method, reqPath, body = null, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : null;
     const req = http.request(
@@ -56,7 +56,8 @@ function sendHttpRequest(port, method, reqPath, body = null) {
         method,
         headers: {
           'Content-Type': 'application/json',
-          ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {})
+          ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+          ...extraHeaders
         }
       },
       (res) => {
@@ -91,8 +92,10 @@ function sendHttpRequest(port, method, reqPath, body = null) {
     getShopSubscription,
     updateShopSubscription
   } = await import('../server/subscription-service.js');
-  const { normalizeEmail, isValidEmail } = await import('../server/auth-service.js');
+  const { normalizeEmail, isValidEmail, createSignedAuthToken } = await import('../server/auth-service.js');
   const { app } = await import('../server.js');
+  const superAdminToken = createSignedAuthToken({ storeCode: 'PLATFORM', email: 'superadmin@billnawpos.com', role: 'SuperAdmin' });
+  const authHdr = { authorization: `Bearer ${superAdminToken}` };
 
   // Start Express test server on ephemeral port
   const server = app.listen(0);
@@ -234,8 +237,22 @@ function sendHttpRequest(port, method, reqPath, body = null) {
   // ============================================================================
   console.log('\n📍 SECTION 2: REST API MALFORMED PAYLOADS & INJECTION RESISTANCE');
 
+  await runTest('ADV-API-00', 'Unauthenticated POST /api/subscription/manage returns 401 and never mints x-refreshed-token', async () => {
+    const res1 = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
+      shopId: 'SHOP-UNAUTH-01',
+      action: 'PAUSED'
+    });
+    assert.strictEqual(res1.status, 401);
+    assert.strictEqual(res1.body.success, false);
+    assert.strictEqual(res1.headers['x-refreshed-token'], undefined);
+
+    const res2 = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {});
+    assert.strictEqual(res2.status, 401);
+    assert.strictEqual(res2.headers['x-refreshed-token'], undefined);
+  });
+
   await runTest('ADV-API-01', 'POST /api/subscription/manage with empty body returns 400', async () => {
-    const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {});
+    const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {}, authHdr);
     assert.strictEqual(res.status, 400);
     assert.strictEqual(res.body.success, false);
     assert.ok(res.body.error.includes('Missing required field'));
@@ -244,7 +261,7 @@ function sendHttpRequest(port, method, reqPath, body = null) {
   await runTest('ADV-API-02', 'POST /api/subscription/manage missing action returns 400', async () => {
     const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
       shopId: 'SHOP-TEST-M1'
-    });
+    }, authHdr);
     assert.strictEqual(res.status, 400);
     assert.strictEqual(res.body.success, false);
     assert.ok(res.body.error.includes('action'));
@@ -253,7 +270,7 @@ function sendHttpRequest(port, method, reqPath, body = null) {
   await runTest('ADV-API-03', 'POST /api/subscription/manage missing both shopEmail and shopId returns 400', async () => {
     const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
       action: 'PAUSED'
-    });
+    }, authHdr);
     assert.strictEqual(res.status, 400);
     assert.strictEqual(res.body.success, false);
     assert.ok(res.body.error.includes('at least one of shopEmail or shopId'));
@@ -264,7 +281,7 @@ function sendHttpRequest(port, method, reqPath, body = null) {
       shopEmail: '   ',
       shopId: '   ',
       action: 'PAUSED'
-    });
+    }, authHdr);
     assert.strictEqual(res.status, 400);
     assert.strictEqual(res.body.success, false);
   });
@@ -286,7 +303,7 @@ function sendHttpRequest(port, method, reqPath, body = null) {
       const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
         shopEmail: bad,
         action: 'PAUSED'
-      });
+      }, authHdr);
       assert.strictEqual(res.status, 400, `Email ${JSON.stringify(bad)} should return 400`);
       assert.strictEqual(res.body.success, false);
     }
@@ -308,11 +325,12 @@ function sendHttpRequest(port, method, reqPath, body = null) {
 
   await runTest('ADV-API-08', 'SQL injection in reason parameter does not crash or execute', async () => {
     const sqlInjectionPayload = "'; DROP TABLE subscriptions; SELECT * FROM users WHERE '1'='1; --";
+    const ownerTok = createSignedAuthToken({ storeCode: 'SHOP-SEC-SQL-01', email: 'sql@test.com', role: 'Owner' });
     const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
       shopId: 'SHOP-SEC-SQL-01',
       action: 'PAUSED',
       reason: sqlInjectionPayload
-    });
+    }, { authorization: `Bearer ${ownerTok}` });
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.success, true);
     assert.strictEqual(res.body.status, 'PAUSED');
@@ -321,11 +339,12 @@ function sendHttpRequest(port, method, reqPath, body = null) {
 
   await runTest('ADV-API-09', 'XSS HTML/script injection in reason is safely stored as string without evaluation', async () => {
     const xssPayload = "<script>alert('XSS_ATTACK')</script><img src='x' onerror='window.hack()'>";
+    const ownerTok = createSignedAuthToken({ storeCode: 'SHOP-SEC-XSS-01', email: 'xss@test.com', role: 'Owner' });
     const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
       shopId: 'SHOP-SEC-XSS-01',
       action: 'PAUSED',
       reason: xssPayload
-    });
+    }, { authorization: `Bearer ${ownerTok}` });
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.success, true);
     assert.strictEqual(res.body.subscription.statusReason, xssPayload);
@@ -333,11 +352,12 @@ function sendHttpRequest(port, method, reqPath, body = null) {
 
   await runTest('ADV-API-10', 'Excessive payload string in reason (50,000 chars) is safely truncated to 500 chars (DoS defense)', async () => {
     const hugeReason = 'A'.repeat(50000);
+    const ownerTok = createSignedAuthToken({ storeCode: 'SHOP-SEC-DOS-01', email: 'dos@test.com', role: 'Owner' });
     const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
       shopId: 'SHOP-SEC-DOS-01',
       action: 'PAUSED',
       reason: hugeReason
-    });
+    }, { authorization: `Bearer ${ownerTok}` });
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.success, true);
     assert.strictEqual(res.body.subscription.statusReason.length, 500);
@@ -349,14 +369,15 @@ function sendHttpRequest(port, method, reqPath, body = null) {
       shopId: traversalShopId,
       action: 'PAUSED',
       reason: 'Traversal test'
-    });
+    }, authHdr);
     // Handled safely without filesystem leak or server crash
     assert.ok(res.status === 200 || res.status === 400 || res.status === 404);
   });
 
   await runTest('ADV-API-12', 'Prototype pollution attempt does not compromise Object prototype', async () => {
     const pollutionPayload = JSON.parse('{"__proto__":{"polluted":"yes"},"constructor":{"prototype":{"isAdmin":true}},"shopId":"SHOP-POLLUTION-01","action":"PAUSED"}');
-    const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', pollutionPayload);
+    const ownerTok = createSignedAuthToken({ storeCode: 'SHOP-POLLUTION-01', email: 'poll@test.com', role: 'Owner' });
+    const res = await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', pollutionPayload, { authorization: `Bearer ${ownerTok}` });
     assert.strictEqual(res.status, 200);
     assert.strictEqual(({}).polluted, undefined, 'Object prototype must NOT be polluted');
     assert.strictEqual(({}).isAdmin, undefined, 'Object prototype isAdmin must NOT be set');
@@ -369,12 +390,14 @@ function sendHttpRequest(port, method, reqPath, body = null) {
 
   await runTest('ADV-CONC-01', '60 rapid concurrent flip-flop requests (ACTIVE <-> PAUSED) execute without crash or 500s', async () => {
     const testShopId = 'SHOP-FLIPFLOP-STRESS-01';
+    const ownerTok = createSignedAuthToken({ storeCode: testShopId, email: 'flip@test.com', role: 'Owner' });
+    const ownerHdr = { authorization: `Bearer ${ownerTok}` };
 
     // Seed shop with ACTIVE
     await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
       shopId: testShopId,
       action: 'ACTIVE'
-    });
+    }, ownerHdr);
 
     // Generate 60 concurrent requests alternating between PAUSED, RESUMED, PAUSED, RESUMED
     const promises = [];
@@ -385,7 +408,7 @@ function sendHttpRequest(port, method, reqPath, body = null) {
           shopId: testShopId,
           action,
           reason: `Concurrent flip-flop request #${i + 1}`
-        })
+        }, ownerHdr)
       );
     }
 
@@ -419,6 +442,7 @@ function sendHttpRequest(port, method, reqPath, body = null) {
     const tenantPromises = [];
     for (let tenantIdx = 1; tenantIdx <= 10; tenantIdx++) {
       const shopId = `SHOP-MULTI-TENANT-${tenantIdx}`;
+      const tenantTok = createSignedAuthToken({ storeCode: shopId, email: `tenant${tenantIdx}@test.com`, role: 'Owner' });
       for (let reqIdx = 1; reqIdx <= 5; reqIdx++) {
         const action = reqIdx % 2 === 1 ? 'PAUSED' : 'ACTIVE';
         tenantPromises.push(
@@ -426,7 +450,7 @@ function sendHttpRequest(port, method, reqPath, body = null) {
             shopId,
             action,
             reason: `Tenant ${tenantIdx} action ${action}`
-          })
+          }, { authorization: `Bearer ${tenantTok}` })
         );
       }
     }
@@ -448,7 +472,9 @@ function sendHttpRequest(port, method, reqPath, body = null) {
 
   await runTest('ADV-CONC-03', 'Concurrent read-while-writing race condition resilience (30 GET + 30 POST)', async () => {
     const raceShopId = 'SHOP-RACE-READWRITE-01';
-    await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', { shopId: raceShopId, action: 'ACTIVE' });
+    const raceTok = createSignedAuthToken({ storeCode: raceShopId, email: 'race@test.com', role: 'Owner' });
+    const raceHdr = { authorization: `Bearer ${raceTok}` };
+    await sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', { shopId: raceShopId, action: 'ACTIVE' }, raceHdr);
 
     const mixedPromises = [];
     for (let i = 0; i < 30; i++) {
@@ -457,7 +483,7 @@ function sendHttpRequest(port, method, reqPath, body = null) {
         sendHttpRequest(serverPort, 'POST', '/api/subscription/manage', {
           shopId: raceShopId,
           action: i % 2 === 0 ? 'PAUSED' : 'ACTIVE'
-        })
+        }, raceHdr)
       );
     }
 

@@ -4,43 +4,162 @@ service cloud.firestore {
 
     // Helper functions for Multi-Tenant Security & Dual-Path Compatibility
     function isValidTenant(id) {
-      return id is string && id.size() >= 3 && !id.matches('^\\s+$');
+      return id is string && id.size() >= 3 && !id.matches('^\\s+$') && id != '_auth';
     }
 
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function hasVerifiedEmail() {
+      return 'email' in request.auth.token &&
+             request.auth.token.email is string &&
+             request.auth.token.email.size() > 0 &&
+             'email_verified' in request.auth.token &&
+             request.auth.token.email_verified == true;
+    }
+
     function matchesTenantId(tenantId) {
       return ('storeCode' in request.auth.token && request.auth.token.storeCode is string && request.auth.token.storeCode == tenantId) ||
              ('cafe_id' in request.auth.token && request.auth.token.cafe_id is string && request.auth.token.cafe_id == tenantId) ||
+             ('cafeId' in request.auth.token && request.auth.token.cafeId is string && request.auth.token.cafeId == tenantId) ||
              ('shopId' in request.auth.token && request.auth.token.shopId is string && request.auth.token.shopId == tenantId);
     }
 
-    function matchesOwnerEmail() {
-      return (resource != null && 'ownerEmail' in resource.data && 'email' in request.auth.token && request.auth.token.email is string && resource.data.ownerEmail == request.auth.token.email) ||
-             (request.resource != null && 'ownerEmail' in request.resource.data && 'email' in request.auth.token && request.auth.token.email is string && request.resource.data.ownerEmail == request.auth.token.email);
+    function hasAdminOrOwnerClaim() {
+      return ('role' in request.auth.token && request.auth.token.role is string && (request.auth.token.role == 'admin' || request.auth.token.role == 'owner')) ||
+             ('isOwner' in request.auth.token && request.auth.token.isOwner == true);
     }
 
+    // Root-only email checks: NEVER trust request.resource.data.ownerEmail on updates or subcollections
+    function matchesExistingOwnerEmail() {
+      return hasVerifiedEmail() &&
+             resource != null &&
+             'ownerEmail' in resource.data &&
+             resource.data.ownerEmail is string &&
+             resource.data.ownerEmail.size() > 0 &&
+             resource.data.ownerEmail.lower() == request.auth.token.email.lower();
+    }
+
+    function matchesCreateOwnerEmail() {
+      return hasVerifiedEmail() &&
+             resource == null &&
+             request.resource != null &&
+             'ownerEmail' in request.resource.data &&
+             request.resource.data.ownerEmail is string &&
+             request.resource.data.ownerEmail.size() > 0 &&
+             request.resource.data.ownerEmail.lower() == request.auth.token.email.lower();
+    }
+
+    function preservesOwnerEmailOnUpdate() {
+      return ('ownerEmail' in resource.data && resource.data.ownerEmail is string && resource.data.ownerEmail.size() > 0)
+        ? ('ownerEmail' in request.resource.data && request.resource.data.ownerEmail is string && request.resource.data.ownerEmail.lower() == resource.data.ownerEmail.lower())
+        : (!('ownerEmail' in request.resource.data) ||
+           (hasVerifiedEmail() && request.resource.data.ownerEmail is string && request.resource.data.ownerEmail.lower() == request.auth.token.email.lower()) ||
+           ('isOwner' in request.auth.token && request.auth.token.isOwner == true) ||
+           ('role' in request.auth.token && request.auth.token.role is string && request.auth.token.role == 'owner'));
+    }
+
+    function docMatchesVerifiedOwnerEmail(docPath) {
+      return exists(docPath) &&
+             'ownerEmail' in get(docPath).data &&
+             get(docPath).data.ownerEmail is string &&
+             get(docPath).data.ownerEmail.size() > 0 &&
+             get(docPath).data.ownerEmail.lower() == request.auth.token.email.lower();
+    }
+
+    function matchesSiblingOrMissing(tenantId) {
+      return (!exists(/databases/$(database)/documents/cafes/$(tenantId)) || docMatchesVerifiedOwnerEmail(/databases/$(database)/documents/cafes/$(tenantId))) &&
+             (!exists(/databases/$(database)/documents/shops/$(tenantId)) || docMatchesVerifiedOwnerEmail(/databases/$(database)/documents/shops/$(tenantId))) &&
+             (!exists(/databases/$(database)/documents/clients/$(tenantId)) || docMatchesVerifiedOwnerEmail(/databases/$(database)/documents/clients/$(tenantId)));
+    }
+
+    function matchesParentOwnerEmail(tenantId) {
+      return hasVerifiedEmail() && (
+        docMatchesVerifiedOwnerEmail(/databases/$(database)/documents/cafes/$(tenantId)) ||
+        docMatchesVerifiedOwnerEmail(/databases/$(database)/documents/shops/$(tenantId)) ||
+        docMatchesVerifiedOwnerEmail(/databases/$(database)/documents/clients/$(tenantId))
+      );
+    }
+
+    // Root tenant document staff/admin helpers
+    function isRootStaff(tenantId) {
+      return isValidTenant(tenantId) && isAuthenticated() && (
+        matchesTenantId(tenantId) ||
+        matchesExistingOwnerEmail()
+      );
+    }
+
+    function isRootAdmin(tenantId) {
+      return isRootStaff(tenantId) && (
+        hasAdminOrOwnerClaim() ||
+        matchesExistingOwnerEmail()
+      );
+    }
+
+    // Subcollection staff/admin helpers (1-arg preserved for subcollection rules)
     function isTenantStaff(tenantId) {
       return isValidTenant(tenantId) && isAuthenticated() && (
         matchesTenantId(tenantId) ||
-        matchesOwnerEmail()
+        matchesParentOwnerEmail(tenantId)
       );
     }
 
     function isTenantAdmin(tenantId) {
       return isTenantStaff(tenantId) && (
-        ('role' in request.auth.token && request.auth.token.role is string && (request.auth.token.role == 'admin' || request.auth.token.role == 'owner')) ||
-        ('isOwner' in request.auth.token && request.auth.token.isOwner == true) ||
-        matchesOwnerEmail()
+        hasAdminOrOwnerClaim() ||
+        matchesParentOwnerEmail(tenantId)
       );
     }
 
     function isWithin30DayEditWindow() {
-      return !('createdAt' in resource.data) || 
-             (resource.data.createdAt is timestamp && request.time < resource.data.createdAt + duration.value(30, 'd')) ||
-             (resource.data.created_at is timestamp && request.time < resource.data.created_at + duration.value(30, 'd'));
+      return ('createdAt' in resource.data && resource.data.createdAt is timestamp && request.time < resource.data.createdAt + duration.value(30, 'd')) ||
+             ('created_at' in resource.data && resource.data.created_at is timestamp && request.time < resource.data.created_at + duration.value(30, 'd'));
+    }
+
+    function isValidInvoiceCreate() {
+      return (!('status' in request.resource.data) || request.resource.data.status == 'PAID' || request.resource.data.status == 'SETTLED') &&
+             (!('createdAt' in request.resource.data) || !(request.resource.data.createdAt is timestamp) || request.resource.data.createdAt <= request.time + duration.value(5, 'm')) &&
+             (!('created_at' in request.resource.data) || !(request.resource.data.created_at is timestamp) || request.resource.data.created_at <= request.time + duration.value(5, 'm'));
+    }
+
+    function isValidInvoiceVoidAudit() {
+      return (
+        'void_audit' in request.resource.data &&
+        request.resource.data.void_audit is map &&
+        'void_reason' in request.resource.data.void_audit &&
+        request.resource.data.void_audit.void_reason is string &&
+        request.resource.data.void_audit.void_reason.size() >= 3 &&
+        'voided_by_staff_id' in request.resource.data.void_audit &&
+        request.resource.data.void_audit.voided_by_staff_id is string &&
+        request.resource.data.void_audit.voided_by_staff_id.size() > 0 &&
+        'voided_at' in request.resource.data.void_audit &&
+        request.resource.data.void_audit.voided_at is string &&
+        request.resource.data.void_audit.voided_at.size() > 0
+      ) || (
+        'void_reason' in request.resource.data &&
+        request.resource.data.void_reason is string &&
+        request.resource.data.void_reason.size() >= 3 &&
+        'voided_by' in request.resource.data &&
+        request.resource.data.voided_by is string &&
+        request.resource.data.voided_by.size() > 0 &&
+        'voided_at' in request.resource.data &&
+        request.resource.data.voided_at is string &&
+        request.resource.data.voided_at.size() > 0
+      );
+    }
+
+    function hasNoBillingFields() {
+      return !('invoice' in request.resource.data) &&
+             !('billNo' in request.resource.data) &&
+             !('amount' in request.resource.data) &&
+             !('final_payable_paise' in request.resource.data) &&
+             !request.resource.data.keys().hasAny([
+               'bill_no', 'invoice_id', 'invoiceNo', 'invoice_no',
+               'final_total_paise', 'grandTotal', 'grand_total',
+               'paymentMode', 'payment_mode', 'subtotal', 'grossSubtotal',
+               'totalTax', 'tax', 'total', 'discount', 'discountAmount'
+             ]);
     }
 
     // ROOT HARDWARE DEVICES COLLECTION — STRICT ZERO-CLIENT ACCESS GATE
@@ -50,26 +169,39 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // INTERNAL OTP / AUTH STORE — STRICT ZERO-CLIENT ACCESS GATE
+    match /clients/_auth/{allChildren=**} {
+      allow read, write: if false;
+    }
+
     // Modern Multi-Tenant Root Collection (/cafes/{cafeId})
     match /cafes/{cafeId} {
-      allow read: if isTenantStaff(cafeId);
-      allow write: if isTenantAdmin(cafeId);
+      allow read: if isRootStaff(cafeId);
+      allow create: if isValidTenant(cafeId) && isAuthenticated() && (
+        (matchesTenantId(cafeId) && hasAdminOrOwnerClaim()) ||
+        (matchesCreateOwnerEmail() && matchesSiblingOrMissing(cafeId))
+      );
+      allow update: if (isRootAdmin(cafeId) && preservesOwnerEmailOnUpdate()) ||
+        (isRootStaff(cafeId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tables', 'updatedAt', 'updated_at']) &&
+         (!('tables' in request.resource.data) || request.resource.data.tables is map));
+      allow delete: if false;
 
       // INVOICE LEDGER — STRICT ANTI-TAMPERING INVARIANT & 30-DAY EDIT LOCK
       match /invoices/{invoiceId} {
-        allow read, create: if isTenantStaff(cafeId);
+        allow read: if isTenantStaff(cafeId);
+        allow create: if isTenantStaff(cafeId) && isValidInvoiceCreate();
         
         // PHYSICAL DELETION IS PERMANENTLY FORBIDDEN
         allow delete: if false;
         
-        // CANCEL / VOID MUTATION AUDIT
+        // CANCEL / VOID MUTATION AUDIT (Financial & identity fields strictly locked)
         allow update: if isTenantStaff(cafeId) &&
           isWithin30DayEditWindow() &&
-          resource.data.status == 'PAID' &&
+          (resource.data.status == 'PAID' || resource.data.status == 'SETTLED') &&
           request.resource.data.status == 'VOID' &&
-          request.resource.data.void_audit.void_reason is string &&
-          request.resource.data.void_audit.voided_by_staff_id is string &&
-          request.resource.data.void_audit.voided_at is string;
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'void_audit', 'void_reason', 'voided_by', 'voided_at', 'updatedAt', 'updated_at']) &&
+          isValidInvoiceVoidAudit();
       }
 
       // KITCHEN ORDER TICKETS (KOT)
@@ -89,18 +221,13 @@ service cloud.firestore {
         allow read: if isTenantStaff(cafeId);
         allow create: if isTenantStaff(cafeId) &&
           request.resource.data.jobType == 'KOT' &&
-          !('invoice' in request.resource.data) &&
-          !('billNo' in request.resource.data) &&
-          !('amount' in request.resource.data) &&
-          !('final_payable_paise' in request.resource.data) &&
+          hasNoBillingFields() &&
           request.resource.data.status == 'queued';
         allow update: if isTenantStaff(cafeId) &&
           resource.data.jobType == 'KOT' &&
           request.resource.data.jobType == 'KOT' &&
-          !('invoice' in request.resource.data) &&
-          !('billNo' in request.resource.data) &&
-          !('amount' in request.resource.data) &&
-          !('final_payable_paise' in request.resource.data) &&
+          hasNoBillingFields() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'leasedBy', 'leasedAt', 'attempts', 'printedAt', 'error', 'updatedAt', 'updated_at']) &&
           request.resource.data.status in ['queued', 'processing', 'printed', 'failed'];
         allow delete: if isTenantAdmin(cafeId);
       }
@@ -132,18 +259,13 @@ service cloud.firestore {
         allow read: if isTenantStaff(cafeId);
         allow create: if isTenantStaff(cafeId) &&
           request.resource.data.jobType == 'KOT' &&
-          !('invoice' in request.resource.data) &&
-          !('billNo' in request.resource.data) &&
-          !('amount' in request.resource.data) &&
-          !('final_payable_paise' in request.resource.data) &&
+          hasNoBillingFields() &&
           request.resource.data.status in ['queued', 'pending'];
         allow update: if isTenantStaff(cafeId) &&
           resource.data.jobType == 'KOT' &&
           request.resource.data.jobType == 'KOT' &&
-          !('invoice' in request.resource.data) &&
-          !('billNo' in request.resource.data) &&
-          !('amount' in request.resource.data) &&
-          !('final_payable_paise' in request.resource.data) &&
+          hasNoBillingFields() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'leasedBy', 'leasedAt', 'attempts', 'printedAt', 'error', 'updatedAt', 'updated_at']) &&
           request.resource.data.status in ['queued', 'pending', 'processing', 'printed', 'failed'];
         allow delete: if isTenantAdmin(cafeId);
       }
@@ -156,38 +278,50 @@ service cloud.firestore {
 
       // OPERATIONAL SUBCOLLECTIONS
       match /menu/{menuId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
+      match /menu_items/{menuId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
       match /menu_meta/{metaId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
       match /inventory/{itemId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /customers/{customerId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
+      match /khata_payments/{paymentId} { allow read, create: if isTenantStaff(cafeId); allow update, delete: if false; }
       match /expenses/{expenseId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /settings/{settingId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
       match /counters/{counterId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /khata/{khataId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /history/{historyId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
       match /raw_materials/{matId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
+      match /recipes/{recipeId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
+      match /stock_logs/{logId} { allow read, create: if isTenantStaff(cafeId); allow update, delete: if false; }
       match /sub_recipes/{recId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantStaff(cafeId); }
-      match /reports/{reportId} { allow read, write: if isTenantStaff(cafeId); }
-      match /daily_summaries/{summaryId} { allow read, write: if isTenantStaff(cafeId); }
-      match /marketing_logs/{logId} { allow read, write: if isTenantStaff(cafeId); }
-      match /quota/{quotaId} { allow read, write: if isTenantStaff(cafeId); }
+      match /reports/{reportId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
+      match /daily_summaries/{summaryId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
+      match /marketing_logs/{logId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
+      match /quota/{quotaId} { allow read: if isTenantStaff(cafeId); allow write: if isTenantAdmin(cafeId); }
     }
 
     // Aligned Dual-Path Backward-Compatibility Paths (/shops/{shopId})
     match /shops/{shopId} {
-      allow read: if isTenantStaff(shopId);
-      allow write: if isTenantAdmin(shopId);
+      allow read: if isRootStaff(shopId);
+      allow create: if isValidTenant(shopId) && isAuthenticated() && (
+        (matchesTenantId(shopId) && hasAdminOrOwnerClaim()) ||
+        (matchesCreateOwnerEmail() && matchesSiblingOrMissing(shopId))
+      );
+      allow update: if (isRootAdmin(shopId) && preservesOwnerEmailOnUpdate()) ||
+        (isRootStaff(shopId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tables', 'updatedAt', 'updated_at']) &&
+         (!('tables' in request.resource.data) || request.resource.data.tables is map));
+      allow delete: if false;
 
       // INVOICE LEDGER — STRICT ANTI-TAMPERING INVARIANT & 30-DAY EDIT LOCK
       match /invoices/{invoiceId} {
-        allow read, create: if isTenantStaff(shopId);
+        allow read: if isTenantStaff(shopId);
+        allow create: if isTenantStaff(shopId) && isValidInvoiceCreate();
         allow delete: if false;
         allow update: if isTenantStaff(shopId) &&
           isWithin30DayEditWindow() &&
-          resource.data.status == 'PAID' &&
+          (resource.data.status == 'PAID' || resource.data.status == 'SETTLED') &&
           request.resource.data.status == 'VOID' &&
-          request.resource.data.void_audit.void_reason is string &&
-          request.resource.data.void_audit.voided_by_staff_id is string &&
-          request.resource.data.void_audit.voided_at is string;
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'void_audit', 'void_reason', 'voided_by', 'voided_at', 'updatedAt', 'updated_at']) &&
+          isValidInvoiceVoidAudit();
       }
 
       // KITCHEN ORDER TICKETS (KOT)
@@ -207,18 +341,13 @@ service cloud.firestore {
         allow read: if isTenantStaff(shopId);
         allow create: if isTenantStaff(shopId) &&
           request.resource.data.jobType == 'KOT' &&
-          !('invoice' in request.resource.data) &&
-          !('billNo' in request.resource.data) &&
-          !('amount' in request.resource.data) &&
-          !('final_payable_paise' in request.resource.data) &&
+          hasNoBillingFields() &&
           request.resource.data.status == 'queued';
         allow update: if isTenantStaff(shopId) &&
           resource.data.jobType == 'KOT' &&
           request.resource.data.jobType == 'KOT' &&
-          !('invoice' in request.resource.data) &&
-          !('billNo' in request.resource.data) &&
-          !('amount' in request.resource.data) &&
-          !('final_payable_paise' in request.resource.data) &&
+          hasNoBillingFields() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'leasedBy', 'leasedAt', 'attempts', 'printedAt', 'error', 'updatedAt', 'updated_at']) &&
           request.resource.data.status in ['queued', 'processing', 'printed', 'failed'];
         allow delete: if isTenantAdmin(shopId);
       }
@@ -249,18 +378,13 @@ service cloud.firestore {
         allow read: if isTenantStaff(shopId);
         allow create: if isTenantStaff(shopId) &&
           request.resource.data.jobType == 'KOT' &&
-          !('invoice' in request.resource.data) &&
-          !('billNo' in request.resource.data) &&
-          !('amount' in request.resource.data) &&
-          !('final_payable_paise' in request.resource.data) &&
+          hasNoBillingFields() &&
           request.resource.data.status in ['queued', 'pending'];
         allow update: if isTenantStaff(shopId) &&
           resource.data.jobType == 'KOT' &&
           request.resource.data.jobType == 'KOT' &&
-          !('invoice' in request.resource.data) &&
-          !('billNo' in request.resource.data) &&
-          !('amount' in request.resource.data) &&
-          !('final_payable_paise' in request.resource.data) &&
+          hasNoBillingFields() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'leasedBy', 'leasedAt', 'attempts', 'printedAt', 'error', 'updatedAt', 'updated_at']) &&
           request.resource.data.status in ['queued', 'pending', 'processing', 'printed', 'failed'];
         allow delete: if isTenantAdmin(shopId);
       }
@@ -273,30 +397,150 @@ service cloud.firestore {
 
       // OPERATIONAL SUBCOLLECTIONS
       match /menu/{menuId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
+      match /menu_items/{menuId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
       match /menu_meta/{metaId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
       match /inventory/{itemId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /customers/{customerId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
+      match /khata_payments/{paymentId} { allow read, create: if isTenantStaff(shopId); allow update, delete: if false; }
       match /expenses/{expenseId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /settings/{settingId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
       match /counters/{counterId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /khata/{khataId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /history/{historyId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
       match /raw_materials/{matId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
+      match /recipes/{recipeId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
+      match /stock_logs/{logId} { allow read, create: if isTenantStaff(shopId); allow update, delete: if false; }
       match /sub_recipes/{recId} { allow read: if isTenantStaff(shopId); allow write: if isTenantStaff(shopId); }
-      match /reports/{reportId} { allow read, write: if isTenantStaff(shopId); }
-      match /daily_summaries/{summaryId} { allow read, write: if isTenantStaff(shopId); }
-      match /marketing_logs/{logId} { allow read, write: if isTenantStaff(shopId); }
-      match /quota/{quotaId} { allow read, write: if isTenantStaff(shopId); }
+      match /reports/{reportId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
+      match /daily_summaries/{summaryId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
+      match /marketing_logs/{logId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
+      match /quota/{quotaId} { allow read: if isTenantStaff(shopId); allow write: if isTenantAdmin(shopId); }
     }
 
-    // Legacy Client Collection (/clients/{clientId})
+    // Legacy Client Collection (/clients/{clientId}) — Replicated explicit subcollections, zero wildcards
     match /clients/{clientId} {
-      allow read: if isTenantStaff(clientId);
-      allow write: if isTenantAdmin(clientId);
-      match /{allChildren=**} {
+      allow read: if clientId != '_auth' && isRootStaff(clientId);
+      allow create: if clientId != '_auth' && isValidTenant(clientId) && isAuthenticated() && (
+        (matchesTenantId(clientId) && hasAdminOrOwnerClaim()) ||
+        (matchesCreateOwnerEmail() && matchesSiblingOrMissing(clientId))
+      );
+      allow update: if clientId != '_auth' && (
+        (isRootAdmin(clientId) && preservesOwnerEmailOnUpdate()) ||
+        (isRootStaff(clientId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tables', 'updatedAt', 'updated_at']) &&
+         (!('tables' in request.resource.data) || request.resource.data.tables is map))
+      );
+      allow delete: if false;
+
+      // INVOICE LEDGER — STRICT ANTI-TAMPERING INVARIANT & 30-DAY EDIT LOCK
+      match /invoices/{invoiceId} {
+        allow read: if isTenantStaff(clientId);
+        allow create: if isTenantStaff(clientId) && isValidInvoiceCreate();
+        allow delete: if false;
+        allow update: if isTenantStaff(clientId) &&
+          isWithin30DayEditWindow() &&
+          (resource.data.status == 'PAID' || resource.data.status == 'SETTLED') &&
+          request.resource.data.status == 'VOID' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'void_audit', 'void_reason', 'voided_by', 'voided_at', 'updatedAt', 'updated_at']) &&
+          isValidInvoiceVoidAudit();
+      }
+
+      // KITCHEN ORDER TICKETS (KOT)
+      match /kot/{kotId} {
+        allow read, create: if isTenantStaff(clientId);
+        allow delete: if false;
+        allow update: if isTenantStaff(clientId);
+      }
+      match /kots/{kotId} {
+        allow read, create: if isTenantStaff(clientId);
+        allow delete: if false;
+        allow update: if isTenantStaff(clientId);
+      }
+
+      // DISTRIBUTED CLOUD PRINT RELAY — EXCLUSIVELY FOR REMOTE KOT PRINTING
+      match /print_queue/{jobId} {
+        allow read: if isTenantStaff(clientId);
+        allow create: if isTenantStaff(clientId) &&
+          request.resource.data.jobType == 'KOT' &&
+          hasNoBillingFields() &&
+          request.resource.data.status == 'queued';
+        allow update: if isTenantStaff(clientId) &&
+          resource.data.jobType == 'KOT' &&
+          request.resource.data.jobType == 'KOT' &&
+          hasNoBillingFields() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'leasedBy', 'leasedAt', 'attempts', 'printedAt', 'error', 'updatedAt', 'updated_at']) &&
+          request.resource.data.status in ['queued', 'processing', 'printed', 'failed'];
+        allow delete: if isTenantAdmin(clientId);
+      }
+
+      match /tables/{tableId} {
         allow read: if isTenantStaff(clientId);
         allow write: if isTenantStaff(clientId);
       }
+
+      // DEVICE PAIRING & AUTHORIZATION
+      match /devices/{deviceId} {
+        allow read: if isTenantStaff(clientId);
+        allow write: if isTenantStaff(clientId);
+      }
+
+      // LIVE STAFF SESSIONS & PRESENCE
+      match /sessions/{sessionId} {
+        allow read: if isTenantStaff(clientId);
+        allow write: if isTenantStaff(clientId);
+      }
+      match /staffSessions/{staffId} {
+        allow read: if isTenantStaff(clientId);
+        allow write: if isTenantStaff(clientId);
+      }
+
+      // DISTRIBUTED CLOUD PRINT RELAY (CamelCase alias)
+      match /printQueue/{jobId} {
+        allow read: if isTenantStaff(clientId);
+        allow create: if isTenantStaff(clientId) &&
+          request.resource.data.jobType == 'KOT' &&
+          hasNoBillingFields() &&
+          request.resource.data.status in ['queued', 'pending'];
+        allow update: if isTenantStaff(clientId) &&
+          resource.data.jobType == 'KOT' &&
+          request.resource.data.jobType == 'KOT' &&
+          hasNoBillingFields() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'leasedBy', 'leasedAt', 'attempts', 'printedAt', 'error', 'updatedAt', 'updated_at']) &&
+          request.resource.data.status in ['queued', 'pending', 'processing', 'printed', 'failed'];
+        allow delete: if isTenantAdmin(clientId);
+      }
+
+      // STAFF DIRECTORY & PIN AUTH
+      match /staff/{staffId} {
+        allow read: if isTenantStaff(clientId);
+        allow write: if isTenantAdmin(clientId);
+      }
+
+      // OPERATIONAL SUBCOLLECTIONS
+      match /menu/{menuId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+      match /menu_items/{menuId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+      match /menu_meta/{metaId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+      match /inventory/{itemId} { allow read: if isTenantStaff(clientId); allow write: if isTenantStaff(clientId); }
+      match /customers/{customerId} { allow read: if isTenantStaff(clientId); allow write: if isTenantStaff(clientId); }
+      match /khata_payments/{paymentId} { allow read, create: if isTenantStaff(clientId); allow update, delete: if false; }
+      match /expenses/{expenseId} { allow read: if isTenantStaff(clientId); allow write: if isTenantStaff(clientId); }
+      match /settings/{settingId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+      match /counters/{counterId} { allow read: if isTenantStaff(clientId); allow write: if isTenantStaff(clientId); }
+      match /khata/{khataId} { allow read: if isTenantStaff(clientId); allow write: if isTenantStaff(clientId); }
+      match /history/{historyId} { allow read: if isTenantStaff(clientId); allow write: if isTenantStaff(clientId); }
+      match /raw_materials/{matId} { allow read: if isTenantStaff(clientId); allow write: if isTenantStaff(clientId); }
+      match /recipes/{recipeId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+      match /stock_logs/{logId} { allow read, create: if isTenantStaff(clientId); allow update, delete: if false; }
+      match /sub_recipes/{recId} { allow read: if isTenantStaff(clientId); allow write: if isTenantStaff(clientId); }
+      match /reports/{reportId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+      match /daily_summaries/{summaryId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+      match /marketing_logs/{logId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+      match /quota/{quotaId} { allow read: if isTenantStaff(clientId); allow write: if isTenantAdmin(clientId); }
+    }
+
+    // EXPLICIT DEFAULT DENY FOR ALL UNMAPPED PATHS
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

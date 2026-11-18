@@ -2,6 +2,10 @@
 // 👥 JS/STAFF.JS - Two-Tier POS Staff, Cryptographic PIN & RBAC
 // ============================================================
 
+const _staffEsc = (str) => (typeof escapeHtml === 'function')
+    ? escapeHtml(str)
+    : String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+
 // 🔑 Salted SHA-256 Cryptographic PIN Engine (Compatible with src/core/rbac.js)
 function generatePinSalt() {
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
@@ -250,10 +254,11 @@ function renderStaffManagementUI() {
     const esc = typeof escapeHtml === 'function' ? escapeHtml : (str => String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 
     tbody.innerHTML = staffList.map(staff => {
-        const initials = staff.name ? staff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
-        const roleCls = staff.role ? `role-${staff.role.toLowerCase()}` : 'role-cashier';
+        const safeNameRaw = String(staff.name || 'Staff');
+        const initials = safeNameRaw ? safeNameRaw.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
+        const roleCls = staff.role ? `role-${_staffEsc(String(staff.role).toLowerCase())}` : 'role-cashier';
         const isActive = staff.status !== 'Inactive' && staff.status !== 'Suspended';
-        const liveSess = sessions.find(s => String(s.staffId) === String(staff.id) || (s.staffName && s.staffName.toLowerCase() === staff.name.toLowerCase()));
+        const liveSess = sessions.find(s => String(s.staffId) === String(staff.id) || (s.staffName && s.staffName.toLowerCase() === safeNameRaw.toLowerCase()));
 
         // Resolve Assigned Terminal / Station Profile
         const staffDevId = staff.deviceId || staff.assignedDeviceId;
@@ -351,24 +356,25 @@ function renderStaffManagementUI() {
             `;
         }
 
+        const safeStaffId = esc(String(staff.id ?? ''));
         return `
             <tr>
                 <td>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="staff-avatar">${initials}</div>
+                        <div class="staff-avatar">${esc(initials)}</div>
                         <div>
-                            <strong style="font-size: 14px; color: var(--text-dark);">${staff.name}</strong>
-                            ${staff.id === currentStaff?.id ? '<span style="margin-left: 6px; font-size: 10px; background: rgba(74, 51, 42, 0.1); color: var(--primary); padding: 2px 6px; border-radius: 4px; font-weight: 700;">ACTIVE SESSION</span>' : ''}
+                            <strong style="font-size: 14px; color: var(--text-dark);">${esc(staff.name || '')}</strong>
+                            ${String(staff.id) === String(currentStaff?.id) ? '<span style="margin-left: 6px; font-size: 10px; background: rgba(74, 51, 42, 0.1); color: var(--primary); padding: 2px 6px; border-radius: 4px; font-weight: 700;">ACTIVE SESSION</span>' : ''}
                         </div>
                     </div>
                 </td>
                 <td>
-                    <span class="staff-badge ${roleCls}">${staff.role}</span>
+                    <span class="staff-badge ${roleCls}">${esc(staff.role || '')}</span>
                     <span style="display: block; font-size: 10px; color: var(--text-muted); font-weight: 600; margin-top: 3px;">Station: ${esc(stationLabel)}</span>
                 </td>
                 <td>${terminalDisplay}</td>
                 <td style="font-size: 13px;">
-                    <div>${staff.phone || '-'}</div>
+                    <div>${esc(staff.phone || '-')}</div>
                     <span style="font-family: monospace; letter-spacing: 2px; font-size: 11px; color: var(--text-muted);">••••</span>
                 </td>
                 <td>
@@ -376,8 +382,8 @@ function renderStaffManagementUI() {
                     ${presenceBadge}
                 </td>
                 <td>
-                    <button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; display: inline-flex; align-items: center; gap: 4px;" onclick="openEditStaffModal(${staff.id})"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg><span>Edit</span></button>
-                    ${staff.role !== 'Admin' ? `<button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; color: var(--danger); border-color: var(--danger); display: inline-flex; align-items: center; justify-content: center;" onclick="deleteStaffMember(${staff.id})" title="Delete Staff Member"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>` : ''}
+                    <button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; display: inline-flex; align-items: center; gap: 4px;" data-staff-id="${safeStaffId}" onclick="openEditStaffModal(this.dataset.staffId)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg><span>Edit</span></button>
+                    ${staff.role !== 'Admin' ? `<button class="btn btn-outline" style="padding: 5px 10px; font-size: 12px; color: var(--danger); border-color: var(--danger); display: inline-flex; align-items: center; justify-content: center;" data-staff-id="${safeStaffId}" onclick="deleteStaffMember(this.dataset.staffId)" title="Delete Staff Member"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>` : ''}
                 </td>
             </tr>
         `;
@@ -396,8 +402,8 @@ function renderLoginStaffPicker() {
 
     // Smart Defaults: Station Profile matching (KDS -> Kitchen Chef, WAITER_MOBILE -> Floor Server) or last active staff
     const stationProfile = (typeof localStorage !== 'undefined') ? localStorage.getItem('billnaw_station_profile') : null;
-    const savedStaffId = parseInt(localStorage.getItem('billnaw_last_staff_id'), 10);
-    if (!selectedLoginStaffId || !staffList.some(s => s.id === selectedLoginStaffId)) {
+    const savedStaffId = (typeof localStorage !== 'undefined') ? localStorage.getItem('billnaw_last_staff_id') : null;
+    if (!selectedLoginStaffId || !staffList.some(s => String(s.id) === String(selectedLoginStaffId))) {
         if (stationProfile === 'KDS') {
             const chef = staffList.find(s => s.role === 'Kitchen Chef' || s.role === 'Chef');
             if (chef) selectedLoginStaffId = chef.id;
@@ -405,9 +411,10 @@ function renderLoginStaffPicker() {
             const waiter = staffList.find(s => s.role === 'Floor Server' || s.role === 'Server');
             if (waiter) selectedLoginStaffId = waiter.id;
         }
-        if (!selectedLoginStaffId) {
-            if (savedStaffId && staffList.some(s => s.id === savedStaffId)) {
-                selectedLoginStaffId = savedStaffId;
+        if (!selectedLoginStaffId || !staffList.some(s => String(s.id) === String(selectedLoginStaffId))) {
+            if (savedStaffId && staffList.some(s => String(s.id) === String(savedStaffId))) {
+                const matchedSaved = staffList.find(s => String(s.id) === String(savedStaffId));
+                selectedLoginStaffId = matchedSaved ? matchedSaved.id : staffList[0].id;
             } else if (staffList.length > 0) {
                 selectedLoginStaffId = staffList[0].id;
             }
@@ -416,13 +423,14 @@ function renderLoginStaffPicker() {
 
     container.innerHTML = staffList.map(staff => {
         const initials = staff.name ? staff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
-        const roleCls = staff.role ? `role-${staff.role.toLowerCase()}` : 'role-cashier';
-        const isSelected = (staff.id === selectedLoginStaffId);
+        const roleCls = staff.role ? `role-${_staffEsc(String(staff.role).toLowerCase())}` : 'role-cashier';
+        const isSelected = (String(staff.id) === String(selectedLoginStaffId));
+        const safeStaffId = _staffEsc(String(staff.id ?? ''));
         return `
-            <div class="staff-card ${isSelected ? 'selected' : ''}" onclick="selectLoginStaff(${staff.id})">
-                <div class="staff-avatar" style="margin: 0 auto 6px auto;">${initials}</div>
-                <div class="staff-name">${staff.name}</div>
-                <div style="margin-top: 4px;"><span class="staff-badge ${roleCls}">${staff.role}</span></div>
+            <div class="staff-card ${isSelected ? 'selected' : ''}" data-staff-id="${safeStaffId}" onclick="selectLoginStaff(this.dataset.staffId)">
+                <div class="staff-avatar" style="margin: 0 auto 6px auto;">${_staffEsc(initials)}</div>
+                <div class="staff-name">${_staffEsc(staff.name || '')}</div>
+                <div style="margin-top: 4px;"><span class="staff-badge ${roleCls}">${_staffEsc(staff.role || '')}</span></div>
             </div>
         `;
     }).join('');
@@ -539,11 +547,9 @@ function unlockTerminal(staff, showWelcomeToast = true) {
 
     currentStaff = staff;
     window.currentStaff = currentStaff;
-    if (currentStaff.role === 'Admin' || currentStaff.role === 'Manager') {
-        currentRole = 'admin';
-    } else {
-        currentRole = 'staff';
-    }
+    const normUnlockRole = (typeof normalizeRole === 'function') ? normalizeRole(currentStaff.role) : currentStaff.role;
+    currentRole = (normUnlockRole === ROLES.ADMIN) ? 'admin' : 'staff';
+    if (typeof window !== 'undefined') window.currentRole = currentRole;
 
     // Milestone 4: Staff Session Lifecycle & Cloud Sync
     const devId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id') || 'DEV_MASTER');
@@ -822,9 +828,10 @@ window.lockTerminalByRemote = lockTerminalByRemote;
 async function remoteLockStaffSession(sessionId) {
     if (!sessionId) return { error: { code: 'INVALID_ID', message: 'sessionId is required' } };
 
-    // RBAC validation: only Admin can execute remote lock
-    const canManage = (currentStaff && (currentStaff.role === 'Admin' || hasPermission(currentStaff, 'can_manage_staff'))) ||
-                      (currentRole === 'admin') ||
+    // RBAC validation: only Admin or authorized staff with can_manage_staff can execute remote lock
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    const canManage = (active && (normalizeRole(active.role) === ROLES.ADMIN || hasPermission(active, 'can_manage_staff'))) ||
+                      (!active && currentRole === 'admin') ||
                       (typeof isMasterTerminal === 'function' && isMasterTerminal()) ||
                       (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true');
     if (!canManage) {
@@ -982,8 +989,8 @@ function renderLiveSessionCards() {
         }
 
         const durationStr = formatShiftDuration(s.shiftStartedAt);
-        const roleClean = String(staffRole).toLowerCase().replace(/\s+/g, '-');
-        const roleBadgeClass = `staff-badge role-${roleClean}`;
+        const roleClean = String(staffRole).toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+        const roleBadgeClass = `staff-badge role-${esc(roleClean)}`;
 
         let actionHtml = '';
         if (isMasterDevice) {
@@ -994,7 +1001,7 @@ function renderLiveSessionCards() {
             actionHtml = `<span class="presence-dot locked" style="margin-right: 4px;"></span><span style="font-size: 11px; font-weight: 700; color: var(--danger);">Remotely Locked</span>`;
         } else {
             actionHtml = `
-                <button type="button" class="btn btn-outline session-remote-lock-btn" onclick="remoteLockStaffSession('${esc(s.sessionId)}')" aria-label="Remote Lock ${esc(staffName)}">
+                <button type="button" class="btn btn-outline session-remote-lock-btn" data-session-id="${esc(String(s.sessionId || ''))}" onclick="remoteLockStaffSession(this.dataset.sessionId)" aria-label="Remote Lock ${esc(staffName)}">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                         <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
@@ -1010,7 +1017,7 @@ function renderLiveSessionCards() {
                     <div class="session-avatar">${esc(initials)}</div>
                     <div style="flex: 1; min-width: 0;">
                         <div class="session-meta-name">
-                            <span class="${dotClass}" title="${statusTitle}"></span>
+                            <span class="${dotClass}" title="${esc(statusTitle)}"></span>
                             <span>${esc(staffName)}</span>
                             <span class="${roleBadgeClass}" style="font-size: 10px; padding: 2px 7px; border-radius: 8px;">${esc(staffRole)}</span>
                         </div>
@@ -1054,15 +1061,16 @@ function quickStaffLoginAsSelected() {
 }
 window.quickStaffLoginAsSelected = quickStaffLoginAsSelected;
 
-function updateStaffTopbarDisplay() {
+function updateStaffTopbarDisplay(staffNameArg = null, staffRoleArg = null) {
     const el = document.getElementById('activeStaffName');
     const slideStaffName = document.getElementById('slideStaffName');
     const popoverStaffName = document.getElementById('popoverStaffName');
-    const roleBadge = currentStaff ? currentStaff.role : 'Admin';
-    const name = currentStaff ? currentStaff.name : 'Admin';
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    const roleBadge = staffRoleArg || (active && active.role) || 'Locked';
+    const name = staffNameArg || (active && active.name) || 'Locked';
 
     if (el) {
-        el.innerHTML = `${name} <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: rgba(20,56,50,0.1); color: var(--primary); margin-left: 4px;">${roleBadge}</span>`;
+        el.innerHTML = `${_staffEsc(name)} <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: rgba(20,56,50,0.1); color: var(--primary); margin-left: 4px;">${_staffEsc(roleBadge)}</span>`;
     }
     if (slideStaffName) slideStaffName.innerText = `${name} (${roleBadge})`;
     if (popoverStaffName) popoverStaffName.innerText = `${name} (${roleBadge})`;
@@ -1106,7 +1114,7 @@ function selectQuickSwitchStaff(staffId) {
     const list = document.getElementById('quickSwitchStaffList');
     if (list) {
         list.querySelectorAll('.staff-card').forEach(card => card.classList.remove('selected'));
-        const selectedCard = list.querySelector(`[data-staff-id="${staffId}"]`);
+        const selectedCard = Array.from(list.querySelectorAll('.staff-card')).find(c => c.getAttribute('data-staff-id') === String(staffId));
         if (selectedCard) selectedCard.classList.add('selected');
     }
     const pinInput = document.getElementById('quickSwitchPinInput');
@@ -1129,13 +1137,14 @@ function openStaffSwitchModal() {
     if (list && staffSource.length > 0) {
         list.innerHTML = staffSource.map(staff => {
             const initials = staff.name ? staff.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
-            const roleCls = staff.role ? `role-${staff.role.toLowerCase()}` : 'role-cashier';
-            const isSelected = (staff.id === selectedLoginStaffId);
+            const roleCls = staff.role ? `role-${_staffEsc(String(staff.role).toLowerCase())}` : 'role-cashier';
+            const isSelected = (String(staff.id) === String(selectedLoginStaffId));
+            const safeStaffId = _staffEsc(String(staff.id ?? ''));
             return `
-                <div class="staff-card ${isSelected ? 'selected' : ''}" data-staff-id="${staff.id}" onclick="selectQuickSwitchStaff(${staff.id}); document.getElementById('quickSwitchPinInput').focus();">
-                    <div class="staff-avatar" style="margin: 0 auto 6px auto;">${initials}</div>
-                    <div class="staff-name">${staff.name}</div>
-                    <div style="margin-top: 4px;"><span class="staff-badge ${roleCls}">${staff.role}</span></div>
+                <div class="staff-card ${isSelected ? 'selected' : ''}" data-staff-id="${safeStaffId}" onclick="selectQuickSwitchStaff(this.dataset.staffId); document.getElementById('quickSwitchPinInput')?.focus();">
+                    <div class="staff-avatar" style="margin: 0 auto 6px auto;">${_staffEsc(initials)}</div>
+                    <div class="staff-name">${_staffEsc(staff.name || '')}</div>
+                    <div style="margin-top: 4px;"><span class="staff-badge ${roleCls}">${_staffEsc(staff.role || '')}</span></div>
                 </div>
             `;
         }).join('');
@@ -1153,7 +1162,7 @@ async function confirmQuickStaffSwitch() {
     const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList) && window.staffList.length > 0)
         ? window.staffList
         : (typeof staffList !== 'undefined' && Array.isArray(staffList) ? staffList : []);
-    const matchedStaff = staffSource.find(s => s.id === selectedLoginStaffId) || (staffSource.length > 0 ? staffSource[0] : null);
+    const matchedStaff = staffSource.find(s => String(s.id) === String(selectedLoginStaffId)) || (staffSource.length > 0 ? staffSource[0] : null);
     if (!matchedStaff) {
         showToast("Select a staff member.");
         return false;
@@ -1512,8 +1521,13 @@ async function saveStaffMember(data = null) {
             savedStaff = staffList[idx];
             showToast(`Staff member ${name} (${role}) updated.`);
         } else {
+            const effectivePin = pin || (typeof generateSecureUniqueStaffPin === 'function' ? generateSecureUniqueStaffPin() : null);
+            if (!effectivePin) {
+                if (typeof showToast === 'function') showToast('A valid 4-digit PIN is required for new staff members.', 'error');
+                return false;
+            }
             const salt = generatePinSalt();
-            const pinHash = await hashPin(pin || '1234', salt);
+            const pinHash = await hashPin(effectivePin, salt);
             const mustChange = (data && data.mustChangePin !== undefined) ? data.mustChangePin : (role !== ROLES.ADMIN);
             const newStaff = {
                 id: existingId,
@@ -1525,7 +1539,7 @@ async function saveStaffMember(data = null) {
                 pin_hash: pinHash,
                 pinSalt: salt,
                 pinHash: pinHash,
-                initialOtp: mustChange ? pin : undefined,
+                initialOtp: mustChange ? effectivePin : undefined,
                 otpHash: mustChange ? pinHash : null,
                 mustChangePin: mustChange,
                 otpConsumed: !mustChange,
@@ -1704,11 +1718,13 @@ async function deleteStaffMember(id) {
 }
 window.deleteStaffMember = deleteStaffMember;
 
-function loginAsStaff() { 
-    currentRole = 'staff'; 
-    document.getElementById('loginOverlay').style.display = 'none'; 
-    enforcePermissions(); 
-    showToast("Logged in as Staff"); 
+function loginAsStaff() {
+    if (typeof showToast === 'function') {
+        showToast("Strict RBAC active: PIN entry required to unlock terminal.", "warning");
+    }
+    const pinInput = document.getElementById('staffLoginPinInput');
+    if (pinInput) pinInput.focus();
+    return false;
 }
 window.loginAsStaff = loginAsStaff;
 
@@ -1825,7 +1841,7 @@ window.lockSystem = lockSystem;
 
 // 🔒 RBAC Access Verification & UI Guards
 function canStaffAccessTab(staff, tabId) {
-    if (!staff || !staff.role) return true;
+    if (!staff || !staff.role || !tabId) return false;
     const normRole = normalizeRole(staff.role);
 
     if (normRole === ROLES.ADMIN) return true;
@@ -1837,7 +1853,7 @@ function canStaffAccessTab(staff, tabId) {
     }
 
     if (normRole === ROLES.CASHIER) {
-        return ['pos', 'tables', 'customers', 'khata', 'menu'].includes(tabId);
+        return ['pos', 'tables', 'customers', 'khata'].includes(tabId);
     }
 
     if (normRole === ROLES.CHEF) {
@@ -1852,9 +1868,8 @@ function canStaffAccessTab(staff, tabId) {
 }
 window.canStaffAccessTab = canStaffAccessTab;
 
-function enforcePermissions() { 
-    const normRole = (currentStaff && currentStaff.role) ? normalizeRole(currentStaff.role) : ROLES.ADMIN;
-
+function enforcePermissions() {
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
     const navMenu = document.getElementById('nav-menu');
     const navSettings = document.getElementById('nav-settings');
     const navReports = document.getElementById('nav-dashboard');
@@ -1862,6 +1877,21 @@ function enforcePermissions() {
     const navKhata = document.getElementById('nav-khata');
     const navTables = document.getElementById('nav-tables');
     const navCustomers = document.getElementById('nav-customers');
+    const navKds = document.getElementById('nav-kds');
+
+    if (!active || !active.role) {
+        ['nav-menu', 'nav-settings', 'nav-dashboard', 'nav-inventory', 'nav-khata', 'nav-tables', 'nav-customers'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('locked');
+        });
+        if (navKds) navKds.style.display = 'none';
+        if (typeof applySettingsRoleRestrictions === 'function') {
+            applySettingsRoleRestrictions();
+        }
+        return;
+    }
+
+    const normRole = normalizeRole(active.role);
 
     if (normRole === ROLES.ADMIN) {
         ['nav-menu', 'nav-settings', 'nav-dashboard', 'nav-inventory', 'nav-khata', 'nav-tables', 'nav-customers'].forEach(id => {
@@ -1882,7 +1912,7 @@ function enforcePermissions() {
         if (navReports) navReports.classList.add('locked');
         if (navSettings) navSettings.classList.add('locked');
         if (navInventory) navInventory.classList.add('locked');
-        if (navMenu) navMenu.classList.remove('locked');
+        if (navMenu) navMenu.classList.add('locked');
         if (navKhata) navKhata.classList.remove('locked');
         if (navTables) navTables.classList.remove('locked');
         if (navCustomers) navCustomers.classList.remove('locked');
@@ -1909,7 +1939,6 @@ function enforcePermissions() {
     }
 
     // Dynamic KDS Role Presentation: present solely for Chef or for Supervisor on KDS-assigned terminal
-    const navKds = document.getElementById('nav-kds');
     if (navKds) {
         const isKdsStation = (typeof getStationProfile === 'function' ? getStationProfile() : (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_station_profile') : null)) === 'KDS';
         if (normRole === ROLES.CHEF || (isKdsStation && (normRole === ROLES.ADMIN || normRole === ROLES.MANAGER))) {
@@ -2243,10 +2272,10 @@ async function submitAdminForgotPinOtpRequest() {
                 setTimeout(() => otpInput.focus(), 80);
             }
         } else {
-            if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">${data.error || 'Failed to dispatch verification code.'}</span>`;
+            if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">${_staffEsc(data.error || 'Failed to dispatch verification code.')}</span>`;
         }
     } catch (err) {
-        if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Network error: ${err.message}</span>`;
+        if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Network error: ${_staffEsc(err.message)}</span>`;
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -2333,7 +2362,7 @@ async function submitAdminForgotPinReset() {
         if (newPinInput) newPinInput.focus();
         return;
     }
-    if (/^(\d)\1{3}$/.test(newPin) || newPin === '1234' || newPin === '4321' || newPin === '1111' || newPin === '0000') {
+    if (/^(\d)\1{3}$/.test(newPin) || ['0000', '1111', '1234', '4321', '0123', '9876'].includes(newPin)) {
         if (fb) fb.innerHTML = '<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Please choose a stronger, non-trivial PIN (avoid 0000, 1111, 1234, etc.).</span>';
         if (newPinInput) newPinInput.focus();
         return;
@@ -2365,7 +2394,7 @@ async function submitAdminForgotPinReset() {
     }
 
     const preservedRole = normalizeRole(targetStaff.role || 'Admin');
-    if (fb) fb.innerHTML = `<span style="color: var(--primary); font-size: 12px;">Verifying &amp; resetting PIN for ${targetStaff.name} (${preservedRole})...</span>`;
+    if (fb) fb.innerHTML = `<span style="color: var(--primary); font-size: 12px;">Verifying &amp; resetting PIN for ${_staffEsc(targetStaff.name)} (${_staffEsc(preservedRole)})...</span>`;
     if (btn) btn.disabled = true;
 
     try {
@@ -2386,7 +2415,11 @@ async function submitAdminForgotPinReset() {
         const data = await res.json();
 
         if (data.success) {
-            const validPinHash = data.adminPinHash || (typeof hashString === 'function' ? hashString(newPin) : '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4');
+            const salt = data.pinSalt || (typeof generatePinSalt === 'function' ? generatePinSalt() : null);
+            if (!salt) throw new Error('Unable to generate cryptographic salt for PIN reset.');
+            const saltedHash = data.pinHash || (typeof hashPin === 'function' ? await hashPin(newPin, salt) : null);
+            if (!saltedHash) throw new Error('Unable to hash reset PIN securely.');
+            const validPinHash = data.adminPinHash || (typeof hashString === 'function' ? hashString(newPin) : saltedHash);
             if (preservedRole === 'Admin') {
                 if (typeof shopProfile !== 'undefined') {
                     if (!shopProfile) shopProfile = {};
@@ -2396,9 +2429,6 @@ async function submitAdminForgotPinReset() {
                     localStorage.setItem('billnaw_admin_pin_hash', validPinHash);
                 } catch(e) {}
             }
-
-            const salt = data.pinSalt || (typeof generatePinSalt === 'function' ? generatePinSalt() : 'a1b2c3d4e5f67890');
-            const saltedHash = data.pinHash || (typeof hashPin === 'function' ? await hashPin(newPin, salt) : validPinHash);
             const derivedStationProfile = targetStaff.stationProfile || (
                 preservedRole === ROLES.CHEF ? 'KDS' :
                 (preservedRole === ROLES.SERVER ? 'WAITER_MOBILE' :
@@ -2460,10 +2490,10 @@ async function submitAdminForgotPinReset() {
 
             showToast(`${targetStaff.name} (${preservedRole}) PIN updated & synced! Welcome back.`, "success");
         } else {
-            if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">${data.error || 'Failed to reset PIN.'}</span>`;
+            if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">${_staffEsc(data.error || 'Failed to reset PIN.')}</span>`;
         }
     } catch (err) {
-        if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Network error: ${err.message}</span>`;
+        if (fb) fb.innerHTML = `<span style="color: #DC2626; font-size: 12px; font-weight: 600;">Network error: ${_staffEsc(err.message)}</span>`;
     } finally {
         if (btn) btn.disabled = false;
     }

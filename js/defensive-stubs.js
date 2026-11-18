@@ -25,6 +25,14 @@ window.toggleKdsSound = function() {
     if (disabled && typeof playKdsAudioChime === 'function') playKdsAudioChime();
 };
 window.openStatementModal = function() {
+    if (typeof checkFloorServerModalBlock === 'function' && checkFloorServerModalBlock('statementModal')) return;
+    if (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role) {
+        const norm = (typeof normalizeRole === 'function') ? normalizeRole(currentStaff.role) : currentStaff.role;
+        if (norm !== 'Admin') {
+            if (typeof showToast === 'function') showToast('Admin authorization required to view statements.', 'error');
+            return;
+        }
+    }
     const modal = document.getElementById('statementModal');
     if (modal) {
         modal.style.display = 'flex';
@@ -36,6 +44,7 @@ window.closeStatementModal = function() {
     if (modal) modal.style.display = 'none';
 };
 window.openSwitchStoreModal = function() {
+    if (typeof checkFloorServerModalBlock === 'function' && checkFloorServerModalBlock('switchStoreModal')) return;
     const modal = document.getElementById('switchStoreModal');
     if (modal) {
         modal.style.display = 'flex';
@@ -47,10 +56,17 @@ window.openSwitchStoreModal = function() {
     }
 };
 window.confirmSwitchShopCode = async function() {
+    if (typeof checkFloorServerModalBlock === 'function' && checkFloorServerModalBlock('switchStoreModal')) return;
     const input = document.getElementById('targetStoreCodeInput');
     const newCode = (input ? input.value : '').trim().toUpperCase();
-    if (!newCode) {
-        if (typeof showToast === 'function') showToast('Please enter a valid Shop Store Code.', 'error');
+    if (!/^[A-Z0-9_-]{3,64}$/.test(newCode)) {
+        if (typeof showToast === 'function') showToast('Please enter a valid Shop Store Code (3-64 chars).', 'error');
+        return;
+    }
+    const activeToken = localStorage.getItem('billnaw_auth_token') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('billnaw_auth_token') : null);
+    if (!activeToken || localStorage.getItem('billnaw_auth_mode') !== 'authenticated') {
+        if (typeof showToast === 'function') showToast('Please sign in before switching stores.', 'error');
+        if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
         return;
     }
     const modal = document.getElementById('switchStoreModal');
@@ -58,11 +74,7 @@ window.confirmSwitchShopCode = async function() {
     if (typeof switchActiveShopCloudStore === 'function') {
         await switchActiveShopCloudStore(newCode);
     } else {
-        if (typeof shopProfile !== 'undefined') shopProfile.storeCode = newCode;
-        localStorage.setItem('bongbhoj_client_id', newCode);
-        localStorage.setItem('billnaw_store_code', newCode);
-        if (typeof showToast === 'function') showToast('Connected to store: ' + newCode + '. Syncing...', 'success');
-        setTimeout(() => window.location.reload(), 400);
+        if (typeof showToast === 'function') showToast('Store switcher is initializing. Please try again.', 'warning');
     }
 };
 window.forceCheckAppUpdate = async function() {
@@ -119,9 +131,35 @@ window.promptAdminAuthorizeTerminal = async function() {
     const pin = prompt("Enter 4-Digit Admin PIN to authorize this terminal:");
     if (!pin) return;
     const cleanPin = pin.trim();
-    const isAdminPin = (typeof hashString === 'function' && hashString(cleanPin) === shopProfile?.adminPinHash) ||
-        (cleanPin === '1234') ||
-        (typeof staffList !== 'undefined' && Array.isArray(staffList) && staffList.some(s => s.role === 'Admin' && s.pin === cleanPin));
+    const hasStoredAdminPin = Boolean(
+        (typeof shopProfile !== 'undefined' && shopProfile?.adminPinHash) ||
+        localStorage.getItem('billnaw_admin_pin_hash') ||
+        (typeof staffList !== 'undefined' && Array.isArray(staffList) && staffList.some(s => s && s.role === 'Admin' && (s.pin_hash || s.pinHash || s.pin)))
+    );
+    let isAdminPin = false;
+    if (typeof verifyAdminPin === 'function') {
+        isAdminPin = await verifyAdminPin(cleanPin);
+    } else {
+        const storedHash = (typeof shopProfile !== 'undefined' && shopProfile?.adminPinHash) || localStorage.getItem('billnaw_admin_pin_hash');
+        if (storedHash && typeof hashString === 'function' && hashString(cleanPin) === storedHash) {
+            isAdminPin = true;
+        } else if (!hasStoredAdminPin && cleanPin === '1234') {
+            isAdminPin = true;
+        }
+    }
+    if (!isAdminPin && typeof staffList !== 'undefined' && Array.isArray(staffList)) {
+        for (const s of staffList) {
+            if (s && s.role === 'Admin') {
+                if (typeof verifyStaffPin === 'function' && await verifyStaffPin(s, cleanPin)) {
+                    isAdminPin = true;
+                    break;
+                } else if (s.pin && s.pin === cleanPin) {
+                    isAdminPin = true;
+                    break;
+                }
+            }
+        }
+    }
 
     if (isAdminPin) {
         if (typeof setMasterTerminal === 'function') setMasterTerminal(true);

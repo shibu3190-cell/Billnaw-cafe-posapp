@@ -1,6 +1,10 @@
 // js/cloud-sync.js - Multi-Device Staff Profile Gateway, Real-Time Presence & Background Sync
 'use strict';
 
+const _csEsc = (str) => (typeof escapeHtml === 'function')
+    ? escapeHtml(str)
+    : String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+
 // ============================================================================
 // 1. CLOUD SYNC LOADING OVERLAY (Full-Screen Branded Hydration Screen)
 // ============================================================================
@@ -18,8 +22,8 @@ function showCloudSyncOverlay(message = 'Syncing Shop Profile, Menu & Active Tab
                     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
                 </svg>
             </div>
-            <h2 style="font-size:22px;font-weight:800;margin:0 0 8px 0;letter-spacing:0.5px;">${activeShopName} Cloud Sync</h2>
-            <p id="cloudSyncStatus" style="font-size:14px;color:rgba(255,255,255,0.78);margin:0 0 24px 0;max-width:320px;line-height:1.4;">${message}</p>
+            <h2 style="font-size:22px;font-weight:800;margin:0 0 8px 0;letter-spacing:0.5px;">${_csEsc(activeShopName)} Cloud Sync</h2>
+            <p id="cloudSyncStatus" style="font-size:14px;color:rgba(255,255,255,0.78);margin:0 0 24px 0;max-width:320px;line-height:1.4;">${_csEsc(message)}</p>
             <div style="width:240px;height:6px;background:rgba(255,255,255,0.12);border-radius:99px;overflow:hidden;position:relative;">
                 <div id="cloudSyncBar" style="height:100%;width:15%;background:linear-gradient(90deg,#E05A38,#FF7A59);border-radius:99px;transition:width 0.35s ease;"></div>
             </div>
@@ -115,13 +119,13 @@ function _renderStaffProfileCards() {
                            (staff.role === 'Floor Server' || staff.role === 'Server') ? '#E05A38' : '#C77E1A';
 
         return `
-            <div class="staff-gateway-card" onclick="onStaffProfileSelected('${staff.id}', '${encodeURIComponent(staff.name)}', '${encodeURIComponent(staff.role)}')" style="background:#FFFFFF;border:1.5px solid #E2E8F0;border-radius:16px;padding:16px 12px;text-align:center;cursor:pointer;position:relative;transition:all 0.2s ease;box-shadow:0 4px 14px rgba(0,0,0,0.04);">
+            <div class="staff-gateway-card" data-staff-id="${_csEsc(String(staff.id))}" data-staff-name="${_csEsc(staff.name || '')}" data-staff-role="${_csEsc(staff.role || '')}" onclick="onStaffProfileSelected(this.dataset.staffId, encodeURIComponent(this.dataset.staffName || ''), encodeURIComponent(this.dataset.staffRole || ''))" style="background:#FFFFFF;border:1.5px solid #E2E8F0;border-radius:16px;padding:16px 12px;text-align:center;cursor:pointer;position:relative;transition:all 0.2s ease;box-shadow:0 4px 14px rgba(0,0,0,0.04);">
                 <div style="position:relative;width:52px;height:52px;margin:0 auto 10px auto;">
-                    <div style="width:52px;height:52px;border-radius:16px;background:${roleBorder};color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;">${initials}</div>
+                    <div style="width:52px;height:52px;border-radius:16px;background:${roleBorder};color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;">${_csEsc(initials)}</div>
                     <span style="position:absolute;bottom:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:${isOnline ? '#22C55E' : '#94A3B8'};border:2px solid #FFFFFF;"></span>
                 </div>
-                <div style="font-weight:700;font-size:14px;color:#1E293B;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${staff.name}</div>
-                <span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;${roleBadgeCls}">${staff.role}</span>
+                <div style="font-weight:700;font-size:14px;color:#1E293B;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_csEsc(staff.name)}</div>
+                <span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;${roleBadgeCls}">${_csEsc(staff.role)}</span>
             </div>
         `;
     }).join('');
@@ -144,9 +148,10 @@ function onStaffProfileSelected(staffId, encodedName, encodedRole) {
 
     if (pinNameEl) pinNameEl.innerText = staffName;
     if (promptTextEl) {
+        const safeStaffName = _csEsc(staffName);
         promptTextEl.innerHTML = isFirstLogin
-            ? `Enter 4-Digit Onboarding OTP for <span id="staffPinName" style="color: var(--primary);">${staffName}</span>`
-            : `Enter 4-Digit PIN for <span id="staffPinName" style="color: var(--primary);">${staffName}</span>`;
+            ? `Enter 4-Digit Onboarding OTP for <span id="staffPinName" style="color: var(--primary);">${safeStaffName}</span>`
+            : `Enter 4-Digit PIN for <span id="staffPinName" style="color: var(--primary);">${safeStaffName}</span>`;
     }
 
     if (pinWrap) {
@@ -259,10 +264,14 @@ function activateStaffProfileSession(staff) {
         }).catch(() => {});
     }
 
-    // 1. Set global active staff
-    const activeObj = { id: staff.id, name: staff.name, role: staff.role };
+    // 1. Set global active staff (normalized role, synced to both window and core.js lexical bindings)
+    const normRole = (typeof normalizeRole === 'function') ? normalizeRole(staff.role) : (staff.role || 'Cashier');
+    const activeObj = { id: staff.id, name: staff.name, role: normRole };
+    const resolvedRoleFlag = (normRole === 'Admin') ? 'admin' : 'staff';
     window.currentStaff = activeObj;
-    window.currentRole = (staff.role === 'Admin' || staff.role === 'Manager') ? 'admin' : 'staff';
+    window.currentRole = resolvedRoleFlag;
+    try { currentStaff = activeObj; } catch (_) {}
+    try { currentRole = resolvedRoleFlag; } catch (_) {}
 
     const devId = (typeof getDeviceId === 'function' ? getDeviceId() : null) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_device_id') : null) || 'DEV_' + Math.random().toString(36).substring(2, 9);
     const sessionId = (typeof window !== 'undefined' && window.currentSessionId) || 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -312,6 +321,9 @@ function activateStaffProfileSession(staff) {
 
     if (typeof applyStationProfileRestrictions === 'function') {
         applyStationProfileRestrictions();
+    }
+    if (typeof enforcePermissions === 'function') {
+        enforcePermissions();
     }
 
     if (typeof showToast === 'function') {

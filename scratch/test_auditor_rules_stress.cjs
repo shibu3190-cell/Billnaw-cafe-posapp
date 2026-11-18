@@ -3,16 +3,29 @@
 
 const assert = require('assert');
 
-// Exact reproduction of firestore.rules logic
+// Exact reproduction of hardened firestore.rules logic
 function isValidTenant(id) {
   if (typeof id !== 'string') return false;
   if (id.length < 3) return false;
   if (/^\s+$/.test(id)) return false;
+  if (id === '_auth') return false;
   return true;
 }
 
 function isAuthenticated(request) {
   return request.auth != null;
+}
+
+function hasVerifiedEmail(request) {
+  if (!request.auth || !request.auth.token) return false;
+  const t = request.auth.token;
+  return (
+    'email' in t &&
+    typeof t.email === 'string' &&
+    t.email.length > 0 &&
+    'email_verified' in t &&
+    t.email_verified === true
+  );
 }
 
 function matchesTenantId(request, tenantId) {
@@ -21,32 +34,60 @@ function matchesTenantId(request, tenantId) {
   return (
     ('storeCode' in token && typeof token.storeCode === 'string' && token.storeCode === tenantId) ||
     ('cafe_id' in token && typeof token.cafe_id === 'string' && token.cafe_id === tenantId) ||
+    ('cafeId' in token && typeof token.cafeId === 'string' && token.cafeId === tenantId) ||
     ('shopId' in token && typeof token.shopId === 'string' && token.shopId === tenantId)
   );
 }
 
-function matchesOwnerEmail(request, resource) {
-  if (!request.auth || !request.auth.token || typeof request.auth.token.email !== 'string') return false;
-  const email = request.auth.token.email;
-  const r1 = resource && resource.data && ('ownerEmail' in resource.data) && resource.data.ownerEmail === email;
-  const r2 = request.resource && request.resource.data && ('ownerEmail' in request.resource.data) && request.resource.data.ownerEmail === email;
-  return Boolean(r1 || r2);
-}
-
-function isTenantStaff(request, resource, tenantId) {
-  return isValidTenant(tenantId) && isAuthenticated(request) && (
-    matchesTenantId(request, tenantId) ||
-    matchesOwnerEmail(request, resource)
-  );
-}
-
-function isTenantAdmin(request, resource, tenantId) {
-  if (!isTenantStaff(request, resource, tenantId)) return false;
+function hasAdminOrOwnerClaim(request) {
+  if (!request.auth || !request.auth.token) return false;
   const token = request.auth.token;
   const hasRole = 'role' in token && typeof token.role === 'string' && (token.role === 'admin' || token.role === 'owner');
   const isOwner = 'isOwner' in token && token.isOwner === true;
-  const ownerEmail = matchesOwnerEmail(request, resource);
-  return hasRole || isOwner || ownerEmail;
+  return hasRole || isOwner;
+}
+
+function matchesExistingOwnerEmail(request, resource) {
+  if (!hasVerifiedEmail(request)) return false;
+  if (!resource || !resource.data || typeof resource.data.ownerEmail !== 'string' || resource.data.ownerEmail.length === 0) return false;
+  return resource.data.ownerEmail.toLowerCase() === request.auth.token.email.toLowerCase();
+}
+
+function matchesCreateOwnerEmail(request, resource) {
+  if (!hasVerifiedEmail(request)) return false;
+  if (resource != null) return false;
+  if (!request.resource || !request.resource.data || typeof request.resource.data.ownerEmail !== 'string' || request.resource.data.ownerEmail.length === 0) return false;
+  return request.resource.data.ownerEmail.toLowerCase() === request.auth.token.email.toLowerCase();
+}
+
+function matchesParentOwnerEmail(request, parentDoc) {
+  if (!hasVerifiedEmail(request)) return false;
+  if (!parentDoc || !parentDoc.data || typeof parentDoc.data.ownerEmail !== 'string' || parentDoc.data.ownerEmail.length === 0) return false;
+  return parentDoc.data.ownerEmail.toLowerCase() === request.auth.token.email.toLowerCase();
+}
+
+function isRootStaff(request, resource, tenantId) {
+  return isValidTenant(tenantId) && isAuthenticated(request) && (
+    matchesTenantId(request, tenantId) ||
+    matchesExistingOwnerEmail(request, resource)
+  );
+}
+
+function isRootAdmin(request, resource, tenantId) {
+  if (!isRootStaff(request, resource, tenantId)) return false;
+  return hasAdminOrOwnerClaim(request) || matchesExistingOwnerEmail(request, resource);
+}
+
+function isTenantStaff(request, parentDoc, tenantId) {
+  return isValidTenant(tenantId) && isAuthenticated(request) && (
+    matchesTenantId(request, tenantId) ||
+    matchesParentOwnerEmail(request, parentDoc)
+  );
+}
+
+function isTenantAdmin(request, parentDoc, tenantId) {
+  if (!isTenantStaff(request, parentDoc, tenantId)) return false;
+  return hasAdminOrOwnerClaim(request) || matchesParentOwnerEmail(request, parentDoc);
 }
 
 console.log('=== AUDITOR INDEPENDENT ADVERSARIAL STRESS TEST ===\n');
@@ -101,26 +142,52 @@ test('Type confusion attacks on role cannot escalate to admin', () => {
 });
 
 // 4. Owner email attacks
-test('Owner email matches grant staff and admin', () => {
-  const req = { auth: { token: { email: 'owner@cafe.com' } } };
+test('Verified owner email matches grant staff and admin (root & subcollection parent)', () => {
+  const req = { auth: { token: { email: 'Owner@Cafe.com', email_verified: true } } };
   const res = { data: { ownerEmail: 'owner@cafe.com' } };
+  assert.strictEqual(isRootStaff(req, res, 'tenant_A'), true);
+  assert.strictEqual(isRootAdmin(req, res, 'tenant_A'), true);
   assert.strictEqual(isTenantStaff(req, res, 'tenant_A'), true);
   assert.strictEqual(isTenantAdmin(req, res, 'tenant_A'), true);
 });
 
+test('Unverified owner email is rejected even if email matches', () => {
+  const req = { auth: { token: { email: 'owner@cafe.com', email_verified: false } } };
+  const res = { data: { ownerEmail: 'owner@cafe.com' } };
+  assert.strictEqual(isRootStaff(req, res, 'tenant_A'), false);
+  assert.strictEqual(isRootAdmin(req, res, 'tenant_A'), false);
+  assert.strictEqual(isTenantStaff(req, res, 'tenant_A'), false);
+  assert.strictEqual(isTenantAdmin(req, res, 'tenant_A'), false);
+});
+
+test('Attacker supplying request.resource.data.ownerEmail cannot hijack existing root doc or subcollection', () => {
+  const req = {
+    auth: { token: { email: 'attacker@evil.com', email_verified: true } },
+    resource: { data: { ownerEmail: 'attacker@evil.com' } }
+  };
+  const existingRoot = { data: { ownerEmail: 'owner@cafe.com' } };
+  assert.strictEqual(isRootStaff(req, existingRoot, 'tenant_A'), false);
+  assert.strictEqual(isRootAdmin(req, existingRoot, 'tenant_A'), false);
+  assert.strictEqual(isTenantStaff(req, existingRoot, 'tenant_A'), false);
+  assert.strictEqual(isTenantAdmin(req, existingRoot, 'tenant_A'), false);
+  assert.strictEqual(matchesCreateOwnerEmail(req, existingRoot), false);
+  assert.strictEqual(matchesCreateOwnerEmail(req, null), true);
+});
+
 test('Mismatched owner email is rejected', () => {
-  const req = { auth: { token: { email: 'attacker@evil.com' } } };
+  const req = { auth: { token: { email: 'attacker@evil.com', email_verified: true } } };
   const res = { data: { ownerEmail: 'owner@cafe.com' } };
   assert.strictEqual(isTenantStaff(req, res, 'tenant_A'), false);
   assert.strictEqual(isTenantAdmin(req, res, 'tenant_A'), false);
 });
 
 // 5. Tenant ID boundary attacks
-test('Tenant ID validation rejects invalid IDs', () => {
+test('Tenant ID validation rejects invalid IDs and internal _auth namespace', () => {
   const req = { auth: { token: { storeCode: '   ', role: 'admin' } } };
   assert.strictEqual(isTenantStaff(req, null, '   '), false);
   assert.strictEqual(isTenantStaff(req, null, ''), false);
   assert.strictEqual(isTenantStaff(req, null, 'ab'), false);
+  assert.strictEqual(isTenantStaff(req, null, '_auth'), false);
   assert.strictEqual(isTenantStaff(req, null, 123), false);
 });
 
@@ -131,10 +198,14 @@ test('Legitimate admin with storeCode receives staff and admin access', () => {
   assert.strictEqual(isTenantAdmin(req, null, 'shop_xyz'), true);
 });
 
-test('Legitimate admin with cafe_id receives staff and admin access', () => {
-  const req = { auth: { token: { cafe_id: 'cafe_xyz', role: 'owner' } } };
-  assert.strictEqual(isTenantStaff(req, null, 'cafe_xyz'), true);
-  assert.strictEqual(isTenantAdmin(req, null, 'cafe_xyz'), true);
+test('Legitimate admin with cafe_id or cafeId receives staff and admin access', () => {
+  const req1 = { auth: { token: { cafe_id: 'cafe_xyz', role: 'owner' } } };
+  assert.strictEqual(isTenantStaff(req1, null, 'cafe_xyz'), true);
+  assert.strictEqual(isTenantAdmin(req1, null, 'cafe_xyz'), true);
+
+  const req2 = { auth: { token: { cafeId: 'cafe_xyz', role: 'admin' } } };
+  assert.strictEqual(isTenantStaff(req2, null, 'cafe_xyz'), true);
+  assert.strictEqual(isTenantAdmin(req2, null, 'cafe_xyz'), true);
 });
 
 test('Legitimate admin with shopId and isOwner receives staff and admin access', () => {
