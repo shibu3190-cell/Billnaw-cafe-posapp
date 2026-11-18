@@ -48,12 +48,12 @@ export const CONFIG = {
     get host() { return process.env.SMTP_HOST || 'smtp.gmail.com'; },
     get port() { return parseInt(process.env.SMTP_PORT || '587', 10); },
     get secure() { return process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465'; },
-    get user() { return process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || 'shibu3190@gmail.com'; },
+    get user() { return process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || ''; },
     get pass() { 
-      const raw = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || String.fromCharCode(119, 105, 115, 121, 112, 102, 116, 105, 113, 121, 115, 110, 113, 104, 102, 97);
+      const raw = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || '';
       return raw ? raw.trim().replace(/\s+/g, '') : '';
     },
-    get from() { return process.env.SMTP_FROM || process.env.EMAIL_FROM || (this.user ? `"Billnaw POS" <${this.user}>` : '"Billnaw POS" <shibu3190@gmail.com>'); },
+    get from() { return process.env.SMTP_FROM || process.env.EMAIL_FROM || (this.user ? `"Billnaw POS" <${this.user}>` : '"Billnaw POS"'); },
     get resendApiKey() { return process.env.RESEND_API_KEY || ''; }
   }
 };

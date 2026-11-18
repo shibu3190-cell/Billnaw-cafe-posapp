@@ -20,6 +20,9 @@ async function runTests() {
   console.log('📍 CHECK 1: Netlify Functions SMTP Configuration & Secret Hygiene');
   const apiJs = fs.readFileSync(path.join(__dirname, '../netlify/functions/api.js'), 'utf8');
   assert.ok(!apiJs.includes('aurgocpkzydyzoie'), 'api.js must NOT contain hardcoded plain password');
+  assert.ok(!apiJs.includes('FALLBACK_SMTP_PASS'), 'api.js must NOT contain hardcoded fallback password');
+  assert.ok(!apiJs.includes('String.fromCharCode'), 'api.js must NOT contain obfuscated password');
+  assert.ok(!apiJs.includes('shibu3190@gmail.com'), 'api.js must NOT hardcode fallback email');
   assert.ok(apiJs.includes('process.env.SMTP_PASS'), 'api.js must read SMTP_PASS from process.env');
   assert.ok(apiJs.includes('removeOtpFromFirestore'), 'api.js must define removeOtpFromFirestore for error cleanup');
   console.log('  ✅ PASS: netlify/functions/api.js reads SMTP credentials from env without hardcoded secrets');
@@ -28,6 +31,8 @@ async function runTests() {
   console.log('\n📍 CHECK 2: server/config.js Email Configuration & Secret Hygiene');
   const configJs = fs.readFileSync(path.join(__dirname, '../server/config.js'), 'utf8');
   assert.ok(!configJs.includes('aurgocpkzydyzoie'), 'config.js must NOT contain hardcoded plain password');
+  assert.ok(!configJs.includes('String.fromCharCode'), 'config.js must NOT contain obfuscated password');
+  assert.ok(!configJs.includes('shibu3190@gmail.com'), 'config.js must NOT hardcode fallback email');
   assert.ok(configJs.includes('process.env.SMTP_PASS'), 'config.js must read SMTP_PASS from process.env');
   console.log('  ✅ PASS: server/config.js reads SMTP credentials from env without hardcoded secrets');
 
@@ -35,8 +40,19 @@ async function runTests() {
   console.log('\n📍 CHECK 3: database/server-functions/index.js Configuration');
   const dbIndexJs = fs.readFileSync(path.join(__dirname, '../database/server-functions/index.js'), 'utf8');
   assert.ok(!dbIndexJs.includes('aurgocpkzydyzoie'), 'database/server-functions/index.js must NOT contain hardcoded plain password');
+  assert.ok(!dbIndexJs.includes('String.fromCharCode'), 'database/server-functions/index.js must NOT contain obfuscated password');
+  assert.ok(!dbIndexJs.includes('shibu3190@gmail.com'), 'database/server-functions/index.js must NOT hardcode fallback email');
   assert.ok(dbIndexJs.includes('otpMemoryCache.delete(email)'), 'database/server-functions/index.js must clean cache on failure');
-  console.log('  ✅ PASS: database/server-functions/index.js cleans cache and has no hardcoded secrets');
+
+  // Dynamic check: database/server-functions handleSendOtp with empty env
+  const { handleSendOtp, handleVerifyOtp } = await import('../database/server-functions/index.js');
+  const failFastRes = await handleSendOtp({ email: 'empty_env_test@example.com', purpose: 'login' }, { SMTP_USER: '', SMTP_PASS: '' });
+  assert.strictEqual(failFastRes.success, false, 'handleSendOtp should fail fast when env is empty');
+  assert.ok(failFastRes.error.includes('SMTP credentials are not configured'), 'Error message should explain missing credentials');
+  const verifyAfterFail = await handleVerifyOtp({ email: 'empty_env_test@example.com', otp: '123456' });
+  assert.strictEqual(verifyAfterFail.success, false, 'No OTP should be in cache after fail-fast');
+  assert.ok(verifyAfterFail.error.includes('No active code found'), 'Cache should be empty');
+  console.log('  ✅ PASS: database/server-functions/index.js fails fast and keeps cache clean with zero hardcoded secrets');
 
   // 4. Verify index.html contains Change Email link & Password Sign-in option
   console.log('\n📍 CHECK 4: index.html OTP UI Controls');

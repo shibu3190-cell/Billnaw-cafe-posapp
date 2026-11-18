@@ -25,10 +25,17 @@ function normalizeEmail(email) {
  * @param {Object} env - { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM }
  * @returns {Promise<{ success: boolean, message: string }>}
  */
-export async function handleSendOtp(req, env) {
+export async function handleSendOtp(req, env = {}) {
   const email = normalizeEmail(req.email);
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { success: false, error: 'Invalid email address provided.' };
+  }
+
+  const smtpUser = (env && env.SMTP_USER !== undefined) ? env.SMTP_USER : (process.env.SMTP_USER || process.env.EMAIL_USER || '');
+  const rawPass = (env && env.SMTP_PASS !== undefined) ? env.SMTP_PASS : (process.env.SMTP_PASS || process.env.EMAIL_PASS || '');
+  const smtpPass = (rawPass || '').trim().replace(/\s+/g, '');
+  if (!smtpUser || !smtpPass) {
+    return { success: false, error: 'SMTP credentials are not configured in environment variables. Please check your email or use password login.' };
   }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -44,9 +51,6 @@ export async function handleSendOtp(req, env) {
 
   const isSignup = req.purpose === 'signup';
   const actionText = isSignup ? 'verify your cafe shop registration' : 'sign in to your counter terminal';
-
-  const smtpUser = env.SMTP_USER || process.env.SMTP_USER || process.env.EMAIL_USER || 'shibu3190@gmail.com';
-  const smtpPass = (env.SMTP_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS || String.fromCharCode(119, 105, 115, 121, 112, 102, 116, 105, 113, 121, 115, 110, 113, 104, 102, 97)).trim().replace(/\s+/g, '');
 
   const transporter = nodemailer.createTransport({
     host: env.SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',

@@ -92,9 +92,9 @@ const FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-bi
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465';
-const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || CONFIG?.email?.user || 'shibu3190@gmail.com';
+const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || CONFIG?.email?.user || '';
 const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || CONFIG?.email?.pass || '').trim().replace(/\s+/g, '');
-const SMTP_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || CONFIG?.email?.from || `"Billnaw POS" <${SMTP_USER}>`;
+const SMTP_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || CONFIG?.email?.from || (SMTP_USER ? `"Billnaw POS" <${SMTP_USER}>` : '"Billnaw POS"');
 
 // In-memory cache for fast single-container hits
 const memoryOtpStore = new Map();
@@ -447,8 +447,10 @@ async function dispatchEmail(toEmail, otp, purpose = 'login') {
     }
   });
 
+  const resolvedFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || CONFIG?.email?.from || (resolvedSmtpUser ? `"Billnaw POS" <${resolvedSmtpUser}>` : '"Billnaw POS"');
+
   const info = await transporter.sendMail({
-    from: SMTP_FROM,
+    from: resolvedFrom,
     to: toEmail,
     subject,
     text,
