@@ -356,16 +356,23 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     fieldsToPatch.deletedStaffIds = Array.from(combinedDeleted);
   }
 
-  if (Array.isArray(payload.menu)) fieldsToPatch.menu = payload.menu;
-  if (Array.isArray(payload.deletedMenuIds)) fieldsToPatch.deletedMenuIds = payload.deletedMenuIds;
-  if (Array.isArray(payload.deletedMenuNames)) fieldsToPatch.deletedMenuNames = payload.deletedMenuNames;
+  let resolvedMenuVersion = null;
   if (typeof payload.menuVersion === 'number' || typeof payload.menuVersion === 'string') {
     const v = Number(payload.menuVersion);
     if (Number.isFinite(v) && v >= 0 && String(payload.menuVersion).trim() !== '') {
+      resolvedMenuVersion = v;
       fieldsToPatch.menuVersion = v;
     }
   }
+  if (Array.isArray(payload.menu)) fieldsToPatch.menu = payload.menu;
+  if (Array.isArray(payload.deletedMenuIds)) fieldsToPatch.deletedMenuIds = payload.deletedMenuIds;
+  if (Array.isArray(payload.deletedMenuNames)) fieldsToPatch.deletedMenuNames = payload.deletedMenuNames;
   if (Array.isArray(payload.categories)) fieldsToPatch.categories = payload.categories;
+
+  if ((Array.isArray(payload.menu) || Array.isArray(payload.categories)) && resolvedMenuVersion === null) {
+    resolvedMenuVersion = Date.now();
+    fieldsToPatch.menuVersion = resolvedMenuVersion;
+  }
 
   let mergedTables = null;
   if (hasTablesPayload) {
@@ -504,6 +511,30 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
       }
     });
     await Promise.allSettled(tablePromises);
+  }
+
+  // 4. Sync Menu Metadata Subcollection (/{collection}/{storeCode}/menu_meta/version)
+  // Ensures all connected peer devices listening on menu_meta/version receive instant version bump
+  if (resolvedMenuVersion !== null || Array.isArray(payload.menu) || Array.isArray(payload.categories)) {
+    const metaDocUrl = `${base}/${collection}/${encodeURIComponent(code)}/menu_meta/version`;
+    const finalVer = resolvedMenuVersion !== null ? resolvedMenuVersion : Date.now();
+    const metaFields = {
+      version: finalVer,
+      updatedAt: timestamp,
+      updatedBy: payload.profile?.name || payload.updatedBy || 'Admin'
+    };
+    if (Array.isArray(fieldsToPatch.menu) || Array.isArray(payload.menu)) {
+      metaFields.itemCount = Array.isArray(fieldsToPatch.menu) ? fieldsToPatch.menu.length : payload.menu.length;
+    }
+    try {
+      await fetch(metaDocUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: jsonToFirestoreFields(metaFields) })
+      }).catch((err) => {
+        console.warn('[SYNC REST] menu_meta patch notice:', err?.message || err);
+      });
+    } catch (e) {}
   }
 
   return {

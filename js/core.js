@@ -1963,22 +1963,43 @@ if (posMeshChannel) {
             if (typeof syncTableUI === 'function') syncTableUI();
             if (typeof renderTablesView === 'function') renderTablesView();
         } else if (data.type === 'MENU_UPDATED' && Array.isArray(data.menu)) {
+            const incomingVer = Number(data.version || 0);
+            const localVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 0);
+            if (incomingVer > 0 && localVer > 0 && incomingVer < localVer) {
+                return; // Guard: Reject stale broadcast from an older tab or disconnected peer
+            }
             if (Array.isArray(data.deletedIds) && typeof recordDeletedMenuItemId === 'function') {
                 data.deletedIds.forEach(id => recordDeletedMenuItemId(id));
             }
             if (Array.isArray(data.deletedNames) && typeof recordDeletedMenuItemName === 'function') {
                 data.deletedNames.forEach(name => recordDeletedMenuItemName(name));
             }
-            if (data.version) {
-                const v = Number(data.version);
-                if (!isNaN(v) && v > 0) {
-                    localStorage.setItem('billnaw_menu_version', String(v));
-                    if (shopProfile) shopProfile.menuVersion = v;
-                    window.currentMenuVersion = v;
-                }
+            if (incomingVer > 0) {
+                localStorage.setItem('billnaw_menu_version', String(incomingVer));
+                if (shopProfile) shopProfile.menuVersion = incomingVer;
+                window.currentMenuVersion = incomingVer;
             }
             const deletedIdSet = new Set((typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds().map(String) : []);
             const deletedNameSet = new Set((typeof getDeletedMenuItemNames === 'function') ? getDeletedMenuItemNames() : []);
+
+            // Clear any stale local tombstones for items actively present in the incoming menu broadcast (only if newer or equal)
+            if (incomingVer >= localVer) {
+                data.menu.forEach(m => {
+                    if (m && !m.isDeleted && m.isAvailable !== false) {
+                        const mid = String(m.id || '').trim();
+                        const mname = String(m.name || '').trim().toLowerCase();
+                        if (mid && deletedIdSet.has(mid)) {
+                            deletedIdSet.delete(mid);
+                            if (typeof removeDeletedMenuItemId === 'function') removeDeletedMenuItemId(mid);
+                        }
+                        if (mname && deletedNameSet.has(mname)) {
+                            deletedNameSet.delete(mname);
+                            if (typeof removeDeletedMenuItemName === 'function') removeDeletedMenuItemName(mname);
+                        }
+                    }
+                });
+            }
+
             menuItems = data.menu.filter(m => {
                 if (!m) return false;
                 if (m.id && deletedIdSet.has(String(m.id))) return false;
@@ -1988,9 +2009,38 @@ if (posMeshChannel) {
             });
             window.menuItems = menuItems;
             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
+            if (Array.isArray(data.categories) && data.categories.length > 0) {
+                menuCategories = data.categories;
+                window.menuCategories = menuCategories;
+                if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_categories', menuCategories);
+                if (typeof renderCategoryDropdown === 'function') renderCategoryDropdown();
+                if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
+                if (typeof renderCategoryListUI === 'function') renderCategoryListUI();
+            }
             if (typeof renderMenuUI === 'function') renderMenuUI();
             if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+            if (window.culinaryInventory && typeof window.culinaryInventory.syncMenuItems === 'function') {
+                window.culinaryInventory.syncMenuItems();
+            }
+        } else if (data.type === 'CATEGORIES_UPDATED' && Array.isArray(data.categories)) {
+            const incomingCatVer = Number(data.version || 0);
+            const localCatVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 0);
+            if (incomingCatVer > 0 && localCatVer > 0 && incomingCatVer < localCatVer) {
+                return; // Guard: Reject stale category broadcast
+            }
+            menuCategories = data.categories;
+            window.menuCategories = menuCategories;
+            if (incomingCatVer > 0) {
+                localStorage.setItem('billnaw_menu_version', String(incomingCatVer));
+                if (shopProfile) shopProfile.menuVersion = incomingCatVer;
+                window.currentMenuVersion = incomingCatVer;
+            }
+            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_categories', menuCategories);
+            if (typeof renderCategoryDropdown === 'function') renderCategoryDropdown();
+            if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
+            if (typeof renderCategoryListUI === 'function') renderCategoryListUI();
+            if (typeof renderMenuUI === 'function') renderMenuUI();
         } else if (data.type === 'STAFF_UPDATED' && Array.isArray(data.staff)) {
             if (Array.isArray(data.deletedStaffIds) && typeof recordDeletedStaffId === 'function') {
                 data.deletedStaffIds.forEach(id => recordDeletedStaffId(id));
@@ -2518,6 +2568,25 @@ function handleRemoteFirestoreUpdate(data) {
             data.deletedMenuNames.forEach(n => recordDeletedMenuItemName(n));
         }
 
+        // If remote has a strictly newer version bumped by another device/admin, remote catalog is authoritative.
+        // Clear any stale local tombstones for items that are actively present in remote menu!
+        if (incomingMenuVersion > localMenuVersion) {
+            data.menu.forEach(m => {
+                if (m && !m.isDeleted && m.isAvailable !== false) {
+                    const mid = String(m.id || '').trim();
+                    const mname = String(m.name || '').trim().toLowerCase();
+                    if (mid && deletedIdSet.has(mid)) {
+                        deletedIdSet.delete(mid);
+                        if (typeof removeDeletedMenuItemId === 'function') removeDeletedMenuItemId(mid);
+                    }
+                    if (mname && deletedNameSet.has(mname)) {
+                        deletedNameSet.delete(mname);
+                        if (typeof removeDeletedMenuItemName === 'function') removeDeletedMenuItemName(mname);
+                    }
+                }
+            });
+        }
+
         // Build clean remote menu (excluding all tombstoned items by ID and Name)
         const cleanRemoteMenu = data.menu.filter(m => {
             if (!m) return false;
@@ -2575,9 +2644,22 @@ function handleRemoteFirestoreUpdate(data) {
             if (typeof idb !== 'undefined' && idb.set) {
                 idb.set('cafe_menu', menuItems);
             }
+            if (Array.isArray(data.categories) && data.categories.length > 0) {
+                menuCategories = data.categories;
+                window.menuCategories = menuCategories;
+                if (typeof idb !== 'undefined' && idb.set) {
+                    idb.set('cafe_categories', menuCategories);
+                }
+                if (typeof renderCategoryDropdown === 'function') renderCategoryDropdown();
+                if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
+                if (typeof renderCategoryListUI === 'function') renderCategoryListUI();
+            }
             if (typeof renderMenuUI === 'function') renderMenuUI();
             if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+            if (window.culinaryInventory && typeof window.culinaryInventory.syncMenuItems === 'function') {
+                window.culinaryInventory.syncMenuItems();
+            }
         }
         // CASE 3: Local was only the pristine 4-item default template: adopt non-empty clean remote menu
         else if (isLocalTemplate && data.menu.length > 0) {
@@ -2654,6 +2736,9 @@ function handleRemoteFirestoreUpdate(data) {
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_categories', menuCategories);
         }
+        if (typeof renderCategoryDropdown === 'function') renderCategoryDropdown();
+        if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
+        if (typeof renderCategoryListUI === 'function') renderCategoryListUI();
     } else if (!Array.isArray(menuCategories) || menuCategories.length === 0) {
         menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
         window.menuCategories = menuCategories;
@@ -3423,23 +3508,30 @@ async function syncBundledMenuFromCloud(storeCode, expectedVersion = null) {
         if (window.firestoreDB && window.firestoreDoc && window.firestoreGetDoc) {
             const rootCol = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
             const storeRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode);
-            const snap = await window.firestoreGetDoc(storeRef);
-            if (snap.exists()) {
-                const data = snap.data();
-                if (Array.isArray(data.menu)) {
-                    const resolvedVer = Math.max(Number(expectedVersion || 0), Number(data.menuVersion || 0)) || expectedVersion || data.menuVersion;
-                    handleRemoteFirestoreUpdate({
-                        menu: data.menu,
-                        menuVersion: resolvedVer,
-                        deletedMenuIds: data.deletedMenuIds,
-                        deletedMenuNames: data.deletedMenuNames,
-                        categories: data.categories
-                    });
-                    return;
+            try {
+                const snap = await window.firestoreGetDoc(storeRef);
+                if (snap && snap.exists()) {
+                    const data = snap.data();
+                    const docVer = Number(data?.menuVersion || 0);
+                    // Guard against stale cache: Only accept snapshot if it matches or exceeds expectedVersion.
+                    // If docVer < expectedVersion, SDK returned a stale cached doc!
+                    if (Array.isArray(data?.menu) && (!expectedVersion || docVer >= Number(expectedVersion))) {
+                        const resolvedVer = Math.max(Number(expectedVersion || 0), docVer) || expectedVersion || docVer;
+                        handleRemoteFirestoreUpdate({
+                            menu: data.menu,
+                            menuVersion: resolvedVer,
+                            deletedMenuIds: data.deletedMenuIds,
+                            deletedMenuNames: data.deletedMenuNames,
+                            categories: data.categories
+                        });
+                        return;
+                    }
                 }
+            } catch (sdkErr) {
+                console.debug("[MenuSync] SDK getDoc deferred:", sdkErr?.message);
             }
         }
-        // Fallback to server REST endpoint (1 single HTTP fetch)
+        // Fallback to server REST endpoint (1 single HTTP fetch, live server state)
         const res = await fetch(`/api/sync/store-data?storeCode=${encodeURIComponent(storeCode)}`);
         if (res.ok) {
             const data = await res.json();
@@ -3896,7 +3988,41 @@ async function flushOfflineSyncQueue() {
         const matchedEntry = qMap[matchedKey];
         if (matchedEntry && typeof matchedEntry === 'object' && Object.keys(matchedEntry).length > 0) {
             console.info(`[OFFLINE SYNC] Resuming connectivity: flushing queued changes for ${activeStoreCode} to cloud...`);
-            return await dispatchBackendStoreSync({ ...matchedEntry, storeCode: activeStoreCode }, true);
+            const syncResult = await dispatchBackendStoreSync({ ...matchedEntry, storeCode: activeStoreCode }, true);
+            if (syncResult) {
+                // If menu/catalog was part of the flushed payload, ensure menu_meta/version and peer mesh are notified
+                if (matchedEntry.menu || matchedEntry.menuVersion || matchedEntry.categories) {
+                    const flushedVer = Number(matchedEntry.menuVersion || localStorage.getItem('billnaw_menu_version') || 1);
+                    const flushedMenu = Array.isArray(matchedEntry.menu) ? matchedEntry.menu : (window.menuItems || []);
+                    if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+                        try {
+                            const rootCol = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(activeStoreCode) : 'shops';
+                            const metaDocRef = window.firestoreDoc(window.firestoreDB, rootCol, activeStoreCode, 'menu_meta', 'version');
+                            if (metaDocRef) {
+                                window.firestoreSetDoc(metaDocRef, {
+                                    version: flushedVer,
+                                    itemCount: flushedMenu.length,
+                                    updatedAt: new Date().toISOString(),
+                                    updatedBy: (typeof currentStaff !== 'undefined' && currentStaff?.name) ? currentStaff.name : 'Admin (Offline Flush)'
+                                }, { merge: true }).catch(() => {});
+                            }
+                        } catch(metaErr) {}
+                    }
+                    if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+                        try {
+                            posMeshChannel.postMessage({
+                                type: 'MENU_UPDATED',
+                                version: flushedVer,
+                                menu: flushedMenu,
+                                deletedIds: matchedEntry.deletedMenuIds || [],
+                                deletedNames: matchedEntry.deletedMenuNames || [],
+                                categories: matchedEntry.categories || (typeof menuCategories !== 'undefined' ? menuCategories : undefined)
+                            });
+                        } catch(e) {}
+                    }
+                }
+            }
+            return syncResult;
         }
         return false;
     } catch (e) {
@@ -4102,24 +4228,63 @@ function persistMenu() {
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ menu: sanitizedMenu, menuVersion: newVersion, deletedMenuIds: deletedIds, deletedMenuNames: deletedNames }, true);
+        dispatchBackendStoreSync({
+            menu: sanitizedMenu,
+            menuVersion: newVersion,
+            deletedMenuIds: deletedIds,
+            deletedMenuNames: deletedNames,
+            categories: (typeof menuCategories !== 'undefined' && Array.isArray(menuCategories)) ? menuCategories : undefined
+        }, true);
     }
     if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
-        try { posMeshChannel.postMessage({ type: 'MENU_UPDATED', version: newVersion, menu: sanitizedMenu, deletedIds, deletedNames }); } catch(e) {}
+        try {
+            posMeshChannel.postMessage({
+                type: 'MENU_UPDATED',
+                version: newVersion,
+                menu: sanitizedMenu,
+                deletedIds,
+                deletedNames,
+                categories: (typeof menuCategories !== 'undefined' && Array.isArray(menuCategories)) ? menuCategories : undefined
+            });
+        } catch(e) {}
     }
 }
 window.persistMenu = persistMenu;
 
 function persistCategories() { 
     idb.set('cafe_categories', menuCategories); 
+    const currentVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 1);
+    const newVersion = currentVer + 1;
+    localStorage.setItem('billnaw_menu_version', String(newVersion));
+    if (shopProfile) shopProfile.menuVersion = newVersion;
+    window.currentMenuVersion = newVersion;
+
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { categories: menuCategories, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, { categories: menuCategories, menuVersion: newVersion, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            try {
+                const storeCode = getActiveStoreIdentifier();
+                if (storeCode) {
+                    const rootCol = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
+                    const metaDocRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode, 'menu_meta', 'version');
+                    if (metaDocRef) {
+                        window.firestoreSetDoc(metaDocRef, {
+                            version: newVersion,
+                            itemCount: (Array.isArray(window.menuItems) ? window.menuItems.length : (Array.isArray(menuItems) ? menuItems.length : 0)),
+                            updatedAt: new Date().toISOString(),
+                            updatedBy: (typeof currentStaff !== 'undefined' && currentStaff?.name) ? currentStaff.name : 'Admin'
+                        }, { merge: true }).catch(() => {});
+                    }
+                }
+            } catch(metaErr) {}
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ categories: menuCategories }, true);
+        dispatchBackendStoreSync({ categories: menuCategories, menuVersion: newVersion }, true);
+    }
+    if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+        try { posMeshChannel.postMessage({ type: 'CATEGORIES_UPDATED', categories: menuCategories, version: newVersion }); } catch(e) {}
     }
 }
 window.persistCategories = persistCategories;
@@ -4968,7 +5133,15 @@ async function runBackgroundHealthCheck(silent = true) {
                 const docRef = window.firestoreDoc(window.firestoreDB, collectionName, storeCode);
                 const snap = await window.firestoreGetDoc(docRef);
                 if (snap && snap.exists()) {
-                    data = snap.data();
+                    const snapData = snap.data();
+                    const fromCache = Boolean(snap.metadata && snap.metadata.fromCache);
+                    const localMenuVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 0);
+                    const snapMenuVer = Number(snapData?.menuVersion || 0);
+                    // If snap came from local cache and doesn't reflect a newer version,
+                    // do not consider it fresh server truth; allow fallback fetch to /api/sync/store-data
+                    if (!fromCache || snapMenuVer > localMenuVer) {
+                        data = snapData;
+                    }
                 }
             } catch (sdkErr) {
                 // Client SDK unauthenticated / permission error -> fall through to REST
