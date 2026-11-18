@@ -78,10 +78,15 @@
                 const pEmail = document.getElementById('shopAuthPasswordEmail');
                 const oEmail = document.getElementById('shopAuthEmail');
                 if (pEmail && oEmail && oEmail.value) pEmail.value = oEmail.value;
+                const pInput = document.getElementById('shopAuthPasswordInput');
+                if (pInput) setTimeout(() => pInput.focus(), 80);
             }
         } else {
             if (otpSec) otpSec.style.display = 'block';
             if (passSec) passSec.style.display = 'none';
+            const pEmail = document.getElementById('shopAuthPasswordEmail');
+            const oEmail = document.getElementById('shopAuthEmail');
+            if (pEmail && oEmail && pEmail.value) oEmail.value = pEmail.value;
         }
     }
     window.toggleLoginAuthMode = toggleLoginAuthMode;
@@ -219,29 +224,20 @@
             return;
         }
 
-        showValidationMsg('loginEmailValidationFeedback', 'Verification code dispatched ✓', 'success');
-        const recipientSpan = document.getElementById('otpRecipientEmailDisplay');
-        if (recipientSpan) recipientSpan.innerText = email;
-
-        const otpSection = document.getElementById('otpInputSection');
-        if (otpSection) otpSection.style.display = 'block';
-
-        const sendWrap = document.getElementById('otpSendActionWrap');
-        if (sendWrap) sendWrap.style.display = 'none';
-
-        startOtpTimer(60);
-
-        // Auto focus first OTP input box
-        const firstOtp = document.querySelector('#otpBoxesContainer .otp-digit-input[data-index="0"]');
-        if (firstOtp) {
-            setTimeout(() => { firstOtp.focus(); firstOtp.select(); }, 100);
+        const btnSendOtp = document.getElementById('btnSendOtp');
+        const origBtnHtml = btnSendOtp ? btnSendOtp.innerHTML : '';
+        if (btnSendOtp) {
+            btnSendOtp.disabled = true;
+            btnSendOtp.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg><span>Sending Code...</span>';
         }
+
+        showValidationMsg('loginEmailValidationFeedback', 'Sending verification code...', 'muted');
 
         if (typeof fetch === 'function') {
             fetch('/api/auth/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
+                body: JSON.stringify({ email, purpose: 'login' })
             }).then(async res => {
                 let data = null;
                 try {
@@ -249,19 +245,48 @@
                 } catch (e) {
                     data = { success: false, error: 'Server returned unexpected status (' + res.status + ')' };
                 }
+
+                if (btnSendOtp) {
+                    btnSendOtp.disabled = false;
+                    btnSendOtp.innerHTML = origBtnHtml;
+                }
+
                 if (data && data.success) {
+                    showValidationMsg('loginEmailValidationFeedback', '', '');
+                    const recipientSpan = document.getElementById('otpRecipientEmailDisplay');
+                    if (recipientSpan) recipientSpan.innerText = email;
+
+                    const otpSection = document.getElementById('otpInputSection');
+                    if (otpSection) otpSection.style.display = 'block';
+
+                    const sendWrap = document.getElementById('otpSendActionWrap');
+                    if (sendWrap) sendWrap.style.display = 'none';
+
+                    startOtpTimer(60);
+
+                    // Auto focus first OTP input box
+                    const firstOtp = document.querySelector('#otpBoxesContainer .otp-digit-input[data-index="0"]');
+                    if (firstOtp) {
+                        setTimeout(() => { firstOtp.focus(); firstOtp.select(); }, 100);
+                    }
+
                     if (typeof showToast === 'function') {
                         showToast('Verification code dispatched to ' + email, 'success');
                     }
                     showValidationMsg('otpValidationFeedback', 'Code sent! Check your inbox or spam folder.', 'success');
-                } else if (data && data.error) {
-                    showValidationMsg('loginEmailValidationFeedback', data.error, 'error');
-                    showValidationMsg('otpValidationFeedback', data.error, 'error');
+                } else {
+                    const errMsg = (data && data.error) ? data.error : 'Failed to dispatch verification code. Please check your email or use password login.';
+                    showValidationMsg('loginEmailValidationFeedback', errMsg, 'error');
+                    showValidationMsg('otpValidationFeedback', errMsg, 'error');
                     if (typeof showToast === 'function') {
-                        showToast(data.error, 'error');
+                        showToast(errMsg, 'error');
                     }
                 }
             }).catch(err => {
+                if (btnSendOtp) {
+                    btnSendOtp.disabled = false;
+                    btnSendOtp.innerHTML = origBtnHtml;
+                }
                 const msg = 'Unable to send code: ' + (err.message || 'Network error');
                 showValidationMsg('loginEmailValidationFeedback', msg, 'error');
                 showValidationMsg('otpValidationFeedback', msg, 'error');
@@ -279,7 +304,61 @@
     function handleResendOtpCode() {
         const resendBtn = document.getElementById('btnResendOtp');
         if (resendBtn && resendBtn.disabled) return;
-        handleSendOtpCode();
+        const emailInput = document.getElementById('shopAuthEmail');
+        const email = emailInput ? emailInput.value.trim() : '';
+        if (!email) {
+            resetLoginOtpView();
+            return;
+        }
+
+        if (resendBtn) {
+            resendBtn.disabled = true;
+            resendBtn.innerText = 'Sending...';
+        }
+
+        if (typeof fetch === 'function') {
+            fetch('/api/auth/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, purpose: 'login' })
+            }).then(async res => {
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch (e) {
+                    data = { success: false, error: 'Server returned unexpected status (' + res.status + ')' };
+                }
+
+                if (resendBtn) {
+                    resendBtn.innerText = 'Resend Code';
+                }
+
+                if (data && data.success) {
+                    startOtpTimer(60);
+                    if (typeof showToast === 'function') {
+                        showToast('New verification code sent to ' + email, 'success');
+                    }
+                    showValidationMsg('otpValidationFeedback', 'New code sent! Check your inbox or spam folder.', 'success');
+                } else {
+                    if (resendBtn) resendBtn.disabled = false;
+                    const errMsg = (data && data.error) ? data.error : 'Failed to resend code. Please use password login.';
+                    showValidationMsg('otpValidationFeedback', errMsg, 'error');
+                    if (typeof showToast === 'function') {
+                        showToast(errMsg, 'error');
+                    }
+                }
+            }).catch(err => {
+                if (resendBtn) {
+                    resendBtn.disabled = false;
+                    resendBtn.innerText = 'Resend Code';
+                }
+                const msg = 'Unable to resend code: ' + (err.message || 'Network error');
+                showValidationMsg('otpValidationFeedback', msg, 'error');
+                if (typeof showToast === 'function') {
+                    showToast(msg, 'error');
+                }
+            });
+        }
     }
     window.handleResendOtpCode = handleResendOtpCode;
 
@@ -717,11 +796,19 @@
             otpCountdownInterval = null;
         }
         const resendBtn = document.getElementById('btnResendOtp');
-        if (resendBtn) resendBtn.disabled = true;
+        if (resendBtn) {
+            resendBtn.disabled = true;
+            resendBtn.innerText = 'Resend Code';
+        }
         const timerText = document.getElementById('otpTimerText');
         if (timerText) timerText.style.display = 'none';
-        const feedback = document.getElementById('loginEmailValidationFeedback');
-        if (feedback) feedback.innerText = '';
+        const otpFeedback = document.getElementById('otpValidationFeedback');
+        if (otpFeedback) otpFeedback.innerText = '';
+        const emailInput = document.getElementById('shopAuthEmail');
+        if (emailInput) {
+            emailInput.focus();
+            if (typeof emailInput.select === 'function') emailInput.select();
+        }
     }
     window.resetLoginOtpView = resetLoginOtpView;
 

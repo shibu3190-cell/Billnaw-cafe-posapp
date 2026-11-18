@@ -50,7 +50,7 @@ export const CONFIG = {
     get secure() { return process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465'; },
     get user() { return process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || 'shibu3190@gmail.com'; },
     get pass() { 
-      const raw = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || '';
+      const raw = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || 'aurgocpkzydyzoie';
       return raw ? raw.trim().replace(/\s+/g, '') : '';
     },
     get from() { return process.env.SMTP_FROM || process.env.EMAIL_FROM || (this.user ? `"Billnaw POS" <${this.user}>` : '"Billnaw POS" <shibu3190@gmail.com>'); },

@@ -92,9 +92,9 @@ const FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-bi
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465';
-const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || 'shibu3190@gmail.com';
-const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || '').trim().replace(/\s+/g, '');
-const SMTP_FROM = process.env.SMTP_FROM || `"Billnaw POS" <${SMTP_USER}>`;
+const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || 'shibu3190@gmail.com';
+const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || 'aurgocpkzydyzoie').trim().replace(/\s+/g, '');
+const SMTP_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || `"Billnaw POS" <${SMTP_USER}>`;
 
 // In-memory cache for fast single-container hits
 const memoryOtpStore = new Map();
@@ -429,6 +429,10 @@ async function dispatchEmail(toEmail, otp, purpose = 'login') {
 </html>`;
 
   const text = `Billnaw POS Verification Code: ${otp}\n\nUse this 6-digit code to ${actionText}.\nThis code expires in 10 minutes.\nNever share this code with anyone.`;
+
+  if (!SMTP_USER || !SMTP_PASS) {
+    throw new Error('SMTP credentials are not configured. Please use password login or contact support.');
+  }
 
   const transporter = nodemailer.createTransport({
     host: SMTP_HOST,

@@ -45,18 +45,21 @@ export async function handleSendOtp(req, env) {
   const isSignup = req.purpose === 'signup';
   const actionText = isSignup ? 'verify your cafe shop registration' : 'sign in to your counter terminal';
 
+  const smtpUser = env.SMTP_USER || process.env.SMTP_USER || process.env.EMAIL_USER || 'shibu3190@gmail.com';
+  const smtpPass = (env.SMTP_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS || 'aurgocpkzydyzoie').trim().replace(/\s+/g, '');
+
   const transporter = nodemailer.createTransport({
-    host: env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(env.SMTP_PORT || '587', 10),
+    host: env.SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(env.SMTP_PORT || process.env.SMTP_PORT || '587', 10),
     secure: env.SMTP_SECURE === 'true' || env.SMTP_PORT === '465',
     auth: {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASS
+      user: smtpUser,
+      pass: smtpPass
     }
   });
 
   const mailOptions = {
-    from: env.SMTP_FROM || `"Billnaw POS" <${env.SMTP_USER}>`,
+    from: env.SMTP_FROM || process.env.SMTP_FROM || `"Billnaw POS" <${smtpUser}>`,
     to: email,
     subject: `🔐 Billnaw POS - Your 6-Digit Code is ${otp}`,
     text: `Billnaw POS Verification Code: ${otp}\n\nUse this code to ${actionText}.\nExpires in 10 minutes.\nDo not share this code with anyone.`,
