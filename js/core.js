@@ -5240,6 +5240,9 @@ window.applyStationProfileRestrictions = applyStationProfileRestrictions;
 
 let _bgSyncTimer = null;
 let _isBgSyncRunning = false;
+let _bgSyncActive = false;
+let _bgSyncGen = 0;
+let _bgSyncListenersAttached = false;
 
 async function runBackgroundHealthCheck(silent = true) {
     if (_isBgSyncRunning) return;
@@ -5254,7 +5257,12 @@ async function runBackgroundHealthCheck(silent = true) {
         }
 
         let data = null;
-        if (window.firestoreDB && window.firestoreDoc && window.firestoreGetDoc) {
+        const activeToken = (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_auth_token') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('billnaw_auth_token') : null)) : '') || '';
+        const reqHeaders = { 'Content-Type': 'application/json' };
+        if (activeToken) reqHeaders['Authorization'] = 'Bearer ' + activeToken;
+        if (storeCode) reqHeaders['x-store-code'] = storeCode;
+
+        if (window.firestoreDB && window.firestoreDoc && window.firestoreGetDoc && window.auth && window.auth.currentUser) {
             try {
                 const collectionName = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
                 const docRef = window.firestoreDoc(window.firestoreDB, collectionName, storeCode);
@@ -5277,7 +5285,9 @@ async function runBackgroundHealthCheck(silent = true) {
 
         if (!data) {
             try {
-                const res = await fetch('/api/sync/store-data?storeCode=' + encodeURIComponent(storeCode));
+                const res = await fetch('/api/sync/store-data?storeCode=' + encodeURIComponent(storeCode), {
+                    headers: reqHeaders
+                });
                 if (res.ok) {
                     data = await res.json();
                 }
@@ -5296,25 +5306,55 @@ async function runBackgroundHealthCheck(silent = true) {
 }
 
 function startBackgroundSync() {
-    if (_bgSyncTimer) return;
+    _bgSyncActive = true;
+    const currentGen = ++_bgSyncGen;
+    if (_bgSyncTimer) {
+        clearTimeout(_bgSyncTimer);
+        _bgSyncTimer = null;
+    }
     runBackgroundHealthCheck(true);
-    _bgSyncTimer = setInterval(() => {
-        runBackgroundHealthCheck(true);
-    }, 30000);
 
-    if (typeof document !== 'undefined') {
+    const SYNC_ACTIVE_INTERVAL = 4000;  // 4s for active foreground terminal
+    const SYNC_IDLE_INTERVAL = 30000;   // 30s for backgrounded terminal (30000ms idle fallback)
+
+    const getInterval = () => (typeof document !== 'undefined' && document.hidden) ? SYNC_IDLE_INTERVAL : SYNC_ACTIVE_INTERVAL;
+
+    const scheduleNextSync = () => {
+        if (!_bgSyncActive || currentGen !== _bgSyncGen) return;
+        if (_bgSyncTimer) clearTimeout(_bgSyncTimer);
+        _bgSyncTimer = setTimeout(async () => {
+            if (!_bgSyncActive || currentGen !== _bgSyncGen) return;
+            await runBackgroundHealthCheck(true);
+            if (!_bgSyncActive || currentGen !== _bgSyncGen) return;
+            scheduleNextSync();
+        }, getInterval());
+    };
+
+    scheduleNextSync();
+
+    if (typeof document !== 'undefined' && !_bgSyncListenersAttached) {
+        _bgSyncListenersAttached = true;
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
+            if (!_bgSyncActive) return;
+            if (!document.hidden) {
                 runBackgroundHealthCheck(true);
             }
+            scheduleNextSync();
+        });
+        window.addEventListener('focus', () => {
+            if (!_bgSyncActive) return;
+            runBackgroundHealthCheck(true);
+            scheduleNextSync();
         });
     }
-    console.info("[BackgroundSync] 30s background sync & health check initialized.");
+    console.info("[BackgroundSync] High-frequency (4s) real-time POS sync initialized.");
 }
 
 function stopBackgroundSync() {
+    _bgSyncActive = false;
+    _bgSyncGen++;
     if (_bgSyncTimer) {
-        clearInterval(_bgSyncTimer);
+        clearTimeout(_bgSyncTimer);
         _bgSyncTimer = null;
     }
 }

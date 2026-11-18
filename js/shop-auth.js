@@ -597,6 +597,21 @@
                             window.menuCategories = menuCategories;
                             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_categories', menuCategories);
                         }
+                        if (data.shop?.tables && typeof data.shop.tables === 'object' && !Array.isArray(data.shop.tables) && Object.keys(data.shop.tables).length > 0) {
+                            tablesInfo = data.shop.tables;
+                            window.tablesInfo = tablesInfo;
+                            if (typeof idb !== 'undefined' && idb.set) await idb.set('cafe_tables', tablesInfo);
+                        }
+                        if (Array.isArray(data.shop?.staff) && data.shop.staff.length > 0) {
+                            const deletedStaffSet = new Set((typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds().map(String) : []);
+                            const cleanStaff = data.shop.staff.filter(s => s && s.id && !deletedStaffSet.has(String(s.id)));
+                            if (cleanStaff.length > 0) {
+                                staffList = cleanStaff;
+                                window.staffList = staffList;
+                                if (typeof idb !== 'undefined' && idb.set) await idb.set('cafe_staff', staffList);
+                                try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
+                            }
+                        }
                         const resolvedEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
                         if (resolvedEmail) {
                             shopProfile.ownerEmail = resolvedEmail;
@@ -635,11 +650,6 @@
                         }
                     }
 
-                    // Attach real-time Firestore listener for /shops/{storeCode}
-                    if (typeof attachFirestoreListener === 'function') {
-                        attachFirestoreListener(data.storeCode);
-                    }
-
                     updateShopAuthUI();
                     if (typeof updateCloudStoreTopbar === 'function') {
                         updateCloudStoreTopbar(data.user?.email || data.shop?.name || email, true);
@@ -663,6 +673,30 @@
                             console.warn("initDatabase hydrate error:", initErr);
                         }
                     }
+
+                    // Reconcile live shop payload via LWW & tombstone rules
+                    if (data.shop && typeof handleRemoteFirestoreUpdate === 'function') {
+                        const remoteTables = (data.shop.tables && typeof data.shop.tables === 'object' && !Array.isArray(data.shop.tables) && Object.keys(data.shop.tables).length > 0)
+                            ? data.shop.tables
+                            : undefined;
+                        handleRemoteFirestoreUpdate({
+                            profile: data.shop.profile,
+                            menu: data.shop.menu,
+                            categories: data.shop.categories,
+                            tables: remoteTables,
+                            staff: data.shop.staff
+                        });
+                    }
+
+                    // Attach real-time Firestore listener for /shops/{storeCode} AFTER database is initialized
+                    if (typeof attachFirestoreListener === 'function') {
+                        attachFirestoreListener(data.storeCode);
+                    }
+
+                    if (typeof updateAllUI === 'function') updateAllUI();
+                    if (typeof renderTables === 'function') renderTables();
+                    if (typeof syncTableUI === 'function') syncTableUI();
+
                     setTimeout(() => {
                         if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay();
                         if (typeof showStaffProfileSelector === 'function') {
@@ -794,6 +828,21 @@
                             window.menuCategories = menuCategories;
                             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_categories', menuCategories);
                         }
+                        if (data.shop?.tables && typeof data.shop.tables === 'object' && !Array.isArray(data.shop.tables) && Object.keys(data.shop.tables).length > 0) {
+                            tablesInfo = data.shop.tables;
+                            window.tablesInfo = tablesInfo;
+                            if (typeof idb !== 'undefined' && idb.set) await idb.set('cafe_tables', tablesInfo);
+                        }
+                        if (Array.isArray(data.shop?.staff) && data.shop.staff.length > 0) {
+                            const deletedStaffSet = new Set((typeof getDeletedStaffIds === 'function') ? getDeletedStaffIds().map(String) : []);
+                            const cleanStaff = data.shop.staff.filter(s => s && s.id && !deletedStaffSet.has(String(s.id)));
+                            if (cleanStaff.length > 0) {
+                                staffList = cleanStaff;
+                                window.staffList = staffList;
+                                if (typeof idb !== 'undefined' && idb.set) await idb.set('cafe_staff', staffList);
+                                try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
+                            }
+                        }
                         const resolvedEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
                         if (resolvedEmail) {
                             shopProfile.ownerEmail = resolvedEmail;
@@ -830,10 +879,6 @@
                         }
                     }
 
-                    if (typeof attachFirestoreListener === 'function') {
-                        attachFirestoreListener(data.storeCode);
-                    }
-
                     updateShopAuthUI();
                     if (typeof updateCloudStoreTopbar === 'function') {
                         updateCloudStoreTopbar(data.user?.email || data.shop?.name || email, true);
@@ -857,6 +902,30 @@
                             console.warn("initDatabase hydrate error:", initErr);
                         }
                     }
+
+                    // Reconcile live shop payload via LWW & tombstone rules
+                    if (data.shop && typeof handleRemoteFirestoreUpdate === 'function') {
+                        const remoteTables = (data.shop.tables && typeof data.shop.tables === 'object' && !Array.isArray(data.shop.tables) && Object.keys(data.shop.tables).length > 0)
+                            ? data.shop.tables
+                            : undefined;
+                        handleRemoteFirestoreUpdate({
+                            profile: data.shop.profile,
+                            menu: data.shop.menu,
+                            categories: data.shop.categories,
+                            tables: remoteTables,
+                            staff: data.shop.staff
+                        });
+                    }
+
+                    // Attach real-time Firestore listener for /shops/{storeCode} AFTER database is initialized
+                    if (typeof attachFirestoreListener === 'function') {
+                        attachFirestoreListener(data.storeCode);
+                    }
+
+                    if (typeof updateAllUI === 'function') updateAllUI();
+                    if (typeof renderTables === 'function') renderTables();
+                    if (typeof syncTableUI === 'function') syncTableUI();
+
                     setTimeout(() => {
                         if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay();
                         if (typeof showStaffProfileSelector === 'function') {

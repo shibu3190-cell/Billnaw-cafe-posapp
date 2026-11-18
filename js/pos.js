@@ -200,6 +200,15 @@ function renderTablesView(filter) {
     if (filter) _tablesViewFilter = filter;
     const currentFilter = _tablesViewFilter || 'all';
     
+    // Immediate reactive sync when viewing tables to guarantee peer updates reflect instantly
+    if (typeof runBackgroundHealthCheck === 'function') {
+        const lastSync = window._lastTablesViewSync || 0;
+        if (Date.now() - lastSync > 2000) {
+            window._lastTablesViewSync = Date.now();
+            runBackgroundHealthCheck(true);
+        }
+    }
+    
     checkAndRolloverStaleTables();
     const grid = document.getElementById('tablesViewGridUI');
     if (!grid) return;
