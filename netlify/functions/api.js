@@ -93,7 +93,7 @@ const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465';
 const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || 'shibu3190@gmail.com';
-const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || 'aurgocpkzydyzoie').trim().replace(/\s+/g, '');
+const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || '').trim().replace(/\s+/g, '');
 const SMTP_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || `"Billnaw POS" <${SMTP_USER}>`;
 
 // In-memory cache for fast single-container hits
@@ -283,6 +283,7 @@ async function persistOtpToFirestore(record) {
     return false;
   }
 }
+
 
 async function retrieveOtpFromFirestore(email) {
   try {
@@ -1476,10 +1477,12 @@ export async function handler(event, context) {
         realEmailDispatched: true
       });
     } catch (mailErr) {
+      memoryOtpStore.delete(email);
+      await removeOtpFromFirestore(email).catch(() => {});
       console.error(`[NETLIFY API] ❌ SMTP Email dispatch error for ${email}:`, mailErr);
       return jsonResponse(500, {
         success: false,
-        error: `Failed to dispatch email to ${email}: ${mailErr.message || 'SMTP delivery failed'}. Please check your email or use password login.`
+        error: `Failed to dispatch verification email to ${email}. Please check your email or use password login.`
       });
     }
   }
@@ -1647,9 +1650,12 @@ export async function handler(event, context) {
         message: `Admin PIN reset code sent to ${email}`
       });
     } catch (err) {
+      memoryOtpStore.delete(email);
+      await removeOtpFromFirestore(email).catch(() => {});
+      console.error(`[NETLIFY API] ❌ PIN reset email error for ${email}:`, err);
       return jsonResponse(500, {
         success: false,
-        error: `Could not send PIN reset email: ${err.message}`
+        error: `Could not send PIN reset email to ${email}. Please check your email or contact support.`
       });
     }
   }
