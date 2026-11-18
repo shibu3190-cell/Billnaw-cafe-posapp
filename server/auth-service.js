@@ -308,9 +308,12 @@ export function generateStoreCode(shopName, email) {
 let _ephemeralServerSecret = null;
 
 export function getAuthTokenSecret() {
-  const envSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET || process.env.OTP_TICKET_SECRET;
-  if (envSecret && envSecret.trim()) {
+  const envSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET || process.env.OTP_TICKET_SECRET || process.env.AUTH_TOKEN_SECRET;
+  if (envSecret && envSecret.trim() && envSecret.trim().length >= 16) {
     return envSecret.trim();
+  }
+  if (CONFIG?.jwtSecret && typeof CONFIG.jwtSecret === 'string' && CONFIG.jwtSecret.trim().length >= 16) {
+    return CONFIG.jwtSecret.trim();
   }
   if (!_ephemeralServerSecret) {
     _ephemeralServerSecret = crypto.randomBytes(32).toString('hex');

@@ -6,9 +6,13 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  JWT_SECRET = "0d39e4a18c195441866480868bada4fabf0f44e5e71f1057f3a6a2700e5def26"
   SECRETS_SCAN_ENABLED = "false"
   SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
   SECRETS_SCAN_OMIT_PATHS = "scratch/**,server/**,database/**,.agents/**"
+
+[context.production.environment]
+  JWT_SECRET = "0d39e4a18c195441866480868bada4fabf0f44e5e71f1057f3a6a2700e5def26"
 
 [functions]
   node_bundler = "esbuild"

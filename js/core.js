@@ -134,7 +134,7 @@ document.addEventListener('click', function(e) {
             const modifiedInit = { ...init, headers };
 
             try {
-                const response = await originalFetch(input, modifiedInit);
+                let response = await originalFetch(input, modifiedInit);
 
                 // Automatically capture rolling refreshed token from server
                 const refreshedToken = response.headers ? response.headers.get('x-refreshed-token') : null;
@@ -142,6 +142,21 @@ document.addEventListener('click', function(e) {
                     try {
                         localStorage.setItem('billnaw_auth_token', refreshedToken);
                     } catch (e) {}
+                }
+
+                // If sync endpoint rejected with 401, purge stale token and prompt re-auth without unauthenticated retry
+                if (response.status === 401) {
+                    const urlStr = typeof input === 'string' ? input : (input?.url || '');
+                    if (urlStr.includes('/sync/store-data') || urlStr.includes('/api/sync/')) {
+                        try {
+                            localStorage.removeItem('billnaw_auth_token');
+                            localStorage.removeItem('billnaw_auth_mode');
+                            sessionStorage.removeItem('billnaw_auth_token');
+                        } catch (e) {}
+                        if (typeof openShopAuthModal === 'function') {
+                            openShopAuthModal(true);
+                        }
+                    }
                 }
 
                 return response;
@@ -4065,7 +4080,23 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                 writeOfflineSyncQueueMap(qMapAfter);
                 return true;
             } else if (res && (res.status === 401 || res.status === 403)) {
-                console.warn(`[BACKEND SYNC] RBAC/Auth rejected (${res.status}) - skipping offline queue retry`);
+                console.warn(`[BACKEND SYNC] RBAC/Auth rejected (${res.status}) - preserving offline queue and prompting auth`);
+                const qMapErr = readOfflineSyncQueueMap();
+                const qKey = existingQueueKey || targetStoreCode;
+                qMapErr[qKey] = { ...(qMapErr[qKey] || {}), ...finalPayload, storeCode: targetStoreCode };
+                writeOfflineSyncQueueMap(qMapErr);
+                setCloudSyncStatus('offline', 'Auth Required (Saved Locally)');
+
+                if (res.status === 401) {
+                    try {
+                        localStorage.removeItem('billnaw_auth_token');
+                        localStorage.removeItem('billnaw_auth_mode');
+                        sessionStorage.removeItem('billnaw_auth_token');
+                    } catch (e) {}
+                    if (typeof openShopAuthModal === 'function') {
+                        openShopAuthModal(true);
+                    }
+                }
                 return false;
             } else {
                 throw new Error(`Sync HTTP ${res ? res.status : 'unknown'}`);
