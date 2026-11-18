@@ -62,6 +62,8 @@ import {
 import {
   createSignedAuthToken,
   verifySignedAuthToken,
+  generateOtpTicket,
+  verifyOtpTicket,
   verifyTenantAuthorization,
   hasRolePermission,
   verifyEndpointAccess,
@@ -265,7 +267,7 @@ async function getNetlifyOtpBlobStore() {
   try {
     const blobs = await import('@netlify/blobs');
     if (blobs && typeof blobs.getStore === 'function') {
-      return blobs.getStore({ name: 'billnaw-auth-otps', consistency: 'eventual' });
+      return blobs.getStore({ name: 'billnaw-auth-otps', consistency: 'strong' });
     }
   } catch (e) {
     if (process.env.NODE_ENV !== 'test') {
@@ -281,9 +283,11 @@ function getOtpBlobKey(email) {
   return crypto.createHash('sha256').update(norm).digest('hex');
 }
 
-function cleanOtpInput(val) {
+export function cleanOtpInput(val) {
   return (val !== undefined && val !== null) ? String(val).replace(/\s+/g, '').trim() : '';
 }
+
+export { generateOtpTicket, verifyOtpTicket };
 
 async function persistOtpToFirestore(record) {
   if (!record || !record.email) return false;
@@ -352,78 +356,98 @@ async function retrieveOtpFromFirestore(email) {
     }
   }
 
-  // If Netlify Blobs store is active, reconcile authoritative multi-container state
-  if (blobStoreFound) {
-    if (blobRecord && typeof blobRecord === 'object' && blobRecord.otp) {
-      if (normalizeEmail(blobRecord.email) !== normEmail) {
-        return null;
-      }
-      if (blobRecord.consumed || Date.now() > blobRecord.expiresAt) {
-        memoryOtpStore.delete(normEmail);
-        return null;
-      }
-      memoryOtpStore.set(normEmail, blobRecord);
-      return blobRecord;
-    } else {
-      // Blobs is available and empty: purge stale memory entry so Resend or Delete is not shadowed
-      memoryOtpStore.delete(normEmail);
+  // If Netlify Blobs store is active and has a record
+  if (blobStoreFound && blobRecord && typeof blobRecord === 'object') {
+    if (normalizeEmail(blobRecord.email) !== normEmail) {
       return null;
     }
+    if (blobRecord.consumed || blobRecord.locked || Date.now() > blobRecord.expiresAt) {
+      memoryOtpStore.delete(normEmail);
+      return blobRecord;
+    }
+    memoryOtpStore.set(normEmail, blobRecord);
+    return blobRecord;
   }
 
-  // 2. Fallback when Blobs is unavailable (e.g. offline testing): check local memory
-  if (memRecord && !memRecord.consumed && Date.now() <= memRecord.expiresAt) {
+  // 2. Check local memory (L1) - DO NOT DELETE if Blobs was null or empty!
+  if (memRecord && !memRecord.consumed && !memRecord.locked && Date.now() <= memRecord.expiresAt) {
     return memRecord;
   }
 
   // 3. Fallback to L3 Firestore REST API
   try {
     const res = await fetch(FIRESTORE_OTP_URL(normEmail));
-    if (!res || !res.ok) return null;
-    const json = await res.json();
-    if (!json || !json.fields) return null;
-    const firestoreRecord = {
-      otp: json.fields.otp?.stringValue,
-      email: json.fields.email?.stringValue,
-      purpose: json.fields.purpose?.stringValue || 'login',
-      createdAt: parseInt(json.fields.createdAt?.integerValue || '0', 10),
-      expiresAt: parseInt(json.fields.expiresAt?.integerValue || '0', 10),
-      resendAvailableAt: parseInt(json.fields.resendAvailableAt?.integerValue || '0', 10),
-      attempts: parseInt(json.fields.attempts?.integerValue || '0', 10),
-      consumed: json.fields.consumed?.booleanValue === true
-    };
-    if (firestoreRecord.consumed || Date.now() > firestoreRecord.expiresAt) {
-      memoryOtpStore.delete(normEmail);
-      return null;
+    if (res && res.ok) {
+      const json = await res.json();
+      if (json && json.fields) {
+        const firestoreRecord = {
+          otp: json.fields.otp?.stringValue,
+          email: json.fields.email?.stringValue,
+          purpose: json.fields.purpose?.stringValue || 'login',
+          createdAt: parseInt(json.fields.createdAt?.integerValue || '0', 10),
+          expiresAt: parseInt(json.fields.expiresAt?.integerValue || '0', 10),
+          resendAvailableAt: parseInt(json.fields.resendAvailableAt?.integerValue || '0', 10),
+          attempts: parseInt(json.fields.attempts?.integerValue || '0', 10),
+          consumed: json.fields.consumed?.booleanValue === true,
+          locked: json.fields.locked?.booleanValue === true
+        };
+        if (!firestoreRecord.consumed && !firestoreRecord.locked && Date.now() <= firestoreRecord.expiresAt) {
+          memoryOtpStore.set(normEmail, firestoreRecord);
+          return firestoreRecord;
+        } else if (firestoreRecord.consumed || firestoreRecord.locked) {
+          memoryOtpStore.delete(normEmail);
+          return firestoreRecord;
+        }
+      }
     }
-    memoryOtpStore.set(normEmail, firestoreRecord);
-    return firestoreRecord;
   } catch (err) {
     console.warn('[SERVERLESS OTP] Firestore read warning:', err.message);
-    return null;
   }
+
+  return null;
 }
 
-async function removeOtpFromFirestore(email) {
+async function markOtpConsumedOrLocked(email, status = 'consumed') {
   const normEmail = normalizeEmail(email);
   if (!normEmail) return;
 
-  // 1. Remove from L1 in-memory cache
   memoryOtpStore.delete(normEmail);
 
-  // 2. Remove from L2 Netlify Blobs
+  const tombstone = {
+    email: normEmail,
+    consumed: true,
+    locked: status === 'locked',
+    status,
+    updatedAt: Date.now(),
+    expiresAt: Date.now() + (10 * 60 * 1000)
+  };
+
   try {
     const blobStore = await getNetlifyOtpBlobStore();
     if (blobStore) {
       const key = getOtpBlobKey(normEmail);
-      await blobStore.delete(key);
+      await blobStore.setJSON(key, tombstone);
     }
   } catch (_) {}
 
-  // 3. Remove from L3 Firestore
   try {
-    await fetch(FIRESTORE_OTP_URL(normEmail), { method: 'DELETE' });
+    await fetch(FIRESTORE_OTP_URL(normEmail), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          email: { stringValue: normEmail },
+          consumed: { booleanValue: true },
+          locked: { booleanValue: status === 'locked' },
+          expiresAt: { integerValue: String(tombstone.expiresAt) }
+        }
+      })
+    }).catch(() => {});
   } catch (_) {}
+}
+
+async function removeOtpFromFirestore(email) {
+  return markOtpConsumedOrLocked(email, 'consumed');
 }
 
 const FIRESTORE_USER_URL = (email) =>
@@ -433,7 +457,7 @@ async function getNetlifyUserBlobStore() {
   try {
     const blobs = await import('@netlify/blobs');
     if (blobs && typeof blobs.getStore === 'function') {
-      return blobs.getStore({ name: 'billnaw-auth-users', consistency: 'eventual' });
+      return blobs.getStore({ name: 'billnaw-auth-users', consistency: 'strong' });
     }
   } catch (e) {
     if (process.env.NODE_ENV !== 'test') {
@@ -1583,7 +1607,7 @@ export async function handler(event, context) {
   // -----------------------------------------------------------
   // Route: /auth/send-otp (Passwordless Login & Signup OTP)
   // -----------------------------------------------------------
-  if (event.httpMethod === 'POST' && (cleanPath === '/auth/send-otp' || cleanPath.endsWith('/send-otp'))) {
+  if (event.httpMethod === 'POST' && (cleanPath === '/auth/send-otp' || cleanPath === '/send-otp')) {
     const clientIp = headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || 'client';
     const rateCheck = checkRateLimit({
       key: `otp_req_${clientIp}`,
@@ -1630,6 +1654,8 @@ export async function handler(event, context) {
     memoryOtpStore.set(email, record);
     await persistOtpToFirestore(record);
 
+    const otpTicket = generateOtpTicket(email, otp, purpose);
+
     // Send the real email via Nodemailer and AWAIT completion
     try {
       await dispatchEmail(email, otp, purpose);
@@ -1638,6 +1664,7 @@ export async function handler(event, context) {
         success: true,
         message: `A 6-digit verification code has been dispatched to ${email}.`,
         email,
+        otpTicket,
         cooldownSeconds: 60,
         expiresInSeconds: 600,
         realEmailDispatched: true
@@ -1656,7 +1683,7 @@ export async function handler(event, context) {
   // -----------------------------------------------------------
   // Route: /auth/verify-otp (Validates OTP & Mints Session)
   // -----------------------------------------------------------
-  if (event.httpMethod === 'POST' && (cleanPath === '/auth/verify-otp' || cleanPath.endsWith('/verify-otp'))) {
+  if (event.httpMethod === 'POST' && (cleanPath === '/auth/verify-otp' || cleanPath === '/verify-otp')) {
     const clientIp = headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || 'client';
     const rateCheck = checkRateLimit({
       key: `verify_req_${clientIp}`,
@@ -1679,44 +1706,77 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'Please enter a valid 6-digit code.' });
     }
 
-    // Check memory first, then Netlify Blobs & Firestore
-    let record = memoryOtpStore.get(email);
-    if (!record || record.consumed || (record && Date.now() > record.expiresAt)) {
-      record = await retrieveOtpFromFirestore(email);
+    // Always check authoritative persistence across containers
+    let record = await retrieveOtpFromFirestore(email);
+    if (!record) {
+      record = memoryOtpStore.get(email);
     }
 
-    const now = Date.now();
-    if (!record || now > record.expiresAt || record.purpose === 'admin-pin-reset') {
-      return jsonResponse(400, {
-        success: false,
-        error: 'Verification code has expired or was not requested. Please click Resend Code.'
-      });
-    }
-
-    if (record.attempts >= 3) {
-      memoryOtpStore.delete(email);
-      await removeOtpFromFirestore(email);
+    if (record && (record.locked || (record.attempts && record.attempts >= 3))) {
+      await markOtpConsumedOrLocked(email, 'locked');
       return jsonResponse(429, {
         success: false,
         error: 'Too many incorrect attempts. Please request a new verification code.'
       });
     }
 
-    const cleanRecordOtp = String(record.otp || '').replace(/\s+/g, '').trim();
-    if (cleanRecordOtp !== submittedOtp) {
-      record.attempts = (record.attempts || 0) + 1;
-      memoryOtpStore.set(email, record);
-      await persistOtpToFirestore(record);
-      const remaining = Math.max(0, 3 - record.attempts);
+    if (record && record.consumed) {
       return jsonResponse(400, {
         success: false,
-        error: `Invalid verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+        error: 'Verification code has already been used. Please request a new code.'
       });
     }
 
-    // Code is valid! Consume and remove
-    memoryOtpStore.delete(email);
-    await removeOtpFromFirestore(email);
+    const now = Date.now();
+    let otpValid = false;
+
+    if (record && now <= record.expiresAt && record.purpose !== 'admin-pin-reset') {
+      const cleanRecordOtp = cleanOtpInput(record.otp);
+      const bufA = Buffer.from(cleanRecordOtp, 'utf8');
+      const bufB = Buffer.from(submittedOtp, 'utf8');
+      const isMatch = bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+
+      if (isMatch) {
+        otpValid = true;
+      } else if (body.otpTicket && (verifyOtpTicket(email, submittedOtp, 'login', body.otpTicket) || verifyOtpTicket(email, submittedOtp, 'signup', body.otpTicket))) {
+        otpValid = true;
+      } else {
+        record.attempts = (record.attempts || 0) + 1;
+        if (record.attempts >= 3) {
+          record.locked = true;
+          record.consumed = true;
+          await markOtpConsumedOrLocked(email, 'locked');
+          return jsonResponse(429, {
+            success: false,
+            error: 'Too many incorrect attempts. Please request a new verification code.'
+          });
+        }
+        memoryOtpStore.set(email, record);
+        await persistOtpToFirestore(record);
+        const remaining = Math.max(0, 3 - record.attempts);
+        return jsonResponse(400, {
+          success: false,
+          error: `Invalid verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+        });
+      }
+    }
+
+    // Cryptographic ticket fallback for multi-container serverless execution when record is absent
+    if (!otpValid && body.otpTicket) {
+      if (verifyOtpTicket(email, submittedOtp, 'login', body.otpTicket) || verifyOtpTicket(email, submittedOtp, 'signup', body.otpTicket)) {
+        otpValid = true;
+      }
+    }
+
+    if (!otpValid) {
+      return jsonResponse(400, {
+        success: false,
+        error: 'Verification code has expired or was not requested. Please click Resend Code.'
+      });
+    }
+
+    // Code is valid! Consume and mark tombstone to prevent replay
+    await markOtpConsumedOrLocked(email, 'consumed');
 
     // Generate authenticated token & store tenant code safely
     let existingUser = await retrieveAuthUserFromFirestore(email);
@@ -1831,6 +1891,7 @@ export async function handler(event, context) {
     }
 
     const otp = crypto.randomInt(100000, 1000000).toString();
+    const otpTicket = generateOtpTicket(email, otp, 'admin-pin-reset');
     const record = {
       email,
       otp,
@@ -1849,7 +1910,11 @@ export async function handler(event, context) {
       await dispatchEmail(email, otp, 'admin-pin-reset');
       return jsonResponse(200, {
         success: true,
-        message: `Admin PIN reset code sent to ${email}`
+        message: `Admin PIN reset code sent to ${email}`,
+        email,
+        otpTicket,
+        cooldownSeconds: 60,
+        expiresInSeconds: 600
       });
     } catch (err) {
       memoryOtpStore.delete(email);
@@ -1902,43 +1967,63 @@ export async function handler(event, context) {
     }
 
     let record = await retrieveOtpFromFirestore(email);
-
-    const now = Date.now();
-    if (!record || record.consumed || now > record.expiresAt || record.purpose !== 'admin-pin-reset') {
-      return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
+    if (!record) {
+      record = memoryOtpStore.get(email);
     }
 
-    if ((record.attempts || 0) >= 3) {
-      memoryOtpStore.delete(email);
-      await removeOtpFromFirestore(email);
+    if (record && (record.locked || (record.attempts && record.attempts >= 3))) {
+      await markOtpConsumedOrLocked(email, 'locked');
       return jsonResponse(429, {
         success: false,
         error: 'Too many invalid attempts. Code invalidated. Please request a new code.'
       });
     }
 
-    const expectedOtp = cleanOtpInput(record.otp);
-    const otpBufA = Buffer.from(submittedOtp, 'utf8');
-    const otpBufB = Buffer.from(expectedOtp, 'utf8');
-    const otpMatches = otpBufA.length === otpBufB.length && crypto.timingSafeEqual(otpBufA, otpBufB);
+    if (record && record.consumed) {
+      return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
+    }
 
-    if (!otpMatches) {
-      record.attempts = (record.attempts || 0) + 1;
-      if (record.attempts >= 3) {
-        memoryOtpStore.delete(email);
-        await removeOtpFromFirestore(email);
-        return jsonResponse(429, {
+    let otpMatches = false;
+
+    const now = Date.now();
+    if (record && !record.consumed && now <= record.expiresAt && record.purpose === 'admin-pin-reset') {
+      const expectedOtp = cleanOtpInput(record.otp);
+      const otpBufA = Buffer.from(submittedOtp, 'utf8');
+      const otpBufB = Buffer.from(expectedOtp, 'utf8');
+      otpMatches = otpBufA.length === otpBufB.length && crypto.timingSafeEqual(otpBufA, otpBufB);
+
+      if (!otpMatches && body.otpTicket) {
+        otpMatches = verifyOtpTicket(email, submittedOtp, 'admin-pin-reset', body.otpTicket);
+      }
+
+      if (!otpMatches) {
+        record.attempts = (record.attempts || 0) + 1;
+        if (record.attempts >= 3) {
+          record.locked = true;
+          record.consumed = true;
+          await markOtpConsumedOrLocked(email, 'locked');
+          return jsonResponse(429, {
+            success: false,
+            error: 'Too many invalid attempts. Code invalidated. Please request a new code.'
+          });
+        }
+        memoryOtpStore.set(email, record);
+        await persistOtpToFirestore(record);
+        const remaining = Math.max(0, 3 - record.attempts);
+        return jsonResponse(400, {
           success: false,
-          error: 'Too many invalid attempts. Code invalidated. Please request a new code.'
+          error: `Invalid or expired reset code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
         });
       }
-      memoryOtpStore.set(email, record);
-      await persistOtpToFirestore(record);
-      const remaining = Math.max(0, 3 - record.attempts);
-      return jsonResponse(400, {
-        success: false,
-        error: `Invalid or expired reset code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
-      });
+    }
+
+    // Cryptographic ticket fallback for multi-container serverless execution when record is absent
+    if (!otpMatches && body.otpTicket) {
+      otpMatches = verifyOtpTicket(email, submittedOtp, 'admin-pin-reset', body.otpTicket);
+    }
+
+    if (!otpMatches) {
+      return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
     }
 
     let existingShop = null;
@@ -1965,9 +2050,7 @@ export async function handler(event, context) {
       }
     }
 
-    record.consumed = true;
-    memoryOtpStore.delete(email);
-    await removeOtpFromFirestore(email);
+    await markOtpConsumedOrLocked(email, 'consumed');
 
     const pinSalt = crypto.randomBytes(16).toString('hex');
     const saltedPinHash = crypto.createHash('sha256').update(`${newPin}:${pinSalt}:billnaw_pin_v2`).digest('hex');
@@ -2098,6 +2181,7 @@ export async function handler(event, context) {
     }
 
     const otp = crypto.randomInt(100000, 1000000).toString();
+    const otpTicket = generateOtpTicket(email, otp, 'password-reset');
     const record = {
       email,
       otp,
@@ -2117,6 +2201,8 @@ export async function handler(event, context) {
       return jsonResponse(200, {
         success: true,
         message: `Password reset code sent to ${email}`,
+        email,
+        otpTicket,
         cooldownSeconds: 60
       });
     } catch (err) {
@@ -2160,33 +2246,53 @@ export async function handler(event, context) {
     }
 
     let record = await retrieveOtpFromFirestore(email);
-
-    if (!record || record.consumed || Date.now() > record.expiresAt) {
-      return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
-    }
-    if (record.purpose !== 'password-reset') {
-      return jsonResponse(400, { success: false, error: 'Invalid OTP purpose for password reset.' });
+    if (!record) {
+      record = memoryOtpStore.get(email);
     }
 
-    record.attempts = (record.attempts || 0) + 1;
-    if (record.attempts > 3) {
-      record.consumed = true;
-      await persistOtpToFirestore(record);
-      await removeOtpFromFirestore(email);
+    if (record && (record.locked || (record.attempts && record.attempts >= 3))) {
+      await markOtpConsumedOrLocked(email, 'locked');
       return jsonResponse(429, { success: false, error: 'Maximum verification attempts exceeded. Please request a new reset code.' });
     }
-
-    const a = Buffer.from(cleanOtpInput(record.otp), 'utf8');
-    const b = Buffer.from(submittedOtp, 'utf8');
-    const match = a.length === b.length && crypto.timingSafeEqual(a, b);
-    if (!match) {
-      await persistOtpToFirestore(record);
-      return jsonResponse(400, { success: false, error: `Incorrect reset code. ${3 - record.attempts} attempt(s) remaining.` });
+    if (record && record.consumed) {
+      return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
     }
 
-    record.consumed = true;
-    await persistOtpToFirestore(record);
-    await removeOtpFromFirestore(email);
+    let match = false;
+
+    if (record && !record.consumed && Date.now() <= record.expiresAt && record.purpose === 'password-reset') {
+      const a = Buffer.from(cleanOtpInput(record.otp), 'utf8');
+      const b = Buffer.from(submittedOtp, 'utf8');
+      match = a.length === b.length && crypto.timingSafeEqual(a, b);
+
+      if (!match && body.otpTicket) {
+        match = verifyOtpTicket(email, submittedOtp, 'password-reset', body.otpTicket);
+      }
+
+      if (!match) {
+        record.attempts = (record.attempts || 0) + 1;
+        if (record.attempts >= 3) {
+          record.locked = true;
+          record.consumed = true;
+          await markOtpConsumedOrLocked(email, 'locked');
+          return jsonResponse(429, { success: false, error: 'Maximum verification attempts exceeded. Please request a new reset code.' });
+        }
+        await persistOtpToFirestore(record);
+        const remaining = Math.max(0, 3 - record.attempts);
+        return jsonResponse(400, { success: false, error: `Incorrect reset code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` });
+      }
+    }
+
+    // Cryptographic ticket fallback for multi-container serverless execution when record is absent
+    if (!match && body.otpTicket) {
+      match = verifyOtpTicket(email, submittedOtp, 'password-reset', body.otpTicket);
+    }
+
+    if (!match) {
+      return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
+    }
+
+    await markOtpConsumedOrLocked(email, 'consumed');
 
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = hashPassword(newPassword, salt);
@@ -2379,25 +2485,53 @@ export async function handler(event, context) {
         return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
       }
       let otpRecord = await retrieveOtpFromFirestore(email);
-      if (!otpRecord || otpRecord.consumed || Date.now() > otpRecord.expiresAt) {
-        return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
+      if (!otpRecord) {
+        otpRecord = memoryOtpStore.get(email);
       }
-      if ((otpRecord.attempts || 0) >= 3) {
-        memoryOtpStore.delete(email);
-        await removeOtpFromFirestore(email);
+
+      if (otpRecord && (otpRecord.locked || (otpRecord.attempts && otpRecord.attempts >= 3))) {
+        await markOtpConsumedOrLocked(email, 'locked');
         return jsonResponse(429, { success: false, error: 'Too many invalid attempts. Code invalidated.' });
       }
-      const otpBufA = Buffer.from(submittedOtp, 'utf8');
-      const otpBufB = Buffer.from(cleanOtpInput(otpRecord.otp), 'utf8');
-      if (otpBufA.length !== otpBufB.length || !crypto.timingSafeEqual(otpBufA, otpBufB)) {
-        otpRecord.attempts = (otpRecord.attempts || 0) + 1;
-        memoryOtpStore.set(email, otpRecord);
-        await persistOtpToFirestore(otpRecord);
+      if (otpRecord && otpRecord.consumed) {
         return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
       }
-      otpRecord.consumed = true;
-      memoryOtpStore.delete(email);
-      await removeOtpFromFirestore(email);
+
+      let otpValid = false;
+
+      if (otpRecord && Date.now() <= otpRecord.expiresAt) {
+        const otpBufA = Buffer.from(submittedOtp, 'utf8');
+        const otpBufB = Buffer.from(cleanOtpInput(otpRecord.otp), 'utf8');
+        if (otpBufA.length === otpBufB.length && crypto.timingSafeEqual(otpBufA, otpBufB)) {
+          otpValid = true;
+        } else if (body.otpTicket && verifyOtpTicket(email, submittedOtp, 'signup', body.otpTicket)) {
+          otpValid = true;
+        } else {
+          otpRecord.attempts = (otpRecord.attempts || 0) + 1;
+          if (otpRecord.attempts >= 3) {
+            otpRecord.locked = true;
+            otpRecord.consumed = true;
+            await markOtpConsumedOrLocked(email, 'locked');
+            return jsonResponse(429, { success: false, error: 'Too many invalid attempts. Code invalidated.' });
+          }
+          memoryOtpStore.set(email, otpRecord);
+          await persistOtpToFirestore(otpRecord);
+          return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
+        }
+      }
+
+      // Cryptographic ticket fallback when record is absent
+      if (!otpValid && body.otpTicket) {
+        if (verifyOtpTicket(email, submittedOtp, 'signup', body.otpTicket)) {
+          otpValid = true;
+        }
+      }
+
+      if (!otpValid) {
+        return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
+      }
+
+      await markOtpConsumedOrLocked(email, 'consumed');
     }
 
     const regResult = registerUser({
@@ -2408,7 +2542,9 @@ export async function handler(event, context) {
       password,
       confirmPassword,
       phone,
-      adminPin
+      adminPin,
+      otp: submittedOtp,
+      otpTicket: body.otpTicket
     });
 
     if (regResult.status !== 200 || !regResult.data?.success) {

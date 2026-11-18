@@ -2287,6 +2287,12 @@ async function submitAdminForgotPinOtpRequest() {
         const data = await res.json();
 
         if (data.success) {
+            if (data.otpTicket) {
+                window._adminForgotPinTicket = data.otpTicket;
+                try {
+                    sessionStorage.setItem('billnaw_admin_pin_ticket', data.otpTicket);
+                } catch(e) {}
+            }
             const s1 = document.getElementById('forgotPinStep1');
             const s2 = document.getElementById('forgotPinStep2');
             const displayEl = document.getElementById('forgotPinTargetEmailDisplay');
@@ -2356,6 +2362,12 @@ async function resendAdminForgotPinOtp() {
         });
         const data = await res.json();
         if (data.success) {
+            if (data.otpTicket) {
+                window._adminForgotPinTicket = data.otpTicket;
+                try {
+                    sessionStorage.setItem('billnaw_admin_pin_ticket', data.otpTicket);
+                } catch(e) {}
+            }
             startForgotPinCooldown(data.cooldownSeconds || 60);
             if (data.devOtp) {
                 showToast(`[DEV/TEST] Fresh code: ${data.devOtp}`, "info");
@@ -2382,11 +2394,16 @@ async function submitAdminForgotPinReset() {
     const fb = document.getElementById('forgotPinFeedback');
     const btn = document.getElementById('btnForgotPinSubmitReset');
 
-    const email = (emailInput?.value || '').trim();
+    const rawEmail = (emailInput?.value || document.getElementById('forgotPinTargetEmailDisplay')?.textContent || (typeof shopProfile !== 'undefined' && (shopProfile?.ownerEmail || shopProfile?.email)) || localStorage.getItem('billnaw_auth_email') || '').trim();
+    const email = rawEmail.toLowerCase();
     const otp = (otpInput?.value || '').trim();
     const newPin = (newPinInput?.value || '').trim();
     const confirmPin = (confirmPinInput?.value || '').trim();
     const selectedStaffIdVal = staffSelect ? staffSelect.value : null;
+
+    const otpTicket = window._adminForgotPinTicket || (function() {
+        try { return sessionStorage.getItem('billnaw_admin_pin_ticket') || ''; } catch(e) { return ''; }
+    })();
 
     if (!/^\d{6}$/.test(otp)) {
         if (fb) fb.innerHTML = '<span style="color: #DC2626; font-size: 12px; font-weight: 600;">OTP must be exactly 6 numeric digits.</span>';
@@ -2445,12 +2462,15 @@ async function submitAdminForgotPinReset() {
                 storeCode,
                 staffId: targetStaff.id,
                 staffName: targetStaff.name,
-                role: preservedRole
+                role: preservedRole,
+                otpTicket
             })
         });
         const data = await res.json();
 
         if (data.success) {
+            window._adminForgotPinTicket = null;
+            try { sessionStorage.removeItem('billnaw_admin_pin_ticket'); } catch(e) {}
             const salt = data.pinSalt || (typeof generatePinSalt === 'function' ? generatePinSalt() : null);
             if (!salt) throw new Error('Unable to generate cryptographic salt for PIN reset.');
             const saltedHash = data.pinHash || (typeof hashPin === 'function' ? await hashPin(newPin, salt) : null);

@@ -1047,8 +1047,18 @@ app.post('/api/auth/send-otp', (req, res) => {
 // 2. Verify OTP (Validates code, rate-limits attempts, resolves store tenant, mints tokens)
 app.post('/api/auth/verify-otp', (req, res) => {
   try {
-    const { email, otp, shopName } = req.body || {};
-    const result = verifyOtp(email, otp, shopName);
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || 'client';
+    const rateCheck = checkRateLimit({
+      key: `verify_req_${clientIp}`,
+      limit: 20,
+      windowSeconds: 300,
+      message: 'Too many verification attempts from this connection. Please wait 5 minutes.'
+    });
+    if (!rateCheck.allowed) {
+      return res.status(429).json({ success: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
+    }
+    const { email, otp, shopName, otpTicket } = req.body || {};
+    const result = verifyOtp(email, otp, shopName, null, otpTicket);
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to verify verification code' });
@@ -1069,7 +1079,17 @@ app.post('/api/auth/admin-forgot-pin/send-otp', (req, res) => {
 // 2C. Admin / Selective Staff Forgot PIN: Verify OTP & Reset PIN with Selective Role
 app.post('/api/auth/admin-forgot-pin/reset', async (req, res) => {
   try {
-    const { email, otp, newPin, storeCode, staffId, staffName, role } = req.body || {};
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || 'client';
+    const rateCheck = checkRateLimit({
+      key: `pin_reset_req_${clientIp}`,
+      limit: 15,
+      windowSeconds: 300,
+      message: 'Too many PIN reset attempts. Please wait 5 minutes.'
+    });
+    if (!rateCheck.allowed) {
+      return res.status(429).json({ success: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
+    }
+    const { email, otp, newPin, storeCode, staffId, staffName, role, otpTicket } = req.body || {};
     const normEmail = normalizeEmail(email);
     const cleanCode = storeCode ? String(storeCode).trim() : '';
     if (cleanCode && !getShopRecord(cleanCode)) {
@@ -1084,7 +1104,7 @@ app.post('/api/auth/admin-forgot-pin/reset', async (req, res) => {
         }
       }
     }
-    const result = resetAdminPinWithOtp(email, otp, newPin, storeCode, staffId, staffName, role);
+    const result = resetAdminPinWithOtp(email, otp, newPin, storeCode, staffId, staffName, role, otpTicket);
     res.status(result.status || (result.data?.success ? 200 : 400)).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to reset PIN' });
@@ -1104,8 +1124,18 @@ app.post('/api/auth/forgot-password/send-otp', (req, res) => {
 
 app.post('/api/auth/forgot-password/reset', (req, res) => {
   try {
-    const { email, otp, newPassword } = req.body || {};
-    const result = resetPasswordWithOtp(email, otp, newPassword);
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || 'client';
+    const rateCheck = checkRateLimit({
+      key: `pw_reset_req_${clientIp}`,
+      limit: 15,
+      windowSeconds: 300,
+      message: 'Too many password reset attempts. Please wait 5 minutes.'
+    });
+    if (!rateCheck.allowed) {
+      return res.status(429).json({ success: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
+    }
+    const { email, otp, newPassword, otpTicket } = req.body || {};
+    const result = resetPasswordWithOtp(email, otp, newPassword, otpTicket);
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to reset password' });

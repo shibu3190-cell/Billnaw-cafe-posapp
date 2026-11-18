@@ -140,6 +140,10 @@
                 btn.innerHTML = origHtml;
             }
             if (res.ok && data && data.success) {
+                if (data.otpTicket) {
+                    window._forgotPasswordOtpTicket = data.otpTicket;
+                    try { sessionStorage.setItem('billnaw_forgot_pw_ticket', data.otpTicket); } catch(e) {}
+                }
                 const step1 = document.getElementById('forgotPassStep1Wrap');
                 const step2 = document.getElementById('forgotPassStep2Wrap');
                 if (step1) step1.style.display = 'none';
@@ -178,6 +182,10 @@
             return;
         }
 
+        const otpTicket = window._forgotPasswordOtpTicket || (function() {
+            try { return sessionStorage.getItem('billnaw_forgot_pw_ticket') || ''; } catch(e) { return ''; }
+        })();
+
         const btn = document.getElementById('btnForgotPassResetSubmit');
         const origHtml = btn ? btn.innerHTML : '';
         if (btn) {
@@ -188,7 +196,7 @@
             const res = await fetch('/api/auth/forgot-password/reset', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, otp, newPassword })
+                body: JSON.stringify({ email, otp, newPassword, otpTicket })
             });
             const data = await res.json().catch(() => ({}));
             if (btn) {
@@ -196,6 +204,8 @@
                 btn.innerHTML = origHtml;
             }
             if (res.ok && data && data.success) {
+                window._forgotPasswordOtpTicket = null;
+                try { sessionStorage.removeItem('billnaw_forgot_pw_ticket'); } catch(e) {}
                 if (typeof showToast === 'function') showToast('Password updated! Signing you in...', 'success');
                 const pEmail = document.getElementById('shopAuthPasswordEmail');
                 const pInput = document.getElementById('shopAuthPasswordInput');
@@ -378,6 +388,12 @@
                 }
 
                 if (data && data.success) {
+                    if (data.otpTicket) {
+                        window._loginOtpTicket = data.otpTicket;
+                        try {
+                            sessionStorage.setItem('billnaw_login_otp_ticket', data.otpTicket);
+                        } catch(e) {}
+                    }
                     showValidationMsg('loginEmailValidationFeedback', '', '');
                     const recipientSpan = document.getElementById('otpRecipientEmailDisplay');
                     if (recipientSpan) recipientSpan.innerText = email;
@@ -460,6 +476,12 @@
                 }
 
                 if (data && data.success) {
+                    if (data.otpTicket) {
+                        window._loginOtpTicket = data.otpTicket;
+                        try {
+                            sessionStorage.setItem('billnaw_login_otp_ticket', data.otpTicket);
+                        } catch(e) {}
+                    }
                     startOtpTimer(60);
                     if (typeof showToast === 'function') {
                         showToast('New verification code sent to ' + email, 'success');
@@ -501,14 +523,20 @@
             return;
         }
 
+        const otpTicket = window._loginOtpTicket || (function() {
+            try { return sessionStorage.getItem('billnaw_login_otp_ticket') || ''; } catch(e) { return ''; }
+        })();
+
         if (typeof fetch === 'function') {
             fetch('/api/auth/verify-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, otp: otpCode })
+                body: JSON.stringify({ email, otp: otpCode, otpTicket })
             }).then(async res => {
                 const data = await res.json().catch(() => ({}));
                 if (res.ok && data && data.success) {
+                    window._loginOtpTicket = null;
+                    try { sessionStorage.removeItem('billnaw_login_otp_ticket'); } catch(e) {}
                     // Wipe OTP inputs upon successful login
                     digitInputs.forEach(input => { input.value = ''; });
 
@@ -1106,6 +1134,10 @@
                     data = { success: false, error: 'Server returned unexpected status (' + res.status + ')' };
                 }
                 if (data && data.success) {
+                    if (data.otpTicket) {
+                        window._signupOtpTicket = data.otpTicket;
+                        try { sessionStorage.setItem('billnaw_signup_otp_ticket', data.otpTicket); } catch(e) {}
+                    }
                     if (typeof showToast === 'function') {
                         showToast('Verification code sent to ' + email, 'success');
                     }
@@ -1147,6 +1179,10 @@
                     data = { success: false, error: 'Server returned unexpected status (' + res.status + ')' };
                 }
                 if (data && data.success) {
+                    if (data.otpTicket) {
+                        window._signupOtpTicket = data.otpTicket;
+                        try { sessionStorage.setItem('billnaw_signup_otp_ticket', data.otpTicket); } catch(e) {}
+                    }
                     if (typeof showToast === 'function') {
                         showToast('New verification code sent to ' + email, 'success');
                     }
@@ -1182,6 +1218,10 @@
         const digitInputs = Array.from(document.querySelectorAll('#signupOtpBoxesContainer .signup-otp-input'));
         const otp = digitInputs.map(i => i.value.trim()).join('');
 
+        const otpTicket = window._signupOtpTicket || (function() {
+            try { return sessionStorage.getItem('billnaw_signup_otp_ticket') || ''; } catch(e) { return ''; }
+        })();
+
         if (!phone || phone.length < 10) {
             alert('Mobile phone number is mandatory (minimum 10 digits required)');
             return;
@@ -1207,7 +1247,8 @@
                     password: pass,
                     confirmPassword: confirm,
                     adminPin,
-                    otp
+                    otp,
+                    otpTicket
                 })
             }).then(async res => {
                 const data = await res.json().catch(() => ({}));
@@ -1215,6 +1256,8 @@
                 return data;
             }).then(async data => {
                 if (data && data.success) {
+                    window._signupOtpTicket = null;
+                    try { sessionStorage.removeItem('billnaw_signup_otp_ticket'); } catch(e) {}
                     digitInputs.forEach(i => { i.value = ''; });
                     try {
                         // Purge any previous tenant / demo state before initializing the new shop
