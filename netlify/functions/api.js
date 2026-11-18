@@ -256,20 +256,59 @@ function sanitizeTenantStoreCode(event, body) {
 }
 
 // -------------------------------------------------------------
-// Cloud Firestore REST Helpers for Cross-Container OTP State
+// Cloud Firestore & Netlify Blobs Helpers for Cross-Container State
 // -------------------------------------------------------------
 const FIRESTORE_OTP_URL = (email) =>
   `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents/clients/_auth/otp/${encodeURIComponent(email)}`;
 
-async function persistOtpToFirestore(record) {
+async function getNetlifyOtpBlobStore() {
   try {
-    const res = await fetch(FIRESTORE_OTP_URL(record.email), {
+    const blobs = await import('@netlify/blobs');
+    if (blobs && typeof blobs.getStore === 'function') {
+      return blobs.getStore({ name: 'billnaw-auth-otps', consistency: 'eventual' });
+    }
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[NetlifyBlobs OTP] Store initialization warning:', e.message);
+    }
+  }
+  return null;
+}
+
+function getOtpBlobKey(email) {
+  if (!email || typeof email !== 'string') return '';
+  return email.trim().toLowerCase().replace('@', '_at_').replace(/[^a-z0-9_.-]/g, '_');
+}
+
+async function persistOtpToFirestore(record) {
+  if (!record || !record.email) return false;
+  const email = normalizeEmail(record.email);
+
+  // 1. In-memory cache (L1 - instant local)
+  memoryOtpStore.set(email, record);
+
+  // 2. Netlify Blobs (L2 - shared across all Netlify serverless containers)
+  try {
+    const blobStore = await getNetlifyOtpBlobStore();
+    if (blobStore) {
+      const key = getOtpBlobKey(email);
+      await blobStore.setJSON(key, record);
+    }
+  } catch (blobErr) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[SERVERLESS OTP] Blobs write warning:', blobErr.message);
+    }
+  }
+
+  // 3. Firestore REST API (L3 - external cloud db)
+  try {
+    const res = await fetch(FIRESTORE_OTP_URL(email), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fields: {
           otp: { stringValue: String(record.otp) },
-          email: { stringValue: record.email },
+          email: { stringValue: email },
           purpose: { stringValue: record.purpose || 'login' },
           createdAt: { integerValue: String(record.createdAt) },
           expiresAt: { integerValue: String(record.expiresAt) },
@@ -277,21 +316,49 @@ async function persistOtpToFirestore(record) {
         }
       })
     });
-    return res.ok;
+    return Boolean(res && res.ok);
   } catch (err) {
     console.warn('[SERVERLESS OTP] Firestore write warning:', err.message);
     return false;
   }
 }
 
-
 async function retrieveOtpFromFirestore(email) {
+  const normEmail = normalizeEmail(email);
+  if (!normEmail) return null;
+
+  // 1. Check L1 in-memory cache
+  const memRecord = memoryOtpStore.get(normEmail);
+  if (memRecord && !memRecord.consumed && Date.now() <= memRecord.expiresAt) {
+    return memRecord;
+  }
+
+  // 2. Check L2 Netlify Blobs (shared multi-instance cache)
   try {
-    const res = await fetch(FIRESTORE_OTP_URL(email));
-    if (!res.ok) return null;
+    const blobStore = await getNetlifyOtpBlobStore();
+    if (blobStore) {
+      const key = getOtpBlobKey(normEmail);
+      const blobRecord = await blobStore.get(key, { type: 'json' });
+      if (blobRecord && typeof blobRecord === 'object' && blobRecord.otp) {
+        if (!blobRecord.consumed && Date.now() <= blobRecord.expiresAt) {
+          memoryOtpStore.set(normEmail, blobRecord);
+          return blobRecord;
+        }
+      }
+    }
+  } catch (blobErr) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[SERVERLESS OTP] Blobs read warning:', blobErr.message);
+    }
+  }
+
+  // 3. Check L3 Firestore REST API
+  try {
+    const res = await fetch(FIRESTORE_OTP_URL(normEmail));
+    if (!res || !res.ok) return null;
     const json = await res.json();
     if (!json || !json.fields) return null;
-    return {
+    const firestoreRecord = {
       otp: json.fields.otp?.stringValue,
       email: json.fields.email?.stringValue,
       purpose: json.fields.purpose?.stringValue || 'login',
@@ -299,6 +366,11 @@ async function retrieveOtpFromFirestore(email) {
       expiresAt: parseInt(json.fields.expiresAt?.integerValue || '0', 10),
       attempts: parseInt(json.fields.attempts?.integerValue || '0', 10)
     };
+    if (!firestoreRecord.consumed && Date.now() <= firestoreRecord.expiresAt) {
+      memoryOtpStore.set(normEmail, firestoreRecord);
+      return firestoreRecord;
+    }
+    return firestoreRecord;
   } catch (err) {
     console.warn('[SERVERLESS OTP] Firestore read warning:', err.message);
     return null;
@@ -306,20 +378,62 @@ async function retrieveOtpFromFirestore(email) {
 }
 
 async function removeOtpFromFirestore(email) {
+  const normEmail = normalizeEmail(email);
+  if (!normEmail) return;
+
+  // 1. Remove from L1 in-memory cache
+  memoryOtpStore.delete(normEmail);
+
+  // 2. Remove from L2 Netlify Blobs
   try {
-    await fetch(FIRESTORE_OTP_URL(email), { method: 'DELETE' });
-  } catch (err) {
-    // Ignore deletion errors
-  }
+    const blobStore = await getNetlifyOtpBlobStore();
+    if (blobStore) {
+      const key = getOtpBlobKey(normEmail);
+      await blobStore.delete(key);
+    }
+  } catch (_) {}
+
+  // 3. Remove from L3 Firestore
+  try {
+    await fetch(FIRESTORE_OTP_URL(normEmail), { method: 'DELETE' });
+  } catch (_) {}
 }
 
 const FIRESTORE_USER_URL = (email) =>
   `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DATABASE_ID}/documents/clients/_auth/users/${encodeURIComponent(email)}`;
 
+async function getNetlifyUserBlobStore() {
+  try {
+    const blobs = await import('@netlify/blobs');
+    if (blobs && typeof blobs.getStore === 'function') {
+      return blobs.getStore({ name: 'billnaw-auth-users', consistency: 'eventual' });
+    }
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[NetlifyBlobs User] Store initialization warning:', e.message);
+    }
+  }
+  return null;
+}
+
+function getUserBlobKey(email) {
+  if (!email || typeof email !== 'string') return '';
+  return email.trim().toLowerCase().replace('@', '_at_').replace(/[^a-z0-9_.-]/g, '_');
+}
+
 async function persistAuthUserToFirestore(user) {
   try {
     if (!user || !user.email) return false;
     const normEmail = normalizeEmail(user.email);
+
+    // Save to Netlify Blobs for resilient multi-instance user persistence
+    try {
+      const userStore = await getNetlifyUserBlobStore();
+      if (userStore) {
+        await userStore.setJSON(getUserBlobKey(normEmail), user);
+      }
+    } catch (_) {}
+
     const res = await fetch(FIRESTORE_USER_URL(normEmail), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -350,6 +464,18 @@ async function retrieveAuthUserFromFirestore(email) {
   try {
     const normEmail = normalizeEmail(email);
     if (!normEmail) return null;
+
+    // Check Netlify Blobs first for multi-instance cache
+    try {
+      const userStore = await getNetlifyUserBlobStore();
+      if (userStore) {
+        const blobUser = await userStore.get(getUserBlobKey(normEmail), { type: 'json' });
+        if (blobUser && typeof blobUser === 'object' && blobUser.email) {
+          return blobUser;
+        }
+      }
+    } catch (_) {}
+
     const res = await fetch(FIRESTORE_USER_URL(normEmail));
     if (!res || !res.ok) return null;
     const json = await res.json();
@@ -1449,7 +1575,7 @@ export async function handler(event, context) {
     }
 
     const now = Date.now();
-    const existing = memoryOtpStore.get(email);
+    const existing = memoryOtpStore.get(email) || await retrieveOtpFromFirestore(email);
     if (existing && !existing.consumed && now < existing.resendAvailableAt) {
       const retryAfter = Math.ceil((existing.resendAvailableAt - now) / 1000);
       return jsonResponse(429, {
@@ -1515,7 +1641,7 @@ export async function handler(event, context) {
     }
 
     const email = normalizeEmail(body.email);
-    const submittedOtp = (body.otp !== undefined && body.otp !== null) ? String(body.otp).trim() : '';
+    const submittedOtp = (body.otp !== undefined && body.otp !== null) ? String(body.otp).replace(/\s+/g, '').trim() : '';
     const shopName = body.shopName ? String(body.shopName).trim() : '';
 
     if (!isValidEmail(email)) {
@@ -1525,9 +1651,9 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'Please enter a valid 6-digit code.' });
     }
 
-    // Check memory first, then Firestore
+    // Check memory first, then Netlify Blobs & Firestore
     let record = memoryOtpStore.get(email);
-    if (!record || record.consumed) {
+    if (!record || record.consumed || (record && Date.now() > record.expiresAt)) {
       record = await retrieveOtpFromFirestore(email);
     }
 
@@ -1548,11 +1674,12 @@ export async function handler(event, context) {
       });
     }
 
-    if (record.otp !== submittedOtp) {
+    const cleanRecordOtp = String(record.otp || '').replace(/\s+/g, '').trim();
+    if (cleanRecordOtp !== submittedOtp) {
       record.attempts = (record.attempts || 0) + 1;
       memoryOtpStore.set(email, record);
       await persistOtpToFirestore(record);
-      const remaining = 3 - record.attempts;
+      const remaining = Math.max(0, 3 - record.attempts);
       return jsonResponse(400, {
         success: false,
         error: `Invalid verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
@@ -1564,9 +1691,10 @@ export async function handler(event, context) {
     await removeOtpFromFirestore(email);
 
     // Generate authenticated token & store tenant code
+    let existingUser = await retrieveAuthUserFromFirestore(email);
     let cleanStoreCode = (body.storeCode && typeof body.storeCode === 'string' && body.storeCode.trim())
       ? body.storeCode.trim()
-      : (shopName ? shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16) : 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 12));
+      : (existingUser?.storeCode || (shopName ? shopName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 16) : 'SHOP_' + email.split('@')[0].toUpperCase().slice(0, 16)));
     const token = createSignedAuthToken({ email, storeCode: cleanStoreCode, role: 'owner' });
     const sessionToken = 'billnaw_' + crypto.randomBytes(24).toString('hex');
 
@@ -1630,7 +1758,7 @@ export async function handler(event, context) {
     }
 
     const now = Date.now();
-    const existing = memoryOtpStore.get(email);
+    const existing = memoryOtpStore.get(email) || await retrieveOtpFromFirestore(email);
     if (existing && !existing.consumed && now < existing.resendAvailableAt) {
       const retryAfter = Math.ceil((existing.resendAvailableAt - now) / 1000);
       return jsonResponse(429, {
@@ -1889,7 +2017,7 @@ export async function handler(event, context) {
     }
 
     const now = Date.now();
-    const existing = memoryOtpStore.get(email);
+    const existing = memoryOtpStore.get(email) || await retrieveOtpFromFirestore(email);
     if (existing && !existing.consumed && now < existing.resendAvailableAt) {
       const retryAfter = Math.ceil((existing.resendAvailableAt - now) / 1000);
       return jsonResponse(429, {
