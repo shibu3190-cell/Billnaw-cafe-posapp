@@ -4018,15 +4018,30 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
             signal = controller.signal;
         }
 
+        let activeToken = '';
+        try {
+            activeToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_auth_token') : '') ||
+                          (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('billnaw_auth_token') : '') || '';
+        } catch (_) {}
+
+        delete finalPayload.token;
+
+        const reqHeaders = {
+            'Content-Type': 'application/json',
+            'x-shop-id': targetStoreCode,
+            'x-store-code': targetStoreCode,
+            'x-shop-email': finalPayload.ownerEmail || ''
+        };
+        if (activeToken) {
+            reqHeaders['Authorization'] = 'Bearer ' + activeToken;
+            reqHeaders['x-auth-token'] = activeToken;
+            reqHeaders['x-session-token'] = activeToken;
+        }
+
         try {
             const res = await fetch('/api/sync/store-data', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-shop-id': targetStoreCode,
-                    'x-store-code': targetStoreCode,
-                    'x-shop-email': finalPayload.ownerEmail || ''
-                },
+                headers: reqHeaders,
                 body: JSON.stringify(finalPayload),
                 signal
             });

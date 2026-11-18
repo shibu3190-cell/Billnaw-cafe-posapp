@@ -464,6 +464,14 @@ async function dispatchEmail(toEmail, otp, purpose = 'login') {
 // Netlify Lambda Handler Entry Point
 // -------------------------------------------------------------
 export async function handler(event, context) {
+  // Connect Netlify Lambda compatibility environment for @netlify/blobs
+  try {
+    const blobs = await import('@netlify/blobs');
+    if (blobs && typeof blobs.connectLambda === 'function') {
+      blobs.connectLambda(event);
+    }
+  } catch (_) {}
+
   // 1. Handle HTTP OPTIONS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {

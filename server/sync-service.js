@@ -9,6 +9,62 @@ const isServerlessEnv = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FU
 const STORE_CACHE_FILE = path.join(isServerlessEnv ? '/tmp' : path.resolve(process.cwd(), 'data'), 'stores_state_cache.json');
 const serverStoreMemoryCache = new Map();
 
+async function getNetlifyBlobStore() {
+  try {
+    const blobs = await import('@netlify/blobs');
+    if (blobs && typeof blobs.getStore === 'function') {
+      return blobs.getStore({ name: 'billnaw-pos-stores', consistency: 'eventual' });
+    }
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[NetlifyBlobs] Store initialization warning:', e.message);
+    }
+  }
+  return null;
+}
+
+export async function getStoreStateFromPersistentCache(code) {
+  if (!code || typeof code !== 'string' || !/^[A-Za-z0-9_-]{3,64}$/.test(code.trim())) {
+    return null;
+  }
+  const cleanCode = code.trim();
+  let cached = serverStoreMemoryCache.get(cleanCode);
+  try {
+    const blobStore = await getNetlifyBlobStore();
+    if (blobStore) {
+      const blobData = await blobStore.get(cleanCode, { type: 'json' });
+      if (blobData && typeof blobData === 'object') {
+        const bTime = Date.parse(blobData.updatedAt || 0) || 0;
+        const mTime = Date.parse(cached?.updatedAt || 0) || 0;
+        if (!cached || bTime > mTime) {
+          cached = blobData;
+          serverStoreMemoryCache.set(cleanCode, blobData);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[SYNC BLOB] Blob read error:', e.message);
+  }
+  return cached;
+}
+
+export async function saveStoreStateToPersistentCache(code, state) {
+  if (!code || typeof code !== 'string' || !/^[A-Za-z0-9_-]{3,64}$/.test(code.trim())) {
+    return;
+  }
+  const cleanCode = code.trim();
+  serverStoreMemoryCache.set(cleanCode, state);
+  saveServerStoreCacheToDisk();
+  try {
+    const blobStore = await getNetlifyBlobStore();
+    if (blobStore) {
+      await blobStore.setJSON(cleanCode, state);
+    }
+  } catch (e) {
+    console.warn('[SYNC BLOB] Blob write error:', e.message);
+  }
+}
+
 try {
   if (fs.existsSync(STORE_CACHE_FILE)) {
     const raw = JSON.parse(fs.readFileSync(STORE_CACHE_FILE, 'utf8'));
@@ -370,11 +426,11 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
 
   // Safe Staff Handling: Merge with existing staff if partial sync, or replace/remove when requested
-  const cachedStoreForMerge = serverStoreMemoryCache.get(code);
+  const cachedStore = await getStoreStateFromPersistentCache(code);
   let finalStaffArray = payload.staff;
   const existingStaffRaw = existingRootFields?.staff?.arrayValue?.values || [];
-  const existingStaff = (cachedStoreForMerge?._quotaFallbackActive && Array.isArray(cachedStoreForMerge.staff))
-    ? cachedStoreForMerge.staff
+  const existingStaff = (cachedStore?._quotaFallbackActive && Array.isArray(cachedStore.staff))
+    ? cachedStore.staff
     : existingStaffRaw.map(v => firestoreValueToJson(v)).filter(Boolean);
 
   if (Array.isArray(payload.staff)) {
@@ -447,7 +503,6 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
 
   let mergedTables = null;
   if (hasTablesPayload) {
-    const cachedStore = serverStoreMemoryCache.get(code);
     const existingTablesRaw = (cachedStore?._quotaFallbackActive && cachedStore.tables)
       ? cachedStore.tables
       : (existingRootFields?.tables ? firestoreValueToJson(existingRootFields.tables) : {});
@@ -474,11 +529,11 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
 
   // If store had pending unsynced fields from a previous Firestore 429 quota fallback, include them so recovery flushes 100% of cached state
   const currentFieldsKeys = Object.keys(fieldsToPatch);
-  if (cachedStoreForMerge?._quotaFallbackActive) {
+  if (cachedStore?._quotaFallbackActive) {
     const dirtyKeys = ['ownerEmail', 'profile', 'name', 'staff', 'deletedStaffIds', 'menu', 'deletedMenuIds', 'deletedMenuNames', 'menuVersion', 'categories', 'tables', 'history', 'expenses', 'customers', 'kots', 'subscription'];
     for (const dk of dirtyKeys) {
-      if (fieldsToPatch[dk] === undefined && cachedStoreForMerge[dk] !== undefined) {
-        fieldsToPatch[dk] = cachedStoreForMerge[dk];
+      if (fieldsToPatch[dk] === undefined && cachedStore[dk] !== undefined) {
+        fieldsToPatch[dk] = cachedStore[dk];
       }
     }
   }
@@ -512,14 +567,22 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
 
   if (rootPatchError) {
     if (rootPatchStatus === 429) {
-      // Firestore free-tier daily write quota exhausted: persist authoritative LWW state in server cache & disk
-      const prevCached = serverStoreMemoryCache.get(code) || {};
-      serverStoreMemoryCache.set(code, {
-        ...prevCached,
+      // Firestore free-tier daily write quota exhausted: persist authoritative LWW state in server cache, disk & Netlify Blobs
+      const mergedTablesState = { ...(cachedStore?.tables || {}) };
+      if (fieldsToPatch.tables && typeof fieldsToPatch.tables === 'object') {
+        for (const [tId, tData] of Object.entries(fieldsToPatch.tables)) {
+          if (tData !== undefined && tData !== null) {
+            mergedTablesState[tId] = mergeTableEntry(mergedTablesState[tId], tData);
+          }
+        }
+      }
+      const updatedState = {
+        ...(cachedStore || {}),
         ...fieldsToPatch,
+        tables: mergedTablesState,
         _quotaFallbackActive: true
-      });
-      saveServerStoreCacheToDisk();
+      };
+      await saveStoreStateToPersistentCache(code, updatedState);
       return {
         success: true,
         quotaFallback: true,
@@ -539,13 +602,22 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     };
   }
 
-  // Root write succeeded on Firestore: keep server cache synchronized and mark quotaFallback false
-  serverStoreMemoryCache.set(code, {
-    ...(serverStoreMemoryCache.get(code) || {}),
+  // Root write succeeded on Firestore: keep persistent cache synchronized and mark quotaFallback false
+  const mergedTablesState = { ...(cachedStore?.tables || {}) };
+  if (fieldsToPatch.tables && typeof fieldsToPatch.tables === 'object') {
+    for (const [tId, tData] of Object.entries(fieldsToPatch.tables)) {
+      if (tData !== undefined && tData !== null) {
+        mergedTablesState[tId] = mergeTableEntry(mergedTablesState[tId], tData);
+      }
+    }
+  }
+  const updatedState = {
+    ...(cachedStore || {}),
     ...fieldsToPatch,
+    tables: mergedTablesState,
     _quotaFallbackActive: false
-  });
-  saveServerStoreCacheToDisk();
+  };
+  await saveStoreStateToPersistentCache(code, updatedState);
 
   // 2. Sync Staff Subcollection (/{collection}/{storeCode}/staff/{staffId})
   if (deletedStaffIdSet.size > 0) {
@@ -701,10 +773,10 @@ export async function getStoreFromFirestoreREST(storeCode) {
   const rootUrl = `${base}/${collection}/${encodeURIComponent(code)}`;
 
   try {
-    const cached = serverStoreMemoryCache.get(code);
+    const cached = await getStoreStateFromPersistentCache(code);
     const res = await fetch(rootUrl);
     if (!res.ok) {
-      if (cached && cached._quotaFallbackActive) {
+      if (cached && (cached._quotaFallbackActive || Object.keys(cached).length > 0)) {
         return {
           success: true,
           storeCode: code,
@@ -752,30 +824,41 @@ export async function getStoreFromFirestoreREST(storeCode) {
       subscription: fields.subscription ? firestoreValueToJson(fields.subscription) : null,
       updatedAt: fields.updatedAt ? firestoreValueToJson(fields.updatedAt) : rawDoc.updateTime
     };
-    if (cached && cached._quotaFallbackActive) {
+    const resolvedTables = { ...(baseResult.tables || {}) };
+    if (cached?.tables && typeof cached.tables === 'object') {
+      for (const [tId, tData] of Object.entries(cached.tables)) {
+        resolvedTables[tId] = mergeTableEntry(resolvedTables[tId], tData);
+      }
+    }
+    const cTime = Date.parse(cached?.updatedAt || 0) || 0;
+    const fTime = Date.parse(baseResult.updatedAt || 0) || 0;
+    if (cached && (cached._quotaFallbackActive || cTime > fTime)) {
       return {
         ...baseResult,
-        ownerEmail: cached.ownerEmail ?? baseResult.ownerEmail,
-        profile: cached.profile ? { ...(baseResult.profile || {}), ...cached.profile } : baseResult.profile,
-        staff: Array.isArray(cached.staff) ? cached.staff : baseResult.staff,
-        deletedStaffIds: Array.isArray(cached.deletedStaffIds) ? cached.deletedStaffIds : baseResult.deletedStaffIds,
-        menu: Array.isArray(cached.menu) ? cached.menu : baseResult.menu,
-        deletedMenuIds: Array.isArray(cached.deletedMenuIds) ? cached.deletedMenuIds : baseResult.deletedMenuIds,
-        deletedMenuNames: Array.isArray(cached.deletedMenuNames) ? cached.deletedMenuNames : baseResult.deletedMenuNames,
+        ownerEmail: (cTime > fTime ? cached.ownerEmail : undefined) ?? baseResult.ownerEmail,
+        profile: (cached.profile && cTime > fTime) ? { ...(baseResult.profile || {}), ...cached.profile } : baseResult.profile,
+        staff: (Array.isArray(cached.staff) && cTime > fTime) ? cached.staff : baseResult.staff,
+        deletedStaffIds: (Array.isArray(cached.deletedStaffIds) && cTime > fTime) ? cached.deletedStaffIds : baseResult.deletedStaffIds,
+        menu: (Array.isArray(cached.menu) && cTime > fTime) ? cached.menu : baseResult.menu,
+        deletedMenuIds: (Array.isArray(cached.deletedMenuIds) && cTime > fTime) ? cached.deletedMenuIds : baseResult.deletedMenuIds,
+        deletedMenuNames: (Array.isArray(cached.deletedMenuNames) && cTime > fTime) ? cached.deletedMenuNames : baseResult.deletedMenuNames,
         menuVersion: Math.max(Number(cached.menuVersion || 0), Number(baseResult.menuVersion || 0)),
-        categories: Array.isArray(cached.categories) ? cached.categories : baseResult.categories,
-        tables: cached.tables ? { ...(baseResult.tables || {}), ...cached.tables } : baseResult.tables,
-        history: Array.isArray(cached.history) ? cached.history : baseResult.history,
-        expenses: Array.isArray(cached.expenses) ? cached.expenses : baseResult.expenses,
-        customers: Array.isArray(cached.customers) ? cached.customers : baseResult.customers,
-        kots: Array.isArray(cached.kots) ? cached.kots : baseResult.kots,
-        updatedAt: cached.updatedAt || baseResult.updatedAt
+        categories: (Array.isArray(cached.categories) && cTime > fTime) ? cached.categories : baseResult.categories,
+        tables: resolvedTables,
+        history: (Array.isArray(cached.history) && cTime > fTime) ? cached.history : baseResult.history,
+        expenses: (Array.isArray(cached.expenses) && cTime > fTime) ? cached.expenses : baseResult.expenses,
+        customers: (Array.isArray(cached.customers) && cTime > fTime) ? cached.customers : baseResult.customers,
+        kots: (Array.isArray(cached.kots) && cTime > fTime) ? cached.kots : baseResult.kots,
+        updatedAt: (cTime > fTime ? cached.updatedAt : undefined) || baseResult.updatedAt
       };
     }
-    return baseResult;
+    return {
+      ...baseResult,
+      tables: resolvedTables
+    };
   } catch (err) {
-    const cached = serverStoreMemoryCache.get(code);
-    if (cached && cached._quotaFallbackActive) {
+    const cached = await getStoreStateFromPersistentCache(code);
+    if (cached && (cached._quotaFallbackActive || Object.keys(cached).length > 0)) {
       return {
         success: true,
         storeCode: code,

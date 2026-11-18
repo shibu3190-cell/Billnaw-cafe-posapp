@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
@@ -22,6 +25,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
+    "@netlify/blobs": "^11.1.9",
     "express": "^4.21.2",
     "nodemailer": "^10.0.10"
   }
