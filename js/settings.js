@@ -1709,12 +1709,20 @@ function switchTab(tabId) {
                 devices: 'Authorized Devices Hub',
                 tables: 'Floor Tables Overview'
             };
-            const isAdminOnlyTab = ['dashboard', 'settings', 'staff', 'devices', 'whatsapp'].includes(tabId);
+            const isAdminOnlyTab = ['dashboard', 'settings', 'staff', 'devices', 'whatsapp', 'menu'].includes(tabId);
             requestManagerOverride({
                 title: isAdminOnlyTab ? 'Admin Authorization Required' : 'Manager Approval Required',
                 actionDescription: `Staff role (${activeStaffForTab.role}) is restricted from accessing ${tabNames[tabId] || tabId}. Enter ${isAdminOnlyTab ? 'Admin' : 'Manager or Admin'} PIN:`,
                 requiredRole: isAdminOnlyTab ? 'Admin' : 'Manager',
+                grantMenuSession: tabId === 'menu',
                 onSuccess: () => {
+                    if (tabId === 'menu') {
+                        const authUntil = Date.now() + (30 * 60 * 1000);
+                        if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = authUntil;
+                        try { sessionStorage.setItem('billnaw_admin_pin_auth_until', String(authUntil)); } catch (e) {}
+                        const navMenuEl = document.getElementById('nav-menu');
+                        if (navMenuEl) navMenuEl.classList.remove('locked');
+                    }
                     switchTabDirect(tabId);
                 }
             });

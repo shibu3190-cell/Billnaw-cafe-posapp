@@ -42,6 +42,8 @@ import {
   resetStoreCloudData,
   requestAdminPinResetOtp,
   resetAdminPinWithOtp,
+  requestPasswordResetOtp,
+  resetPasswordWithOtp,
   getShopRecord,
   normalizeEmail,
   isValidEmail,
@@ -1086,6 +1088,27 @@ app.post('/api/auth/admin-forgot-pin/reset', async (req, res) => {
     res.status(result.status || (result.data?.success ? 200 : 400)).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to reset PIN' });
+  }
+});
+
+// 2C-2. Account Forgot Password: Send OTP & Reset Password via Email Verification
+app.post('/api/auth/forgot-password/send-otp', (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const result = requestPasswordResetOtp(email);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to dispatch password reset code' });
+  }
+});
+
+app.post('/api/auth/forgot-password/reset', (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body || {};
+    const result = resetPasswordWithOtp(email, otp, newPassword);
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to reset password' });
   }
 });
 

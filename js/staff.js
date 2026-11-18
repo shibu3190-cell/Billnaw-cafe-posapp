@@ -100,7 +100,7 @@ window.ROLES = ROLES;
 const ROLE_PERMISSIONS = {
     [ROLES.ADMIN]: ['can_take_orders', 'can_settle_bills', 'can_apply_discount', 'can_void_invoice', 'can_manage_menu', 'can_view_reports', 'can_view_expenses', 'can_change_settings', 'can_manage_devices', 'can_manage_staff', 'can_view_kds', 'can_update_prep_status', 'can_dispatch_kot', 'can_view_tables'],
     [ROLES.MANAGER]: ['can_take_orders', 'can_settle_bills', 'can_apply_discount', 'can_void_invoice', 'can_manage_menu'],
-    [ROLES.CASHIER]: ['can_take_orders', 'can_settle_bills'],
+    [ROLES.CASHIER]: ['can_take_orders', 'can_settle_bills', 'can_manage_menu', 'can_view_tables'],
     [ROLES.CHEF]: ['can_view_kds', 'can_update_prep_status'],
     [ROLES.SERVER]: ['can_take_orders', 'can_dispatch_kot', 'can_view_tables']
 };
@@ -538,7 +538,9 @@ window.submitStaffPinLogin = confirmStaffLogin;
 function unlockTerminal(staff, showWelcomeToast = true) {
     isTerminalLocked = false;
     window.isTerminalLocked = false;
+    if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = 0;
     try {
+        sessionStorage.removeItem('billnaw_admin_pin_auth_until');
         localStorage.removeItem('billnaw_terminal_locked');
         localStorage.setItem('billnaw_last_staff_id', staff.id);
         localStorage.setItem('billnaw_active_staff', JSON.stringify({ id: staff.id, name: staff.name, role: staff.role }));
@@ -623,7 +625,9 @@ window.unlockTerminal = unlockTerminal;
 function lockTerminal(notify = true) {
     isTerminalLocked = true;
     window.isTerminalLocked = true;
+    if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = 0;
     try {
+        sessionStorage.removeItem('billnaw_admin_pin_auth_until');
         localStorage.setItem('billnaw_terminal_locked', 'true');
     } catch (e) {}
 
@@ -769,8 +773,10 @@ function lockTerminalByRemote(lockedSession) {
         window.currentSessionId = null;
         window.currentStaff = null;
         window.currentRole = null;
+        window._menuAdminPinAuthorizedUntil = 0;
     }
     try {
+        sessionStorage.removeItem('billnaw_admin_pin_auth_until');
         localStorage.removeItem('billnaw_current_session_id');
         localStorage.removeItem('billnaw_active_staff');
         localStorage.removeItem('billnaw_last_staff_id');
@@ -1240,11 +1246,13 @@ window.backspaceSwitchPin = backspaceSwitchPin;
 let spotOverrideCallback = null;
 let spotOverrideCancelCallback = null;
 let spotOverrideRequiredRole = 'Manager';
+let spotOverrideGrantMenuSession = false;
 
-function requestManagerOverride({ title, actionDescription, requiredRole = 'Manager', onSuccess, onCancel }) {
+function requestManagerOverride({ title, actionDescription, requiredRole = 'Manager', grantMenuSession = false, onSuccess, onCancel }) {
     spotOverrideCallback = onSuccess;
     spotOverrideCancelCallback = onCancel;
     spotOverrideRequiredRole = requiredRole;
+    spotOverrideGrantMenuSession = Boolean(grantMenuSession);
 
     const modal = document.getElementById('spotManagerOverrideModal');
     if (!modal) {
@@ -1312,6 +1320,12 @@ async function confirmSpotManagerOverride() {
     }
 
     if (authorized) {
+        if (spotOverrideGrantMenuSession && authorizingManager && normalizeRole(authorizingManager.role) === 'Admin') {
+            const authUntil = Date.now() + (30 * 60 * 1000);
+            if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = authUntil;
+            try { sessionStorage.setItem('billnaw_admin_pin_auth_until', String(authUntil)); } catch (e) {}
+        }
+        spotOverrideGrantMenuSession = false;
         closeSpotManagerOverrideModal(false);
         showToast(`Action approved by ${authorizingManager.name} (${authorizingManager.role})`, "success");
         if (typeof spotOverrideCallback === 'function') {
@@ -1819,11 +1833,13 @@ function logoutStaff() {
         localStorage.removeItem('billnaw_current_session_id');
         localStorage.removeItem('billnaw_active_staff');
         localStorage.removeItem('billnaw_last_staff_id');
+        sessionStorage.removeItem('billnaw_admin_pin_auth_until');
     } catch (e) {}
     if (typeof window !== 'undefined') {
         window.currentSessionId = null;
         window.currentStaff = null;
         window.currentRole = null;
+        window._menuAdminPinAuthorizedUntil = 0;
     }
     currentStaff = null;
     currentRole = null; 
@@ -1840,6 +1856,20 @@ function lockSystem() {
 window.lockSystem = lockSystem;
 
 // 🔒 RBAC Access Verification & UI Guards
+function isMenuPinSessionActive() {
+    if (typeof window !== 'undefined' && window._menuAdminPinAuthorizedUntil && Date.now() < window._menuAdminPinAuthorizedUntil) {
+        return true;
+    }
+    try {
+        if (typeof sessionStorage !== 'undefined') {
+            const authUntil = Number(sessionStorage.getItem('billnaw_admin_pin_auth_until') || 0);
+            if (authUntil > Date.now()) return true;
+        }
+    } catch (e) {}
+    return false;
+}
+window.isMenuPinSessionActive = isMenuPinSessionActive;
+
 function canStaffAccessTab(staff, tabId) {
     if (!staff || !staff.role || !tabId) return false;
     const normRole = normalizeRole(staff.role);
@@ -1853,7 +1883,7 @@ function canStaffAccessTab(staff, tabId) {
     }
 
     if (normRole === ROLES.CASHIER) {
-        return ['pos', 'tables', 'customers', 'khata'].includes(tabId);
+        return ['pos', 'tables', 'customers', 'khata', 'menu'].includes(tabId);
     }
 
     if (normRole === ROLES.CHEF) {
@@ -1861,6 +1891,9 @@ function canStaffAccessTab(staff, tabId) {
     }
 
     if (normRole === ROLES.SERVER) {
+        if (tabId === 'menu' && isMenuPinSessionActive()) {
+            return true;
+        }
         return ['tables', 'pos', 'settings'].includes(tabId);
     }
 
@@ -1912,7 +1945,7 @@ function enforcePermissions() {
         if (navReports) navReports.classList.add('locked');
         if (navSettings) navSettings.classList.add('locked');
         if (navInventory) navInventory.classList.add('locked');
-        if (navMenu) navMenu.classList.add('locked');
+        if (navMenu) navMenu.classList.remove('locked');
         if (navKhata) navKhata.classList.remove('locked');
         if (navTables) navTables.classList.remove('locked');
         if (navCustomers) navCustomers.classList.remove('locked');
@@ -1927,7 +1960,10 @@ function enforcePermissions() {
         if (navReports) navReports.classList.add('locked');
         if (navSettings) navSettings.classList.remove('locked');
         if (navInventory) navInventory.classList.add('locked');
-        if (navMenu) navMenu.classList.add('locked');
+        if (navMenu) {
+            if (isMenuPinSessionActive()) navMenu.classList.remove('locked');
+            else navMenu.classList.add('locked');
+        }
         if (navKhata) navKhata.classList.add('locked');
         if (navCustomers) navCustomers.classList.add('locked');
         if (navTables) navTables.classList.remove('locked');

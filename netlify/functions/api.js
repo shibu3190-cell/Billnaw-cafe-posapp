@@ -92,9 +92,9 @@ const FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-bi
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465';
-const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || 'shibu3190@gmail.com';
-const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || '').trim().replace(/\s+/g, '');
-const SMTP_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || `"Billnaw POS" <${SMTP_USER}>`;
+const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || CONFIG?.email?.user || 'shibu3190@gmail.com';
+const SMTP_PASS = (process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || CONFIG?.email?.pass || '').trim().replace(/\s+/g, '');
+const SMTP_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || CONFIG?.email?.from || `"Billnaw POS" <${SMTP_USER}>`;
 
 // In-memory cache for fast single-container hits
 const memoryOtpStore = new Map();
@@ -431,7 +431,9 @@ async function dispatchEmail(toEmail, otp, purpose = 'login') {
 
   const text = `Billnaw POS Verification Code: ${otp}\n\nUse this 6-digit code to ${actionText}.\nThis code expires in 10 minutes.\nNever share this code with anyone.`;
 
-  if (!SMTP_USER || !SMTP_PASS) {
+  const resolvedSmtpUser = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || CONFIG?.email?.user || SMTP_USER;
+  const resolvedSmtpPass = (process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_APP_PASSWORD || CONFIG?.email?.pass || SMTP_PASS || '').trim().replace(/\s+/g, '');
+  if (!resolvedSmtpUser || !resolvedSmtpPass) {
     throw new Error('SMTP credentials are not configured. Please use password login or contact support.');
   }
 
@@ -440,8 +442,8 @@ async function dispatchEmail(toEmail, otp, purpose = 'login') {
     port: SMTP_PORT,
     secure: SMTP_SECURE,
     auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS
+      user: resolvedSmtpUser,
+      pass: resolvedSmtpPass
     }
   });
 
@@ -1853,6 +1855,150 @@ export async function handler(event, context) {
       role: finalRole,
       stationProfile,
       storeCode: requestedStoreCode
+    });
+  }
+
+  // -----------------------------------------------------------
+  // Route: /auth/forgot-password/send-otp
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && (cleanPath === '/auth/forgot-password/send-otp' || cleanPath.endsWith('/forgot-password/send-otp'))) {
+    const clientIp = headers['x-nf-client-connection-ip'] || headers['x-forwarded-for'] || 'client';
+    const rateCheck = checkRateLimit({
+      key: `pw_otp_req_${clientIp}`,
+      limit: 10,
+      windowSeconds: 600,
+      message: 'Too many password reset requests from this device. Please wait 10 minutes.'
+    });
+    if (!rateCheck.allowed) {
+      return jsonResponse(429, { success: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
+    }
+
+    const email = normalizeEmail(body.email);
+    if (!isValidEmail(email)) {
+      return jsonResponse(400, { success: false, error: 'Please enter a valid email address.' });
+    }
+
+    const now = Date.now();
+    const existing = memoryOtpStore.get(email);
+    if (existing && !existing.consumed && now < existing.resendAvailableAt) {
+      const retryAfter = Math.ceil((existing.resendAvailableAt - now) / 1000);
+      return jsonResponse(429, {
+        success: false,
+        error: `Please wait ${retryAfter} seconds before requesting a new code.`,
+        retryAfter
+      });
+    }
+
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const record = {
+      email,
+      otp,
+      purpose: 'password-reset',
+      createdAt: now,
+      expiresAt: now + (600 * 1000),
+      resendAvailableAt: now + (60 * 1000),
+      attempts: 0,
+      consumed: false
+    };
+
+    memoryOtpStore.set(email, record);
+    await persistOtpToFirestore(record);
+
+    try {
+      await dispatchEmail(email, otp, 'password-reset');
+      return jsonResponse(200, {
+        success: true,
+        message: `Password reset code sent to ${email}`,
+        cooldownSeconds: 60
+      });
+    } catch (err) {
+      memoryOtpStore.delete(email);
+      await removeOtpFromFirestore(email).catch(() => {});
+      console.error(`[NETLIFY API] ❌ Password reset email error for ${email}:`, err);
+      return jsonResponse(500, {
+        success: false,
+        error: `Could not send password reset email to ${email}. Please check your email or sign in with Email + OTP.`
+      });
+    }
+  }
+
+  // -----------------------------------------------------------
+  // Route: /auth/forgot-password/reset
+  // -----------------------------------------------------------
+  if (event.httpMethod === 'POST' && (cleanPath === '/auth/forgot-password/reset' || cleanPath.endsWith('/forgot-password/reset'))) {
+    const email = normalizeEmail(body.email);
+    const submittedOtp = String(body.otp || '').trim();
+    const newPassword = String(body.newPassword || '');
+
+    if (!isValidEmail(email)) {
+      return jsonResponse(400, { success: false, error: 'Invalid email address.' });
+    }
+    if (!/^\d{6}$/.test(submittedOtp)) {
+      return jsonResponse(400, { success: false, error: 'Please enter the 6-digit reset code.' });
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return jsonResponse(400, { success: false, error: 'Password must be at least 6 characters.' });
+    }
+
+    let record = memoryOtpStore.get(email);
+    if (!record) {
+      record = await retrieveOtpFromFirestore(email);
+      if (record) memoryOtpStore.set(email, record);
+    }
+
+    if (!record || record.consumed || Date.now() > record.expiresAt) {
+      return jsonResponse(400, { success: false, error: 'Invalid or expired reset code.' });
+    }
+    if (record.purpose !== 'password-reset') {
+      return jsonResponse(400, { success: false, error: 'Invalid OTP purpose for password reset.' });
+    }
+
+    record.attempts = (record.attempts || 0) + 1;
+    if (record.attempts > 3) {
+      record.consumed = true;
+      await persistOtpToFirestore(record);
+      return jsonResponse(429, { success: false, error: 'Maximum verification attempts exceeded. Please request a new reset code.' });
+    }
+
+    const a = Buffer.from(String(record.otp), 'utf8');
+    const b = Buffer.from(submittedOtp, 'utf8');
+    const match = a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (!match) {
+      await persistOtpToFirestore(record);
+      return jsonResponse(400, { success: false, error: `Incorrect reset code. ${3 - record.attempts} attempt(s) remaining.` });
+    }
+
+    record.consumed = true;
+    await persistOtpToFirestore(record);
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = hashPassword(newPassword, salt);
+    let existingUser = await retrieveAuthUserFromFirestore(email);
+    const uid = existingUser?.uid || ('usr_' + crypto.createHash('sha256').update(email).digest('hex').slice(0, 10));
+    const storeCode = existingUser?.storeCode || generateStoreCode(existingUser?.shopName || 'Billnaw Cafe', email);
+    const updatedUser = {
+      ...(existingUser || {}),
+      uid,
+      email,
+      firstName: existingUser?.firstName || '',
+      lastName: existingUser?.lastName || '',
+      shopName: existingUser?.shopName || 'Billnaw Cafe',
+      phone: existingUser?.phone || '',
+      storeCode,
+      passwordHash,
+      salt,
+      role: existingUser?.role || 'Owner',
+      createdAt: existingUser?.createdAt || new Date().toISOString()
+    };
+
+    setAuthUserRecord(updatedUser);
+    await persistAuthUserToFirestore(updatedUser);
+
+    return jsonResponse(200, {
+      success: true,
+      message: 'Password updated successfully! You can now sign in.',
+      email,
+      storeCode
     });
   }
 

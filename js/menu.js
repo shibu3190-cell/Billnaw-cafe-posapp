@@ -16,6 +16,15 @@ function _sanitizeMenuImgUrl(url) {
 }
 
 function canCurrentStaffManageMenu() {
+    if (typeof window !== 'undefined' && window._menuAdminPinAuthorizedUntil && Date.now() < window._menuAdminPinAuthorizedUntil) {
+        return true;
+    }
+    try {
+        if (typeof sessionStorage !== 'undefined') {
+            const authUntil = Number(sessionStorage.getItem('billnaw_admin_pin_auth_until') || 0);
+            if (authUntil > Date.now()) return true;
+        }
+    } catch (e) {}
     if (typeof currentStaff === 'undefined') {
         return (typeof hasPermission !== 'function');
     }
@@ -23,23 +32,34 @@ function canCurrentStaffManageMenu() {
     if (!active || !active.role) {
         return (typeof hasPermission !== 'function' && !active);
     }
+    const r = String(active.role).trim().toLowerCase();
+    if (r === 'admin' || r === 'owner' || r === 'manager' || r === 'cashier') {
+        return true;
+    }
     if (typeof hasPermission === 'function') {
         return hasPermission(active, 'can_manage_menu');
     }
-    const r = String(active.role).trim().toLowerCase();
-    return r === 'admin' || r === 'owner' || r === 'manager';
+    return false;
 }
+window.canCurrentStaffManageMenu = canCurrentStaffManageMenu;
 
 function _requireMenuPermission(actionLabel, onAuthorized) {
     if (canCurrentStaffManageMenu()) return true;
     if (typeof requestManagerOverride === 'function') {
         requestManagerOverride({
-            title: 'Manager Authorization Required',
-            actionDescription: `Enter Manager or Admin PIN to ${actionLabel}:`,
-            onSuccess: () => { if (typeof onAuthorized === 'function') onAuthorized(); }
+            title: 'Admin Authorization Required',
+            actionDescription: `Enter 4-Digit Admin PIN to ${actionLabel}:`,
+            requiredRole: 'Admin',
+            grantMenuSession: true,
+            onSuccess: () => {
+                const authUntil = Date.now() + (30 * 60 * 1000);
+                if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = authUntil;
+                try { sessionStorage.setItem('billnaw_admin_pin_auth_until', String(authUntil)); } catch (e) {}
+                if (typeof onAuthorized === 'function') onAuthorized();
+            }
         });
     } else if (typeof showToast === 'function') {
-        showToast('Permission denied: Manager or Admin authorization required.', 'error');
+        showToast('Permission denied: Admin authorization required.', 'error');
     }
     return false;
 }
@@ -785,6 +805,7 @@ function toggleStockUnlimited() {
     }
     const itemName = activeAdjustingItem.name || 'Item';
     activeAdjustingItem.trackStock = false;
+    activeAdjustingItem.updatedAt = Date.now();
     persistMenu();
     renderMenuUI();
     closeQuickAdjustStockModal();
@@ -813,6 +834,7 @@ function saveQuickStockAdjustment() {
     activeAdjustingItem.trackStock = true;
     activeAdjustingItem.stockQty = isNaN(newQty) ? 0 : Math.max(0, newQty);
     activeAdjustingItem.stock = activeAdjustingItem.stockQty;
+    activeAdjustingItem.updatedAt = Date.now();
 
     const itemName = activeAdjustingItem.name || 'Item';
     const finalQty = activeAdjustingItem.stockQty;

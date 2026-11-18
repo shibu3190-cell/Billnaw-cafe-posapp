@@ -1,7 +1,36 @@
 // server/sync-service.js - Backend Shop Mapping, Cloud Sync, Backup, and Diagnostics
 // Manages shop data integrity, verification, cloud configuration, and state mapping.
 
+import fs from 'fs';
+import path from 'path';
 import { CONFIG } from './config.js';
+
+const isServerlessEnv = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const STORE_CACHE_FILE = path.join(isServerlessEnv ? '/tmp' : path.resolve(process.cwd(), 'data'), 'stores_state_cache.json');
+const serverStoreMemoryCache = new Map();
+
+try {
+  if (fs.existsSync(STORE_CACHE_FILE)) {
+    const raw = JSON.parse(fs.readFileSync(STORE_CACHE_FILE, 'utf8'));
+    if (raw && typeof raw === 'object') {
+      for (const [k, v] of Object.entries(raw)) {
+        if (k && v && typeof v === 'object') serverStoreMemoryCache.set(k, v);
+      }
+    }
+  }
+} catch (e) {}
+
+function saveServerStoreCacheToDisk() {
+  try {
+    const dir = path.dirname(STORE_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const serialized = {};
+    for (const [k, v] of serverStoreMemoryCache.entries()) {
+      serialized[k] = v;
+    }
+    fs.writeFileSync(STORE_CACHE_FILE, JSON.stringify(serialized), 'utf8');
+  } catch (e) {}
+}
 
 export function getShopStatus() {
   return {
@@ -137,6 +166,8 @@ export function jsonToFirestoreFields(obj) {
 function parseComparableTimestamp(val) {
   if (typeof val === 'number' && Number.isFinite(val)) return val;
   if (typeof val === 'string' && val.trim() !== '') {
+    const asNum = Number(val);
+    if (Number.isFinite(asNum) && asNum > 0) return asNum;
     const parsed = Date.parse(val);
     if (!Number.isNaN(parsed)) return parsed;
   }
@@ -159,10 +190,14 @@ function mergeTableEntry(existingTable, incomingTable) {
     return { ...incomingTable };
   }
 
+  const incomingTs = parseComparableTimestamp(incomingTable.updatedAt ?? incomingTable.clearedAt ?? incomingTable.savedTime);
+  const existingTs = parseComparableTimestamp(existingTable.updatedAt ?? existingTable.clearedAt ?? existingTable.savedTime);
+  const existingClearedTs = parseComparableTimestamp(existingTable.clearedAt);
+  const existingItems = Array.isArray(existingTable.items) ? existingTable.items : [];
+
   if (isExplicitTableReset(incomingTable)) {
-    const incomingTs = parseComparableTimestamp(incomingTable.updatedAt ?? incomingTable.clearedAt ?? incomingTable.savedTime);
-    const existingTs = parseComparableTimestamp(existingTable.updatedAt ?? existingTable.savedTime);
-    if (incomingTs !== null && existingTs !== null && incomingTs < existingTs) {
+    const isUntimestampedBootSlot = (incomingTs === null && incomingTable.occupied !== false && String(incomingTable.status || '').toLowerCase() !== 'billed');
+    if (existingItems.length > 0 && existingTs !== null && (isUntimestampedBootSlot || (incomingTs !== null && incomingTs < existingTs))) {
       return { ...existingTable };
     }
     return {
@@ -174,7 +209,19 @@ function mergeTableEntry(existingTable, incomingTable) {
     };
   }
 
+  // Guard: If existing table was explicitly cleared/settled at existingClearedTs, reject stale incoming items with incomingTs === null or incomingTs <= existingClearedTs
+  if (isExplicitTableReset(existingTable) && existingClearedTs !== null && (incomingTs === null || incomingTs <= existingClearedTs)) {
+    return { ...existingTable };
+  }
+
   if (Array.isArray(incomingTable.items) && incomingTable.items.length > 0) {
+    // Last-Edit-Wins (LWW): If existingTable has active items and a strictly newer timestamp than incomingTable, preserve existingTable as base
+    const useExistingAsBase = Boolean(existingItems.length > 0 && existingTs !== null && incomingTs !== null && existingTs > incomingTs);
+    const baseTable = useExistingAsBase ? existingTable : incomingTable;
+    const otherTable = useExistingAsBase ? incomingTable : existingTable;
+    const baseItems = useExistingAsBase ? existingItems : incomingTable.items;
+    const otherItems = useExistingAsBase ? incomingTable.items : existingItems;
+
     const existingMap = (existingTable.kotPrintedMap && typeof existingTable.kotPrintedMap === 'object' && !Array.isArray(existingTable.kotPrintedMap))
       ? existingTable.kotPrintedMap
       : {};
@@ -190,11 +237,10 @@ function mergeTableEntry(existingTable, incomingTable) {
     }
     const prunedMap = {};
 
-    const existingItems = Array.isArray(existingTable.items) ? existingTable.items : [];
-    const mergedItems = incomingTable.items.map((item) => {
+    const mergedItems = baseItems.map((item) => {
       if (!item || typeof item !== 'object') return item;
       const itemIdStr = (item.id !== undefined && item.id !== null) ? String(item.id) : '';
-      const prevItem = existingItems.find((pi) => {
+      const prevItem = otherItems.find((pi) => {
         if (!pi || typeof pi !== 'object') return false;
         if (itemIdStr && pi.id !== undefined && pi.id !== null && String(pi.id) === itemIdStr) return true;
         return Boolean(pi.name && item.name && pi.name === item.name);
@@ -225,18 +271,22 @@ function mergeTableEntry(existingTable, incomingTable) {
     const anyKotPrinted = mergedItems.some(it => Number(it?.qtyKotPrinted || 0) > 0);
     const existingStatus = String(existingTable.status || '').trim().toLowerCase();
     const incomingStatus = String(incomingTable.status || '').trim().toLowerCase();
-    let finalStatus = incomingTable.status ?? existingTable.status;
-    if (existingStatus === 'kot' && (!incomingStatus || incomingStatus === 'occupied') && anyKotPrinted) {
+    let finalStatus = baseTable.status ?? otherTable.status;
+    if ((existingStatus === 'kot' || incomingStatus === 'kot') && (!finalStatus || String(finalStatus).toLowerCase() === 'occupied') && anyKotPrinted) {
       finalStatus = 'kot';
     }
 
     return {
-      ...existingTable,
-      ...incomingTable,
+      ...otherTable,
+      ...baseTable,
       status: finalStatus,
       items: mergedItems,
       kotPrintedMap: prunedMap
     };
+  }
+
+  if (existingItems.length > 0 && existingTs !== null && (incomingTs === null || incomingTs < existingTs)) {
+    return { ...existingTable };
   }
 
   return {
@@ -320,9 +370,12 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
 
   // Safe Staff Handling: Merge with existing staff if partial sync, or replace/remove when requested
+  const cachedStoreForMerge = serverStoreMemoryCache.get(code);
   let finalStaffArray = payload.staff;
   const existingStaffRaw = existingRootFields?.staff?.arrayValue?.values || [];
-  const existingStaff = existingStaffRaw.map(v => firestoreValueToJson(v)).filter(Boolean);
+  const existingStaff = (cachedStoreForMerge?._quotaFallbackActive && Array.isArray(cachedStoreForMerge.staff))
+    ? cachedStoreForMerge.staff
+    : existingStaffRaw.map(v => firestoreValueToJson(v)).filter(Boolean);
 
   if (Array.isArray(payload.staff)) {
     if (needsStaffMerge && existingStaff.length > 0) {
@@ -348,7 +401,9 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   if (Array.isArray(payload.deletedStaffIds)) {
     fieldsToPatch.deletedStaffIds = Array.from(deletedStaffIdSet);
   } else if (deletedStaffIdSet.size > 0) {
-    const existingDeletedStaff = existingRootFields?.deletedStaffIds ? firestoreValueToJson(existingRootFields.deletedStaffIds) : [];
+    const existingDeletedStaff = (cachedStoreForMerge?._quotaFallbackActive && Array.isArray(cachedStoreForMerge.deletedStaffIds))
+      ? cachedStoreForMerge.deletedStaffIds
+      : (existingRootFields?.deletedStaffIds ? firestoreValueToJson(existingRootFields.deletedStaffIds) : []);
     const combinedDeleted = new Set([
       ...(Array.isArray(existingDeletedStaff) ? existingDeletedStaff.map(id => String(id).trim()).filter(Boolean) : []),
       ...deletedStaffIdSet
@@ -364,19 +419,38 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
       fieldsToPatch.menuVersion = v;
     }
   }
-  if (Array.isArray(payload.menu)) fieldsToPatch.menu = payload.menu;
-  if (Array.isArray(payload.deletedMenuIds)) fieldsToPatch.deletedMenuIds = payload.deletedMenuIds;
-  if (Array.isArray(payload.deletedMenuNames)) fieldsToPatch.deletedMenuNames = payload.deletedMenuNames;
+  if (Array.isArray(payload.menu)) {
+    fieldsToPatch.menu = payload.menu;
+  }
+  if (Array.isArray(payload.deletedMenuIds)) {
+    const activeMenuIds = new Set(
+      (Array.isArray(payload.menu) ? payload.menu : [])
+        .filter(m => m && !m.isDeleted && m.isAvailable !== false && m.id !== undefined)
+        .map(m => String(m.id).trim())
+    );
+    fieldsToPatch.deletedMenuIds = payload.deletedMenuIds.filter(id => !activeMenuIds.has(String(id).trim()));
+  }
+  if (Array.isArray(payload.deletedMenuNames)) {
+    const activeMenuNames = new Set(
+      (Array.isArray(payload.menu) ? payload.menu : [])
+        .filter(m => m && !m.isDeleted && m.isAvailable !== false && m.name)
+        .map(m => String(m.name).trim().toLowerCase())
+    );
+    fieldsToPatch.deletedMenuNames = payload.deletedMenuNames.filter(n => !activeMenuNames.has(String(n).trim().toLowerCase()));
+  }
   if (Array.isArray(payload.categories)) fieldsToPatch.categories = payload.categories;
 
-  if ((Array.isArray(payload.menu) || Array.isArray(payload.categories)) && resolvedMenuVersion === null) {
+  if (payload.menuVersion === undefined && (Array.isArray(payload.menu) || Array.isArray(payload.categories)) && resolvedMenuVersion === null) {
     resolvedMenuVersion = Date.now();
     fieldsToPatch.menuVersion = resolvedMenuVersion;
   }
 
   let mergedTables = null;
   if (hasTablesPayload) {
-    const existingTablesRaw = existingRootFields?.tables ? firestoreValueToJson(existingRootFields.tables) : {};
+    const cachedStore = serverStoreMemoryCache.get(code);
+    const existingTablesRaw = (cachedStore?._quotaFallbackActive && cachedStore.tables)
+      ? cachedStore.tables
+      : (existingRootFields?.tables ? firestoreValueToJson(existingRootFields.tables) : {});
     mergedTables = (existingTablesRaw && typeof existingTablesRaw === 'object' && !Array.isArray(existingTablesRaw))
       ? { ...existingTablesRaw }
       : {};
@@ -397,6 +471,17 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   if (payload.subscription) fieldsToPatch.subscription = payload.subscription;
   fieldsToPatch.updatedAt = timestamp;
   fieldsToPatch.storeCode = code;
+
+  // If store had pending unsynced fields from a previous Firestore 429 quota fallback, include them so recovery flushes 100% of cached state
+  const currentFieldsKeys = Object.keys(fieldsToPatch);
+  if (cachedStoreForMerge?._quotaFallbackActive) {
+    const dirtyKeys = ['ownerEmail', 'profile', 'name', 'staff', 'deletedStaffIds', 'menu', 'deletedMenuIds', 'deletedMenuNames', 'menuVersion', 'categories', 'tables', 'history', 'expenses', 'customers', 'kots', 'subscription'];
+    for (const dk of dirtyKeys) {
+      if (fieldsToPatch[dk] === undefined && cachedStoreForMerge[dk] !== undefined) {
+        fieldsToPatch[dk] = cachedStoreForMerge[dk];
+      }
+    }
+  }
 
   // Build field paths for updateMask
   const updateMaskParams = Object.keys(fieldsToPatch)
@@ -426,6 +511,26 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
 
   if (rootPatchError) {
+    if (rootPatchStatus === 429) {
+      // Firestore free-tier daily write quota exhausted: persist authoritative LWW state in server cache & disk
+      const prevCached = serverStoreMemoryCache.get(code) || {};
+      serverStoreMemoryCache.set(code, {
+        ...prevCached,
+        ...fieldsToPatch,
+        _quotaFallbackActive: true
+      });
+      saveServerStoreCacheToDisk();
+      return {
+        success: true,
+        quotaFallback: true,
+        storeCode: code,
+        syncedFields: currentFieldsKeys,
+        staffCount: Array.isArray(finalStaffArray) ? finalStaffArray.length : 0,
+        deletedStaffId: deletedIdStr || undefined,
+        deletedStaffIds: deletedStaffIdSet.size > 0 ? Array.from(deletedStaffIdSet) : undefined,
+        tableCount: hasTablesPayload ? Object.keys(payload.tables).length : undefined
+      };
+    }
     return {
       success: false,
       status: rootPatchStatus,
@@ -433,6 +538,14 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
       storeCode: code
     };
   }
+
+  // Root write succeeded on Firestore: keep server cache synchronized and mark quotaFallback false
+  serverStoreMemoryCache.set(code, {
+    ...(serverStoreMemoryCache.get(code) || {}),
+    ...fieldsToPatch,
+    _quotaFallbackActive: false
+  });
+  saveServerStoreCacheToDisk();
 
   // 2. Sync Staff Subcollection (/{collection}/{storeCode}/staff/{staffId})
   if (deletedStaffIdSet.size > 0) {
@@ -520,6 +633,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     const finalVer = resolvedMenuVersion !== null ? resolvedMenuVersion : Date.now();
     const metaFields = {
       version: finalVer,
+      menuVersion: finalVer,
       updatedAt: timestamp,
       updatedBy: payload.profile?.name || payload.updatedBy || 'Admin'
     };
@@ -587,15 +701,38 @@ export async function getStoreFromFirestoreREST(storeCode) {
   const rootUrl = `${base}/${collection}/${encodeURIComponent(code)}`;
 
   try {
+    const cached = serverStoreMemoryCache.get(code);
     const res = await fetch(rootUrl);
     if (!res.ok) {
+      if (cached && cached._quotaFallbackActive) {
+        return {
+          success: true,
+          storeCode: code,
+          ownerEmail: cached.ownerEmail || cached.profile?.ownerEmail || null,
+          profile: cached.profile || null,
+          staff: cached.staff || [],
+          deletedStaffIds: cached.deletedStaffIds || [],
+          menu: cached.menu || [],
+          deletedMenuIds: cached.deletedMenuIds || [],
+          deletedMenuNames: cached.deletedMenuNames || [],
+          menuVersion: cached.menuVersion || 0,
+          categories: cached.categories || [],
+          tables: cached.tables || {},
+          history: cached.history || [],
+          expenses: cached.expenses || [],
+          customers: cached.customers || [],
+          kots: cached.kots || [],
+          subscription: cached.subscription || null,
+          updatedAt: cached.updatedAt || new Date().toISOString()
+        };
+      }
       return { success: false, status: res.status, error: await res.text() };
     }
     const rawDoc = await res.json();
     const fields = rawDoc.fields || {};
     const profileObj = fields.profile ? firestoreValueToJson(fields.profile) : null;
     const ownerEmail = (fields.ownerEmail ? firestoreValueToJson(fields.ownerEmail) : null) || profileObj?.ownerEmail || profileObj?.email || null;
-    return {
+    const baseResult = {
       success: true,
       storeCode: code,
       ownerEmail,
@@ -615,7 +752,51 @@ export async function getStoreFromFirestoreREST(storeCode) {
       subscription: fields.subscription ? firestoreValueToJson(fields.subscription) : null,
       updatedAt: fields.updatedAt ? firestoreValueToJson(fields.updatedAt) : rawDoc.updateTime
     };
+    if (cached && cached._quotaFallbackActive) {
+      return {
+        ...baseResult,
+        ownerEmail: cached.ownerEmail ?? baseResult.ownerEmail,
+        profile: cached.profile ? { ...(baseResult.profile || {}), ...cached.profile } : baseResult.profile,
+        staff: Array.isArray(cached.staff) ? cached.staff : baseResult.staff,
+        deletedStaffIds: Array.isArray(cached.deletedStaffIds) ? cached.deletedStaffIds : baseResult.deletedStaffIds,
+        menu: Array.isArray(cached.menu) ? cached.menu : baseResult.menu,
+        deletedMenuIds: Array.isArray(cached.deletedMenuIds) ? cached.deletedMenuIds : baseResult.deletedMenuIds,
+        deletedMenuNames: Array.isArray(cached.deletedMenuNames) ? cached.deletedMenuNames : baseResult.deletedMenuNames,
+        menuVersion: Math.max(Number(cached.menuVersion || 0), Number(baseResult.menuVersion || 0)),
+        categories: Array.isArray(cached.categories) ? cached.categories : baseResult.categories,
+        tables: cached.tables ? { ...(baseResult.tables || {}), ...cached.tables } : baseResult.tables,
+        history: Array.isArray(cached.history) ? cached.history : baseResult.history,
+        expenses: Array.isArray(cached.expenses) ? cached.expenses : baseResult.expenses,
+        customers: Array.isArray(cached.customers) ? cached.customers : baseResult.customers,
+        kots: Array.isArray(cached.kots) ? cached.kots : baseResult.kots,
+        updatedAt: cached.updatedAt || baseResult.updatedAt
+      };
+    }
+    return baseResult;
   } catch (err) {
+    const cached = serverStoreMemoryCache.get(code);
+    if (cached && cached._quotaFallbackActive) {
+      return {
+        success: true,
+        storeCode: code,
+        ownerEmail: cached.ownerEmail || cached.profile?.ownerEmail || null,
+        profile: cached.profile || null,
+        staff: cached.staff || [],
+        deletedStaffIds: cached.deletedStaffIds || [],
+        menu: cached.menu || [],
+        deletedMenuIds: cached.deletedMenuIds || [],
+        deletedMenuNames: cached.deletedMenuNames || [],
+        menuVersion: cached.menuVersion || 0,
+        categories: cached.categories || [],
+        tables: cached.tables || {},
+        history: cached.history || [],
+        expenses: cached.expenses || [],
+        customers: cached.customers || [],
+        kots: cached.kots || [],
+        subscription: cached.subscription || null,
+        updatedAt: cached.updatedAt || new Date().toISOString()
+      };
+    }
     return { success: false, error: err.message };
   }
 }

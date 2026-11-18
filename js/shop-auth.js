@@ -71,25 +71,151 @@
     function toggleLoginAuthMode(mode) {
         const otpSec = document.getElementById('shopAuthOtpSection');
         const passSec = document.getElementById('shopAuthPasswordSection');
+        const forgotSec = document.getElementById('shopAuthForgotPasswordSection');
         if (mode === 'password') {
             if (otpSec) otpSec.style.display = 'none';
+            if (forgotSec) forgotSec.style.display = 'none';
             if (passSec) {
                 passSec.style.display = 'block';
                 const pEmail = document.getElementById('shopAuthPasswordEmail');
                 const oEmail = document.getElementById('shopAuthEmail');
-                if (pEmail && oEmail && oEmail.value) pEmail.value = oEmail.value;
+                const fEmail = document.getElementById('shopAuthForgotEmail');
+                if (pEmail && !pEmail.value) {
+                    pEmail.value = (fEmail && fEmail.value) || (oEmail && oEmail.value) || '';
+                }
                 const pInput = document.getElementById('shopAuthPasswordInput');
                 if (pInput) setTimeout(() => pInput.focus(), 80);
+            }
+        } else if (mode === 'forgot-password') {
+            if (otpSec) otpSec.style.display = 'none';
+            if (passSec) passSec.style.display = 'none';
+            if (forgotSec) {
+                forgotSec.style.display = 'block';
+                const fEmail = document.getElementById('shopAuthForgotEmail');
+                const pEmail = document.getElementById('shopAuthPasswordEmail');
+                const oEmail = document.getElementById('shopAuthEmail');
+                if (fEmail && !fEmail.value) {
+                    fEmail.value = (pEmail && pEmail.value) || (oEmail && oEmail.value) || '';
+                }
+                const step1 = document.getElementById('forgotPassStep1Wrap');
+                const step2 = document.getElementById('forgotPassStep2Wrap');
+                if (step1) step1.style.display = 'block';
+                if (step2) step2.style.display = 'none';
+                showValidationMsg('forgotPassFeedback', '', '');
             }
         } else {
             if (otpSec) otpSec.style.display = 'block';
             if (passSec) passSec.style.display = 'none';
+            if (forgotSec) forgotSec.style.display = 'none';
             const pEmail = document.getElementById('shopAuthPasswordEmail');
             const oEmail = document.getElementById('shopAuthEmail');
             if (pEmail && oEmail && pEmail.value) oEmail.value = pEmail.value;
         }
     }
     window.toggleLoginAuthMode = toggleLoginAuthMode;
+
+    async function handleSendForgotPasswordOtp() {
+        const emailEl = document.getElementById('shopAuthForgotEmail');
+        const email = emailEl ? emailEl.value.trim().toLowerCase() : '';
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email || !emailRegex.test(email)) {
+            showValidationMsg('forgotPassFeedback', 'Please enter a valid email address.', 'error');
+            return;
+        }
+        const btn = document.getElementById('btnForgotPassSendOtp');
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span>Sending Code...</span>';
+        }
+        try {
+            const res = await fetch('/api/auth/forgot-password/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+            if (res.ok && data && data.success) {
+                const step1 = document.getElementById('forgotPassStep1Wrap');
+                const step2 = document.getElementById('forgotPassStep2Wrap');
+                if (step1) step1.style.display = 'none';
+                if (step2) step2.style.display = 'block';
+                showValidationMsg('forgotPassFeedback', `6-digit reset code sent to ${email}`, 'success');
+                if (typeof showToast === 'function') showToast(`Reset code sent to ${email}`, 'success');
+            } else {
+                const msg = (data && data.error) || 'Failed to send reset code. Please check your email.';
+                showValidationMsg('forgotPassFeedback', msg, 'error');
+                if (typeof showToast === 'function') showToast(msg, 'error');
+            }
+        } catch (err) {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+            showValidationMsg('forgotPassFeedback', 'Network error: ' + (err.message || 'Unable to send code'), 'error');
+        }
+    }
+    window.handleSendForgotPasswordOtp = handleSendForgotPasswordOtp;
+
+    async function handleResetForgotPassword() {
+        const emailEl = document.getElementById('shopAuthForgotEmail');
+        const otpEl = document.getElementById('forgotPassOtpInput');
+        const newPassEl = document.getElementById('forgotPassNewInput');
+        const email = emailEl ? emailEl.value.trim().toLowerCase() : '';
+        const otp = otpEl ? otpEl.value.trim() : '';
+        const newPassword = newPassEl ? newPassEl.value : '';
+
+        if (!email || !/^\d{6}$/.test(otp)) {
+            showValidationMsg('forgotPassFeedback', 'Please enter the 6-digit reset code sent to your email.', 'error');
+            return;
+        }
+        if (!newPassword || newPassword.length < 6) {
+            showValidationMsg('forgotPassFeedback', 'New password must be at least 6 characters.', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('btnForgotPassResetSubmit');
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span>Updating Password...</span>';
+        }
+        try {
+            const res = await fetch('/api/auth/forgot-password/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, otp, newPassword })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+            if (res.ok && data && data.success) {
+                if (typeof showToast === 'function') showToast('Password updated! Signing you in...', 'success');
+                const pEmail = document.getElementById('shopAuthPasswordEmail');
+                const pInput = document.getElementById('shopAuthPasswordInput');
+                if (pEmail) pEmail.value = email;
+                if (pInput) pInput.value = newPassword;
+                toggleLoginAuthMode('password');
+                handlePasswordSignIn();
+            } else {
+                const msg = (data && data.error) || 'Failed to reset password.';
+                showValidationMsg('forgotPassFeedback', msg, 'error');
+            }
+        } catch (err) {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+            showValidationMsg('forgotPassFeedback', 'Network error: ' + (err.message || 'Could not reset password'), 'error');
+        }
+    }
+    window.handleResetForgotPassword = handleResetForgotPassword;
 
     function showValidationMsg(containerId, message, type) {
         const el = document.getElementById(containerId);

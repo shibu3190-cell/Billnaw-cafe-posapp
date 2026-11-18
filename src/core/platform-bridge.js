@@ -546,10 +546,23 @@ export const ThermalPrinterBridge = {
           this._activeBluetoothDevice = null;
           this._activeCharacteristic = null;
         }
-        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-          window.dispatchEvent(new CustomEvent('printer-disconnected', {
-            detail: { slot: slotKey, name: device.name || 'Bluetooth Printer' }
-          }));
+        if (typeof window !== 'undefined') {
+          if (slotKey === 'printer1') {
+            window.bleDevice = null;
+            window.bleServer = null;
+            window.printCharacteristic = null;
+          }
+          if (typeof window.evaluateKitchenStationConsumer === 'function') {
+            window.evaluateKitchenStationConsumer();
+          }
+          if (typeof window.applyStationProfileRestrictions === 'function') {
+            window.applyStationProfileRestrictions();
+          }
+          if (typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('printer-disconnected', {
+              detail: { slot: slotKey, name: device.name || 'Bluetooth Printer' }
+            }));
+          }
         }
       });
 
@@ -580,6 +593,14 @@ export const ThermalPrinterBridge = {
       }
 
       this.persistPrinterConfig();
+      if (typeof window !== 'undefined') {
+        if (typeof window.evaluateKitchenStationConsumer === 'function') {
+          window.evaluateKitchenStationConsumer();
+        }
+        if (typeof window.applyStationProfileRestrictions === 'function') {
+          window.applyStationProfileRestrictions();
+        }
+      }
 
       return successResult({
         slot: slotKey,
@@ -688,6 +709,14 @@ export const ThermalPrinterBridge = {
       }
 
       this.persistPrinterConfig();
+      if (typeof window !== 'undefined') {
+        if (typeof window.evaluateKitchenStationConsumer === 'function') {
+          window.evaluateKitchenStationConsumer();
+        }
+        if (typeof window.applyStationProfileRestrictions === 'function') {
+          window.applyStationProfileRestrictions();
+        }
+      }
       return successResult({
         name: printer.name,
         connected: true,
@@ -806,6 +835,14 @@ export const ThermalPrinterBridge = {
       }
 
       this.persistPrinterConfig();
+      if (typeof window !== 'undefined') {
+        if (typeof window.evaluateKitchenStationConsumer === 'function') {
+          window.evaluateKitchenStationConsumer();
+        }
+        if (typeof window.applyStationProfileRestrictions === 'function') {
+          window.applyStationProfileRestrictions();
+        }
+      }
 
       return successResult({
         name: printer.name,

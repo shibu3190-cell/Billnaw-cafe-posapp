@@ -111,15 +111,23 @@ document.addEventListener('click', function(e) {
 
             // Attach active staff role headers for granular RBAC if present
             try {
+                const pinAuthUntil = Number((typeof window !== 'undefined' && window._menuAdminPinAuthorizedUntil) || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('billnaw_admin_pin_auth_until')) || 0);
+                const isPinElevated = pinAuthUntil > Date.now();
                 const activeStaffRaw = localStorage.getItem('billnaw_active_staff') || sessionStorage.getItem('billnaw_active_staff');
                 if (activeStaffRaw) {
                     const activeStaff = JSON.parse(activeStaffRaw);
                     if (activeStaff && activeStaff.role && !headers.has('x-staff-role')) {
-                        headers.set('x-staff-role', activeStaff.role);
+                        const rawRole = String(activeStaff.role).trim();
+                        const effectiveRole = (isPinElevated && (rawRole === 'Floor Server' || rawRole === 'Server' || rawRole === 'Waiter'))
+                            ? 'Cashier'
+                            : rawRole;
+                        headers.set('x-staff-role', effectiveRole);
                     }
                     if (activeStaff && activeStaff.id && !headers.has('x-staff-id')) {
                         headers.set('x-staff-id', String(activeStaff.id));
                     }
+                } else if (isPinElevated && !headers.has('x-staff-role')) {
+                    headers.set('x-staff-role', 'Cashier');
                 }
             } catch (e) {}
 
@@ -1927,6 +1935,7 @@ function triggerBillingReadyAlert(tableId, tableName, staffName) {
 window.triggerBillingReadyAlert = triggerBillingReadyAlert;
 
 function isBillingAlertEligibleRole() {
+    if (typeof isBluetoothPrinterConnected === 'function' && isBluetoothPrinterConnected()) return true;
     const activeStaffObj = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
     const rawRole = (activeStaffObj && activeStaffObj.role)
         ? activeStaffObj.role
@@ -1960,7 +1969,10 @@ if (posMeshChannel) {
             tablesInfo = data.tables;
             window.tablesInfo = tablesInfo;
             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_tables', tablesInfo);
+            if (typeof renderTables === 'function') renderTables();
             if (typeof syncTableUI === 'function') syncTableUI();
+            if (typeof updateCartUI === 'function') updateCartUI();
+            if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
             if (typeof renderTablesView === 'function') renderTablesView();
         } else if (data.type === 'MENU_UPDATED' && Array.isArray(data.menu)) {
             const incomingVer = Number(data.version || 0);
@@ -2085,6 +2097,16 @@ if (posMeshChannel) {
                     }
                 }
             } catch(e) {}
+        } else if (data.type === 'HISTORY_UPDATED' && Array.isArray(data.history)) {
+            orderHistory = data.history;
+            window.orderHistory = orderHistory;
+            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_history', orderHistory);
+            if (typeof renderDashboardAnalytics === 'function') {
+                const dashTab = document.getElementById('dashboard');
+                if (dashTab && dashTab.classList.contains('active')) {
+                    renderDashboardAnalytics();
+                }
+            }
         }
     };
 }
@@ -2639,7 +2661,37 @@ function handleRemoteFirestoreUpdate(data) {
             if (shopProfile) shopProfile.menuVersion = incomingMenuVersion;
             window.currentMenuVersion = incomingMenuVersion;
 
-            menuItems = cleanRemoteMenu;
+            // Per-item Last-Edit-Wins (LWW): if local item has a strictly newer updatedAt timestamp than remote item, preserve newer edit
+            const _parseMenuTs = (val) => {
+                if (typeof val === 'number' && Number.isFinite(val)) return val;
+                if (typeof val === 'string' && val.trim() !== '') {
+                    const asNum = Number(val);
+                    if (Number.isFinite(asNum) && asNum > 0) return asNum;
+                    const parsed = Date.parse(val);
+                    if (!Number.isNaN(parsed)) return parsed;
+                }
+                return 0;
+            };
+            const localItemMap = new Map();
+            if (Array.isArray(menuItems)) {
+                menuItems.forEach(lm => {
+                    if (lm && !lm.isDeleted && lm.isAvailable !== false) {
+                        if (lm.id !== undefined) localItemMap.set('id:' + String(lm.id), lm);
+                        if (lm.name) localItemMap.set('name:' + String(lm.name).trim().toLowerCase(), lm);
+                    }
+                });
+            }
+            menuItems = cleanRemoteMenu.map(rm => {
+                if (!rm) return rm;
+                const lm = (rm.id !== undefined && localItemMap.get('id:' + String(rm.id))) ||
+                           (rm.name && localItemMap.get('name:' + String(rm.name).trim().toLowerCase()));
+                const lTs = _parseMenuTs(lm?.updatedAt);
+                const rTs = _parseMenuTs(rm?.updatedAt);
+                if (lm && lTs > 0 && lTs > rTs) {
+                    return { ...rm, ...lm };
+                }
+                return rm;
+            });
             window.menuItems = menuItems;
             if (typeof idb !== 'undefined' && idb.set) {
                 idb.set('cafe_menu', menuItems);
@@ -2780,6 +2832,17 @@ function handleRemoteFirestoreUpdate(data) {
             ? data.history
             : (data.history && typeof data.history === 'object' ? Object.values(data.history) : []);
 
+        const _parseTableTs = (val) => {
+            if (typeof val === 'number' && Number.isFinite(val)) return val;
+            if (typeof val === 'string' && val.trim() !== '') {
+                const asNum = Number(val);
+                if (Number.isFinite(asNum) && asNum > 0) return asNum;
+                const parsed = Date.parse(val);
+                if (!Number.isNaN(parsed)) return parsed;
+            }
+            return 0;
+        };
+
         for (const [tId, tData] of Object.entries(data.tables)) {
             if (!tData || typeof tData !== 'object') continue;
             const prevTable = tablesInfo[tId];
@@ -2790,8 +2853,8 @@ function handleRemoteFirestoreUpdate(data) {
 
             // Guard against stale remote empty boot snapshots overwriting a locally active sibling table
             if (prevTable && prevItems.length > 0 && remoteItems.length === 0 && (newStatus === 'empty' || newStatus === 'vacant' || !newStatus)) {
-                const remoteClearedTs = Number(tData.clearedAt || (tData.updatedAt ? new Date(tData.updatedAt).getTime() : 0) || 0);
-                const localActiveTs = Number(prevTable.updatedAt || prevTable.savedTime || 0);
+                const remoteClearedTs = Math.max(_parseTableTs(tData.clearedAt), _parseTableTs(tData.updatedAt));
+                const localActiveTs = Math.max(_parseTableTs(prevTable.updatedAt), _parseTableTs(prevTable.savedTime));
                 const hasNewerCheckoutInHistory = remoteHistoryList.some(o => {
                     if (!o) return false;
                     const oTable = String(o.tableId || o.table_id || o.table || '').replace(/^Table\s+/i, '').trim();
@@ -2800,6 +2863,15 @@ function handleRemoteFirestoreUpdate(data) {
                     return oTs >= localActiveTs;
                 });
                 if (!(newStatus === 'billed' || (remoteClearedTs > 0 && remoteClearedTs >= localActiveTs) || hasNewerCheckoutInHistory)) {
+                    continue;
+                }
+            }
+
+            // Guard against stale remote active table snapshot resurrecting a locally settled/cleared table (Last-Edit-Wins)
+            const localClearedTs = _parseTableTs(prevTable?.clearedAt);
+            if (prevTable && prevItems.length === 0 && localClearedTs > 0 && remoteItems.length > 0) {
+                const rActiveTs = Math.max(_parseTableTs(tData.updatedAt), _parseTableTs(tData.savedTime));
+                if (rActiveTs === 0 || rActiveTs <= localClearedTs) {
                     continue;
                 }
             }
@@ -2813,15 +2885,23 @@ function handleRemoteFirestoreUpdate(data) {
                 });
             }
 
-            // Non-mutating clone for merge
-            let mergedTable = prevTable ? { ...prevTable, ...tData } : { ...tData };
+            const rTime = Math.max(_parseTableTs(tData.updatedAt), _parseTableTs(tData.savedTime));
+            const lTime = Math.max(_parseTableTs(prevTable?.updatedAt), _parseTableTs(prevTable?.savedTime));
+            const useLocalAsBase = Boolean(prevTable && prevItems.length > 0 && lTime > 0 && (rTime === 0 || lTime > rTime));
+
+            // Non-mutating clone for merge (respecting LWW base table metadata)
+            let mergedTable = prevTable
+                ? (useLocalAsBase ? { ...tData, ...prevTable } : { ...prevTable, ...tData })
+                : { ...tData };
+            if (prevTable?.clearedAt && (!remoteItems || remoteItems.length === 0) && (!prevItems || prevItems.length === 0)) {
+                const pClear = _parseTableTs(prevTable.clearedAt);
+                const rClear = _parseTableTs(tData.clearedAt);
+                if (pClear >= rClear) mergedTable.clearedAt = prevTable.clearedAt;
+            }
 
             // Preserve qtyKotPrinted, kotPrintedMap & frozen price snapshots across devices for running orders
             if (remoteItems.length > 0 && newStatus !== 'empty' && newStatus !== 'billed') {
                 const mergedMap = { ...(prevTable?.kotPrintedMap || {}), ...(tData.kotPrintedMap || {}) };
-                const rTime = Number(tData.updatedAt ? new Date(tData.updatedAt).getTime() : (tData.savedTime || 0)) || 0;
-                const lTime = Number(prevTable?.updatedAt || prevTable?.savedTime || 0) || 0;
-                const useLocalAsBase = Boolean(prevTable && prevItems.length > 0 && lTime > rTime && rTime > 0);
                 const baseItems = useLocalAsBase ? prevItems : remoteItems;
                 const otherItems = useLocalAsBase ? remoteItems : prevItems;
 
@@ -3903,6 +3983,33 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
         const queuedForStore = existingQueueKey ? qMapBefore[existingQueueKey] : null;
         const finalPayload = { ...(queuedForStore || {}), ...payloadToSend, storeCode: targetStoreCode };
 
+        // Role-aware payload sanitization: prevent queued Admin-only fields (like staff) from causing 403 on Cashier/Server table/menu syncs
+        try {
+            const pinAuthUntil = Number((typeof window !== 'undefined' && window._menuAdminPinAuthorizedUntil) || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('billnaw_admin_pin_auth_until')) || 0);
+            const isPinElevated = pinAuthUntil > Date.now();
+            const activeStaffObj = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
+            const normStaffRole = activeStaffObj && activeStaffObj.role ? String(activeStaffObj.role).trim().toLowerCase() : 'admin';
+            const isAdminStaff = normStaffRole === 'admin' || normStaffRole === 'owner';
+            if (!isAdminStaff && (finalPayload.tables !== undefined || finalPayload.menu !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined)) {
+                delete finalPayload.staff;
+                delete finalPayload.replaceStaff;
+                delete finalPayload.deletedStaffId;
+                delete finalPayload.deletedStaffIds;
+            }
+            const canSyncMenu = isAdminStaff || isPinElevated || normStaffRole === 'manager' || normStaffRole === 'cashier' || (typeof canCurrentStaffManageMenu === 'function' && canCurrentStaffManageMenu());
+            if (!canSyncMenu) {
+                delete finalPayload.menu;
+                delete finalPayload.menuVersion;
+                delete finalPayload.deletedMenuIds;
+                delete finalPayload.deletedMenuNames;
+                delete finalPayload.categories;
+                const hasRemainingFields = finalPayload.tables !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined || finalPayload.expenses !== undefined;
+                if (!hasRemainingFields) {
+                    return false;
+                }
+            }
+        } catch (e) {}
+
         let timeoutId = null;
         let signal = undefined;
         if (typeof AbortController !== 'undefined') {
@@ -3942,6 +4049,9 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                 });
                 writeOfflineSyncQueueMap(qMapAfter);
                 return true;
+            } else if (res && (res.status === 401 || res.status === 403)) {
+                console.warn(`[BACKEND SYNC] RBAC/Auth rejected (${res.status}) - skipping offline queue retry`);
+                return false;
             } else {
                 throw new Error(`Sync HTTP ${res ? res.status : 'unknown'}`);
             }
@@ -4497,7 +4607,10 @@ function persistHistoryFirebase(newOrder = null) {
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ history: orderHistory });
+        dispatchBackendStoreSync({ history: orderHistory }, true);
+    }
+    if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+        try { posMeshChannel.postMessage({ type: 'HISTORY_UPDATED', history: orderHistory }); } catch(e) {}
     }
 }
 window.persistHistoryFirebase = persistHistoryFirebase;
@@ -5023,6 +5136,7 @@ function applyStationProfileRestrictions() {
     } else if (profile === STATION_PROFILES.WAITER_MOBILE || normRole === 'Floor Server' || normRole === 'Server') {
         if (navPos) navPos.style.display = 'flex';
         if (navTables) navTables.style.display = 'flex'; // Dedicated Table Floor View accessible to waitstaff
+        if (navMenu) navMenu.style.display = 'flex'; // Accessible to Floor Server via 4-Digit Admin PIN
         if (navKds) navKds.style.display = 'none';
         if (navReports) navReports.style.display = 'none';
         if (navInventory) navInventory.style.display = 'none';
@@ -5030,7 +5144,7 @@ function applyStationProfileRestrictions() {
         if (navMore) navMore.style.display = 'flex';
         if (cartDiscountWrap) cartDiscountWrap.style.display = 'none';
         
-        // Floor Server: replace Checkout button with "Ready for Billing - Notify Cashier"
+        // Floor Server: replace Checkout button with "Ready for Billing - Notify Cashier" (or direct CHECKOUT if Bluetooth printer is connected)
         const handleReadyForBilling = () => {
             const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
             const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[curT] : null;
@@ -5043,6 +5157,7 @@ function applyStationProfileRestrictions() {
                 tablesInfo[curT].status = 'ready_for_billing';
                 tablesInfo[curT].readyForBillingTime = Date.now();
                 tablesInfo[curT].readyForBillingBy = staffName;
+                tablesInfo[curT].updatedAt = Date.now();
             }
             if (typeof persistTables === 'function') persistTables();
             if (typeof syncTableUI === 'function') syncTableUI();
@@ -5068,17 +5183,29 @@ function applyStationProfileRestrictions() {
         };
         window.handleReadyForBilling = handleReadyForBilling;
 
+        const hasDirectBlePrinter = (typeof isBluetoothPrinterConnected === 'function' && isBluetoothPrinterConnected());
         const dBtn = document.getElementById('desktopCheckoutBtn');
         if (dBtn) {
-            dBtn.innerHTML = '<span>Ready for Billing - Notify Cashier</span>';
-            dBtn.onclick = handleReadyForBilling;
+            if (hasDirectBlePrinter) {
+                dBtn.innerHTML = '<span>CHECKOUT</span><span id="desktopCheckoutBtnSub" style="display: inline-flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>';
+                dBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(true); };
+            } else {
+                dBtn.innerHTML = '<span>Ready for Billing - Notify Cashier</span>';
+                dBtn.onclick = handleReadyForBilling;
+            }
         }
 
         const mBtn = document.querySelector('.sc-right');
         if (mBtn) {
-            mBtn.innerHTML = '<span>Ready for Billing</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>';
-            mBtn.onclick = handleReadyForBilling;
+            if (hasDirectBlePrinter) {
+                mBtn.innerHTML = '<span>CHECKOUT</span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>';
+                mBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(true); };
+            } else {
+                mBtn.innerHTML = '<span>Ready for Billing</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>';
+                mBtn.onclick = handleReadyForBilling;
+            }
         }
+        if (typeof enforcePermissions === 'function') enforcePermissions();
     } else {
         // Cashier Profile: Can create/edit active orders, checkout, view menu and reports.
         if (navPos) navPos.style.display = 'flex';
@@ -5281,6 +5408,8 @@ function clearAllTenantLocalData() {
         localStorage.removeItem('billnaw_offline_sync_queue');
         localStorage.removeItem('billnaw_deleted_staff_ids');
         localStorage.removeItem('billnaw_active_kots');
+        try { sessionStorage.removeItem('billnaw_admin_pin_auth_until'); } catch (e) {}
+        if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = 0;
 
         TENANT_CACHE_LOCALSTORAGE_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
         TENANT_AUTH_LOCALSTORAGE_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
@@ -6162,12 +6291,23 @@ async function initDatabase() {
     if (typeof dispatchBackendStoreSync === 'function') {
         const currentStoreCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (shopProfile?.storeCode || null);
         if (currentStoreCode) {
-            dispatchBackendStoreSync({
+            const nonEmptyBootTables = {};
+            if (storedTables && typeof storedTables === 'object') {
+                for (const [tKey, tVal] of Object.entries(tablesInfo || {})) {
+                    if (tVal && ((Array.isArray(tVal.items) && tVal.items.length > 0) || tVal.updatedAt || tVal.clearedAt)) {
+                        nonEmptyBootTables[tKey] = tVal;
+                    }
+                }
+            }
+            const bootSyncPayload = {
                 profile: shopProfile,
                 staff: staffList,
-                tables: tablesInfo,
                 storeCode: currentStoreCode
-            }, true);
+            };
+            if (Object.keys(nonEmptyBootTables).length > 0) {
+                bootSyncPayload.tables = nonEmptyBootTables;
+            }
+            dispatchBackendStoreSync(bootSyncPayload, true);
         }
     }
 

@@ -789,6 +789,8 @@ function addToCart(itemId, event) {
     }
     if(tInfo.status === 'empty' || tInfo.status === 'booked' || !tInfo.status) tInfo.status = 'occupied'; 
     if(!tInfo.savedTime) tInfo.savedTime = Date.now();
+    tInfo.updatedAt = Date.now();
+    tInfo.clearedAt = null;
     debouncedPersistTables(350); 
     syncTableUI(); 
     updateCartUI(); 
@@ -826,14 +828,18 @@ function modifyQty(itemId, delta, event) {
                 if (item.name) delete tInfo.kotPrintedMap[item.name];
             }
         }
+        const nowTs = Date.now();
+        tInfo.updatedAt = nowTs;
         if(tInfo.items.length === 0 && tInfo.status !== 'booked') { 
             tInfo.status = 'empty'; 
             tInfo.savedTime = null; 
             tInfo.lastReminder = null; 
             tInfo.kotPrintedMap = {};
+            tInfo.clearedAt = nowTs;
         } else if (tInfo.items.length > 0 && !tInfo.savedTime) {
-            tInfo.savedTime = Date.now();
+            tInfo.savedTime = nowTs;
             if (tInfo.status === 'empty') tInfo.status = 'occupied';
+            tInfo.clearedAt = null;
         }
         debouncedPersistTables(350); 
         syncTableUI(); 
@@ -891,8 +897,9 @@ window.modifyQty = modifyQty;
 
 function clearTable() {
     if(confirm("Clear this entire order?")) {
+        const nowTs = Date.now();
         const currentTName = typeof getTableName === 'function' ? getTableName(activeTable) : `Table ${activeTable}`;
-        tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
+        tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null, kotPrintedMap: {}, clearedAt: nowTs, updatedAt: nowTs };
         persistTables();
         syncTableUI();
         updateCartUI();
@@ -1492,6 +1499,7 @@ function markTableKotItemsPrinted(tableId) {
         }
     });
     tInfo.status = 'kot';
+    tInfo.updatedAt = Date.now();
 }
 window.markTableKotItemsPrinted = markTableKotItemsPrinted;
 
@@ -1848,13 +1856,28 @@ function renderCheckoutUpiQr(amount) {
 }
 window.renderCheckoutUpiQr = renderCheckoutUpiQr;
 
+function isBluetoothPrinterConnected() {
+    if (typeof printCharacteristic !== 'undefined' && Boolean(printCharacteristic)) return true;
+    if (typeof window !== 'undefined') {
+        if (window.printCharacteristic) return true;
+        if (window.posPrinters?.printer1 && Boolean(window.posPrinters.printer1.characteristic)) return true;
+        if (window.posPrinters?.printer2 && Boolean(window.posPrinters.printer2.characteristic)) return true;
+        if (window.ThermalPrinterBridge?.printers?.printer1?.characteristic) return true;
+        if (window.ThermalPrinterBridge?.printers?.printer2?.characteristic) return true;
+        if (window.ThermalPrinterBridge?.activeCharacteristic) return true;
+    }
+    return false;
+}
+window.isBluetoothPrinterConnected = isBluetoothPrinterConnected;
+
 function openCheckoutModal(bypassRoleCheck = false) {
     if (typeof canAccessStoreData === 'function' && !canAccessStoreData()) {
         if (typeof showToast === 'function') showToast("Transaction blocked: device pending authorization or revoked.");
         return;
     }
     if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff) {
-        const canSettle = typeof hasPermission === 'function' ? hasPermission(currentStaff, 'can_settle_bills') : (currentStaff.role !== 'Waiter' && currentStaff.role !== 'Floor Server' && currentStaff.role !== 'Kitchen Chef');
+        const isBleConnected = isBluetoothPrinterConnected();
+        const canSettle = isBleConnected || (typeof hasPermission === 'function' ? hasPermission(currentStaff, 'can_settle_bills') : (currentStaff.role !== 'Waiter' && currentStaff.role !== 'Floor Server' && currentStaff.role !== 'Kitchen Chef'));
         if (!canSettle) {
             if (typeof requestManagerOverride === 'function') {
                 requestManagerOverride({
@@ -2025,8 +2048,9 @@ function onCheckoutTableSelect(newTableNo) {
 
     if (!targetHasItems && currentHasItems) {
         // Target is vacant: Move / Transfer active table order to target table
-        tablesInfo[newTableNo] = JSON.parse(JSON.stringify(currentTInfo));
-        tablesInfo[activeTable] = { items: [], status: 'vacant', notes: '' };
+        const transferTs = Date.now();
+        tablesInfo[newTableNo] = { ...JSON.parse(JSON.stringify(currentTInfo)), updatedAt: transferTs, clearedAt: null };
+        tablesInfo[activeTable] = { items: [], status: 'vacant', notes: '', savedTime: null, lastReminder: null, kotPrintedMap: {}, clearedAt: transferTs, updatedAt: transferTs };
         activeTable = newTableNo;
         window.activeTable = newTableNo;
         persistTables();
@@ -2347,18 +2371,27 @@ async function confirmCheckout() {
         }
         selectedCustomerForOrder = null;
 
+        let stockModified = false;
         tInfo.items.forEach(cartItem => { 
             const mItem = menuItems.find(m => m.id === cartItem.id); 
             if (mItem && mItem.trackStock) { 
                 mItem.stockQty -= cartItem.qty; 
                 if (mItem.stockQty < 0) mItem.stockQty = 0; 
+                mItem.stock = mItem.stockQty;
+                mItem.updatedAt = Date.now();
+                stockModified = true;
             } 
         });
-        persistMenu(); 
+        if (stockModified && (typeof canCurrentStaffManageMenu !== 'function' || canCurrentStaffManageMenu())) {
+            persistMenu(); 
+        } else if (stockModified && typeof idb !== 'undefined' && idb.set) {
+            idb.set('cafe_menu', menuItems);
+        }
         orderHistory.unshift(newOrder); 
         persistHistoryFirebase(newOrder); 
         if (typeof deductInventoryForOrder === 'function') deductInventoryForOrder(newOrder);
-        tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null }; 
+        const settledAtTs = Date.now();
+        tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null, kotPrintedMap: {}, clearedAt: settledAtTs, updatedAt: settledAtTs }; 
         persistTables(); 
 
         // Mark any active KOT for this settled table as SERVED and clear from KDS
@@ -2514,10 +2547,21 @@ async function connectBluetoothPrinter(printerSlot = 'printer1') {
                 window.posPrinters[slotKey].server = null;
                 window.posPrinters[slotKey].characteristic = null;
             }
+            if (window.ThermalPrinterBridge && window.ThermalPrinterBridge.printers && window.ThermalPrinterBridge.printers[slotKey]) {
+                window.ThermalPrinterBridge.printers[slotKey].status = 'DISCONNECTED';
+                window.ThermalPrinterBridge.printers[slotKey].device = null;
+                window.ThermalPrinterBridge.printers[slotKey].server = null;
+                window.ThermalPrinterBridge.printers[slotKey].characteristic = null;
+            }
+            if (window.ThermalPrinterBridge && (slotKey === 'printer1' || window.ThermalPrinterBridge.activeBluetoothDevice === device)) {
+                window.ThermalPrinterBridge.activeBluetoothDevice = null;
+                window.ThermalPrinterBridge.activeCharacteristic = null;
+            }
             if (slotKey === 'printer1' || (!window.posPrinters?.printer1?.characteristic && bleDevice === device)) {
                 bleDevice = null;
                 bleServer = null;
                 printCharacteristic = null;
+                window.printCharacteristic = null;
             }
             if (btn) {
                 btn.innerHTML = "Search & Pair Printer";
@@ -2527,6 +2571,9 @@ async function connectBluetoothPrinter(printerSlot = 'printer1') {
             showToast(`⚠️ ${device.name || 'Printer'} (${slotKey}) Disconnected!`);
             if (typeof evaluateKitchenStationConsumer === 'function') {
                 evaluateKitchenStationConsumer();
+            }
+            if (typeof applyStationProfileRestrictions === 'function') {
+                applyStationProfileRestrictions();
             }
         });
 
@@ -2602,6 +2649,7 @@ async function connectBluetoothPrinter(printerSlot = 'printer1') {
             bleDevice = device;
             bleServer = server;
             printCharacteristic = foundChar;
+            window.printCharacteristic = foundChar;
         }
 
         // Mirror to ThermalPrinterBridge if loaded
@@ -2621,6 +2669,9 @@ async function connectBluetoothPrinter(printerSlot = 'printer1') {
         showToast(`🖨️ ${device.name || 'Printer'} Connected to ${slotKey === 'printer2' ? 'Kitchen (Printer 2)' : 'Receipt (Printer 1)'}!`);
         if (typeof evaluateKitchenStationConsumer === 'function') {
             evaluateKitchenStationConsumer();
+        }
+        if (typeof applyStationProfileRestrictions === 'function') {
+            applyStationProfileRestrictions();
         }
         if (btn) {
             btn.innerHTML = "Connected";
@@ -3638,17 +3689,35 @@ function isKitchenPrinterConnected() {
     const bridge = window.ThermalPrinterBridge;
     const kotSlot = bridge?.routing?.defaultKotPrinter || 'printer2';
     const slot = bridge?.printers?.[kotSlot] || window.posPrinters?.[kotSlot];
-    if (!slot) return false;
-
-    if (bridge && typeof bridge.isPrinterReady === 'function') {
-        return bridge.isPrinterReady(kotSlot);
+    if (slot) {
+        if (bridge && typeof bridge.isPrinterReady === 'function') {
+            if (bridge.isPrinterReady(kotSlot)) return true;
+        } else if (
+            slot.status === 'CONNECTED' ||
+            Boolean(slot.characteristic) ||
+            Boolean(slot.device) ||
+            (slot.transport === 'NETWORK' && Boolean(slot.host)) ||
+            slot.transport === 'SYSTEM_DIALOG'
+        ) {
+            return true;
+        }
     }
-
-    return slot.status === 'CONNECTED' ||
-           Boolean(slot.characteristic) ||
-           Boolean(slot.device) ||
-           (slot.transport === 'NETWORK' && Boolean(slot.host)) ||
-           slot.transport === 'SYSTEM_DIALOG';
+    const slot1 = bridge?.printers?.printer1 || window.posPrinters?.printer1;
+    if (slot1 && (
+        Boolean(slot1.characteristic) ||
+        Boolean(slot1.device && (!slot1.device.gatt || slot1.device.gatt.connected)) ||
+        (slot1.transport === 'NETWORK' && Boolean(slot1.host)) ||
+        slot1.transport === 'SYSTEM_DIALOG'
+    )) {
+        return true;
+    }
+    if (typeof printCharacteristic !== 'undefined' && Boolean(printCharacteristic)) {
+        return true;
+    }
+    if (window.printCharacteristic) {
+        return true;
+    }
+    return false;
 }
 window.isKitchenPrinterConnected = isKitchenPrinterConnected;
 
@@ -3739,7 +3808,13 @@ async function processCloudKotJob(job, shopId, options = {}) {
             printSuccess = Boolean(customRes && (customRes.success !== false));
             if (!printSuccess) printError = customRes?.error || 'Custom dispatch failed';
         } else if (bridge && typeof bridge.dispatchToPrinterSlot === 'function') {
-            const dispatchRes = await bridge.dispatchToPrinterSlot(kotSlot, bytes);
+            let dispatchRes = await bridge.dispatchToPrinterSlot(kotSlot, bytes);
+            if (!dispatchRes || !dispatchRes.success || !dispatchRes.data?.printed) {
+                const fallbackSlot = kotSlot === 'printer2' ? 'printer1' : 'printer2';
+                if (bridge.printers?.[fallbackSlot]?.status === 'CONNECTED' || window.posPrinters?.[fallbackSlot]?.status === 'CONNECTED') {
+                    dispatchRes = await bridge.dispatchToPrinterSlot(fallbackSlot, bytes);
+                }
+            }
             printSuccess = Boolean(dispatchRes && dispatchRes.success && dispatchRes.data?.printed);
             if (!printSuccess) {
                 printError = dispatchRes?.error?.message || dispatchRes?.error || 'Dispatch returned failure';
@@ -3748,7 +3823,9 @@ async function processCloudKotJob(job, shopId, options = {}) {
             // Direct write fallback using characteristic
             const targetChar = window.posPrinters?.[kotSlot]?.characteristic ||
                                window.posPrinters?.printer2?.characteristic ||
-                               window.printCharacteristic;
+                               window.posPrinters?.printer1?.characteristic ||
+                               window.printCharacteristic ||
+                               (typeof printCharacteristic !== 'undefined' ? printCharacteristic : null);
             if (targetChar) {
                 const payloadBytes = bytes || new TextEncoder().encode(`KOT: Table ${claimedRecord.tableNo || 'T1'}\n\n`);
                 const CHUNK_SIZE = 100;

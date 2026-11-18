@@ -102,7 +102,7 @@ const BACKEND_ROLE_PERMISSIONS = {
     'manage_menu', 'view_reports', 'manage_inventory', 'dispatch_kot', 'view_tables'
   ],
   Cashier: [
-    'take_orders', 'settle_bills', 'view_tables'
+    'take_orders', 'settle_bills', 'view_tables', 'manage_menu'
   ],
   'Floor Server': [
     'take_orders', 'dispatch_kot', 'view_tables'
@@ -585,7 +585,7 @@ async function syncShopToFirestore(storeCode, shopData) {
       codeStr.startsWith('SHOP-ALEXCAFE-') ||
       emailStr.includes('selftest') ||
       emailStr.includes('audit_') ||
-      (emailStr.startsWith('signup_') && emailStr.endsWith('@billnawcafe.com'))
+      emailStr.endsWith('@billnawcafe.com')
     ) {
       return;
     }
@@ -1648,6 +1648,76 @@ export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode, staffId
       role: resolvedRole,
       stationProfile: targetStaff.stationProfile,
       storeCode: code
+    }
+  };
+}
+
+/**
+ * Dispatches a 6-digit OTP to the account email for password reset.
+ */
+export function requestPasswordResetOtp(email) {
+  const normEmail = normalizeEmail(email);
+  if (!isValidEmail(normEmail)) {
+    return { status: 400, data: { success: false, error: 'Please enter a valid email address.' } };
+  }
+  return sendOtp(normEmail, 'password-reset');
+}
+
+/**
+ * Verifies email OTP and updates the account password without altering existing shop data.
+ */
+export function resetPasswordWithOtp(email, otp, newPassword) {
+  const normEmail = normalizeEmail(email);
+  if (!isValidEmail(normEmail)) {
+    return { status: 400, data: { success: false, error: 'Invalid email address.' } };
+  }
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    return { status: 400, data: { success: false, error: 'Password must be at least 6 characters.' } };
+  }
+
+  const otpRecord = otpStore.get(normEmail);
+  if (!otpRecord || otpRecord.consumed || Date.now() > otpRecord.expiresAt) {
+    return { status: 400, data: { success: false, error: 'Invalid or expired OTP code.' } };
+  }
+  if (otpRecord.purpose !== 'password-reset') {
+    return { status: 400, data: { success: false, error: 'Invalid OTP purpose for password reset.' } };
+  }
+
+  const verifyRes = verifyOtp(normEmail, otp, undefined, 'password-reset');
+  if (verifyRes.status !== 200 || !verifyRes.data.success) {
+    return { status: verifyRes.status === 429 ? 429 : 400, data: { success: false, error: verifyRes.data?.error || 'Invalid or expired OTP code.' } };
+  }
+
+  const salt = crypto.randomBytes(16).toString('hex');
+  const passwordHash = hashPassword(newPassword, salt);
+  let user = userStore.get(normEmail);
+  if (!user) {
+    const uid = 'usr_' + crypto.createHash('sha256').update(normEmail).digest('hex').slice(0, 10);
+    const storeCode = verifyRes.data?.storeCode || generateStoreCode('Billnaw Cafe', normEmail);
+    user = {
+      uid,
+      email: normEmail,
+      firstName: '',
+      lastName: '',
+      shopName: verifyRes.data?.shop?.name || 'Billnaw Cafe',
+      storeCode,
+      role: 'Owner',
+      createdAt: new Date().toISOString()
+    };
+  }
+  user.salt = salt;
+  user.passwordHash = passwordHash;
+  user.updatedAt = new Date().toISOString();
+  userStore.set(normEmail, user);
+  saveAuthStoreToDisk();
+
+  return {
+    status: 200,
+    data: {
+      success: true,
+      message: 'Password updated successfully! You can now sign in.',
+      email: normEmail,
+      storeCode: user.storeCode
     }
   };
 }
