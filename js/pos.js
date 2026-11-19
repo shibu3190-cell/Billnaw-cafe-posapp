@@ -899,7 +899,12 @@ function modifyQty(itemId, delta, event) {
                     }
                 }
             }
-        } catch(kotErr) {}
+        } catch(kotErr) {
+            console.warn('[POS KOT] Failed to update active KOT on item quantity modification:', kotErr);
+            if (typeof showToast === 'function') {
+                showToast("⚠️ Warning: Kitchen ticket status could not be auto-updated locally.", "warning");
+            }
+        }
     }
 }
 window.modifyQty = modifyQty;
@@ -939,7 +944,12 @@ function clearTable() {
                     window.dispatchEvent(new CustomEvent('billnaw:kot-status-changed', { detail: { table: currentTName, status: 'CANCELLED' } }));
                 }
             }
-        } catch(kotErr) {}
+        } catch(kotErr) {
+            console.warn('[POS KOT] Failed to cancel active KOTs on table clear:', kotErr);
+            if (typeof showToast === 'function') {
+                showToast("⚠️ Notice: Active KOT cancellation failed to persist locally.", "warning");
+            }
+        }
 
         if (window.kotUIInstance && typeof window.kotUIInstance.loadKots === 'function') {
             window.kotUIInstance.loadKots();
@@ -2364,11 +2374,21 @@ async function confirmCheckout() {
 
             try {
                 localStorage.setItem('cafe_khata', JSON.stringify(currentKhata));
-            } catch (e) {}
+            } catch (storageErr) {
+                console.warn('[POS KHATA] Failed to save Khata due to localStorage:', storageErr);
+                if (typeof showToast === 'function') {
+                    showToast("⚠️ Warning: Khata ledger could not be saved to local storage quota.", "warning");
+                }
+            }
             if (typeof idb !== 'undefined' && idb.set) {
                 try {
                     idb.set('cafe_khata', currentKhata);
-                } catch (e) {}
+                } catch (idbErr) {
+                    console.warn('[POS KHATA] Failed to save Khata due to IndexedDB:', idbErr);
+                    if (typeof showToast === 'function') {
+                        showToast("⚠️ Warning: Khata ledger could not be saved to IndexedDB storage.", "warning");
+                    }
+                }
             }
             if (typeof persistKhata === 'function') {
                 persistKhata();
@@ -2435,7 +2455,12 @@ async function confirmCheckout() {
             if (typeof window.renderKdsUI === 'function') {
                 window.renderKdsUI();
             }
-        } catch(kotErr) {} 
+        } catch(kotErr) {
+            console.warn('[POS KOT] Failed to transition active KOT to SERVED upon bill settlement:', kotErr);
+            if (typeof showToast === 'function') {
+                showToast("⚠️ Warning: Kitchen ticket status could not be updated to SERVED.", "warning");
+            }
+        } 
         
         syncTableUI(); 
         updateCartUI(); 
@@ -3075,7 +3100,9 @@ async function sendEscPosToPrinter(order) {
         document.body.classList.remove('printing-kot');
     }
     if (typeof ensureShopProfileHydrated === 'function') {
-        try { await ensureShopProfileHydrated(); } catch (e) {}
+        try { await ensureShopProfileHydrated(); } catch (e) {
+            console.warn('[POS PRINT] Shop profile hydration warning before printing:', e);
+        }
     }
     if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
 
@@ -3470,7 +3497,9 @@ function peekNextKotNumber() {
                 });
             }
         }
-    } catch(e) {}
+    } catch(e) {
+        console.warn('[POS KOT] Failed to parse active KOTs while peeking next KOT number:', e);
+    }
     return lastKot + 1;
 }
 window.peekNextKotNumber = peekNextKotNumber;
@@ -3484,7 +3513,9 @@ function getNextUnifiedKotNumber() {
             if (typeof persistProfile === 'function') persistProfile();
             else if (typeof persistShopProfile === 'function') persistShopProfile();
         }
-    } catch(e) {}
+    } catch(e) {
+        console.warn('[POS KOT] Failed to persist last KOT number to storage:', e);
+    }
     return nextKot;
 }
 window.getNextUnifiedKotNumber = getNextUnifiedKotNumber;
@@ -4065,7 +4096,12 @@ async function printKitchenTicket() {
             const filtered = Array.isArray(list) ? list.filter(k => k && k.kot_id !== kotId) : [];
             filtered.unshift(newKot);
             localStorage.setItem('billnaw_active_kots', JSON.stringify(filtered.slice(0, 100)));
-        } catch (storageErr) {}
+        } catch (storageErr) {
+            console.warn('[POS KOT] Failed to save active KOT to local storage:', storageErr);
+            if (typeof showToast === 'function') {
+                showToast("⚠️ Warning: Kitchen ticket could not be cached locally.", "warning");
+            }
+        }
 
         await sendKotToPrinter(currentTableName, kotItemsToDispatch, { isAddon: delta.isAddon, kotHeader, kotNumber: kotNo, kotNo: kotNo, kotId: kotId, kotDisplayNo: kotDisplayNo });
 
@@ -4086,7 +4122,9 @@ async function printKitchenTicket() {
 
         // Broadcast to multi-terminal mesh
         if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
-            try { posMeshChannel.postMessage({ type: 'KOT_DISPATCHED', kot: newKot, kotNo: kotNo }); } catch(e) {}
+            try { posMeshChannel.postMessage({ type: 'KOT_DISPATCHED', kot: newKot, kotNo: kotNo }); } catch(e) {
+                console.warn('[POS KOT] posMeshChannel dispatch warning:', e);
+            }
         }
 
         const kotModal = document.getElementById('kotModal');
