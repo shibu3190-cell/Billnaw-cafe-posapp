@@ -20,8 +20,43 @@ const userStore = new Map();
 const shopStore = new Map();
 const sessionStore = new Map();
 const rateLimitStore = new Map();
+const recentVerifiedOtpStore = new Map();
+const OTP_IDEMPOTENCY_WINDOW_MS = 25000;
 
-// Periodic prune to prevent memory leaks in sliding window rate limiter
+function getRecentVerifiedOtpSession(email, cleanOtp) {
+  if (!email || !cleanOtp) return null;
+  const normEmail = normalizeEmail(email);
+  const recent = recentVerifiedOtpStore.get(normEmail);
+  if (!recent) return null;
+  if (Date.now() > recent.expiresAt) {
+    recentVerifiedOtpStore.delete(normEmail);
+    return null;
+  }
+  const submittedHash = crypto.createHash('sha256').update(String(cleanOtp).trim()).digest('hex');
+  if (recent.otpHash === submittedHash && recent.data) {
+    return recent.data;
+  }
+  return null;
+}
+
+function storeRecentVerifiedOtpSession(email, cleanOtp, data) {
+  if (!email || !cleanOtp || !data) return;
+  const now = Date.now();
+  // Evict expired entries if Map capacity exceeds threshold to prevent memory growth
+  if (recentVerifiedOtpStore.size > 200) {
+    for (const [k, v] of recentVerifiedOtpStore.entries()) {
+      if (!v || now > v.expiresAt) recentVerifiedOtpStore.delete(k);
+    }
+  }
+  const normEmail = normalizeEmail(email);
+  recentVerifiedOtpStore.set(normEmail, {
+    otpHash: crypto.createHash('sha256').update(String(cleanOtp).trim()).digest('hex'),
+    data,
+    expiresAt: now + OTP_IDEMPOTENCY_WINDOW_MS
+  });
+}
+
+// Periodic prune to prevent memory leaks in sliding window rate limiter & idempotency store
 try {
   const pruneTimer = setInterval(() => {
     const now = Date.now();
@@ -32,6 +67,11 @@ try {
         const active = v.timestamps.filter(t => (now - t) < 3600000);
         if (active.length === 0) rateLimitStore.delete(k);
         else v.timestamps = active;
+      }
+    }
+    for (const [k, v] of recentVerifiedOtpStore.entries()) {
+      if (!v || now > v.expiresAt) {
+        recentVerifiedOtpStore.delete(k);
       }
     }
   }, 300000);
@@ -977,7 +1017,7 @@ export async function sendActualOtpEmail(toEmail, otp, purpose = 'login') {
  * Validates user-submitted OTP.
  * Enforces max 3 attempts, single-use consumption, and resolves user/shop tenant.
  */
-export function verifyOtp(email, otp, shopName, expectedPurpose = null, otpTicket = null) {
+export function verifyOtp(email, otp, shopName, expectedPurpose = null, otpTicket = null, allowIdempotentReplay = false) {
   const normalizedEmail = normalizeEmail(email);
   if (!isValidEmail(normalizedEmail)) {
     return {
@@ -995,6 +1035,15 @@ export function verifyOtp(email, otp, shopName, expectedPurpose = null, otpTicke
   }
 
   const now = Date.now();
+
+  // Fast-path idempotency check for concurrent duplicate requests (e.g. double-click / auto-submit)
+  if (allowIdempotentReplay) {
+    const recent = getRecentVerifiedOtpSession(normalizedEmail, cleanOtp);
+    if (recent) {
+      return { status: 200, data: recent };
+    }
+  }
+
   const record = otpStore.get(normalizedEmail);
   const allowedPurposes = expectedPurpose ? [expectedPurpose] : ['login', 'signup'];
 
@@ -1010,6 +1059,12 @@ export function verifyOtp(email, otp, shopName, expectedPurpose = null, otpTicke
     };
   }
   if (record && record.consumed) {
+    if (allowIdempotentReplay) {
+      const recent = getRecentVerifiedOtpSession(normalizedEmail, cleanOtp);
+      if (recent) {
+        return { status: 200, data: recent };
+      }
+    }
     return {
       status: 400,
       data: { success: false, error: 'Invalid or expired OTP' }
@@ -1130,33 +1185,40 @@ export function verifyOtp(email, otp, shopName, expectedPurpose = null, otpTicke
 
   const customToken = createCustomAuthToken({ uid: user.uid, email: user.email, storeCode: user.storeCode, role: user.role || 'Owner' });
 
+  const responseData = {
+    success: true,
+    message: 'Authentication successful.',
+    token: sessionToken,
+    sessionToken,
+    customToken,
+    storeCode: user.storeCode,
+    shop: {
+      storeCode: shop.storeCode,
+      name: shop.name,
+      ownerEmail: shop.ownerEmail,
+      profile: shop.profile,
+      staff: shop.staff,
+      categories: shop.categories,
+      menu: shop.menu
+    },
+    user: {
+      uid: user.uid,
+      email: user.email,
+      shopName: user.shopName,
+      storeCode: user.storeCode,
+      role: user.role
+    },
+    isNewUser
+  };
+
+  // Only cache authenticated session when idempotent replay is enabled (login endpoint)
+  if (allowIdempotentReplay) {
+    storeRecentVerifiedOtpSession(normalizedEmail, cleanOtp, responseData);
+  }
+
   return {
     status: 200,
-    data: {
-      success: true,
-      message: 'Authentication successful.',
-      token: sessionToken,
-      sessionToken,
-      customToken,
-      storeCode: user.storeCode,
-      shop: {
-        storeCode: shop.storeCode,
-        name: shop.name,
-        ownerEmail: shop.ownerEmail,
-        profile: shop.profile,
-        staff: shop.staff,
-        categories: shop.categories,
-        menu: shop.menu
-      },
-      user: {
-        uid: user.uid,
-        email: user.email,
-        shopName: user.shopName,
-        storeCode: user.storeCode,
-        role: user.role
-      },
-      isNewUser
-    }
+    data: responseData
   };
 }
 

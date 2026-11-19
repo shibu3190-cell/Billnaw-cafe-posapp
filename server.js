@@ -1058,7 +1058,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
       return res.status(429).json({ success: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
     }
     const { email, otp, shopName, otpTicket } = req.body || {};
-    const result = verifyOtp(email, otp, shopName, null, otpTicket);
+    const result = verifyOtp(email, otp, shopName, null, otpTicket, true);
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to verify verification code' });

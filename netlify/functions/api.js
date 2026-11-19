@@ -103,6 +103,40 @@ const SMTP_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || CONFIG?.ema
 // In-memory cache for fast single-container hits
 const memoryOtpStore = new Map();
 const reportTokens = new Map();
+const recentVerifiedOtpStore = new Map();
+const OTP_IDEMPOTENCY_WINDOW_MS = 25000; // 25 seconds grace window for concurrent/duplicate submissions
+
+function getRecentVerifiedOtpSession(email, submittedOtp) {
+  if (!email || !submittedOtp) return null;
+  const normEmail = normalizeEmail(email);
+  const recent = recentVerifiedOtpStore.get(normEmail);
+  if (!recent) return null;
+  if (Date.now() > recent.expiresAt) {
+    recentVerifiedOtpStore.delete(normEmail);
+    return null;
+  }
+  const submittedHash = crypto.createHash('sha256').update(cleanOtpInput(submittedOtp)).digest('hex');
+  if (recent.otpHash === submittedHash && recent.payload) {
+    return recent.payload;
+  }
+  return null;
+}
+
+function storeRecentVerifiedOtpSession(email, submittedOtp, payload) {
+  if (!email || !submittedOtp || !payload) return;
+  const now = Date.now();
+  if (recentVerifiedOtpStore.size > 100) {
+    for (const [k, v] of recentVerifiedOtpStore.entries()) {
+      if (!v || now > v.expiresAt) recentVerifiedOtpStore.delete(k);
+    }
+  }
+  const normEmail = normalizeEmail(email);
+  recentVerifiedOtpStore.set(normEmail, {
+    otpHash: crypto.createHash('sha256').update(cleanOtpInput(submittedOtp)).digest('hex'),
+    payload,
+    expiresAt: now + OTP_IDEMPOTENCY_WINDOW_MS
+  });
+}
 
 function pruneExpiredReportTokens() {
   const now = Date.now();
@@ -289,7 +323,7 @@ export function cleanOtpInput(val) {
   return (val !== undefined && val !== null) ? String(val).replace(/\s+/g, '').trim() : '';
 }
 
-export { generateOtpTicket, verifyOtpTicket };
+export { generateOtpTicket, verifyOtpTicket, memoryOtpStore, recentVerifiedOtpStore };
 
 async function persistOtpToFirestore(record) {
   if (!record || !record.email) return false;
@@ -413,8 +447,6 @@ async function markOtpConsumedOrLocked(email, status = 'consumed') {
   const normEmail = normalizeEmail(email);
   if (!normEmail) return;
 
-  memoryOtpStore.delete(normEmail);
-
   const tombstone = {
     email: normEmail,
     consumed: true,
@@ -423,6 +455,8 @@ async function markOtpConsumedOrLocked(email, status = 'consumed') {
     updatedAt: Date.now(),
     expiresAt: Date.now() + (10 * 60 * 1000)
   };
+
+  memoryOtpStore.set(normEmail, tombstone);
 
   try {
     const blobStore = await getNetlifyOtpBlobStore();
@@ -1732,6 +1766,13 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'Please enter a valid 6-digit code.' });
     }
 
+    // Fast-path idempotency window for concurrent / double-submit verifications
+    const recentSession = getRecentVerifiedOtpSession(email, submittedOtp);
+    if (recentSession) {
+      console.log(`[NETLIFY API] 🔄 Concurrent duplicate verify-otp resolved idempotently for ${email}`);
+      return jsonResponse(200, recentSession);
+    }
+
     // Always check authoritative persistence across containers
     let record = await retrieveOtpFromFirestore(email);
     if (!record) {
@@ -1747,6 +1788,11 @@ export async function handler(event, context) {
     }
 
     if (record && record.consumed) {
+      const recentSession = getRecentVerifiedOtpSession(email, submittedOtp);
+      if (recentSession) {
+        console.log(`[NETLIFY API] 🔄 Concurrent duplicate verify-otp resolved idempotently for ${email}`);
+        return jsonResponse(200, recentSession);
+      }
       return jsonResponse(400, {
         success: false,
         error: 'Verification code has already been used. Please request a new code.'
@@ -1857,7 +1903,7 @@ export async function handler(event, context) {
           ? existingShop.profile.name
           : ((existingShop?.name && existingShop.name !== 'My Cafe') ? existingShop.name : (shopName || cleanStoreCode)));
 
-    return jsonResponse(200, {
+    const successPayload = {
       success: true,
       token,
       sessionToken,
@@ -1882,7 +1928,10 @@ export async function handler(event, context) {
         storeCode: cleanStoreCode
       },
       message: 'Email verified successfully!'
-    });
+    };
+
+    storeRecentVerifiedOtpSession(email, submittedOtp, successPayload);
+    return jsonResponse(200, successPayload);
   }
 
   // -----------------------------------------------------------
@@ -2510,6 +2559,14 @@ export async function handler(event, context) {
       if (!/^\d{6}$/.test(submittedOtp)) {
         return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
       }
+
+      // Fast-path idempotency window for concurrent / double-submit signups
+      const recentSession = getRecentVerifiedOtpSession(email, submittedOtp);
+      if (recentSession) {
+        console.log(`[NETLIFY API] 🔄 Concurrent duplicate signup resolved idempotently for ${email}`);
+        return jsonResponse(200, recentSession);
+      }
+
       let otpRecord = await retrieveOtpFromFirestore(email);
       if (!otpRecord) {
         otpRecord = memoryOtpStore.get(email);
@@ -2520,6 +2577,11 @@ export async function handler(event, context) {
         return jsonResponse(429, { success: false, error: 'Too many invalid attempts. Code invalidated.' });
       }
       if (otpRecord && otpRecord.consumed) {
+        const recentSession = getRecentVerifiedOtpSession(email, submittedOtp);
+        if (recentSession) {
+          console.log(`[NETLIFY API] 🔄 Concurrent duplicate signup resolved idempotently for ${email}`);
+          return jsonResponse(200, recentSession);
+        }
         return jsonResponse(400, { success: false, error: 'Invalid or expired email verification code' });
       }
 
@@ -2643,7 +2705,7 @@ export async function handler(event, context) {
       console.warn('[NETLIFY SIGNUP] Auto-seed note:', seedErr.message);
     }
 
-    return jsonResponse(200, {
+    const signupResponse = {
       success: true,
       message: 'Account created successfully',
       token,
@@ -2653,7 +2715,13 @@ export async function handler(event, context) {
       isOwner: true,
       user: { ...regUser, role: 'Owner', isOwner: true },
       shop: regResult.data.shop || { name: shopName, storeCode }
-    });
+    };
+
+    if (submittedOtp) {
+      storeRecentVerifiedOtpSession(email, submittedOtp, signupResponse);
+    }
+
+    return jsonResponse(200, signupResponse);
   }
 
   // -----------------------------------------------------------

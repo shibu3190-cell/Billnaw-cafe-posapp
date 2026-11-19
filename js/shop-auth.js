@@ -510,7 +510,11 @@
     }
     window.handleResendOtpCode = handleResendOtpCode;
 
+    let _isVerifyingLoginOtp = false;
+
     function handleVerifyOtpCode() {
+        if (_isVerifyingLoginOtp) return;
+
         const digitInputs = Array.from(document.querySelectorAll('#otpBoxesContainer .otp-digit-input'));
         const otpCode = digitInputs.map(input => input.value.trim()).join('');
         const emailInput = document.getElementById('shopAuthEmail');
@@ -527,6 +531,14 @@
             try { return sessionStorage.getItem('billnaw_login_otp_ticket') || ''; } catch(e) { return ''; }
         })();
 
+        const btnVerify = document.getElementById('btnVerifyOtpSubmit');
+        const origBtnHtml = btnVerify ? btnVerify.innerHTML : '';
+        if (btnVerify) {
+            btnVerify.disabled = true;
+            btnVerify.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg><span>Verifying...</span>';
+        }
+        _isVerifyingLoginOtp = true;
+
         if (typeof fetch === 'function') {
             fetch('/api/auth/verify-otp', {
                 method: 'POST',
@@ -541,18 +553,20 @@
                     digitInputs.forEach(input => { input.value = ''; });
 
                     try {
-                        // Multi-Account Device Isolation: check tenant switch BEFORE writing new auth/device keys
-                        const prevStoreCode = (localStorage.getItem('billnaw_store_code') || localStorage.getItem('billnaw_last_store_code') || '').trim();
+                        // Multi-Account Device Isolation: Always clear old tenant cache when logging into a different shop
+                        const prevStoreCode = (localStorage.getItem('billnaw_store_code') || localStorage.getItem('billnaw_last_store_code') || (typeof shopProfile !== 'undefined' && shopProfile?.storeCode) || '').trim();
                         const prevEmail = (localStorage.getItem('billnaw_auth_email') || localStorage.getItem('billnaw_last_device_email') || '').trim().toLowerCase();
                         const prevAuthMode = localStorage.getItem('billnaw_auth_mode');
                         const incomingEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
+                        const incomingStore = (data.storeCode || '').trim();
                         const isTenantSwitch = Boolean(
-                            (prevStoreCode && data.storeCode && prevStoreCode !== data.storeCode) ||
+                            (prevStoreCode && incomingStore && prevStoreCode !== incomingStore) ||
                             (prevEmail && incomingEmail && prevEmail !== incomingEmail) ||
+                            !prevStoreCode ||
                             prevAuthMode === 'demo'
                         );
                         if (isTenantSwitch) {
-                            console.log(`[AUTH] Switching store tenant: ${prevStoreCode || 'demo'} -> ${data.storeCode}. Purging previous tenant cache.`);
+                            console.log(`[AUTH] Enforcing clean store tenant: ${prevStoreCode || 'unauthenticated'} -> ${incomingStore}. Purging local tenant cache.`);
                             await clearAllTenantLocalData();
                         }
 
@@ -742,8 +756,19 @@
                 showValidationMsg('loginEmailValidationFeedback', errMsg, 'error');
                 showValidationMsg('otpValidationFeedback', errMsg, 'error');
                 if (typeof showToast === 'function') showToast(errMsg, 'error');
+            }).finally(() => {
+                _isVerifyingLoginOtp = false;
+                if (btnVerify) {
+                    btnVerify.disabled = false;
+                    btnVerify.innerHTML = origBtnHtml;
+                }
             });
         } else {
+            _isVerifyingLoginOtp = false;
+            if (btnVerify) {
+                btnVerify.disabled = false;
+                btnVerify.innerHTML = origBtnHtml;
+            }
             const msg = 'Network connection unavailable';
             showValidationMsg('loginEmailValidationFeedback', msg, 'error');
             showValidationMsg('otpValidationFeedback', msg, 'error');
@@ -773,18 +798,20 @@
             }).then(async data => {
                 if (data && data.success) {
                     try {
-                        // Multi-Account Device Isolation: check tenant switch BEFORE writing new auth/device keys
-                        const prevStoreCode = (localStorage.getItem('billnaw_store_code') || localStorage.getItem('billnaw_last_store_code') || '').trim();
+                        // Multi-Account Device Isolation: Always clear old tenant cache when logging into a different shop
+                        const prevStoreCode = (localStorage.getItem('billnaw_store_code') || localStorage.getItem('billnaw_last_store_code') || (typeof shopProfile !== 'undefined' && shopProfile?.storeCode) || '').trim();
                         const prevEmail = (localStorage.getItem('billnaw_auth_email') || localStorage.getItem('billnaw_last_device_email') || '').trim().toLowerCase();
                         const prevAuthMode = localStorage.getItem('billnaw_auth_mode');
                         const incomingEmail = (data.user?.email || data.shop?.ownerEmail || email || '').trim().toLowerCase();
+                        const incomingStore = (data.storeCode || '').trim();
                         const isTenantSwitch = Boolean(
-                            (prevStoreCode && data.storeCode && prevStoreCode !== data.storeCode) ||
+                            (prevStoreCode && incomingStore && prevStoreCode !== incomingStore) ||
                             (prevEmail && incomingEmail && prevEmail !== incomingEmail) ||
+                            !prevStoreCode ||
                             prevAuthMode === 'demo'
                         );
                         if (isTenantSwitch) {
-                            console.log(`[AUTH] Switching store tenant: ${prevStoreCode || 'demo'} -> ${data.storeCode}. Purging previous tenant cache.`);
+                            console.log(`[AUTH] Enforcing clean store tenant: ${prevStoreCode || 'unauthenticated'} -> ${incomingStore}. Purging local tenant cache.`);
                             await clearAllTenantLocalData();
                         }
 
@@ -1204,7 +1231,11 @@
     }
     window.handleResendSignupOtp = handleResendSignupOtp;
 
+    let _isVerifyingSignupOtp = false;
+
     function handleVerifyAndCreateAccount() {
+        if (_isVerifyingSignupOtp) return;
+
         const fn = document.getElementById('signupFirstName') ? document.getElementById('signupFirstName').value.trim() : '';
         const ln = document.getElementById('signupLastName') ? document.getElementById('signupLastName').value.trim() : '';
         const shop = document.getElementById('signupShopName') ? document.getElementById('signupShopName').value.trim() : '';
@@ -1233,6 +1264,14 @@
             alert(msg);
             return;
         }
+
+        const btnVerify = document.getElementById('btnVerifySignupSubmit');
+        const origBtnHtml = btnVerify ? btnVerify.innerHTML : '';
+        if (btnVerify) {
+            btnVerify.disabled = true;
+            btnVerify.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg><span>Creating Account...</span>';
+        }
+        _isVerifyingSignupOtp = true;
 
         if (typeof fetch === 'function') {
             fetch('/api/auth/signup', {
@@ -1378,8 +1417,19 @@
                 }
             }).catch((err) => {
                 alert('Signup verification error: ' + (err.message || 'Please check your connection and retry.'));
+            }).finally(() => {
+                _isVerifyingSignupOtp = false;
+                if (btnVerify) {
+                    btnVerify.disabled = false;
+                    btnVerify.innerHTML = origBtnHtml;
+                }
             });
         } else {
+            _isVerifyingSignupOtp = false;
+            if (btnVerify) {
+                btnVerify.disabled = false;
+                btnVerify.innerHTML = origBtnHtml;
+            }
             alert('Network connection unavailable');
         }
     }
@@ -1995,6 +2045,20 @@
             const container = document.getElementById(containerId);
             if (!container) return;
             const inputs = Array.from(container.querySelectorAll('.otp-digit-input'));
+            let lastAutoSubmitCode = '';
+            let lastAutoSubmitAt = 0;
+
+            const triggerCompleteDebounced = (code) => {
+                const now = Date.now();
+                if (code === lastAutoSubmitCode && now - lastAutoSubmitAt < 2500) {
+                    return;
+                }
+                lastAutoSubmitCode = code;
+                lastAutoSubmitAt = now;
+                if (typeof onComplete === 'function') {
+                    onComplete();
+                }
+            };
 
             inputs.forEach((input, index) => {
                 input.addEventListener('input', () => {
@@ -2005,8 +2069,8 @@
                         inputs[index + 1].select();
                     }
                     const fullCode = inputs.map(i => i.value.trim()).join('');
-                    if (fullCode.length === 6 && typeof onComplete === 'function') {
-                        onComplete();
+                    if (fullCode.length === 6) {
+                        triggerCompleteDebounced(fullCode);
                     }
                 });
 
@@ -2033,8 +2097,8 @@
                         }
                         const nextFocusIndex = Math.min(digits.length, inputs.length - 1);
                         inputs[nextFocusIndex].focus();
-                        if (digits.length === 6 && typeof onComplete === 'function') {
-                            onComplete();
+                        if (digits.length === 6) {
+                            triggerCompleteDebounced(digits);
                         }
                     }
                 });

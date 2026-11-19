@@ -2559,22 +2559,9 @@ function handleRemoteFirestoreUpdate(data) {
             }
         }
 
-        if (Array.isArray(staffList) && staffList.length > cleanRemoteStaff.length) {
-            // Local device has newer/more staff members: union merge so local additions are never wiped, excluding deleted staff
-            const staffMap = new Map();
-            cleanRemoteStaff.forEach(s => { if (s && s.id) staffMap.set(String(s.id), s); });
-            staffList.forEach(s => {
-                if (s && s.id && !deletedStaffSet.has(String(s.id)) && !staffMap.has(String(s.id))) {
-                    staffMap.set(String(s.id), s);
-                }
-            });
-            staffList = Array.from(staffMap.values());
-            if (typeof dispatchBackendStoreSync === 'function') {
-                dispatchBackendStoreSync({ staff: staffList, deletedStaffIds: Array.from(deletedStaffSet) }, true);
-            }
-        } else {
-            staffList = cleanRemoteStaff;
-        }
+        // Authoritative Cloud Isolation: Remote Firestore is the single source of truth for the active tenant's staff roster.
+        // Never union-merge memory from previous shops, and never echo-sync incoming remote reads back to cloud.
+        staffList = cleanRemoteStaff;
         window.staffList = staffList;
         try {
             idb.set('cafe_staff', staffList);
@@ -6430,7 +6417,6 @@ async function initDatabase() {
             }
             const bootSyncPayload = {
                 profile: shopProfile,
-                staff: staffList,
                 storeCode: currentStoreCode
             };
             if (Object.keys(nonEmptyBootTables).length > 0) {
