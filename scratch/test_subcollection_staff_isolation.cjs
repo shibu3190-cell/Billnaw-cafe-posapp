@@ -63,8 +63,8 @@ async function runTests() {
   // TEST 3: Persistent Cache read/write quarantine protection
   // -------------------------------------------------------------------------
   console.log('\n📍 TEST 3: Persistent Cache read/write quarantine');
-  await saveStoreStateToPersistentCache('SHOP_ABHIJITMODAK', dirtyData);
-  const cached = await getStoreStateFromPersistentCache('SHOP_ABHIJITMODAK');
+  await saveStoreStateToPersistentCache('SHOP_TEST_CACHE_QUARANTINE', dirtyData);
+  const cached = await getStoreStateFromPersistentCache('SHOP_TEST_CACHE_QUARANTINE');
   assert.strictEqual(cached.staff.length, 2, 'Cache read must be sanitized');
   assert.ok(!cached.staff.some(s => BAPI_QUARANTINE_STAFF_IDS.includes(String(s.id))), 'No Bapi staff in cache');
   console.log('  ✅ PASS: Persistent cache read/write is guarded against leaked staff.');
@@ -142,8 +142,32 @@ async function runTests() {
 
   console.log('  ✅ PASS: All 4 client defensive layers verified in source code.');
 
+  // -------------------------------------------------------------------------
+  // TEST 7: POST /api/sync/store-data handles quarantine merge without reference errors
+  // -------------------------------------------------------------------------
+  console.log('\n📍 TEST 7: Netlify POST /api/sync/store-data quarantine merge');
+  const { handler } = await import('../netlify/functions/api.js');
+  const syncEvent = {
+    httpMethod: 'POST',
+    path: '/api/sync/store-data',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: 'SHOP_ABHIJITMODAK',
+      tables: { 'T1': { status: 'occupied', updatedAt: new Date().toISOString() } }
+    })
+  };
+  const syncRes = await handler(syncEvent);
+  assert.strictEqual(syncRes.statusCode, 200, 'POST /api/sync/store-data must return 200 OK');
+  const parsedSync = JSON.parse(syncRes.body);
+  assert.strictEqual(parsedSync.success, true, 'Sync must succeed');
+  assert.ok(Array.isArray(parsedSync.deletedStaffIds), 'Must return deletedStaffIds');
+  for (const qId of BAPI_QUARANTINE_STAFF_IDS) {
+    assert.ok(parsedSync.deletedStaffIds.includes(qId), `deletedStaffIds must include ${qId}`);
+  }
+  console.log('  ✅ PASS: POST /api/sync/store-data succeeds with 200 OK and preserves quarantine.');
+
   console.log('\n====================================================================');
-  console.log('🎉 ALL 6 SUBCOLLECTION STAFF ISOLATION TESTS PASSED 100%!');
+  console.log('🎉 ALL 7 SUBCOLLECTION STAFF ISOLATION TESTS PASSED 100%!');
   console.log('====================================================================');
 }
 

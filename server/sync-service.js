@@ -502,8 +502,8 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   if (Array.isArray(payload.deletedStaffIds)) {
     fieldsToPatch.deletedStaffIds = Array.from(deletedStaffIdSet);
   } else if (deletedStaffIdSet.size > 0) {
-    const existingDeletedStaff = (cachedStoreForMerge?._quotaFallbackActive && Array.isArray(cachedStoreForMerge.deletedStaffIds))
-      ? cachedStoreForMerge.deletedStaffIds
+    const existingDeletedStaff = (cachedStore?._quotaFallbackActive && Array.isArray(cachedStore.deletedStaffIds))
+      ? cachedStore.deletedStaffIds
       : (existingRootFields?.deletedStaffIds ? firestoreValueToJson(existingRootFields.deletedStaffIds) : []);
     const combinedDeleted = new Set([
       ...(Array.isArray(existingDeletedStaff) ? existingDeletedStaff.map(id => String(id).trim()).filter(Boolean) : []),
