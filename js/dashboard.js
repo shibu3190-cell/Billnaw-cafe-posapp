@@ -1508,7 +1508,7 @@ function saveEditedOrder() {
             order.items = validItems.map(i => `${i.name} (x${i.qty || i.quantity || 1})`).join(', ');
             order.amount = Math.max(0, validItems.reduce((sum, i) => sum + ((Number(i.price || 0)) * (Number(i.qty || i.quantity || 1))), 0));
         }
-        persistHistoryFirebase(); 
+        persistHistoryFirebase(order); 
         renderDashboardAnalytics(); 
         showToast("Bill updated."); 
         document.getElementById('editOrderModal').style.display = 'none';

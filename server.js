@@ -25,7 +25,7 @@ import {
   checkFoodImageRateLimit
 } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
-import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle, syncStoreToFirestoreREST, getStoreFromFirestoreREST, deleteStaffFromFirestoreREST } from './server/sync-service.js';
+import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle, syncStoreToFirestoreREST, getStoreFromFirestoreREST, deleteStaffFromFirestoreREST, getInvoicesFromFirestoreREST, getStoreStateFromPersistentCache } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot, normalizeShopId, getClientProfileData, getCurrentYearMonth } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
 import {
@@ -1513,6 +1513,25 @@ app.get('/api/sync/store-data', async (req, res) => {
   }
 });
 
+app.get('/api/sync/invoices', async (req, res) => {
+  try {
+    const code = sanitizeTenantStoreCode(req);
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const auth = checkTenantAuth(req, res, code, true);
+    if (!auth.authorized) {
+      return res.status(auth.status || 401).json({ success: false, error: auth.error });
+    }
+    const pageSize = parseInt(req.query.pageSize, 10) || 50;
+    const pageToken = req.query.pageToken || null;
+    const result = await getInvoicesFromFirestoreREST(code, { pageSize, pageToken });
+    res.status(result.success ? 200 : (result.status >= 400 ? result.status : 500)).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch invoices' });
+  }
+});
+
 app.post('/api/sync/store-data', async (req, res) => {
   try {
     const code = sanitizeTenantStoreCode(req);
@@ -2110,6 +2129,11 @@ app.post('/api/reports/generate-statement', async (req, res) => {
     const cloudStore = await getStoreFromFirestoreREST(code).catch(() => null);
     if (cloudStore && cloudStore.success && Array.isArray(cloudStore.history)) {
       cloudStore.history.forEach(addTx);
+    }
+
+    const cachedStoreState = await getStoreStateFromPersistentCache(code).catch(() => null);
+    if (cachedStoreState && Array.isArray(cachedStoreState.history)) {
+      cachedStoreState.history.forEach(addTx);
     }
 
     try {

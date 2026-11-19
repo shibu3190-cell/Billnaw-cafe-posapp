@@ -2113,7 +2113,14 @@ if (posMeshChannel) {
                 }
             } catch(e) {}
         } else if (data.type === 'HISTORY_UPDATED' && Array.isArray(data.history)) {
-            orderHistory = data.history;
+            const histMap = new Map((orderHistory || []).map(o => [String(o.id || o.billNo || ''), o]));
+            data.history.forEach(o => {
+                if (o) {
+                    const k = String(o.id || o.billNo || '');
+                    if (k) histMap.set(k, o);
+                }
+            });
+            orderHistory = Array.from(histMap.values()).sort((a,b) => (Number(b.id || b.billNo || 0) - Number(a.id || a.billNo || 0)));
             window.orderHistory = orderHistory;
             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_history', orderHistory);
             if (typeof renderDashboardAnalytics === 'function') {
@@ -4261,7 +4268,7 @@ async function persistAllToFirestore() {
         deletedMenuNames: deletedMenuNames,
         categories: menuCategories,
         customers: customersList,
-        history: orderHistory,
+        history: Array.isArray(orderHistory) ? orderHistory.slice(0, 50) : [],
         expenses: dailyExpenses,
         tables: tablesInfo,
         kots: Array.isArray(activeKots) ? activeKots.slice(0, 50) : [],
@@ -4645,15 +4652,51 @@ function persistHistoryFirebase(newOrder = null) {
     if (typeof pruneClientTransactionalCache === 'function') {
         pruneClientTransactionalCache(10).catch(() => {});
     }
+    // Retain 100% full historical orders in local client IndexedDB
     idb.set('cafe_history', orderHistory); 
+
+    // Cap root document orders to latest 50 to prevent Firestore 1MB single-document limit
+    const MAX_ROOT_ORDERS = 50;
+    const cappedHistory = Array.isArray(orderHistory) ? orderHistory.slice(0, MAX_ROOT_ORDERS) : [];
+
     if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { history: orderHistory, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, { history: cappedHistory, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        }
+        // Subcollection archive for decoupled individual invoice scalability
+        if (newOrder) {
+            try {
+                const rawId = String(newOrder.billNo || newOrder.id || '').trim();
+                if (rawId && typeof getStoreSubdocRef === 'function') {
+                    const invId = rawId.replace(/[\/\s#?]/g, '_');
+                    const invDocRef = getStoreSubdocRef('invoices', invId);
+                    if (invDocRef) {
+                        let safeCreatedAt = newOrder.created_at || newOrder.createdAt || newOrder.settled_at;
+                        if (!safeCreatedAt && newOrder.date) {
+                            const parsed = Date.parse(newOrder.date);
+                            if (Number.isFinite(parsed)) safeCreatedAt = new Date(parsed).toISOString();
+                        }
+                        if (!safeCreatedAt) safeCreatedAt = new Date().toISOString();
+
+                        const invoiceRecord = {
+                            ...newOrder,
+                            id: newOrder.id || invId,
+                            billNo: newOrder.billNo || invId,
+                            created_at: safeCreatedAt,
+                            updatedAt: new Date().toISOString(),
+                            status: newOrder.status || 'PAID'
+                        };
+                        window.firestoreSetDoc(invDocRef, invoiceRecord, { merge: true }).catch(() => {});
+                    }
+                }
+            } catch (invErr) {
+                console.warn('[INVOICE ARCHIVE] Subdoc archive notice:', invErr?.message || invErr);
+            }
         }
     }
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ history: orderHistory }, true);
+        dispatchBackendStoreSync({ history: cappedHistory }, true);
     }
     if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
         try { posMeshChannel.postMessage({ type: 'HISTORY_UPDATED', history: orderHistory }); } catch(e) {}

@@ -30,6 +30,8 @@ import {
   syncStoreToFirestoreREST,
   deleteStaffFromFirestoreREST,
   getStoreFromFirestoreREST,
+  getInvoicesFromFirestoreREST,
+  getStoreStateFromPersistentCache,
   getShopStatus,
   getPublicClientConfig
 } from '../../server/sync-service.js';
@@ -994,6 +996,30 @@ export async function handler(event, context) {
     const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
     try {
       const result = await getStoreFromFirestoreREST(storeCode);
+      const status = result.status || (result.success ? 200 : 500);
+      return jsonResponse(status, result, extraHeaders);
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Fetch failed' }, extraHeaders);
+    }
+  }
+
+  // Route: /sync/invoices (GET)
+  if (event.httpMethod === 'GET' && (cleanPath === '/sync/invoices' || cleanPath.endsWith('/sync/invoices'))) {
+    const storeCode = sanitizeTenantStoreCode(event, body);
+    if (!storeCode) {
+      return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const token = extractAuthToken(event, body);
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    if (!auth.authorized) {
+      return jsonResponse(auth.status || 401, { success: false, error: auth.error });
+    }
+    const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
+    const queryParams = event.queryStringParameters || {};
+    const pageSize = parseInt(queryParams.pageSize, 10) || 50;
+    const pageToken = queryParams.pageToken || null;
+    try {
+      const result = await getInvoicesFromFirestoreREST(storeCode, { pageSize, pageToken });
       const status = result.status || (result.success ? 200 : 500);
       return jsonResponse(status, result, extraHeaders);
     } catch (err) {
@@ -2830,9 +2856,14 @@ export async function handler(event, context) {
 
     let sourceHistory = Array.isArray(transactions) ? transactions : [];
     if (sourceHistory.length === 0) {
-      const cloudStore = await getStoreFromFirestoreREST(code).catch(() => null);
-      if (cloudStore && cloudStore.success && Array.isArray(cloudStore.history)) {
-        sourceHistory = cloudStore.history;
+      const cachedStoreState = await getStoreStateFromPersistentCache(code).catch(() => null);
+      if (cachedStoreState && Array.isArray(cachedStoreState.history) && cachedStoreState.history.length > 0) {
+        sourceHistory = cachedStoreState.history;
+      } else {
+        const cloudStore = await getStoreFromFirestoreREST(code).catch(() => null);
+        if (cloudStore && cloudStore.success && Array.isArray(cloudStore.history)) {
+          sourceHistory = cloudStore.history;
+        }
       }
     }
 

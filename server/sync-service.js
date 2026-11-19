@@ -8,6 +8,7 @@ import { CONFIG } from './config.js';
 const isServerlessEnv = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
 const STORE_CACHE_FILE = path.join(isServerlessEnv ? '/tmp' : path.resolve(process.cwd(), 'data'), 'stores_state_cache.json');
 const serverStoreMemoryCache = new Map();
+export const MAX_ROOT_HISTORY_COUNT = 50;
 
 async function getNetlifyBlobStore() {
   try {
@@ -519,7 +520,15 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     fieldsToPatch.tables = {};
   }
 
-  if (Array.isArray(payload.history)) fieldsToPatch.history = payload.history;
+  let sortedHistory = null;
+  if (Array.isArray(payload.history)) {
+    sortedHistory = [...payload.history].sort((a, b) => {
+      const tA = new Date(a?.created_at || a?.createdAt || a?.settled_at || a?.date || a?.id || 0).getTime();
+      const tB = new Date(b?.created_at || b?.createdAt || b?.settled_at || b?.date || b?.id || 0).getTime();
+      return (Number.isFinite(tB) ? tB : 0) - (Number.isFinite(tA) ? tA : 0);
+    });
+    fieldsToPatch.history = sortedHistory.slice(0, MAX_ROOT_HISTORY_COUNT);
+  }
   if (Array.isArray(payload.expenses)) fieldsToPatch.expenses = payload.expenses;
   if (Array.isArray(payload.customers)) fieldsToPatch.customers = payload.customers;
   if (Array.isArray(payload.kots)) fieldsToPatch.kots = payload.kots;
@@ -533,7 +542,9 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     const dirtyKeys = ['ownerEmail', 'profile', 'name', 'staff', 'deletedStaffIds', 'menu', 'deletedMenuIds', 'deletedMenuNames', 'menuVersion', 'categories', 'tables', 'history', 'expenses', 'customers', 'kots', 'subscription'];
     for (const dk of dirtyKeys) {
       if (fieldsToPatch[dk] === undefined && cachedStore[dk] !== undefined) {
-        fieldsToPatch[dk] = cachedStore[dk];
+        fieldsToPatch[dk] = (dk === 'history' && Array.isArray(cachedStore[dk]))
+          ? cachedStore[dk].slice(0, MAX_ROOT_HISTORY_COUNT)
+          : cachedStore[dk];
       }
     }
   }
@@ -565,6 +576,28 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     console.warn('[SYNC REST] Root doc fetch error:', rootPatchError);
   }
 
+  // Merge history for persistent cache so server retains full historical ledger without 1MB single-document limit
+  let fullMergedHistory = fieldsToPatch.history || cachedStore?.history || [];
+  if (Array.isArray(payload.history)) {
+    const historyMap = new Map();
+    if (Array.isArray(cachedStore?.history)) {
+      cachedStore.history.forEach(item => {
+        const key = String(item?.id || item?.billNo || item?.bill_no || item?.invoiceNo || '').trim();
+        if (key) historyMap.set(key, item);
+      });
+    }
+    payload.history.forEach(item => {
+      const key = String(item?.id || item?.billNo || item?.bill_no || item?.invoiceNo || '').trim();
+      if (key) historyMap.set(key, item);
+      else historyMap.set(String(Math.random()), item);
+    });
+    fullMergedHistory = Array.from(historyMap.values()).sort((a, b) => {
+      const tA = new Date(a?.created_at || a?.createdAt || a?.settled_at || a?.date || a?.id || 0).getTime();
+      const tB = new Date(b?.created_at || b?.createdAt || b?.settled_at || b?.date || b?.id || 0).getTime();
+      return (Number.isFinite(tB) ? tB : 0) - (Number.isFinite(tA) ? tA : 0);
+    });
+  }
+
   if (rootPatchError) {
     if (rootPatchStatus === 429) {
       // Firestore free-tier daily write quota exhausted: persist authoritative LWW state in server cache, disk & Netlify Blobs
@@ -579,6 +612,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
       const updatedState = {
         ...(cachedStore || {}),
         ...fieldsToPatch,
+        history: fullMergedHistory,
         tables: mergedTablesState,
         _quotaFallbackActive: true
       };
@@ -591,7 +625,9 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
         staffCount: Array.isArray(finalStaffArray) ? finalStaffArray.length : 0,
         deletedStaffId: deletedIdStr || undefined,
         deletedStaffIds: deletedStaffIdSet.size > 0 ? Array.from(deletedStaffIdSet) : undefined,
-        tableCount: hasTablesPayload ? Object.keys(payload.tables).length : undefined
+        tableCount: hasTablesPayload ? Object.keys(payload.tables).length : undefined,
+        historyCount: Array.isArray(fieldsToPatch.history) ? fieldsToPatch.history.length : undefined,
+        archivedInvoicesCount: Array.isArray(payload.history) ? payload.history.length : undefined
       };
     }
     return {
@@ -614,6 +650,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   const updatedState = {
     ...(cachedStore || {}),
     ...fieldsToPatch,
+    history: fullMergedHistory,
     tables: mergedTablesState,
     _quotaFallbackActive: false
   };
@@ -723,6 +760,63 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     } catch (e) {}
   }
 
+  // 5. Sync Invoices Subcollection (/{collection}/{storeCode}/invoices/{invoiceId})
+  // Archives individual order invoices so historical data scales infinitely without 1MB document limit
+  if (Array.isArray(payload.history) && payload.history.length > 0) {
+    const cachedHistoryMap = new Map();
+    if (Array.isArray(cachedStore?.history)) {
+      cachedStore.history.forEach(item => {
+        const key = String(item?.id || item?.billNo || item?.bill_no || item?.invoiceNo || '').trim();
+        if (key) cachedHistoryMap.set(key, item);
+      });
+    }
+
+    // Only dispatch network writes for new or strictly newer orders to protect Firestore write quotas
+    const ordersToArchive = (sortedHistory || payload.history)
+      .filter(order => {
+        if (!order) return false;
+        const key = String(order.id || order.billNo || order.bill_no || order.invoiceNo || '').trim();
+        if (!key) return false;
+        const cached = cachedHistoryMap.get(key);
+        if (!cached) return true; // Brand new order -> archive
+        const incomingTs = Date.parse(order.updatedAt || order.created_at || order.createdAt || order.settled_at || order.date || 0) || 0;
+        const cachedTs = Date.parse(cached.updatedAt || cached.created_at || cached.createdAt || cached.settled_at || cached.date || 0) || 0;
+        return incomingTs > cachedTs; // Modified/voided order -> archive update
+      })
+      .slice(0, 50);
+
+    const invoicePromises = ordersToArchive.map(async (order) => {
+      if (!order) return;
+      const rawId = String(order.id || order.billNo || order.bill_no || order.invoiceNo || '').trim();
+      if (!rawId) return;
+      const invId = rawId.replace(/[\/\s#?]/g, '_');
+      const invoiceDocUrl = `${base}/${collection}/${encodeURIComponent(code)}/invoices/${encodeURIComponent(invId)}`;
+      try {
+        let safeCreatedAt = order.created_at || order.createdAt || order.settled_at;
+        if (!safeCreatedAt && order.date) {
+          const parsed = Date.parse(order.date);
+          if (Number.isFinite(parsed)) safeCreatedAt = new Date(parsed).toISOString();
+        }
+        if (!safeCreatedAt) safeCreatedAt = timestamp;
+
+        const orderData = {
+          ...order,
+          id: order.id || invId,
+          billNo: order.billNo || order.bill_no || invId,
+          created_at: safeCreatedAt,
+          updatedAt: timestamp,
+          status: order.status || 'PAID'
+        };
+        await fetch(invoiceDocUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: jsonToFirestoreFields(orderData) })
+        }).catch(() => null);
+      } catch (e) {}
+    });
+    await Promise.allSettled(invoicePromises);
+  }
+
   return {
     success: true,
     storeCode: code,
@@ -730,7 +824,9 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     staffCount: staffToSubdoc.length,
     deletedStaffId: deletedIdStr || undefined,
     deletedStaffIds: deletedStaffIdSet.size > 0 ? Array.from(deletedStaffIdSet) : undefined,
-    tableCount: hasTablesPayload ? Object.keys(payload.tables).length : undefined
+    tableCount: hasTablesPayload ? Object.keys(payload.tables).length : undefined,
+    historyCount: Array.isArray(fieldsToPatch.history) ? fieldsToPatch.history.length : undefined,
+    archivedInvoicesCount: Array.isArray(payload.history) ? payload.history.length : undefined
   };
 }
 
@@ -758,7 +854,8 @@ export async function deleteStaffFromFirestoreREST(storeCode, staffId, remaining
   });
 }
 
-export async function getStoreFromFirestoreREST(storeCode) {
+export async function getStoreFromFirestoreREST(storeCode, options = {}) {
+  const { fullHistory = false } = (typeof options === 'object' && options !== null) ? options : {};
   const cleanCode = (typeof storeCode === 'string') ? storeCode.trim() : '';
   if (!cleanCode || !/^[A-Za-z0-9_-]{3,64}$/.test(cleanCode)) {
     return { success: false, error: 'Tenant isolation error: valid storeCode required.' };
@@ -790,7 +887,7 @@ export async function getStoreFromFirestoreREST(storeCode) {
           menuVersion: cached.menuVersion || 0,
           categories: cached.categories || [],
           tables: cached.tables || {},
-          history: cached.history || [],
+          history: fullHistory ? (cached.history || []) : (cached.history || []).slice(0, MAX_ROOT_HISTORY_COUNT),
           expenses: cached.expenses || [],
           customers: cached.customers || [],
           kots: cached.kots || [],
@@ -804,6 +901,7 @@ export async function getStoreFromFirestoreREST(storeCode) {
     const fields = rawDoc.fields || {};
     const profileObj = fields.profile ? firestoreValueToJson(fields.profile) : null;
     const ownerEmail = (fields.ownerEmail ? firestoreValueToJson(fields.ownerEmail) : null) || profileObj?.ownerEmail || profileObj?.email || null;
+    const parsedHistory = fields.history ? firestoreValueToJson(fields.history) : [];
     const baseResult = {
       success: true,
       storeCode: code,
@@ -817,7 +915,7 @@ export async function getStoreFromFirestoreREST(storeCode) {
       menuVersion: fields.menuVersion ? firestoreValueToJson(fields.menuVersion) : 0,
       categories: fields.categories ? firestoreValueToJson(fields.categories) : [],
       tables: fields.tables ? firestoreValueToJson(fields.tables) : {},
-      history: fields.history ? firestoreValueToJson(fields.history) : [],
+      history: fullHistory ? parsedHistory : (Array.isArray(parsedHistory) ? parsedHistory.slice(0, MAX_ROOT_HISTORY_COUNT) : []),
       expenses: fields.expenses ? firestoreValueToJson(fields.expenses) : [],
       customers: fields.customers ? firestoreValueToJson(fields.customers) : [],
       kots: fields.kots ? firestoreValueToJson(fields.kots) : [],
@@ -830,6 +928,9 @@ export async function getStoreFromFirestoreREST(storeCode) {
         resolvedTables[tId] = mergeTableEntry(resolvedTables[tId], tData);
       }
     }
+    const resolvedHistory = fullHistory
+      ? ((Array.isArray(cached?.history) && cached.history.length > 0) ? cached.history : baseResult.history)
+      : baseResult.history;
     const cTime = Date.parse(cached?.updatedAt || 0) || 0;
     const fTime = Date.parse(baseResult.updatedAt || 0) || 0;
     if (cached && (cached._quotaFallbackActive || cTime > fTime)) {
@@ -845,7 +946,7 @@ export async function getStoreFromFirestoreREST(storeCode) {
         menuVersion: Math.max(Number(cached.menuVersion || 0), Number(baseResult.menuVersion || 0)),
         categories: (Array.isArray(cached.categories) && cTime > fTime) ? cached.categories : baseResult.categories,
         tables: resolvedTables,
-        history: (Array.isArray(cached.history) && cTime > fTime) ? cached.history : baseResult.history,
+        history: resolvedHistory,
         expenses: (Array.isArray(cached.expenses) && cTime > fTime) ? cached.expenses : baseResult.expenses,
         customers: (Array.isArray(cached.customers) && cTime > fTime) ? cached.customers : baseResult.customers,
         kots: (Array.isArray(cached.kots) && cTime > fTime) ? cached.kots : baseResult.kots,
@@ -854,6 +955,7 @@ export async function getStoreFromFirestoreREST(storeCode) {
     }
     return {
       ...baseResult,
+      history: resolvedHistory,
       tables: resolvedTables
     };
   } catch (err) {
@@ -872,12 +974,70 @@ export async function getStoreFromFirestoreREST(storeCode) {
         menuVersion: cached.menuVersion || 0,
         categories: cached.categories || [],
         tables: cached.tables || {},
-        history: cached.history || [],
+        history: fullHistory ? (cached.history || []) : (cached.history || []).slice(0, MAX_ROOT_HISTORY_COUNT),
         expenses: cached.expenses || [],
         customers: cached.customers || [],
         kots: cached.kots || [],
         subscription: cached.subscription || null,
         updatedAt: cached.updatedAt || new Date().toISOString()
+      };
+    }
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getInvoicesFromFirestoreREST(storeCode, { pageSize = 50, pageToken = null } = {}) {
+  const cleanCode = (typeof storeCode === 'string') ? storeCode.trim() : '';
+  if (!cleanCode || !/^[A-Za-z0-9_-]{3,64}$/.test(cleanCode)) {
+    return { success: false, error: 'Tenant isolation error: valid storeCode required.' };
+  }
+  const code = cleanCode;
+  if (!CONFIG?.firebase?.projectId || !CONFIG?.firebase?.firestoreDatabaseId) {
+    return { success: false, error: 'Firebase configuration missing on server' };
+  }
+  const collection = getStoreCollectionName(code);
+  const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
+  const limit = Math.min(Math.max(1, Number(pageSize) || 50), 100);
+  let url = `${base}/${collection}/${encodeURIComponent(code)}/invoices?pageSize=${limit}`;
+  if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const cached = await getStoreStateFromPersistentCache(code);
+      if (cached && Array.isArray(cached.history)) {
+        return {
+          success: true,
+          storeCode: code,
+          invoices: cached.history.slice(0, limit),
+          totalCached: cached.history.length,
+          source: 'cache'
+        };
+      }
+      return { success: false, status: res.status, error: await res.text() };
+    }
+    const data = await res.json();
+    const invoices = (data.documents || []).map(doc => {
+      const id = doc.name ? doc.name.split('/').pop() : '';
+      const docData = doc.fields ? firestoreValueToJson({ mapValue: { fields: doc.fields } }) : {};
+      return { id, ...docData };
+    });
+    return {
+      success: true,
+      storeCode: code,
+      invoices,
+      nextPageToken: data.nextPageToken || null,
+      source: 'firestore'
+    };
+  } catch (err) {
+    const cached = await getStoreStateFromPersistentCache(code);
+    if (cached && Array.isArray(cached.history)) {
+      return {
+        success: true,
+        storeCode: code,
+        invoices: cached.history.slice(0, limit),
+        totalCached: cached.history.length,
+        source: 'cache'
       };
     }
     return { success: false, error: err.message };

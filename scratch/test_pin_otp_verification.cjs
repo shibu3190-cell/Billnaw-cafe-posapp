@@ -3,6 +3,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+process.env.NODE_ENV = 'test';
 
 async function run() {
   console.log('====================================================');
