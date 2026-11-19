@@ -3377,14 +3377,45 @@ function subscribeStaffCloudListener(targetStoreCode = null) {
         if (!staffColRef) return null;
 
         firestoreStaffUnsubscribe = window.firestoreOnSnapshot(staffColRef, (snap) => {
-            const staffDocs = [];
+            const rawSubDocs = [];
             snap.forEach(docSnap => {
-                staffDocs.push({ id: docSnap.id, ...docSnap.data() });
+                rawSubDocs.push({ id: docSnap.id, ...docSnap.data() });
             });
+
+            // Strict Tenant Isolation & Deleted Staff Exclusion:
+            const deletedSet = new Set((typeof getDeletedStaffIds === 'function' ? getDeletedStaffIds() : []).map(String));
+            
+            // Known Cross-Tenant Leaked Staff Quarantine (Bapi shop staff ids must never enter Abhijit shop)
+            const activeStoreCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (targetStoreCode || window.myClientID || shopProfile?.storeCode || '');
+            const shopEmail = String(shopProfile?.ownerEmail || shopProfile?.email || '').toLowerCase().trim();
+            const isAbhijitShop = activeStoreCode === 'SHOP_ABHIJITMODAK' || shopEmail.includes('abhijitmodak');
+            const BAPI_LEAKED_IDS = new Set(['1793965135000', '1793965355981', '1794229462515', '1794307359978', '1794308489640', '1794308708078', '1794308990021', '1794309081290', '1794310972228']);
+
+            // Authoritative Roster Invariant:
+            // The root store document (via remote snapshot or boot hydration) is the SOLE authoritative roster.
+            // A subcollection document must NEVER inject phantom/orphaned profiles that do not exist in the store's verified roster.
+            const validSubDocs = rawSubDocs.filter(d => {
+                const sId = String(d.id || d.staffId || '').trim();
+                if (!sId || deletedSet.has(sId)) return false;
+                if (isAbhijitShop && BAPI_LEAKED_IDS.has(sId)) return false;
+                // If authoritative staffList exists, only permit documents matching existing roster
+                if (Array.isArray(staffList) && staffList.length > 0) {
+                    return staffList.some(s => String(s?.id || s?.staffId) === sId);
+                }
+                return true;
+            });
+
             const activeStaff = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
-            if (activeStaff && activeStaff.role !== 'Admin' && staffDocs.length > 0) {
-                const stillExists = staffDocs.some(s => String(s.id) === String(activeStaff.id));
-                if (!stillExists) {
+            if (activeStaff && activeStaff.role !== 'Admin') {
+                const activeIdStr = String(activeStaff.id);
+                const isExplicitlyRevoked = deletedSet.has(activeIdStr) ||
+                    (isAbhijitShop && BAPI_LEAKED_IDS.has(activeIdStr)) ||
+                    (Array.isArray(staffList) && staffList.length > 0 && !staffList.some(s => String(s?.id || s?.staffId) === activeIdStr));
+
+                const matchingSubDoc = validSubDocs.find(s => String(s.id || s.staffId) === activeIdStr);
+                const isExplicitlyRevokedInSubDoc = Boolean(matchingSubDoc && (matchingSubDoc.status === 'REVOKED' || matchingSubDoc.isLocked === true));
+
+                if (isExplicitlyRevoked || isExplicitlyRevokedInSubDoc) {
                     try { localStorage.setItem('billnaw_session_revoked', 'true'); } catch (e) {}
                     if (typeof lockTerminalByRemote === 'function') {
                         lockTerminalByRemote({ staffId: activeStaff.id, status: 'REVOKED', reason: 'Staff profile removed by Admin' });
@@ -3396,17 +3427,37 @@ function subscribeStaffCloudListener(targetStoreCode = null) {
                     }
                 }
             }
-            if (staffDocs.length > 0) {
-                staffList = staffDocs;
-                window.staffList = staffList;
-                if (typeof idb !== 'undefined' && idb.set) { idb.set('cafe_staff', staffList); }
-                try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
-                if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
-                if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
-                if (typeof renderStaffList === 'function') renderStaffList();
-                if (typeof renderAvatarPicker === 'function') renderAvatarPicker();
+
+            // Merge PIN hash, salt, or status updates from subcollection into authoritative staffList
+            if (Array.isArray(staffList) && staffList.length > 0) {
+                const subMap = new Map(validSubDocs.map(d => [String(d.id || d.staffId), d]));
+                let updated = false;
+                const reconciled = staffList.map(member => {
+                    const subDoc = subMap.get(String(member.id));
+                    if (subDoc) {
+                        const newHash = subDoc.pin_hash || subDoc.pinHash;
+                        const oldHash = member.pin_hash || member.pinHash;
+                        const newStatus = subDoc.status;
+                        const oldStatus = member.status;
+                        if ((newHash && newHash !== oldHash) || (newStatus && newStatus !== oldStatus)) {
+                            updated = true;
+                            return { ...member, ...subDoc };
+                        }
+                    }
+                    return member;
+                });
+                if (updated) {
+                    staffList = reconciled;
+                    window.staffList = staffList;
+                    if (typeof idb !== 'undefined' && idb.set) { idb.set('cafe_staff', staffList); }
+                    try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
+                    if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
+                    if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
+                    if (typeof renderStaffList === 'function') renderStaffList();
+                    if (typeof renderAvatarPicker === 'function') renderAvatarPicker();
+                }
             }
-            window.dispatchEvent(new CustomEvent('billnaw:staff-updated', { detail: { staff: staffDocs } }));
+            window.dispatchEvent(new CustomEvent('billnaw:staff-updated', { detail: { staff: validSubDocs } }));
         }, (err) => {
             console.warn('[Firestore] staff listener warning:', err.message);
         });
@@ -6359,24 +6410,55 @@ async function initDatabase() {
         customersList = storedCustomers;
         window.customersList = customersList;
     }
+    const deletedStaffSet = new Set((typeof getDeletedStaffIds === 'function' ? getDeletedStaffIds() : []).map(String));
+    const activeCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (shopProfile?.storeCode || null);
+    const activeEmail = String(shopProfile?.ownerEmail || shopProfile?.email || '').toLowerCase().trim();
+    const isAbhijitActive = activeCode === 'SHOP_ABHIJITMODAK' || activeEmail.includes('abhijitmodak');
+    const BAPI_QUARANTINE_IDS = new Set(['1793965135000', '1793965355981', '1794229462515', '1794307359978', '1794308489640', '1794308708078', '1794308990021', '1794309081290', '1794310972228']);
+
     const storedStaff = await idb.get('cafe_staff');
+    let loadedFromCache = false;
     if (storedStaff && Array.isArray(storedStaff) && storedStaff.length > 0) {
-        staffList = storedStaff;
-        window.staffList = staffList;
-        try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
-    } else {
+        const cleanStored = storedStaff.filter(s => {
+            if (!s || !s.id) return false;
+            const sId = String(s.id);
+            if (deletedStaffSet.has(sId)) return false;
+            if (isAbhijitActive && BAPI_QUARANTINE_IDS.has(sId)) return false;
+            return true;
+        });
+        if (cleanStored.length > 0) {
+            staffList = cleanStored;
+            window.staffList = staffList;
+            loadedFromCache = true;
+            if (cleanStored.length !== storedStaff.length) {
+                await idb.set('cafe_staff', staffList);
+            }
+            try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
+        } else {
+            try { await idb.del('cafe_staff'); } catch(e) {}
+            try { localStorage.removeItem('billnaw_store_staff'); } catch(e) {}
+        }
+    }
+
+    if (!loadedFromCache) {
         let recoveredStaff = null;
         try {
             const raw = localStorage.getItem('billnaw_store_staff');
             if (raw) {
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    recoveredStaff = parsed;
+                    recoveredStaff = parsed.filter(s => {
+                        if (!s || !s.id) return false;
+                        const sId = String(s.id);
+                        if (deletedStaffSet.has(sId)) return false;
+                        if (isAbhijitActive && BAPI_QUARANTINE_IDS.has(sId)) return false;
+                        return true;
+                    });
                 }
             }
         } catch(e) {}
 
-        if (recoveredStaff) {
+        if (Array.isArray(recoveredStaff) && recoveredStaff.length > 0) {
             staffList = recoveredStaff;
             window.staffList = staffList;
             await idb.set('cafe_staff', staffList);

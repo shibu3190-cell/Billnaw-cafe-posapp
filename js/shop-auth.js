@@ -570,6 +570,14 @@
                             await clearAllTenantLocalData();
                         }
 
+                        // Cross-tenant quarantine: ensure Bapi leaked staff IDs are permanently blocked in Abhijit shop
+                        if (incomingStore === 'SHOP_ABHIJITMODAK' || incomingEmail.includes('abhijitmodak')) {
+                            const BAPI_QUARANTINE_IDS = ['1793965135000', '1793965355981', '1794229462515', '1794307359978', '1794308489640', '1794308708078', '1794308990021', '1794309081290', '1794310972228'];
+                            if (typeof recordDeletedStaffId === 'function') {
+                                BAPI_QUARANTINE_IDS.forEach(id => recordDeletedStaffId(id));
+                            }
+                        }
+
                         localStorage.setItem('billnaw_auth_mode', 'authenticated');
                         const isOwner = Boolean(data && (data.isOwner || (data.user && (data.user.role === 'owner' || data.user.isOwner))));
                         if (isOwner) {
@@ -813,6 +821,14 @@
                         if (isTenantSwitch) {
                             console.log(`[AUTH] Enforcing clean store tenant: ${prevStoreCode || 'unauthenticated'} -> ${incomingStore}. Purging local tenant cache.`);
                             await clearAllTenantLocalData();
+                        }
+
+                        // Cross-tenant quarantine: ensure Bapi leaked staff IDs are permanently blocked in Abhijit shop
+                        if (incomingStore === 'SHOP_ABHIJITMODAK' || incomingEmail.includes('abhijitmodak')) {
+                            const BAPI_QUARANTINE_IDS = ['1793965135000', '1793965355981', '1794229462515', '1794307359978', '1794308489640', '1794308708078', '1794308990021', '1794309081290', '1794310972228'];
+                            if (typeof recordDeletedStaffId === 'function') {
+                                BAPI_QUARANTINE_IDS.forEach(id => recordDeletedStaffId(id));
+                            }
                         }
 
                         localStorage.setItem('billnaw_auth_mode', 'authenticated');

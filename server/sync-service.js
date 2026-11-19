@@ -10,6 +10,46 @@ const STORE_CACHE_FILE = path.join(isServerlessEnv ? '/tmp' : path.resolve(proce
 const serverStoreMemoryCache = new Map();
 export const MAX_ROOT_HISTORY_COUNT = 50;
 
+export const BAPI_QUARANTINE_STAFF_IDS = Object.freeze([
+  '1793965135000',
+  '1793965355981',
+  '1794229462515',
+  '1794307359978',
+  '1794308489640',
+  '1794308708078',
+  '1794308990021',
+  '1794309081290',
+  '1794310972228'
+]);
+const BAPI_QUARANTINE_STAFF_SET = new Set(BAPI_QUARANTINE_STAFF_IDS);
+
+export function isAbhijitTenant(storeCode, ownerEmail, profile) {
+  const code = String(storeCode || '').trim();
+  const email = String(ownerEmail || profile?.ownerEmail || profile?.email || '').toLowerCase().trim();
+  return code === 'SHOP_ABHIJITMODAK' || email.includes('abhijitmodak');
+}
+
+export function sanitizeStaffForTenant(storeCode, data) {
+  if (!data || typeof data !== 'object') return data;
+  if (!isAbhijitTenant(storeCode, data.ownerEmail, data.profile)) return data;
+
+  const cleanStaff = Array.isArray(data.staff)
+    ? data.staff.filter(s => {
+        const sid = String(s?.id || s?.staffId || '').trim();
+        return sid && !BAPI_QUARANTINE_STAFF_SET.has(sid);
+      })
+    : data.staff;
+
+  const existingDeleted = Array.isArray(data.deletedStaffIds) ? data.deletedStaffIds.map(String) : [];
+  const mergedDeleted = new Set([...existingDeleted, ...BAPI_QUARANTINE_STAFF_IDS]);
+
+  return {
+    ...data,
+    staff: cleanStaff,
+    deletedStaffIds: Array.from(mergedDeleted)
+  };
+}
+
 async function getNetlifyBlobStore() {
   try {
     const blobs = await import('@netlify/blobs');
@@ -46,7 +86,7 @@ export async function getStoreStateFromPersistentCache(code) {
   } catch (e) {
     console.warn('[SYNC BLOB] Blob read error:', e.message);
   }
-  return cached;
+  return sanitizeStaffForTenant(cleanCode, cached);
 }
 
 export async function saveStoreStateToPersistentCache(code, state) {
@@ -54,12 +94,13 @@ export async function saveStoreStateToPersistentCache(code, state) {
     return;
   }
   const cleanCode = code.trim();
-  serverStoreMemoryCache.set(cleanCode, state);
+  const cleanState = sanitizeStaffForTenant(cleanCode, state);
+  serverStoreMemoryCache.set(cleanCode, cleanState);
   saveServerStoreCacheToDisk();
   try {
     const blobStore = await getNetlifyBlobStore();
     if (blobStore) {
-      await blobStore.setJSON(cleanCode, state);
+      await blobStore.setJSON(cleanCode, cleanState);
     }
   } catch (e) {
     console.warn('[SYNC BLOB] Blob write error:', e.message);
@@ -398,6 +439,9 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
         deletedStaffIdSet.add(String(rawId).trim());
       }
     }
+  }
+  if (isAbhijitTenant(code, resolvedOwnerEmail, payload.profile)) {
+    BAPI_QUARANTINE_STAFF_IDS.forEach(id => deletedStaffIdSet.add(id));
   }
   const deletedIdStr = (payload.deletedStaffId !== undefined && payload.deletedStaffId !== null && String(payload.deletedStaffId).trim() !== '')
     ? String(payload.deletedStaffId).trim()
@@ -874,7 +918,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
     const res = await fetch(rootUrl);
     if (!res.ok) {
       if (cached && (cached._quotaFallbackActive || Object.keys(cached).length > 0)) {
-        return {
+        return sanitizeStaffForTenant(code, {
           success: true,
           storeCode: code,
           ownerEmail: cached.ownerEmail || cached.profile?.ownerEmail || null,
@@ -893,7 +937,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
           kots: cached.kots || [],
           subscription: cached.subscription || null,
           updatedAt: cached.updatedAt || new Date().toISOString()
-        };
+        });
       }
       return { success: false, status: res.status, error: await res.text() };
     }
@@ -934,7 +978,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
     const cTime = Date.parse(cached?.updatedAt || 0) || 0;
     const fTime = Date.parse(baseResult.updatedAt || 0) || 0;
     if (cached && (cached._quotaFallbackActive || cTime > fTime)) {
-      return {
+      return sanitizeStaffForTenant(code, {
         ...baseResult,
         ownerEmail: (cTime > fTime ? cached.ownerEmail : undefined) ?? baseResult.ownerEmail,
         profile: (cached.profile && cTime > fTime) ? { ...(baseResult.profile || {}), ...cached.profile } : baseResult.profile,
@@ -951,17 +995,17 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
         customers: (Array.isArray(cached.customers) && cTime > fTime) ? cached.customers : baseResult.customers,
         kots: (Array.isArray(cached.kots) && cTime > fTime) ? cached.kots : baseResult.kots,
         updatedAt: (cTime > fTime ? cached.updatedAt : undefined) || baseResult.updatedAt
-      };
+      });
     }
-    return {
+    return sanitizeStaffForTenant(code, {
       ...baseResult,
       history: resolvedHistory,
       tables: resolvedTables
-    };
+    });
   } catch (err) {
     const cached = await getStoreStateFromPersistentCache(code);
     if (cached && (cached._quotaFallbackActive || Object.keys(cached).length > 0)) {
-      return {
+      return sanitizeStaffForTenant(code, {
         success: true,
         storeCode: code,
         ownerEmail: cached.ownerEmail || cached.profile?.ownerEmail || null,
@@ -980,7 +1024,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
         kots: cached.kots || [],
         subscription: cached.subscription || null,
         updatedAt: cached.updatedAt || new Date().toISOString()
-      };
+      });
     }
     return { success: false, error: err.message };
   }

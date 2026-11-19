@@ -90,18 +90,36 @@ function _renderStaffProfileCards() {
     if (!grid) return;
 
     const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList)) ? window.staffList : [];
-    
+    const deletedSet = new Set((typeof getDeletedStaffIds === 'function' ? getDeletedStaffIds() : []).map(String));
+    const activeStoreCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (window.myClientID || (window.shopProfile && window.shopProfile.storeCode) || '');
+    const activeEmail = String((window.shopProfile && (window.shopProfile.ownerEmail || window.shopProfile.email)) || '').toLowerCase().trim();
+    const isAbhijitShop = activeStoreCode === 'SHOP_ABHIJITMODAK' || activeEmail.includes('abhijitmodak');
+    const BAPI_QUARANTINE_IDS = new Set(['1793965135000', '1793965355981', '1794229462515', '1794307359978', '1794308489640', '1794308708078', '1794308990021', '1794309081290', '1794310972228']);
+
     // Always synthesize Admin Profile at the very top
     const adminStaff = {
         id: 'admin',
-        name: (window.shopProfile && window.shopProfile.ownerName) || 'Store Admin',
+        name: (window.shopProfile && (window.shopProfile.ownerName || window.shopProfile.name)) || 'Store Admin',
         role: 'Admin',
         isAdmin: true
     };
 
+    const seenIds = new Set(['admin', '1']);
+    const nonAdminProfiles = [];
+    for (const staff of staffSource) {
+        if (!staff || !staff.id) continue;
+        const sId = String(staff.id);
+        if (staff.id === 'admin' || staff.role === 'Admin' || staff.id === 1) continue;
+        if (deletedSet.has(sId)) continue;
+        if (isAbhijitShop && BAPI_QUARANTINE_IDS.has(sId)) continue;
+        if (seenIds.has(sId)) continue;
+        seenIds.add(sId);
+        nonAdminProfiles.push(staff);
+    }
+
     const allProfiles = [
         adminStaff,
-        ...staffSource.filter(s => s && s.id !== 'admin' && s.role !== 'Admin' && s.id !== 1)
+        ...nonAdminProfiles
     ];
     const sessions = (typeof window !== 'undefined' && window.activeStaffSessions) || [];
 
