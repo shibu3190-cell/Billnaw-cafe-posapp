@@ -2240,7 +2240,7 @@ function isSubscriptionPaused() {
     const status = (window.currentSubscriptionState && window.currentSubscriptionState.status) ||
                    (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_subscription_status') : null) ||
                    'ACTIVE';
-    return status.toUpperCase() === 'PAUSED';
+    return String(status).replace(/["']/g, '').trim().toUpperCase() === 'PAUSED';
 }
 window.isSubscriptionPaused = isSubscriptionPaused;
 
@@ -2248,7 +2248,7 @@ function isSubscriptionRevoked() {
     const status = (window.currentSubscriptionState && window.currentSubscriptionState.status) ||
                    (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_subscription_status') : null) ||
                    'ACTIVE';
-    return status.toUpperCase() === 'REVOKED';
+    return String(status).replace(/["']/g, '').trim().toUpperCase() === 'REVOKED';
 }
 window.isSubscriptionRevoked = isSubscriptionRevoked;
 
@@ -2261,7 +2261,11 @@ function applySubscriptionStatus(subscription) {
         };
     }
 
-    const rawStatus = (subscription.status || 'ACTIVE').toUpperCase();
+    const rawStatus = String(subscription.status || 'ACTIVE').replace(/["']/g, '').trim().toUpperCase();
+    if (subscription.plan) subscription.plan = String(subscription.plan).replace(/^["']|["']$/g, '').trim();
+    if (subscription.tier) subscription.tier = String(subscription.tier).replace(/^["']|["']$/g, '').trim();
+    if (subscription.statusReason) subscription.statusReason = String(subscription.statusReason).replace(/^["']|["']$/g, '').trim();
+    if (subscription.validUntil) subscription.validUntil = String(subscription.validUntil).replace(/^["']|["']$/g, '').trim();
     currentSubscriptionState = { ...subscription, status: rawStatus };
     window.currentSubscriptionState = currentSubscriptionState;
 
