@@ -14,17 +14,31 @@ async function run() {
 
   const storeOwnerEmail = 'bapi92halder@gmail.com';
   const storeCode = 'SHOP_BAPI92HALDER';
+  const testIp = '127.0.0.99';
 
   // ---------------------------------------------------------------
   // CHECK 1: POST /api/auth/admin-forgot-pin/send-otp
   // ---------------------------------------------------------------
   console.log('📍 CHECK 1: POST /api/auth/admin-forgot-pin/send-otp');
-  const sendRes = await handler({
+  let sendRes = await handler({
     httpMethod: 'POST',
     path: '/api/auth/admin-forgot-pin/send-otp',
-    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': '127.0.0.1' },
+    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': testIp },
     body: JSON.stringify({ email: storeOwnerEmail, storeCode })
   }, {});
+
+  if (sendRes.statusCode === 429) {
+    const errData = JSON.parse(sendRes.body);
+    const waitMs = ((errData.retryAfter || 2) + 1) * 1000;
+    console.log(`[Cooldown notice] Waiting ${waitMs}ms for OTP resend cooldown...`);
+    await new Promise(r => setTimeout(r, waitMs));
+    sendRes = await handler({
+      httpMethod: 'POST',
+      path: '/api/auth/admin-forgot-pin/send-otp',
+      headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': testIp },
+      body: JSON.stringify({ email: storeOwnerEmail, storeCode })
+    }, {});
+  }
 
   assert.strictEqual(sendRes.statusCode, 200, 'send-otp must return 200');
   const sendData = JSON.parse(sendRes.body);
@@ -42,7 +56,7 @@ async function run() {
   const badOtpRes = await handler({
     httpMethod: 'POST',
     path: '/api/auth/admin-forgot-pin/reset',
-    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': '127.0.0.1' },
+    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': testIp },
     body: JSON.stringify({
       email: storeOwnerEmail,
       otp: '999999',
@@ -61,7 +75,7 @@ async function run() {
   const trivialPinRes = await handler({
     httpMethod: 'POST',
     path: '/api/auth/admin-forgot-pin/reset',
-    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': '127.0.0.1' },
+    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': testIp },
     body: JSON.stringify({
       email: storeOwnerEmail,
       otp: '123456',
@@ -94,7 +108,7 @@ async function run() {
   const resetSuccessRes = await handler({
     httpMethod: 'POST',
     path: '/api/auth/admin-forgot-pin/reset',
-    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': '127.0.0.1' },
+    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': testIp },
     body: JSON.stringify({
       email: storeOwnerEmail,
       otp: freshOtp,
@@ -123,7 +137,7 @@ async function run() {
   const replayRes = await handler({
     httpMethod: 'POST',
     path: '/api/auth/admin-forgot-pin/reset',
-    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': '127.0.0.1' },
+    headers: { 'content-type': 'application/json', 'x-nf-client-connection-ip': testIp },
     body: JSON.stringify({
       email: storeOwnerEmail,
       otp: freshOtp,
