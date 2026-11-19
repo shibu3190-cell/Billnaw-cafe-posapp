@@ -5462,6 +5462,9 @@ function startBackgroundSync() {
     if (typeof document !== 'undefined' && !_bgSyncListenersAttached) {
         _bgSyncListenersAttached = true;
         document.addEventListener('visibilitychange', () => {
+            if (typeof checkAndApplySessionEpoch === 'function' && !document.hidden) {
+                checkAndApplySessionEpoch().catch(() => {});
+            }
             if (!_bgSyncActive) return;
             if (!document.hidden) {
                 runBackgroundHealthCheck(true);
@@ -5469,6 +5472,9 @@ function startBackgroundSync() {
             scheduleNextSync();
         });
         window.addEventListener('focus', () => {
+            if (typeof checkAndApplySessionEpoch === 'function') {
+                checkAndApplySessionEpoch().catch(() => {});
+            }
             if (!_bgSyncActive) return;
             runBackgroundHealthCheck(true);
             scheduleNextSync();
@@ -5648,6 +5654,247 @@ function clearAllTenantLocalData() {
     } catch (e) {}
 }
 window.clearAllTenantLocalData = clearAllTenantLocalData;
+
+// ============================================================================
+// 🔄 Session Epoch / Soft Upgrade Architecture (Milestone 1 - Approach A)
+// ============================================================================
+const APP_DATA_EPOCH = '2026_11_19_CLEAN_V1';
+if (typeof window !== 'undefined') {
+    window.APP_DATA_EPOCH = APP_DATA_EPOCH;
+}
+
+/**
+ * Checks the local client epoch against APP_DATA_EPOCH.
+ * When mismatched or forced:
+ *   1. Snapshots and isolates any in-progress draft orders/bills actively being punched in memory or IDB.
+ *   2. Purges stale tenant cache (corrupted cafe_staff IDB, billnaw_store_staff, orphaned sessions, etc.).
+ *   3. Restores preserved draft orders into tablesInfo and persists to IDB cafe_tables.
+ *   4. Prompts cashier/admin to cleanly authenticate (PIN entry or shop login).
+ *   5. Records updated epoch in localStorage so subsequent loads are immediate.
+ * 
+ * @param {boolean} force - Force soft upgrade even if epoch matches.
+ * @returns {Promise<{ migrated: boolean, preservedDraftTables: string[] }>}
+ */
+async function checkAndApplySessionEpoch(force = false) {
+    if (typeof localStorage === 'undefined') {
+        return { migrated: false, preservedDraftTables: [] };
+    }
+
+    const storedEpoch = localStorage.getItem('billnaw_data_epoch') || localStorage.getItem('billnaw_app_data_epoch');
+    if (!force && storedEpoch === APP_DATA_EPOCH) {
+        return { migrated: false, preservedDraftTables: [] };
+    }
+
+    console.info(`[SessionEpoch] Epoch mismatch or upgrade triggered: current="${storedEpoch || 'none'}" -> target="${APP_DATA_EPOCH}". Performing soft upgrade.`);
+
+    // 1. Snapshot and isolate active draft order/bill actively being punched in memory or IDB
+    const preservedDrafts = {};
+    try {
+        const memTables = (typeof window !== 'undefined' && window.tablesInfo && typeof window.tablesInfo === 'object')
+            ? window.tablesInfo
+            : ((typeof tablesInfo === 'object' && tablesInfo) ? tablesInfo : null);
+
+        if (memTables) {
+            for (const [tId, tData] of Object.entries(memTables)) {
+                if (tData && Array.isArray(tData.items) && tData.items.length > 0) {
+                    preservedDrafts[tId] = JSON.parse(JSON.stringify(tData));
+                }
+            }
+        }
+
+        // Also check IDB 'cafe_tables' if not already preserved in memory
+        if (typeof idb !== 'undefined' && typeof idb.get === 'function') {
+            try {
+                const idbTables = await idb.get('cafe_tables');
+                if (idbTables && typeof idbTables === 'object') {
+                    for (const [tId, tData] of Object.entries(idbTables)) {
+                        if (!preservedDrafts[tId] && tData && Array.isArray(tData.items) && tData.items.length > 0) {
+                            preservedDrafts[tId] = JSON.parse(JSON.stringify(tData));
+                        }
+                    }
+                }
+            } catch (idbErr) {
+                console.warn('[SessionEpoch] Error checking IDB cafe_tables for draft orders:', idbErr);
+            }
+        }
+
+        // Check active cart / currentCart / billnaw_active_cart fallback
+        const curTableNo = (typeof window !== 'undefined' && window.activeTable)
+            ? window.activeTable
+            : ((typeof activeTable !== 'undefined') ? activeTable : 1);
+        const rawCart = localStorage.getItem('billnaw_active_cart');
+        let activeCart = null;
+        if (rawCart) {
+            try { activeCart = JSON.parse(rawCart); } catch (_) {}
+        }
+        if (!activeCart) {
+            if (typeof currentCart !== 'undefined' && Array.isArray(currentCart) && currentCart.length > 0) {
+                activeCart = currentCart;
+            } else if (typeof window !== 'undefined' && Array.isArray(window.cart) && window.cart.length > 0) {
+                activeCart = window.cart;
+            }
+        }
+        if (activeCart && Array.isArray(activeCart) && activeCart.length > 0) {
+            if (!preservedDrafts[curTableNo] || !preservedDrafts[curTableNo].items || preservedDrafts[curTableNo].items.length === 0) {
+                preservedDrafts[curTableNo] = {
+                    items: JSON.parse(JSON.stringify(activeCart)),
+                    status: 'occupied',
+                    savedTime: Date.now(),
+                    lastReminder: null
+                };
+            }
+        }
+    } catch (snapshotErr) {
+        console.warn('[SessionEpoch] Draft snapshot error:', snapshotErr);
+    }
+
+    // 2. Purge stale tenant cache (corrupted cafe_staff, ghost table states, orphaned sessions)
+    try {
+        // Staff cache
+        localStorage.removeItem('billnaw_store_staff');
+        localStorage.removeItem('billnaw_active_staff');
+        localStorage.removeItem('billnaw_last_staff_id');
+        localStorage.removeItem('billnaw_deleted_staff_ids');
+
+        if (typeof idb !== 'undefined') {
+            if (typeof idb.delete === 'function') await idb.delete('cafe_staff').catch(() => {});
+            else if (typeof idb.del === 'function') await idb.del('cafe_staff').catch(() => {});
+            else if (typeof idb.clear === 'function') await idb.clear('cafe_staff').catch(() => {});
+
+            if (typeof idb.clear === 'function') {
+                await idb.clear('billnaw_sessions').catch(() => {});
+                await idb.clear('billnaw_devices').catch(() => {});
+            }
+        }
+
+        // Sessions, Device pairing & Terminal Lock states
+        localStorage.removeItem('billnaw_active_sessions');
+        localStorage.removeItem('billnaw_current_session_id');
+        localStorage.removeItem('billnaw_authorized_devices');
+        localStorage.removeItem('billnaw_session_revoked');
+        localStorage.removeItem('billnaw_terminal_locked');
+        localStorage.removeItem('billnaw_pin_verified_at');
+
+        // Sync Queues
+        localStorage.removeItem('billnaw_offline_sync_queue');
+
+        // Reset in-memory staff & session references
+        if (typeof staffList !== 'undefined') staffList = [];
+        if (typeof currentStaff !== 'undefined') currentStaff = null;
+        if (typeof window !== 'undefined') {
+            window.staffList = [];
+            window.currentStaff = null;
+            window.currentRole = null;
+            window.currentSessionId = null;
+            window.activeStaffSessions = [];
+            window.authorizedDevices = [];
+        }
+    } catch (purgeErr) {
+        console.warn('[SessionEpoch] Stale cache purge error:', purgeErr);
+    }
+
+    // 3. Reset ghost table states in cafe_tables while keeping preserved drafts
+    try {
+        const targetTables = {};
+        const totalTables = (typeof shopProfile !== 'undefined' && shopProfile && shopProfile.tableCount)
+            ? Number(shopProfile.tableCount)
+            : 10;
+        const maxTableNum = Math.max(totalTables, ...Object.keys(preservedDrafts).map(Number).filter(n => !isNaN(n)));
+
+        for (let i = 1; i <= maxTableNum; i++) {
+            if (preservedDrafts[i]) {
+                targetTables[i] = preservedDrafts[i];
+            } else {
+                targetTables[i] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
+            }
+        }
+        for (const [tId, tData] of Object.entries(preservedDrafts)) {
+            if (!targetTables[tId]) {
+                targetTables[tId] = tData;
+            }
+        }
+
+        if (typeof tablesInfo !== 'undefined') {
+            tablesInfo = targetTables;
+        }
+        if (typeof window !== 'undefined') {
+            window.tablesInfo = targetTables;
+        }
+
+        if (typeof idb !== 'undefined' && typeof idb.set === 'function') {
+            await idb.set('cafe_tables', targetTables).catch(() => {});
+        }
+
+        if (typeof syncTableUI === 'function') {
+            try { syncTableUI(); } catch (e) {}
+        }
+        if (typeof updateCartUI === 'function') {
+            try { updateCartUI(); } catch (e) {}
+        }
+    } catch (restoreErr) {
+        console.warn('[SessionEpoch] Draft restoration error:', restoreErr);
+    }
+
+    // 4. Record updated epoch in localStorage
+    try {
+        localStorage.setItem('billnaw_data_epoch', APP_DATA_EPOCH);
+        localStorage.setItem('billnaw_app_data_epoch', APP_DATA_EPOCH);
+    } catch (storageErr) {
+        console.warn('[SessionEpoch] Failed to persist epoch:', storageErr);
+    }
+
+    // 5. Prompt cashier/admin to cleanly authenticate
+    const hasToken = Boolean(
+        localStorage.getItem('billnaw_auth_token') ||
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('billnaw_auth_token')) ||
+        localStorage.getItem('billnaw_shop_session')
+    );
+
+    if (hasToken) {
+        if (typeof lockTerminal === 'function') {
+            lockTerminal(true);
+        }
+        if (typeof runBackgroundHealthCheck === 'function') {
+            runBackgroundHealthCheck(false).catch(() => {});
+        }
+    } else {
+        if (typeof openShopAuthModal === 'function') {
+            openShopAuthModal(true);
+        }
+    }
+
+    return { migrated: true, preservedDraftTables: Object.keys(preservedDrafts) };
+}
+
+if (typeof window !== 'undefined') {
+    window.APP_DATA_EPOCH = APP_DATA_EPOCH;
+    window.checkAndApplySessionEpoch = checkAndApplySessionEpoch;
+}
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports.APP_DATA_EPOCH = APP_DATA_EPOCH;
+    module.exports.checkAndApplySessionEpoch = checkAndApplySessionEpoch;
+}
+
+// Global Lifecycle Wake Listeners (visibilitychange, focus, pageshow)
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && typeof checkAndApplySessionEpoch === 'function') {
+            return checkAndApplySessionEpoch().catch((err) => console.warn('[SessionEpoch] visibilitychange check failed:', err));
+        }
+    });
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('focus', () => {
+        if (typeof checkAndApplySessionEpoch === 'function') {
+            return checkAndApplySessionEpoch().catch((err) => console.warn('[SessionEpoch] focus check failed:', err));
+        }
+    });
+    window.addEventListener('pageshow', () => {
+        if (typeof checkAndApplySessionEpoch === 'function') {
+            return checkAndApplySessionEpoch().catch((err) => console.warn('[SessionEpoch] pageshow check failed:', err));
+        }
+    });
+}
 
 function playKdsAudioChime() {
     if (localStorage.getItem('billnaw_kds_chime_disabled') === 'true') return;
@@ -6054,6 +6301,13 @@ window.updateAllUI = updateAllUI;
 
 async function initDatabase() {
     await idb.init();
+    if (typeof checkAndApplySessionEpoch === 'function') {
+        try {
+            await checkAndApplySessionEpoch();
+        } catch (epochErr) {
+            console.warn('[SessionEpoch] initDatabase epoch check notice:', epochErr);
+        }
+    }
 
     // Multi-Account Device Isolation: Run BEFORE hydrating or self-healing old tenant data into shopProfile/IDB
     try {

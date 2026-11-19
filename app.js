@@ -314,6 +314,15 @@ window.logoutShopCloudAccount = logoutShop;
 
 // App Bootstrap Initialization
 async function initApp() {
+    // Session Epoch / Soft Upgrade Lifecycle Check before database hydration
+    if (typeof checkAndApplySessionEpoch === 'function') {
+        try {
+            await checkAndApplySessionEpoch();
+        } catch (epochErr) {
+            console.warn('[SessionEpoch] Boot migration check failed:', epochErr);
+        }
+    }
+
     const activeToken = localStorage.getItem('billnaw_auth_token') || sessionStorage.getItem('billnaw_auth_token');
     const authMode = localStorage.getItem('billnaw_auth_mode');
     const isAuth = activeToken && authMode === 'authenticated';
