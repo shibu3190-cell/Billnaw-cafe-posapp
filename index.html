@@ -5108,8 +5108,8 @@
                 </div>
 
                 <div id="menuInventorySubView">
-                    <div class="bulk-upload-dashed-card" onclick="if (!event.target.closest('button')) openUploadMenuChoiceModal();" ondragover="event.preventDefault();" ondrop="handleMenuDrop(event);" title="Drag &amp; drop physical menu photo/PDF or use 1-tap ingest buttons">
-                        <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0;">
+                    <div id="aiIngestCollapsibleCard" class="bulk-upload-dashed-card" onclick="handleAiIngestCardClick(event);" ondragover="event.preventDefault();" ondrop="handleMenuDrop(event);" title="Drag &amp; drop physical menu photo/PDF or use 1-tap ingest buttons">
+                        <div class="ai-ingest-header-row" style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0;">
                             <div class="bulk-upload-icon-circle">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                             </div>
@@ -5121,8 +5121,11 @@
                                         <span id="aiMenuQuotaPillText">15 / 15 free scans</span>
                                     </span>
                                 </div>
-                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Drag &amp; drop physical menu photo/PDF or snap live with camera for instant Gemini OCR review</div>
+                                <div class="ai-ingest-sub-desc" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Drag &amp; drop physical menu photo/PDF or snap live with camera for instant Gemini OCR review</div>
                             </div>
+                            <span class="ai-ingest-chevron" aria-hidden="true">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </span>
                         </div>
                         <div class="unified-ai-ingest-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <button type="button" class="btn btn-outline" onclick="openMenuFilePicker('aiMenuCameraInput')" style="font-size: 12px; padding: 8px 14px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; border: 1.5px solid #CBD5E1; background: #FFFFFF; color: var(--text-dark); cursor: pointer;" title="Snap physical menu with device camera">

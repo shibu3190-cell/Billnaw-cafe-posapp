@@ -2012,7 +2012,7 @@ function renderVerticalProgressMeters(orders) {
                 <div class="vertical-meter-col">
                     <span class="meter-val-text">₹ ${Math.round(val)}</span>
                     <div class="meter-track-vertical">
-                        <div class="meter-fill-vertical" style="height: ${barHeight}%; background: ${c.color};"></div>
+                        <div class="meter-fill-vertical" style="height: ${barHeight}%; --pct: ${barHeight}%; background: ${c.color};"></div>
                     </div>
                     <span class="meter-pct-badge">${pct}%</span>
                     <span class="meter-label-bottom" title="${c.label}">${c.label}</span>
@@ -2048,7 +2048,7 @@ function renderVerticalProgressMeters(orders) {
                 <div class="vertical-meter-col">
                     <span class="meter-val-text">₹ ${Math.round(val)}</span>
                     <div class="meter-track-vertical">
-                        <div class="meter-fill-vertical" style="height: ${barHeight}%; background: ${p.color};"></div>
+                        <div class="meter-fill-vertical" style="height: ${barHeight}%; --pct: ${barHeight}%; background: ${p.color};"></div>
                     </div>
                     <span class="meter-pct-badge">${pct}%</span>
                     <span class="meter-label-bottom" title="${p.label}">${p.label}</span>

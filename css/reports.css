@@ -843,8 +843,8 @@
 
 @media screen and (max-width: 540px) {
     .kpi-grid {
-        grid-template-columns: 1fr !important;
-        gap: 12px !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 10px !important;
     }
 }
 

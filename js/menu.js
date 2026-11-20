@@ -2473,3 +2473,18 @@ async function confirmAiImport(bypassRoleCheck = false) {
     }
 }
 window.confirmAiImport = confirmAiImport;
+
+function handleAiIngestCardClick(event) {
+    if (event && event.target && event.target.closest('button')) return;
+    if (typeof window !== 'undefined' && window.innerWidth <= 640) {
+        const card = document.getElementById('aiIngestCollapsibleCard');
+        if (card) {
+            card.classList.toggle('is-expanded');
+            return;
+        }
+    }
+    if (typeof openUploadMenuChoiceModal === 'function') {
+        openUploadMenuChoiceModal();
+    }
+}
+window.handleAiIngestCardClick = handleAiIngestCardClick;
