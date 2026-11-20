@@ -558,6 +558,123 @@ function renderOrdersLogModalCards() {
 }
 window.renderOrdersLogModalCards = renderOrdersLogModalCards;
 
+let _invoicesCloudPageToken = null;
+let _isLoadingCloudInvoices = false;
+
+/**
+ * On-demand paginated query for older historical invoices from the cloud (/invoices subcollection).
+ * Caps local root memory footprint while enabling full audit access to past transactions.
+ * @param {number} [pageSize=50]
+ * @returns {Promise<{ success: boolean, count?: number, hasMore?: boolean, error?: string }>}
+ */
+async function loadOlderInvoicesFromCloud(pageSize = 50) {
+    if (_isLoadingCloudInvoices) return { success: false, error: 'Already loading' };
+    const loadBtn = document.getElementById('ordersModalLoadMoreCloudBtn');
+    const origBtnHtml = loadBtn ? loadBtn.innerHTML : '';
+    _isLoadingCloudInvoices = true;
+    if (loadBtn) {
+        loadBtn.disabled = true;
+        loadBtn.innerHTML = `<span>Loading...</span>`;
+    }
+
+    try {
+        const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+                          localStorage.getItem('billnaw_store_code') ||
+                          localStorage.getItem('billnaw_shop_code') ||
+                          (typeof shopProfile !== 'undefined' && (shopProfile?.storeCode || shopProfile?.id)) ||
+                          '';
+
+        if (!storeCode) {
+            if (typeof showToast === 'function') showToast('Store session not active.', 'warning');
+            return { success: false, error: 'No active store code' };
+        }
+
+        const token = (typeof getActiveAuthToken === 'function' ? getActiveAuthToken() : null) ||
+                      localStorage.getItem('billnaw_auth_token') ||
+                      localStorage.getItem('billnaw_shop_token') ||
+                      '';
+
+        let url = `/api/sync/invoices?pageSize=${encodeURIComponent(pageSize)}&storeCode=${encodeURIComponent(storeCode)}`;
+        if (_invoicesCloudPageToken) {
+            url += `&pageToken=${encodeURIComponent(_invoicesCloudPageToken)}`;
+        }
+
+        const headers = { 'Accept': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+            const errText = await res.text().catch(() => '');
+            if (typeof showToast === 'function') showToast('Could not fetch cloud invoices.', 'warning');
+            return { success: false, error: errText };
+        }
+
+        const data = await res.json();
+        const incomingInvoices = Array.isArray(data.invoices) ? data.invoices : [];
+        _invoicesCloudPageToken = data.nextPageToken || null;
+
+        if (incomingInvoices.length > 0) {
+            if (!Array.isArray(orderHistory)) orderHistory = [];
+            const existingIds = new Set(orderHistory.map(o => String(o.id || o.billNo || '').trim()));
+            let addedCount = 0;
+            incomingInvoices.forEach(inv => {
+                const key = String(inv.id || inv.billNo || '').trim();
+                if (key && !existingIds.has(key)) {
+                    orderHistory.push(inv);
+                    existingIds.add(key);
+                    addedCount++;
+                }
+            });
+
+            // Keep sorted newest to oldest
+            orderHistory.sort((a, b) => {
+                const tA = new Date(a.created_at || a.createdAt || a.settled_at || a.date || a.id || 0).getTime();
+                const tB = new Date(b.created_at || b.createdAt || b.settled_at || b.date || b.id || 0).getTime();
+                return (Number.isFinite(tB) ? tB : 0) - (Number.isFinite(tA) ? tA : 0);
+            });
+
+            if (typeof idb !== 'undefined' && idb.set) {
+                idb.set('cafe_history', orderHistory);
+            }
+
+            if (typeof renderOrdersLogModalCards === 'function') {
+                renderOrdersLogModalCards();
+            }
+            if (typeof renderDashboardAnalytics === 'function') {
+                renderDashboardAnalytics();
+            }
+
+            if (typeof showToast === 'function') {
+                showToast(`Loaded ${addedCount} historical orders from cloud.`, 'success');
+            }
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('All cloud invoices already loaded.', 'info');
+            }
+        }
+
+        return {
+            success: true,
+            invoicesLoaded: incomingInvoices.length,
+            hasNextPage: Boolean(_invoicesCloudPageToken)
+        };
+    } catch (err) {
+        console.warn('[CLOUD INVOICES] Load error:', err);
+        if (typeof showToast === 'function') showToast('Cloud sync error.', 'warning');
+        return { success: false, error: err.message };
+    } finally {
+        _isLoadingCloudInvoices = false;
+        if (loadBtn) {
+            loadBtn.disabled = false;
+            loadBtn.innerHTML = origBtnHtml;
+            if (!_invoicesCloudPageToken) {
+                loadBtn.style.opacity = '0.6';
+            }
+        }
+    }
+}
+window.loadOlderInvoicesFromCloud = loadOlderInvoicesFromCloud;
+
 function onDashboardMonthChanged() {
     currentDashboardRange = 'month';
     ['today', 'yesterday', 'week', 'all', 'custom'].forEach(r => {
@@ -1335,8 +1452,111 @@ function exportExpensesCSV() {
 }
 window.exportExpensesCSV = exportExpensesCSV;
 
+/**
+ * Generates and saves daily closing summary to reports/{date} in Firestore and IndexedDB.
+ * Contains Total Sales, Total Tax, Payment split, Expenses, and Net Drawer amount.
+ * @param {string} [targetDate] - ISO date string YYYY-MM-DD (defaults to today)
+ * @returns {Promise<object>} The saved daily closing report
+ */
+async function saveDailyClosingSummary(targetDate = null) {
+    const todayISO = targetDate || ((typeof getLocalISODate === 'function') ? getLocalISODate() : new Date().toISOString().slice(0, 10));
+    const targetOrders = (Array.isArray(orderHistory) ? orderHistory : []).filter(o => {
+        const fDate = (typeof getOrderFilterDate === 'function') ? getOrderFilterDate(o) : (o.filterDate || (o.date && o.date.slice(0, 10)));
+        return fDate === todayISO;
+    });
+
+    const targetExpenses = (Array.isArray(dailyExpenses) ? dailyExpenses : []).filter(e => {
+        const fDate = (typeof getExpenseFilterDate === 'function') ? getExpenseFilterDate(e) : (e.filterDate || (e.date && e.date.slice(0, 10)));
+        return fDate === todayISO;
+    });
+
+    const totalGross = targetOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const totalExp = targetExpenses.reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
+    const totalTax = targetOrders.reduce((sum, o) => sum + (Number(o.tax) || 0), 0);
+
+    const cashSales = targetOrders.filter(o => (o.paymentMode || 'Cash').toLowerCase() === 'cash').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const upiSales = targetOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'upi').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const cardSales = targetOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'card').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+    const dineInCount = targetOrders.filter(o => (o.orderType || 'Dine-In') === 'Dine-In').length;
+    const takeawayCount = targetOrders.filter(o => (o.orderType || '') === 'Takeaway').length;
+
+    const netCashInDrawer = cashSales - totalExp;
+    const netProfit = totalGross - totalExp;
+
+    const storeCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
+                      localStorage.getItem('billnaw_store_code') ||
+                      localStorage.getItem('billnaw_shop_code') ||
+                      (typeof shopProfile !== 'undefined' && (shopProfile?.storeCode || shopProfile?.id)) ||
+                      '';
+
+    const closingSummary = {
+        date: todayISO,
+        storeCode,
+        totalSales: Number(totalGross.toFixed(2)),
+        totalGross: Number(totalGross.toFixed(2)),
+        totalTax: Number(totalTax.toFixed(2)),
+        totalExpenses: Number(totalExp.toFixed(2)),
+        netCashInDrawer: Number(netCashInDrawer.toFixed(2)),
+        netProfit: Number(netProfit.toFixed(2)),
+        totalOrders: targetOrders.length,
+        paymentSplit: {
+            cash: Number(cashSales.toFixed(2)),
+            upi: Number(upiSales.toFixed(2)),
+            card: Number(cardSales.toFixed(2))
+        },
+        orderTypeSplit: {
+            dineIn: dineInCount,
+            takeaway: takeawayCount
+        },
+        closedBy: (typeof currentStaff !== 'undefined' && currentStaff?.name) || 'Admin',
+        closedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+
+    // 1. Local IndexedDB Persistence
+    if (typeof idb !== 'undefined' && idb.set) {
+        try {
+            await idb.set(`cafe_report_${todayISO}`, closingSummary);
+            const existingReports = (await idb.get('cafe_reports')) || {};
+            existingReports[todayISO] = closingSummary;
+            await idb.set('cafe_reports', existingReports);
+        } catch (e) {
+            console.warn('[REPORT] Local IndexedDB save notice:', e);
+        }
+    }
+
+    // 2. Direct Firestore Subcollection Persistence: /shops/{storeCode}/reports/{YYYY-MM-DD}
+    if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+        try {
+            const reportDocRef = (typeof getStoreSubdocRef === 'function')
+                ? getStoreSubdocRef('reports', todayISO)
+                : null;
+            if (reportDocRef) {
+                await window.firestoreSetDoc(reportDocRef, closingSummary, { merge: true });
+                console.log(`[REPORT] Daily closing summary synced to Firestore reports/${todayISO}`);
+            }
+        } catch (fErr) {
+            console.warn('[REPORT] Firestore reports save notice:', fErr?.message || fErr);
+        }
+    }
+
+    // 3. Backend REST sync for multi-tenant backup
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ dailyReport: closingSummary }, true);
+    }
+
+    window.dispatchEvent(new CustomEvent('billnaw:daily-report-saved', { detail: { report: closingSummary } }));
+    return closingSummary;
+}
+window.saveDailyClosingSummary = saveDailyClosingSummary;
+
 function printDailyZReport() {
     const todayISO = getLocalISODate();
+    // Auto-persist daily closing summary to reports/{todayISO}
+    saveDailyClosingSummary(todayISO).catch((err) => {
+        console.warn('[REPORT] Auto-persist daily closing summary notice:', err?.message || err);
+    });
     const todayOrders = orderHistory.filter(o => (getOrderFilterDate(o) === todayISO || o.filterDate === todayISO || (o.date && o.date.startsWith(new Date().toLocaleDateString()))));
     const todayExpenses = dailyExpenses.filter(e => (getExpenseFilterDate(e) === todayISO || e.filterDate === todayISO || (e.date && e.date.startsWith(new Date().toLocaleDateString()))));
 

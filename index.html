@@ -1612,7 +1612,7 @@
             </div>
 
             <!-- Modal Footer with Pagination Controls & Close -->
-            <div style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border);">
+            <div style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); flex-wrap: wrap; gap: 8px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <button type="button" id="ordersModalPrevBtn" class="btn btn-sm btn-outline" onclick="ordersModalPrevPage()" style="display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; font-size: 12px;">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -1622,6 +1622,10 @@
                     <button type="button" id="ordersModalNextBtn" class="btn btn-sm btn-outline" onclick="ordersModalNextPage()" style="display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; font-size: 12px;">
                         <span>Next</span>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                    <button type="button" id="ordersModalLoadMoreCloudBtn" class="btn btn-sm btn-outline" onclick="loadOlderInvoicesFromCloud()" style="display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; font-size: 12px; color: var(--primary); border-color: var(--primary);">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span>Load Cloud History</span>
                     </button>
                 </div>
                 <button type="button" class="btn btn-outline" onclick="closeOrdersLogModal()" style="padding: 6px 16px; font-size: 12px; font-weight: 700;">Done</button>

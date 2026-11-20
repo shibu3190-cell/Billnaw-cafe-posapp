@@ -31,6 +31,7 @@ import {
   deleteStaffFromFirestoreREST,
   getStoreFromFirestoreREST,
   getInvoicesFromFirestoreREST,
+  getReportsFromFirestoreREST,
   getStoreStateFromPersistentCache,
   getShopStatus,
   getPublicClientConfig
@@ -1061,6 +1062,31 @@ export async function handler(event, context) {
     }
   }
 
+  // Route: /sync/reports (GET)
+  if (event.httpMethod === 'GET' && (cleanPath === '/sync/reports' || cleanPath.endsWith('/sync/reports'))) {
+    const storeCode = sanitizeTenantStoreCode(event, body);
+    if (!storeCode) {
+      return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const token = extractAuthToken(event, body);
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    if (!auth.authorized) {
+      return jsonResponse(auth.status || 401, { success: false, error: auth.error });
+    }
+    const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
+    const queryParams = event.queryStringParameters || {};
+    const date = queryParams.date || null;
+    const pageSize = parseInt(queryParams.pageSize, 10) || 30;
+    const pageToken = queryParams.pageToken || null;
+    try {
+      const result = await getReportsFromFirestoreREST(storeCode, { date, pageSize, pageToken });
+      const status = result.status || (result.success ? 200 : 500);
+      return jsonResponse(status, result, extraHeaders);
+    } catch (err) {
+      return jsonResponse(500, { success: false, error: err.message || 'Fetch failed' }, extraHeaders);
+    }
+  }
+
   // Route: /sync/store-data (POST)
   if (event.httpMethod === 'POST' && (cleanPath === '/sync/store-data' || cleanPath.endsWith('/sync/store-data'))) {
     const storeCode = sanitizeTenantStoreCode(event, body);
@@ -1074,7 +1100,7 @@ export async function handler(event, context) {
     }
     const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
 
-    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots } = body || {};
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots, dailyReport } = body || {};
 
     if (staff !== undefined || replaceStaff !== undefined || deletedStaffId !== undefined || deletedStaffIds !== undefined) {
       const staffRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'manage_staff' });
@@ -1088,7 +1114,7 @@ export async function handler(event, context) {
         return jsonResponse(menuRbac.status || 403, { success: false, error: menuRbac.error });
       }
     }
-    if (tables !== undefined || history !== undefined || expenses !== undefined || customers !== undefined) {
+    if (tables !== undefined || history !== undefined || expenses !== undefined || customers !== undefined || dailyReport !== undefined) {
       const opsRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'take_orders' });
       if (!opsRbac.allowed) {
         return jsonResponse(opsRbac.status || 403, { success: false, error: opsRbac.error });
@@ -1101,7 +1127,8 @@ export async function handler(event, context) {
       kots !== undefined ||
       history !== undefined ||
       customers !== undefined ||
-      expenses !== undefined
+      expenses !== undefined ||
+      dailyReport !== undefined
     );
     if (!settingsRbac.allowed && !hasOperationalPayload && (ownerEmail !== undefined || profile !== undefined)) {
       return jsonResponse(settingsRbac.status || 403, { success: false, error: settingsRbac.error });
@@ -1118,7 +1145,7 @@ export async function handler(event, context) {
       const result = await syncStoreToFirestoreREST(storeCode, {
         ownerEmail: normalizedEmail || undefined,
         profile: safeProfile,
-        staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots
+        staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots, dailyReport
       });
       return jsonResponse(result.success ? 200 : (result.status >= 400 ? result.status : 500), result, extraHeaders);
     } catch (err) {

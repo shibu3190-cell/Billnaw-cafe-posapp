@@ -1279,17 +1279,41 @@ export const ThermalPrinterBridge = {
           parts.push(encodeClean(rightLine));
         } else {
           const availNameWidth = cols - neededRightWidth;
-          const firstChunk = name.slice(0, availNameWidth);
+          let firstChunk = name;
+          let remainder = '';
+
+          if (name.length > availNameWidth) {
+            // Find the last space before or at availNameWidth to avoid mid-word truncation
+            let lastSpace = name.lastIndexOf(' ', availNameWidth);
+            // If the break point is inside an open parenthesis e.g. "Packaged Water (2 Litre)",
+            // keep the parenthetical block together by breaking before '('
+            const openParen = name.lastIndexOf('(', availNameWidth);
+            if (openParen > 0 && name.indexOf(')', openParen) > availNameWidth) {
+              const spaceBeforeParen = name.lastIndexOf(' ', openParen);
+              if (spaceBeforeParen > 0) {
+                lastSpace = spaceBeforeParen;
+              } else {
+                lastSpace = openParen;
+              }
+            }
+
+            if (lastSpace > 0) {
+              firstChunk = name.slice(0, lastSpace).trim();
+              remainder = name.slice(lastSpace + 1).trim();
+            } else {
+              // Continuous token exceeds availNameWidth, split at column edge
+              firstChunk = name.slice(0, availNameWidth);
+              remainder = name.slice(availNameWidth).trim();
+            }
+          }
+
           const itemLine = firstChunk.padEnd(availNameWidth, ' ') + colSpace + String(qty).padStart(actualQtyWidth, ' ') + colSpace + priceStr.padStart(actualPriceWidth, ' ') + '\n';
           parts.push(encodeClean(itemLine));
 
-          if (name.length > availNameWidth) {
-            const remainder = name.slice(availNameWidth).trim();
-            if (remainder.length > 0) {
-              const overflowLines = wrapText(remainder, cols - 2);
-              for (const ol of overflowLines) {
-                parts.push(encodeClean(`  ${ol}\n`));
-              }
+          if (remainder.length > 0) {
+            const overflowLines = wrapText(remainder, cols - 2);
+            for (const ol of overflowLines) {
+              parts.push(encodeClean(`  ${ol}\n`));
             }
           }
         }

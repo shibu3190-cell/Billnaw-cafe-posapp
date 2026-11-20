@@ -902,6 +902,28 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     await Promise.allSettled(invoicePromises);
   }
 
+  // 6. Sync Daily Report Subcollection (/{collection}/{storeCode}/reports/{reportDate})
+  if (payload.dailyReport && typeof payload.dailyReport === 'object') {
+    try {
+      const repDate = String(payload.dailyReport.date || '').trim() || timestamp.slice(0, 10);
+      const safeRepId = repDate.replace(/[\/\s#?]/g, '_');
+      const reportDocUrl = `${base}/${collection}/${encodeURIComponent(code)}/reports/${encodeURIComponent(safeRepId)}`;
+      const reportData = {
+        ...payload.dailyReport,
+        date: repDate,
+        storeCode: code,
+        updatedAt: timestamp
+      };
+      await fetch(reportDocUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: jsonToFirestoreFields(reportData) })
+      }).catch((err) => {
+        console.warn('[SYNC REST] daily report patch notice:', err?.message || err);
+      });
+    } catch (e) {}
+  }
+
   return {
     success: true,
     storeCode: code,
@@ -1129,6 +1151,58 @@ export async function getInvoicesFromFirestoreREST(storeCode, { pageSize = 50, p
         source: 'cache'
       };
     }
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getReportsFromFirestoreREST(storeCode, { date = null, pageSize = 30, pageToken = null } = {}) {
+  const code = (typeof storeCode === 'string') ? storeCode.trim() : '';
+  if (!code) return { success: false, error: 'Store code is required' };
+  if (!CONFIG.firebase.projectId || !CONFIG.firebase.firestoreDatabaseId) {
+    return { success: false, error: 'Firebase configuration missing on server' };
+  }
+  const collection = getStoreCollectionName(code);
+  const base = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebase.projectId}/databases/${CONFIG.firebase.firestoreDatabaseId}/documents`;
+  
+  if (date) {
+    const safeDate = String(date).trim().replace(/[\/\s#?]/g, '_');
+    const url = `${base}/${collection}/${encodeURIComponent(code)}/reports/${encodeURIComponent(safeDate)}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        return { success: false, status: res.status, error: await res.text() };
+      }
+      const doc = await res.json();
+      const report = doc.fields ? firestoreValueToJson({ mapValue: { fields: doc.fields } }) : {};
+      return { success: true, storeCode: code, date: safeDate, report, source: 'firestore' };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  const limit = Math.min(Math.max(1, Number(pageSize) || 30), 100);
+  let url = `${base}/${collection}/${encodeURIComponent(code)}/reports?pageSize=${limit}`;
+  if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      return { success: false, status: res.status, error: await res.text() };
+    }
+    const data = await res.json();
+    const reports = (data.documents || []).map(doc => {
+      const id = doc.name ? doc.name.split('/').pop() : '';
+      const docData = doc.fields ? firestoreValueToJson({ mapValue: { fields: doc.fields } }) : {};
+      return { id, ...docData };
+    });
+    return {
+      success: true,
+      storeCode: code,
+      reports,
+      nextPageToken: data.nextPageToken || null,
+      source: 'firestore'
+    };
+  } catch (err) {
     return { success: false, error: err.message };
   }
 }

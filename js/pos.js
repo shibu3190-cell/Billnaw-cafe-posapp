@@ -729,10 +729,23 @@ function bookTable() {
         }
     }
 
-    // Otherwise, empty table reservation toggle
-    tInfo.status = tInfo.status === 'booked' ? 'empty' : 'booked'; 
-    persistTables(); 
-    syncTableUI(); 
+    // Otherwise, empty table reservation toggle (Cashier / Admin only)
+    if (typeof canManageTableStatus === 'function' && !canManageTableStatus()) {
+        const staffRole = (typeof currentStaff !== 'undefined' && currentStaff?.role) || 'Server';
+        if (typeof showToast === 'function') {
+            showToast(`Permission denied: ${staffRole} cannot reserve tables. Only Cashier or Admin can do that.`, 'warning');
+        }
+        return;
+    }
+
+    const newStatus = tInfo.status === 'booked' ? 'empty' : 'booked'; 
+    tInfo.status = newStatus; 
+    if (typeof broadcastTableDelta === 'function') {
+        broadcastTableDelta(activeTable, tInfo);
+    } else {
+        persistTables(); 
+        syncTableUI(); 
+    }
     if (typeof showToast === 'function') {
         showToast(tInfo.status === 'booked' ? `Table ${currentTableName} reserved!` : `Table ${currentTableName} reservation cleared!`);
     }
@@ -3349,11 +3362,28 @@ async function sendEscPosToPrinter(order) {
     receiptText += '--------------------------------\n';
 
     order.rawItems.forEach(item => {
-        let qtyName = `${item.qty}x ${item.name}`; 
-        let priceStr = (item.price * item.qty).toFixed(2);
+        let name = item.name || 'Item';
+        let qty = item.qty || 1;
+        let priceStr = (item.price * qty).toFixed(2);
+        let qtyName = `${qty}x ${name}`; 
         if (qtyName.length + priceStr.length >= 31) { 
-            receiptText += qtyName.substring(0, 32) + '\n'; 
-            receiptText += priceStr.padStart(32, ' ') + '\n'; 
+            let avail = Math.max(10, 31 - priceStr.length - 1);
+            let firstChunk = qtyName;
+            let rem = '';
+            if (qtyName.length > avail) {
+                const sp = qtyName.lastIndexOf(' ', avail);
+                if (sp > 0) {
+                    firstChunk = qtyName.slice(0, sp).trim();
+                    rem = qtyName.slice(sp + 1).trim();
+                } else {
+                    firstChunk = qtyName.slice(0, avail);
+                    rem = qtyName.slice(avail).trim();
+                }
+            }
+            receiptText += firstChunk.padEnd(avail, ' ') + ' ' + priceStr.padStart(31 - avail, ' ') + '\n';
+            if (rem) {
+                receiptText += '  ' + rem.substring(0, 30) + '\n';
+            }
         } else { 
             const spaces = Math.max(1, 32 - qtyName.length - priceStr.length);
             receiptText += qtyName + ' '.repeat(spaces) + priceStr + '\n'; 

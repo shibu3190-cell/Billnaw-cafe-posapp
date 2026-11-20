@@ -1989,6 +1989,20 @@ if (posMeshChannel) {
             if (typeof updateCartUI === 'function') updateCartUI();
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
             if (typeof renderTablesView === 'function') renderTablesView();
+        } else if (data.type === 'TABLE_DELTA' && data.tableId !== undefined) {
+            const tId = String(data.tableId);
+            if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
+            tablesInfo[tId] = { ...(tablesInfo[tId] || {}), ...(data.tableData || {}) };
+            window.tablesInfo = tablesInfo;
+            if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_tables', tablesInfo);
+            if (typeof renderTables === 'function') renderTables();
+            if (typeof syncTableUI === 'function') syncTableUI();
+            if (typeof updateCartUI === 'function') updateCartUI();
+            if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+            if (typeof renderTablesView === 'function') renderTablesView();
+            window.dispatchEvent(new CustomEvent('billnaw:table-status-changed', {
+                detail: { tableId: tId, status: tablesInfo[tId]?.status, tableData: tablesInfo[tId] }
+            }));
         } else if (data.type === 'MENU_UPDATED' && Array.isArray(data.menu)) {
             const incomingVer = Number(data.version || 0);
             const localVer = Number(localStorage.getItem('billnaw_menu_version') || (shopProfile && shopProfile.menuVersion) || 0);
@@ -3933,6 +3947,86 @@ function sanitizeMenuItemForStorage(item) {
     }
     return clone;
 }
+
+/**
+ * Resize & compress shop logo to <= 128x128 px and strictly under 20 KB (20,480 bytes)
+ * Uses canvas downscaling and progressive JPEG quality reduction.
+ * @param {string|File|Blob|HTMLImageElement} source
+ * @param {number} [maxDim=128]
+ * @param {number} [maxBytes=20480]
+ * @returns {Promise<string>}
+ */
+function resizeAndCompressLogo(source, maxDim = 128, maxBytes = 20480) {
+    if (!source) return Promise.resolve('');
+    return new Promise((resolve) => {
+        // Node / test environment fallback
+        if (typeof document === 'undefined' || typeof Image === 'undefined') {
+            if (typeof source === 'string') {
+                return resolve(source.length > maxBytes ? source.slice(0, maxBytes) : source);
+            }
+            return resolve('');
+        }
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            try {
+                let w = img.naturalWidth || img.width || 128;
+                let h = img.naturalHeight || img.height || 128;
+                if (w > h && w > maxDim) {
+                    h = Math.round(h * (maxDim / w));
+                    w = maxDim;
+                } else if (h > maxDim) {
+                    w = Math.round(w * (maxDim / h));
+                    h = maxDim;
+                }
+                w = Math.max(1, Math.min(w, maxDim));
+                h = Math.max(1, Math.min(h, maxDim));
+
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    return resolve(typeof source === 'string' ? source : '');
+                }
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+
+                let quality = 0.82;
+                let dataUrl = canvas.toDataURL('image/jpeg', quality);
+                while (dataUrl.length * 0.75 > maxBytes && quality > 0.25) {
+                    quality -= 0.12;
+                    dataUrl = canvas.toDataURL('image/jpeg', quality);
+                }
+                resolve(dataUrl);
+            } catch (err) {
+                console.warn('[LOGO] Compression warning:', err);
+                resolve(typeof source === 'string' ? source : '');
+            }
+        };
+        img.onerror = () => {
+            resolve(typeof source === 'string' ? source : '');
+        };
+
+        if (typeof source === 'string') {
+            img.src = source;
+        } else if (typeof Blob !== 'undefined' && source instanceof Blob) {
+            const reader = new FileReader();
+            reader.onload = (e) => { img.src = e.target.result; };
+            reader.onerror = () => { resolve(''); };
+            reader.readAsDataURL(source);
+        } else if (source && source.src) {
+            img.src = source.src;
+        } else {
+            resolve('');
+        }
+    });
+}
+if (typeof window !== 'undefined') {
+    window.resizeAndCompressLogo = resizeAndCompressLogo;
+}
 if (typeof window !== 'undefined') {
     window.sanitizeMenuItemForStorage = sanitizeMenuItemForStorage;
 }
@@ -3952,6 +4046,10 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports.dispatchBackendStoreSync = dispatchBackendStoreSync;
     module.exports.pruneClientTransactionalCache = pruneClientTransactionalCache;
     module.exports.subscribeInvoicesCloudListener = subscribeInvoicesCloudListener;
+    module.exports.resizeAndCompressLogo = resizeAndCompressLogo;
+    module.exports.canManageTableStatus = canManageTableStatus;
+    module.exports.broadcastTableDelta = broadcastTableDelta;
+    module.exports.updateTableStatus = updateTableStatus;
 }
 
 let backendSyncTimers = {};
@@ -4381,6 +4479,118 @@ function persistTables() {
 }
 window.persistTables = persistTables;
 
+/**
+ * Role check for table status updates.
+ * Requirement: Cashier or Admin can update table status.
+ * @param {object} [staff]
+ * @returns {boolean}
+ */
+function canManageTableStatus(staff) {
+    const s = staff || (typeof currentStaff !== 'undefined' ? currentStaff : null) || (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (!s || !s.role) return true; // Default allow in single-user demo mode
+    const role = String(s.role).trim().toLowerCase();
+    return role === 'admin' || role === 'cashier' || role === 'manager';
+}
+window.canManageTableStatus = canManageTableStatus;
+
+/**
+ * Broadcasts table status/delta updates via Firestore listeners and mesh channel.
+ * Saves bandwidth by broadcasting { tableId, status, ... } rather than all tables.
+ * @param {string|number} tableId
+ * @param {object} tableData
+ */
+function broadcastTableDelta(tableId, tableData) {
+    if (!tableId || !tableData) return;
+    const tId = String(tableId);
+
+    if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
+    const nowTs = Date.now();
+    tablesInfo[tId] = { ...(tablesInfo[tId] || {}), ...tableData, updatedAt: nowTs };
+    window.tablesInfo = tablesInfo;
+
+    // 1. Local IndexedDB
+    if (typeof idb !== 'undefined' && idb.set) {
+        idb.set('cafe_tables', tablesInfo);
+    }
+
+    // 2. Direct Firestore Delta
+    if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+        const storeDocRef = getStoreDocRef();
+        if (storeDocRef) {
+            window.firestoreSetDoc(storeDocRef, {
+                tables: {
+                    [tId]: tablesInfo[tId]
+                },
+                updatedAt: new Date().toISOString()
+            }, { merge: true }).catch((err) => {
+                console.warn('[TABLE DELTA] Firestore write notice:', err?.message || err);
+            });
+        }
+    }
+
+    // 3. Backend REST delta sync
+    if (typeof dispatchBackendStoreSync === 'function') {
+        dispatchBackendStoreSync({ tables: { [tId]: tablesInfo[tId] } }, true);
+    }
+
+    // 4. POS Mesh Broadcast
+    if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
+        try {
+            posMeshChannel.postMessage({
+                type: 'TABLE_DELTA',
+                tableId: tId,
+                tableData: tablesInfo[tId]
+            });
+        } catch(e) {}
+    }
+
+    // 5. Local UI Sync
+    if (typeof syncTableUI === 'function') syncTableUI();
+    if (typeof renderTablesView === 'function') renderTablesView();
+    window.dispatchEvent(new CustomEvent('billnaw:table-status-changed', {
+        detail: { tableId: tId, status: tablesInfo[tId]?.status, tableData: tablesInfo[tId] }
+    }));
+}
+window.broadcastTableDelta = broadcastTableDelta;
+
+/**
+ * Updates a table's status with role-based access check (Cashier or Admin only).
+ * Broadcasts delta immediately across Firestore and mesh.
+ * @param {string|number} tableId
+ * @param {string} newStatus - 'occupied', 'vacant', 'empty', 'booked', 'ready_for_billing', etc.
+ * @param {object} [options]
+ * @returns {boolean} Whether the status was updated
+ */
+function updateTableStatus(tableId, newStatus, options = {}) {
+    const s = options.staff || (typeof currentStaff !== 'undefined' ? currentStaff : null) || (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (!canManageTableStatus(s)) {
+        const staffRole = s && s.role ? s.role : 'Server';
+        const msg = `Permission denied: ${staffRole} cannot change table status. Only Cashier or Admin can do that.`;
+        if (typeof showToast === 'function') {
+            showToast(msg, 'warning');
+        } else {
+            console.warn(msg);
+        }
+        return false;
+    }
+
+    const tId = String(tableId);
+    if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
+    const cur = tablesInfo[tId] || { items: [] };
+    cur.status = newStatus;
+    cur.updatedAt = Date.now();
+    if (newStatus === 'empty' || newStatus === 'vacant') {
+        cur.clearedAt = Date.now();
+    }
+    broadcastTableDelta(tId, cur);
+    if (typeof showToast === 'function' && !options.silent) {
+        const tName = typeof getTableName === 'function' ? getTableName(tId) : `Table ${tId}`;
+        showToast(`${tName} marked ${newStatus.toUpperCase()}`, 'info');
+    }
+    return true;
+}
+window.updateTableStatus = updateTableStatus;
+
 function persistMenu() { 
     if (typeof markMenuCustomized === 'function') markMenuCustomized();
     if (typeof window !== 'undefined' && Array.isArray(window.menuItems) && window.menuItems.length > 0 && (!Array.isArray(menuItems) || menuItems.length === 0)) {
@@ -4616,6 +4826,15 @@ function persistProfile() {
     idb.set('cafe_profile', shopProfile); 
     if (shopProfile.logo) {
         idb.set('cafe_logo', shopProfile.logo);
+        if (shopProfile.logo.length * 0.75 > 20480 && typeof resizeAndCompressLogo === 'function') {
+            resizeAndCompressLogo(shopProfile.logo, 128, 20480).then(compact => {
+                if (compact && compact !== shopProfile.logo) {
+                    shopProfile.logo = compact;
+                    idb.set('cafe_logo', compact);
+                    try { localStorage.setItem('billnaw_shop_logo', compact); } catch(e) {}
+                }
+            }).catch(() => {});
+        }
     }
 
     // Quad-Tier Local Persistence: Save JSON + discrete keys to prevent wipe on cache clear

@@ -291,21 +291,43 @@ function updateProfileVisuals() {
 }
 window.updateProfileVisuals = updateProfileVisuals;
 
-function loadLogo(event) { 
+async function loadLogo(event) { 
     const file = event.target.files[0]; 
     if (!file) return;
+    try {
+        if (typeof resizeAndCompressLogo === 'function') {
+            const compressed = await resizeAndCompressLogo(file, 128, 20480);
+            if (compressed) {
+                shopProfile.logo = compressed;
+                updateProfileVisuals();
+                persistProfile();
+                showToast("Logo updated & compressed (< 20 KB).");
+                return;
+            }
+        }
+    } catch (err) {
+        console.warn('Logo compression error:', err);
+    }
+
+    // Direct fallback if resizeAndCompressLogo is not yet available
     const reader = new FileReader(); 
     reader.onload = (e) => { 
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-            const MAX_DIM = 250; let w = img.width, h = img.height;
+            const MAX_DIM = 128; let w = img.width, h = img.height;
             if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
             canvas.width = Math.round(w); canvas.height = Math.round(h);
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            shopProfile.logo = canvas.toDataURL('image/jpeg', 0.85); 
+            let q = 0.82;
+            let dataUrl = canvas.toDataURL('image/jpeg', q);
+            while (dataUrl.length * 0.75 > 20480 && q > 0.3) {
+                q -= 0.12;
+                dataUrl = canvas.toDataURL('image/jpeg', q);
+            }
+            shopProfile.logo = dataUrl; 
             updateProfileVisuals(); persistProfile(); showToast("Logo Updated.");
         };
         img.src = e.target.result;
@@ -2016,9 +2038,23 @@ window.renderSettingsProfileHeader = renderSettingsProfileHeader;
 // ============================================================
 let onboardUploadedLogo = '';
 
-function handleOnboardLogoUpload(event) {
+async function handleOnboardLogoUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
+    try {
+        if (typeof resizeAndCompressLogo === 'function') {
+            const compressed = await resizeAndCompressLogo(file, 128, 20480);
+            if (compressed) {
+                onboardUploadedLogo = compressed;
+                const statusEl = document.getElementById('onboardLogoStatus');
+                if (statusEl) statusEl.innerText = '✅ Logo selected & optimized (< 20 KB)!';
+                return;
+            }
+        }
+    } catch (err) {
+        console.warn('Onboarding logo compression error:', err);
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
         onboardUploadedLogo = e.target.result;
