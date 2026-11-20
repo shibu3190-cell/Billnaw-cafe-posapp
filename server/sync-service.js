@@ -110,14 +110,31 @@ export async function saveStoreStateToPersistentCache(code, state) {
   }
   const cleanCode = code.trim();
   const existing = serverStoreMemoryCache.get(cleanCode) || {};
-  // Preserve existing fields (especially staff, profile, menu) when partial data is written
+  // Preserve existing fields (especially staff, profile, logo, upiId, menu) when partial data is written
   const mergedState = { ...existing };
   if (state && typeof state === 'object') {
     for (const [k, v] of Object.entries(state)) {
       if (v !== undefined) {
-        mergedState[k] = v;
+        if (k === 'profile' && v && typeof v === 'object' && existing.profile && typeof existing.profile === 'object') {
+          mergedState.profile = {
+            ...existing.profile,
+            ...v,
+            logo: v.logo || existing.profile.logo,
+            upiId: v.upiId || existing.profile.upiId,
+            showQr: v.showQr !== undefined ? v.showQr : existing.profile.showQr,
+            name: v.name || existing.profile.name
+          };
+        } else {
+          mergedState[k] = v;
+        }
       }
     }
+  }
+  // Guarantee top-level logo & upiId aliases if present in profile for resilient cross-device reads
+  if (mergedState.profile) {
+    if (mergedState.profile.logo) mergedState.logo = mergedState.profile.logo;
+    if (mergedState.profile.upiId) mergedState.upiId = mergedState.profile.upiId;
+    if (mergedState.profile.showQr !== undefined) mergedState.showQr = mergedState.profile.showQr;
   }
   if (state && state.staff === undefined && existing.staff !== undefined) {
     mergedState.staff = existing.staff;
@@ -448,15 +465,6 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   // 1. Prepare Root Document Fields
   const fieldsToPatch = {};
   const resolvedOwnerEmail = (payload.ownerEmail || payload.profile?.ownerEmail || payload.profile?.email || '').trim().toLowerCase();
-  if (payload.profile) {
-    if (resolvedOwnerEmail && !payload.profile.ownerEmail) {
-      payload.profile.ownerEmail = resolvedOwnerEmail;
-    }
-    fieldsToPatch.profile = payload.profile;
-    if (payload.profile.name) {
-      fieldsToPatch.name = payload.profile.name;
-    }
-  }
   if (resolvedOwnerEmail) {
     fieldsToPatch.ownerEmail = resolvedOwnerEmail;
   }
@@ -488,10 +496,12 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   );
   const needsStaffMerge = Array.isArray(payload.staff) && payload.staff.length > 0 && !payload.replaceStaff;
   const needsDeletedStaffMerge = deletedStaffIdSet.size > 0 && !Array.isArray(payload.deletedStaffIds);
+  const needsProfileMerge = Boolean(payload.profile && typeof payload.profile === 'object') ||
+                            Boolean(payload.logo || payload.upiId || payload.showQr !== undefined);
 
-  // Single optional GET rootUrl fetch for concurrent staff/tables/deletedStaffIds merge
+  // Single optional GET rootUrl fetch for concurrent staff/tables/deletedStaffIds/profile merge
   let existingRootFields = null;
-  if (needsStaffMerge || hasTablesPayload || needsDeletedStaffMerge) {
+  if (needsStaffMerge || hasTablesPayload || needsDeletedStaffMerge || needsProfileMerge) {
     try {
       const rootCheck = await fetch(rootUrl);
       if (rootCheck && rootCheck.ok && typeof rootCheck.json === 'function') {
@@ -503,8 +513,44 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     }
   }
 
-  // Safe Staff Handling: Merge with existing staff if partial sync, or replace/remove when requested
+  // Safe Profile & Identity Handling: Defensively merge with existing Firestore and cached profile
+  // Invariant: upiId, showQr, logo, name, phone, address are NEVER lost or overwritten by partial updates
   const cachedStore = await getStoreStateFromPersistentCache(code);
+  if (payload.profile && typeof payload.profile === 'object') {
+    const existingProfile = (existingRootFields?.profile ? firestoreValueToJson(existingRootFields.profile) : null) ||
+                            (cachedStore?.profile && typeof cachedStore.profile === 'object' ? cachedStore.profile : null) ||
+                            {};
+    const mergedProfile = { ...existingProfile, ...payload.profile };
+    // Defensively preserve logo and upiId if omitted or blank in incoming partial profile
+    if (!payload.profile.logo && existingProfile.logo) {
+      mergedProfile.logo = existingProfile.logo;
+    }
+    if (!payload.profile.upiId && existingProfile.upiId) {
+      mergedProfile.upiId = existingProfile.upiId;
+    }
+    if (payload.profile.showQr === undefined && existingProfile.showQr !== undefined) {
+      mergedProfile.showQr = existingProfile.showQr;
+    }
+    if (!payload.profile.name && existingProfile.name) {
+      mergedProfile.name = existingProfile.name;
+    }
+    if (resolvedOwnerEmail && !mergedProfile.ownerEmail) {
+      mergedProfile.ownerEmail = resolvedOwnerEmail;
+    }
+    fieldsToPatch.profile = mergedProfile;
+    if (mergedProfile.name) {
+      fieldsToPatch.name = mergedProfile.name;
+    }
+  } else if (payload.logo || payload.upiId || payload.showQr !== undefined) {
+    const existingProfile = (existingRootFields?.profile ? firestoreValueToJson(existingRootFields.profile) : null) ||
+                            (cachedStore?.profile && typeof cachedStore.profile === 'object' ? cachedStore.profile : null) ||
+                            {};
+    const mergedProfile = { ...existingProfile };
+    if (payload.logo) mergedProfile.logo = payload.logo;
+    if (payload.upiId) mergedProfile.upiId = payload.upiId;
+    if (payload.showQr !== undefined) mergedProfile.showQr = Boolean(payload.showQr);
+    fieldsToPatch.profile = mergedProfile;
+  }
   let finalStaffArray = payload.staff;
   const existingStaffRaw = existingRootFields?.staff?.arrayValue?.values || [];
   const existingStaff = (cachedStore?._quotaFallbackActive && Array.isArray(cachedStore.staff))
@@ -986,6 +1032,9 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
           storeCode: code,
           ownerEmail: cached.ownerEmail || cached.profile?.ownerEmail || null,
           profile: cached.profile || null,
+          logo: cached.profile?.logo || cached.logo || null,
+          upiId: cached.profile?.upiId || cached.upiId || null,
+          showQr: cached.profile?.showQr !== undefined ? cached.profile.showQr : (cached.showQr !== undefined ? cached.showQr : null),
           staff: (Array.isArray(cached.staff) && cached.staff.length > 0)
             ? cached.staff
             : (isAbhijitTenant(code) ? GENUINE_ABHIJIT_STAFF : (cached.staff || [])),
@@ -1016,6 +1065,9 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
       storeCode: code,
       ownerEmail,
       profile: profileObj,
+      logo: profileObj?.logo || null,
+      upiId: profileObj?.upiId || null,
+      showQr: profileObj?.showQr !== undefined ? profileObj.showQr : (profileObj ? true : null),
       staff: fields.staff ? firestoreValueToJson(fields.staff) : [],
       deletedStaffIds: fields.deletedStaffIds ? firestoreValueToJson(fields.deletedStaffIds) : [],
       menu: fields.menu ? firestoreValueToJson(fields.menu) : [],
@@ -1046,7 +1098,20 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
       return sanitizeStaffForTenant(code, {
         ...baseResult,
         ownerEmail: (cTime > fTime ? cached.ownerEmail : undefined) ?? baseResult.ownerEmail,
-        profile: (cached.profile && cTime > fTime) ? { ...(baseResult.profile || {}), ...cached.profile } : baseResult.profile,
+        profile: (cached.profile && cTime > fTime)
+          ? {
+              ...(baseResult.profile || {}),
+              ...cached.profile,
+              logo: cached.profile.logo || baseResult.profile?.logo,
+              upiId: cached.profile.upiId || baseResult.profile?.upiId,
+              showQr: cached.profile.showQr !== undefined ? cached.profile.showQr : baseResult.profile?.showQr
+            }
+          : baseResult.profile,
+        logo: (cached.profile?.logo || cached.logo) || baseResult.logo,
+        upiId: (cached.profile?.upiId || cached.upiId) || baseResult.upiId,
+        showQr: (cached.profile?.showQr !== undefined ? cached.profile.showQr : cached.showQr) !== undefined
+          ? (cached.profile?.showQr !== undefined ? cached.profile.showQr : cached.showQr)
+          : baseResult.showQr,
         staff: (Array.isArray(cached.staff) && cTime > fTime) ? cached.staff : baseResult.staff,
         deletedStaffIds: (Array.isArray(cached.deletedStaffIds) && cTime > fTime) ? cached.deletedStaffIds : baseResult.deletedStaffIds,
         menu: (Array.isArray(cached.menu) && cTime > fTime) ? cached.menu : baseResult.menu,
@@ -1076,6 +1141,9 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
         storeCode: code,
         ownerEmail: cached.ownerEmail || cached.profile?.ownerEmail || null,
         profile: cached.profile || null,
+        logo: cached.profile?.logo || cached.logo || null,
+        upiId: cached.profile?.upiId || cached.upiId || null,
+        showQr: cached.profile?.showQr !== undefined ? cached.profile.showQr : (cached.showQr !== undefined ? cached.showQr : null),
         staff: (Array.isArray(cached.staff) && cached.staff.length > 0)
           ? cached.staff
           : (isAbhijitTenant(code) ? GENUINE_ABHIJIT_STAFF : (cached.staff || [])),

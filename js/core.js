@@ -2503,14 +2503,17 @@ function handleRemoteFirestoreUpdate(data) {
         applySubscriptionStatus({ status: 'ACTIVE', plan: 'billnaw Pro', isFree: true });
     }
 
-    if (data.profile) {
+    const incomingProfile = (data.profile && typeof data.profile === 'object') ? data.profile : {};
+    if (data.profile || data.upiId || data.logo || data.name) {
         const existingPinHash = shopProfile?.adminPinHash || localStorage.getItem('billnaw_admin_pin_hash');
         const existingLogo = shopProfile?.logo || localStorage.getItem('billnaw_shop_logo');
+        const existingUpi = shopProfile?.upiId || localStorage.getItem('billnaw_shop_upi_id');
+        const existingShowQr = (shopProfile?.showQr !== undefined) ? shopProfile.showQr : (localStorage.getItem('billnaw_shop_show_qr') === 'true');
         const existingName = (shopProfile?.name && shopProfile.name !== 'billnaw' && shopProfile.name !== 'My Cafe') 
             ? shopProfile.name 
             : (localStorage.getItem('billnaw_shop_name') && localStorage.getItem('billnaw_shop_name') !== 'billnaw' && localStorage.getItem('billnaw_shop_name') !== 'My Cafe' ? localStorage.getItem('billnaw_shop_name') : null);
         const existingTableCount = parseInt(shopProfile?.tableCount || localStorage.getItem('billnaw_table_count') || 0, 10);
-        const incomingTableCount = parseInt(data.profile.tableCount || 0, 10);
+        const incomingTableCount = parseInt(incomingProfile.tableCount || 0, 10);
         let highestOccupiedTable = 0;
         if (typeof tablesInfo === 'object' && tablesInfo) {
             Object.keys(tablesInfo).forEach(k => {
@@ -2521,11 +2524,16 @@ function handleRemoteFirestoreUpdate(data) {
             });
         }
 
-        shopProfile = { ...shopProfile, ...data.profile };
+        shopProfile = { ...shopProfile, ...incomingProfile };
+        if (data.logo && !shopProfile.logo) shopProfile.logo = data.logo;
+        if (data.upiId && !shopProfile.upiId) shopProfile.upiId = data.upiId;
+        if (data.showQr !== undefined && shopProfile.showQr === undefined) shopProfile.showQr = Boolean(data.showQr);
         const resolvedTableCount = incomingTableCount > 0 ? incomingTableCount : (existingTableCount > 0 ? existingTableCount : 5);
         shopProfile.tableCount = Math.max(resolvedTableCount, highestOccupiedTable);
         if (!shopProfile.logo && existingLogo) shopProfile.logo = existingLogo;
-        if (existingName && (!data.profile.name || data.profile.name === 'My Cafe' || data.profile.name === 'billnaw')) {
+        if (!shopProfile.upiId && existingUpi) shopProfile.upiId = existingUpi;
+        if (shopProfile.showQr === undefined && existingShowQr !== undefined) shopProfile.showQr = existingShowQr;
+        if (existingName && (!shopProfile.name || shopProfile.name === 'My Cafe' || shopProfile.name === 'billnaw')) {
             shopProfile.name = existingName;
         }
         if (!shopProfile.adminPinHash && existingPinHash) {
@@ -2538,6 +2546,7 @@ function handleRemoteFirestoreUpdate(data) {
         try {
             idb.set('cafe_profile', shopProfile);
             if (shopProfile.logo) idb.set('cafe_logo', shopProfile.logo);
+            if (shopProfile.upiId) idb.set('cafe_upi_id', shopProfile.upiId);
             localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
             if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
             if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone);
@@ -4730,7 +4739,17 @@ async function ensureShopProfileHydrated() {
                     if (sp.logo && !shopProfile.logo) shopProfile.logo = sp.logo;
                     if (sp.address && !shopProfile.address) shopProfile.address = sp.address;
                     if (sp.phone && !shopProfile.phone) shopProfile.phone = sp.phone;
+                    if (sp.upiId && !shopProfile.upiId) shopProfile.upiId = sp.upiId;
+                    if (sp.showQr !== undefined && shopProfile.showQr === undefined) shopProfile.showQr = Boolean(sp.showQr);
+                    if (sp.fssai && !shopProfile.fssai) shopProfile.fssai = sp.fssai;
+                    if (sp.gstin && !shopProfile.gstin) shopProfile.gstin = sp.gstin;
+                    if (sp.gstMode && !shopProfile.gstMode) shopProfile.gstMode = sp.gstMode;
+                    if (sp.defaultGstRate !== undefined && shopProfile.defaultGstRate === undefined) shopProfile.defaultGstRate = Number(sp.defaultGstRate);
                 }
+                if (session.shop.upiId && !shopProfile.upiId) shopProfile.upiId = session.shop.upiId;
+                if (session.shop.showQr !== undefined && shopProfile.showQr === undefined) shopProfile.showQr = Boolean(session.shop.showQr);
+                if (session.shop.fssai && !shopProfile.fssai) shopProfile.fssai = session.shop.fssai;
+                if (session.shop.gstin && !shopProfile.gstin) shopProfile.gstin = session.shop.gstin;
             }
             if (session && session.storeCode) {
                 shopProfile.storeCode = session.storeCode;
@@ -4793,6 +4812,10 @@ async function ensureShopProfileHydrated() {
                 const idbLogo = await idb.get('cafe_logo');
                 if (idbLogo) shopProfile.logo = idbLogo;
             }
+            if (!shopProfile.upiId) {
+                const idbUpi = await idb.get('cafe_upi_id');
+                if (idbUpi) shopProfile.upiId = idbUpi;
+            }
             const idbProf = await idb.get('cafe_profile');
             if (idbProf && typeof idbProf === 'object') {
                 if ((!shopProfile.name || shopProfile.name === 'billnaw' || shopProfile.name === 'My Cafe') && idbProf.name && idbProf.name !== 'billnaw' && idbProf.name !== 'My Cafe') shopProfile.name = idbProf.name;
@@ -4824,6 +4847,9 @@ function persistProfile() {
     }
     window.shopProfile = shopProfile;
     idb.set('cafe_profile', shopProfile); 
+    if (shopProfile.upiId) {
+        idb.set('cafe_upi_id', shopProfile.upiId);
+    }
     if (shopProfile.logo) {
         idb.set('cafe_logo', shopProfile.logo);
         if (shopProfile.logo.length * 0.75 > 35840 && typeof resizeAndCompressLogo === 'function') {

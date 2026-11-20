@@ -636,7 +636,34 @@
                             }
                             if (sp.address && !shopProfile.address) shopProfile.address = sp.address;
                             if (sp.phone && !shopProfile.phone) shopProfile.phone = sp.phone;
+                            if (sp.upiId && !shopProfile.upiId) shopProfile.upiId = sp.upiId;
+                            if (sp.showQr !== undefined && shopProfile.showQr === undefined) shopProfile.showQr = Boolean(sp.showQr);
+                            if (sp.fssai && !shopProfile.fssai) shopProfile.fssai = sp.fssai;
+                            if (sp.gstin && !shopProfile.gstin) shopProfile.gstin = sp.gstin;
+                            if (sp.gstMode && !shopProfile.gstMode) shopProfile.gstMode = sp.gstMode;
+                            if (sp.defaultGstRate !== undefined && shopProfile.defaultGstRate === undefined) shopProfile.defaultGstRate = Number(sp.defaultGstRate);
                         }
+                        if (data.shop && data.shop.upiId && !shopProfile.upiId) shopProfile.upiId = data.shop.upiId;
+                        if (data.shop && data.shop.showQr !== undefined && shopProfile.showQr === undefined) shopProfile.showQr = Boolean(data.shop.showQr);
+                        if (data.shop && data.shop.fssai && !shopProfile.fssai) shopProfile.fssai = data.shop.fssai;
+                        if (data.shop && data.shop.gstin && !shopProfile.gstin) shopProfile.gstin = data.shop.gstin;
+                        try {
+                            if (typeof idb !== 'undefined' && idb.set) {
+                                idb.set('cafe_profile', shopProfile);
+                                if (shopProfile.upiId) idb.set('cafe_upi_id', shopProfile.upiId);
+                                if (shopProfile.logo) idb.set('cafe_logo', shopProfile.logo);
+                            }
+                            localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
+                            if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
+                            if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone);
+                            if (shopProfile.address) localStorage.setItem('billnaw_shop_address', shopProfile.address);
+                            if (shopProfile.fssai) localStorage.setItem('billnaw_shop_fssai', shopProfile.fssai);
+                            if (shopProfile.gstin) localStorage.setItem('billnaw_shop_gstin', shopProfile.gstin);
+                            if (shopProfile.upiId) localStorage.setItem('billnaw_shop_upi_id', shopProfile.upiId);
+                            if (shopProfile.showQr !== undefined) localStorage.setItem('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false');
+                            if (shopProfile.logo) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
+                        } catch(e) {}
+                        if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
                         if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0) {
                             menuItems = data.shop.menu;
                             window.menuItems = menuItems;
@@ -888,7 +915,34 @@
                             }
                             if (sp.address && !shopProfile.address) shopProfile.address = sp.address;
                             if (sp.phone && !shopProfile.phone) shopProfile.phone = sp.phone;
+                            if (sp.upiId && !shopProfile.upiId) shopProfile.upiId = sp.upiId;
+                            if (sp.showQr !== undefined && shopProfile.showQr === undefined) shopProfile.showQr = Boolean(sp.showQr);
+                            if (sp.fssai && !shopProfile.fssai) shopProfile.fssai = sp.fssai;
+                            if (sp.gstin && !shopProfile.gstin) shopProfile.gstin = sp.gstin;
+                            if (sp.gstMode && !shopProfile.gstMode) shopProfile.gstMode = sp.gstMode;
+                            if (sp.defaultGstRate !== undefined && shopProfile.defaultGstRate === undefined) shopProfile.defaultGstRate = Number(sp.defaultGstRate);
                         }
+                        if (data.shop && data.shop.upiId && !shopProfile.upiId) shopProfile.upiId = data.shop.upiId;
+                        if (data.shop && data.shop.showQr !== undefined && shopProfile.showQr === undefined) shopProfile.showQr = Boolean(data.shop.showQr);
+                        if (data.shop && data.shop.fssai && !shopProfile.fssai) shopProfile.fssai = data.shop.fssai;
+                        if (data.shop && data.shop.gstin && !shopProfile.gstin) shopProfile.gstin = data.shop.gstin;
+                        try {
+                            if (typeof idb !== 'undefined' && idb.set) {
+                                idb.set('cafe_profile', shopProfile);
+                                if (shopProfile.upiId) idb.set('cafe_upi_id', shopProfile.upiId);
+                                if (shopProfile.logo) idb.set('cafe_logo', shopProfile.logo);
+                            }
+                            localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
+                            if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
+                            if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone);
+                            if (shopProfile.address) localStorage.setItem('billnaw_shop_address', shopProfile.address);
+                            if (shopProfile.fssai) localStorage.setItem('billnaw_shop_fssai', shopProfile.fssai);
+                            if (shopProfile.gstin) localStorage.setItem('billnaw_shop_gstin', shopProfile.gstin);
+                            if (shopProfile.upiId) localStorage.setItem('billnaw_shop_upi_id', shopProfile.upiId);
+                            if (shopProfile.showQr !== undefined) localStorage.setItem('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false');
+                            if (shopProfile.logo) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
+                        } catch(e) {}
+                        if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
                         if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0) {
                             menuItems = data.shop.menu;
                             window.menuItems = menuItems;

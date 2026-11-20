@@ -226,12 +226,15 @@ function updateProfileVisuals() {
     
     const sidebarLogo = document.getElementById('sidebarLogo');
     const printLogo = document.getElementById('printLogo');
+    const invModalLogo = document.getElementById('invModalLogo');
     if (shopProfile.logo) {
         if (sidebarLogo) { sidebarLogo.src = shopProfile.logo; sidebarLogo.style.display = 'block'; }
         if (printLogo) { printLogo.src = shopProfile.logo; printLogo.style.display = 'block'; }
+        if (invModalLogo) { invModalLogo.src = shopProfile.logo; invModalLogo.style.display = 'block'; }
     } else {
         if (sidebarLogo) { sidebarLogo.src = ''; sidebarLogo.style.display = 'none'; }
         if (printLogo) { printLogo.src = ''; printLogo.style.display = 'none'; }
+        if (invModalLogo) { invModalLogo.src = ''; invModalLogo.style.display = 'none'; }
     }
 
     // Sync Settings Hub summary header & avatar

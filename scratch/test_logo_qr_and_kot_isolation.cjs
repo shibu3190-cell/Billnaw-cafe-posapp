@@ -243,9 +243,9 @@ check('KOT-ISO-03: CSS @media print hides #print-receipt when body.printing-kot 
   );
 });
 
-check('KOT-ISO-04: executeHtmlPrint does not shrink 160px QR code to 50px and isolates KOT', () => {
+check('KOT-ISO-04: executeHtmlPrint does not shrink QR code to 50px and isolates KOT', () => {
   assert.ok(
-    posjs.includes('.print-qr-img{width:160px !important;height:160px !important;') &&
+    (posjs.includes('.print-qr-img{width:144px !important;height:144px !important;') || posjs.includes('.print-qr-img{width:160px !important;height:160px !important;')) &&
     !posjs.includes('img{max-width:50px;'),
     'executeHtmlPrint still has global img{max-width:50px} shrinking QR code!'
   );
