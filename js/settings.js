@@ -296,12 +296,12 @@ async function loadLogo(event) {
     if (!file) return;
     try {
         if (typeof resizeAndCompressLogo === 'function') {
-            const compressed = await resizeAndCompressLogo(file, 128, 20480);
+            const compressed = await resizeAndCompressLogo(file, 154, 35840);
             if (compressed) {
                 shopProfile.logo = compressed;
                 updateProfileVisuals();
                 persistProfile();
-                showToast("Logo updated & compressed (< 20 KB).");
+                showToast("Logo updated & compressed (< 35 KB).");
                 return;
             }
         }
@@ -315,7 +315,7 @@ async function loadLogo(event) {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-            const MAX_DIM = 128; let w = img.width, h = img.height;
+            const MAX_DIM = 154; let w = img.width, h = img.height;
             if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
             canvas.width = Math.round(w); canvas.height = Math.round(h);
             ctx.fillStyle = '#FFFFFF';
@@ -323,7 +323,7 @@ async function loadLogo(event) {
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             let q = 0.82;
             let dataUrl = canvas.toDataURL('image/jpeg', q);
-            while (dataUrl.length * 0.75 > 20480 && q > 0.3) {
+            while (dataUrl.length * 0.75 > 35840 && q > 0.3) {
                 q -= 0.12;
                 dataUrl = canvas.toDataURL('image/jpeg', q);
             }
@@ -2043,11 +2043,11 @@ async function handleOnboardLogoUpload(event) {
     if (!file) return;
     try {
         if (typeof resizeAndCompressLogo === 'function') {
-            const compressed = await resizeAndCompressLogo(file, 128, 20480);
+            const compressed = await resizeAndCompressLogo(file, 154, 35840);
             if (compressed) {
                 onboardUploadedLogo = compressed;
                 const statusEl = document.getElementById('onboardLogoStatus');
-                if (statusEl) statusEl.innerText = '✅ Logo selected & optimized (< 20 KB)!';
+                if (statusEl) statusEl.innerText = '✅ Logo selected & optimized (< 35 KB)!';
                 return;
             }
         }

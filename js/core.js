@@ -3949,14 +3949,14 @@ function sanitizeMenuItemForStorage(item) {
 }
 
 /**
- * Resize & compress shop logo to <= 128x128 px and strictly under 20 KB (20,480 bytes)
+ * Resize & compress shop logo to <= 154x154 px and strictly under 35 KB (35,840 bytes)
  * Uses canvas downscaling and progressive JPEG quality reduction.
  * @param {string|File|Blob|HTMLImageElement} source
- * @param {number} [maxDim=128]
- * @param {number} [maxBytes=20480]
+ * @param {number} [maxDim=154]
+ * @param {number} [maxBytes=35840]
  * @returns {Promise<string>}
  */
-function resizeAndCompressLogo(source, maxDim = 128, maxBytes = 20480) {
+function resizeAndCompressLogo(source, maxDim = 154, maxBytes = 35840) {
     if (!source) return Promise.resolve('');
     return new Promise((resolve) => {
         // Node / test environment fallback
@@ -4826,8 +4826,8 @@ function persistProfile() {
     idb.set('cafe_profile', shopProfile); 
     if (shopProfile.logo) {
         idb.set('cafe_logo', shopProfile.logo);
-        if (shopProfile.logo.length * 0.75 > 20480 && typeof resizeAndCompressLogo === 'function') {
-            resizeAndCompressLogo(shopProfile.logo, 128, 20480).then(compact => {
+        if (shopProfile.logo.length * 0.75 > 35840 && typeof resizeAndCompressLogo === 'function') {
+            resizeAndCompressLogo(shopProfile.logo, 154, 35840).then(compact => {
                 if (compact && compact !== shopProfile.logo) {
                     shopProfile.logo = compact;
                     idb.set('cafe_logo', compact);

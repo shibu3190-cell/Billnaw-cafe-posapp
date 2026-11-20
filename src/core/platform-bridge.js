@@ -284,7 +284,7 @@ export const DEFAULT_PRINTERS_CONFIG = {
 /**
  * Universal Hardware Thermal Printer Bridge.
  */
-function generateEscPosNativeQr(text, moduleSize = 6) {
+function generateEscPosNativeQr(text, moduleSize = 5) {
   if (!text) return new Uint8Array(0);
   const enc = new TextEncoder();
   const textBytes = enc.encode(text);
@@ -1448,7 +1448,7 @@ export const ThermalPrinterBridge = {
         }
       } else if (shouldShowQr && effectiveUpi) {
         const upiPayString = `upi://pay?pa=${effectiveUpi}&pn=${encodeURIComponent(storeName)}&am=${totalRupees}&cu=INR`;
-        const qrCmds = generateEscPosNativeQr(upiPayString, is80mm ? 7 : 5);
+        const qrCmds = generateEscPosNativeQr(upiPayString, is80mm ? 6 : 4);
         if (qrCmds && qrCmds.length > 0) {
           parts.push(new Uint8Array([0x1B, 0x61, 0x01])); // Center
           parts.push(encodeClean("\nScan to Pay\n"));

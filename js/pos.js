@@ -1876,8 +1876,8 @@ function renderCheckoutUpiQr(amount) {
     if (window.QRCode) {
         new QRCode(canvasHolder, {
             text: upiString,
-            width: 160,
-            height: 160,
+            width: 144,
+            height: 144,
             colorDark: "#2B1C15",
             colorLight: "#FFFFFF",
             correctLevel: QRCode.CorrectLevel.M
@@ -2143,7 +2143,7 @@ function executeHtmlPrint(divId) {
             if (qrSrc) {
                 qrScript = `<div style="text-align:center; margin-top:14px; padding-top:8px; border-top:1px dashed #000;">
                     <div style="font-weight:bold; font-size:12px; margin-bottom:4px; letter-spacing:0.5px;">SCAN TO PAY VIA UPI</div>
-                    <img class="print-qr-img" src="${qrSrc}" style="margin:0 auto; display:block; width:160px; height:160px; max-width:160px; image-rendering:pixelated;">
+                    <img class="print-qr-img" src="${qrSrc}" style="margin:0 auto; display:block; width:144px; height:144px; max-width:144px; image-rendering:pixelated;">
                     <div style="font-size:10px; margin-top:4px; font-weight:bold;">UPI: ${escapeHtml(shopProfile.upiId)}</div>
                 </div>`;
             }
@@ -2174,7 +2174,7 @@ function executeHtmlPrint(divId) {
         const doc = iframe.contentWindow.document;
         const docTitle = divId === 'print-kot' ? 'KOT' : 'Receipt';
         doc.open();
-        doc.write(`<html><head><title>${docTitle}</title><style>body{font-family:'Courier New',Courier,monospace;font-size:12px;color:#000;margin:0;padding:10px;width:300px;}.print-center{text-align:center;}.print-row{display:flex;justify-content:space-between;margin-bottom:5px;}.print-line{border-bottom:1px dashed #000;margin:8px 0;}#printLogo{max-width:60px;max-height:60px;margin:0 auto 6px auto;object-fit:contain;filter:grayscale(100%) contrast(200%);}.print-qr-img{width:160px !important;height:160px !important;max-width:160px !important;filter:none !important;}</style></head><body>${content} ${qrScript}</body></html>`);
+        doc.write(`<html><head><title>${docTitle}</title><style>body{font-family:'Courier New',Courier,monospace;font-size:12px;color:#000;margin:0;padding:10px;width:300px;}.print-center{text-align:center;}.print-row{display:flex;justify-content:space-between;margin-bottom:5px;}.print-line{border-bottom:1px dashed #000;margin:8px 0;}#printLogo{max-width:72px;max-height:72px;margin:0 auto 6px auto;object-fit:contain;filter:grayscale(100%) contrast(200%);}.print-qr-img{width:144px !important;height:144px !important;max-width:144px !important;filter:none !important;}</style></head><body>${content} ${qrScript}</body></html>`);
         doc.close();
         setTimeout(() => {
             iframe.contentWindow.focus();
@@ -2508,13 +2508,13 @@ window.posPrinters = window.posPrinters || {
     printer2: { id: 'printer2', name: null, device: null, server: null, characteristic: null, status: 'DISCONNECTED' }
 };
 
-async function getLogoBytes(base64Image) {
+async function getLogoBytes(base64Image, customMaxWidth = 240) {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas'); 
             const ctx = canvas.getContext('2d');
-            const maxWidth = 200; 
+            const maxWidth = customMaxWidth; 
             let width = img.width; 
             let height = img.height;
             if (width > maxWidth) { 
@@ -3158,7 +3158,7 @@ async function sendEscPosToPrinter(order) {
         qrCodeDiv.innerHTML = '';
         if (shopProfile.showQr && shopProfile.upiId && window.QRCode) {
             const upiString = `upi://pay?pa=${shopProfile.upiId}&pn=${encodeURIComponent(shopProfile.name || 'billnaw')}&am=${Number(order.amount || 0).toFixed(2)}&cu=INR`;
-            new QRCode(qrCodeDiv, { text: upiString, width: 256, height: 256, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
+            new QRCode(qrCodeDiv, { text: upiString, width: 230, height: 230, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
             await new Promise(r => setTimeout(r, 60)); 
         }
     }
@@ -3285,7 +3285,7 @@ async function sendEscPosToPrinter(order) {
     let logoBytes = null;
     if (shopProfile.logo && typeof getLogoBytes === 'function') {
         try {
-            logoBytes = await getLogoBytes(shopProfile.logo);
+            logoBytes = await getLogoBytes(shopProfile.logo, 240);
         } catch (e) {
             console.warn('[Print] Logo conversion failed:', e);
         }
@@ -3300,7 +3300,7 @@ async function sendEscPosToPrinter(order) {
             : (qrImg && qrImg.src ? qrImg.src : null);
         if (qrDataUrl && typeof getLogoBytes === 'function') {
             try {
-                qrBytes = await getLogoBytes(qrDataUrl);
+                qrBytes = await getLogoBytes(qrDataUrl, 180);
             } catch (e) {
                 console.warn('[Print] QR conversion failed:', e);
             }
@@ -3435,7 +3435,7 @@ async function sendEscPosToPrinter(order) {
     let payloads = [];
     
     if (shopProfile.logo) {
-        const logoBytes = await getLogoBytes(shopProfile.logo);
+        const logoBytes = await getLogoBytes(shopProfile.logo, 240);
         if (logoBytes) { 
             payloads.push(new Uint8Array([0x1B, 0x61, 0x01])); 
             payloads.push(logoBytes); 
@@ -3451,7 +3451,7 @@ async function sendEscPosToPrinter(order) {
     if (shopProfile.showQr && shopProfile.upiId) {
         const qrCanvas = qrCodeDiv ? qrCodeDiv.querySelector('canvas') : null;
         if (qrCanvas) {
-            const qrBytes = await getLogoBytes(qrCanvas.toDataURL('image/jpeg', 1.0));
+            const qrBytes = await getLogoBytes(qrCanvas.toDataURL('image/jpeg', 1.0), 180);
             if (qrBytes) {
                 payloads.push(new Uint8Array([0x1B, 0x61, 0x01]));
                 payloads.push(new TextEncoder().encode("\nScan to Pay\n"));
@@ -4421,8 +4421,8 @@ function viewOrderInvoiceModal(orderId) {
             const upiString = `upi://pay?pa=${encodeURIComponent(shopProfile.upiId)}&pn=${encodeURIComponent(shopProfile.name || 'billnaw')}&am=${order.amount.toFixed(2)}&cu=INR`;
             new QRCode(invQrCode, {
                 text: upiString,
-                width: 130,
-                height: 130,
+                width: 117,
+                height: 117,
                 colorDark: "#2B1C15",
                 colorLight: "#FFFFFF",
                 correctLevel: QRCode.CorrectLevel.M

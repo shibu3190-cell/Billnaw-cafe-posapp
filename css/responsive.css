@@ -915,7 +915,7 @@ body.printing { background: #fff !important; }
     .print-row span:first-child { flex: 1; text-align: left; padding-right: 10px; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.2;}
     .print-row span:last-child { white-space: nowrap; text-align: right; font-weight: bold; }
     .print-line { border-bottom: 1px dashed #000; margin: 8px 0; width: 100%; }
-    #printLogo { max-width: 55px; max-height: 55px; margin: 0 auto 8px auto; object-fit: contain; filter: grayscale(100%) contrast(200%); }
+    #printLogo { max-width: 66px; max-height: 66px; margin: 0 auto 8px auto; object-fit: contain; filter: grayscale(100%) contrast(200%); }
     .print-meta { font-size: 11px; margin: 2px 0; color: #000; }
 }
 

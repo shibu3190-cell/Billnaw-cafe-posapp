@@ -78,19 +78,19 @@ if (typeof global.localStorage === 'undefined') {
         assert(coreJsContent.includes('module.exports.resizeAndCompressLogo = resizeAndCompressLogo'), 'resizeAndCompressLogo should be in module.exports');
     });
 
-    it('F1-02: loadLogo in js/settings.js uses resizeAndCompressLogo with 128 maxDim and 20KB limit', () => {
-        assert(settingsJsContent.includes('resizeAndCompressLogo(file, 128, 20480)'), 'loadLogo should pass 128 and 20480 to resizeAndCompressLogo');
-        assert(settingsJsContent.includes('const MAX_DIM = 128;'), 'Fallback in loadLogo should enforce MAX_DIM = 128');
+    it('F1-02: loadLogo in js/settings.js uses resizeAndCompressLogo with 154 maxDim and 35KB limit', () => {
+        assert(settingsJsContent.includes('resizeAndCompressLogo(file, 154, 35840)'), 'loadLogo should pass 154 and 35840 to resizeAndCompressLogo');
+        assert(settingsJsContent.includes('const MAX_DIM = 154;'), 'Fallback in loadLogo should enforce MAX_DIM = 154');
     });
 
     it('F1-03: handleOnboardLogoUpload in js/settings.js optimizes logo before saving', () => {
         assert(settingsJsContent.includes('handleOnboardLogoUpload'), 'handleOnboardLogoUpload should be defined');
-        const onboardMatch = settingsJsContent.match(/async function handleOnboardLogoUpload[\s\S]*?resizeAndCompressLogo\(file,\s*128,\s*20480\)/);
-        assert(onboardMatch, 'handleOnboardLogoUpload must call resizeAndCompressLogo(file, 128, 20480)');
+        const onboardMatch = settingsJsContent.match(/async function handleOnboardLogoUpload[\s\S]*?resizeAndCompressLogo\(file,\s*154,\s*35840\)/);
+        assert(onboardMatch, 'handleOnboardLogoUpload must call resizeAndCompressLogo(file, 154, 35840)');
     });
 
-    it('F1-04: persistProfile in js/core.js defensively checks logo size and re-compresses if > 20 KB', () => {
-        assert(coreJsContent.includes('shopProfile.logo.length * 0.75 > 20480'), 'persistProfile should guard against logos > 20 KB');
+    it('F1-04: persistProfile in js/core.js defensively checks logo size and re-compresses if > 35 KB', () => {
+        assert(coreJsContent.includes('shopProfile.logo.length * 0.75 > 35840'), 'persistProfile should guard against logos > 35 KB');
     });
 
     // ============================================================
