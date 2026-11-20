@@ -1778,9 +1778,25 @@ function switchTabDirect(tabId) {
     document.querySelectorAll('.view, .tab-content').forEach(c => c.classList.remove('active')); 
     
     const targetNavBtn = document.getElementById(`nav-${tabId}`) || document.getElementById(`tab-${tabId}`);
-    if (['customers', 'settings', 'whatsapp'].includes(tabId)) {
+    const MORE_SUBPAGES = {
+        kds: { title: 'Kitchen Display (KDS)', sub: 'Live preparation tickets & status' },
+        khata: { title: 'Khata & Due Ledger', sub: 'Customer credits & settlements' },
+        customers: { title: 'Customers & Loyalty', sub: 'Directory, tiers & order history' },
+        whatsapp: { title: 'WhatsApp Campaigns', sub: 'AI targeting & promo broadcasts' },
+        inventory: { title: 'Kitchen & Inventory', sub: 'Raw stock, recipes & prep batches' },
+        settings: { title: 'Settings & Store Profile', sub: 'Tax, printers, staff & cloud sync' }
+    };
+    const subMeta = MORE_SUBPAGES[tabId];
+    if (subMeta) {
         const moreNavBtn = document.getElementById('nav-more');
         if (moreNavBtn) moreNavBtn.classList.add('active');
+        document.body?.classList.add('mobile-subpage-active');
+        const tEl = document.getElementById('mobileSubpageTitle');
+        const sEl = document.getElementById('mobileSubpageSubtitle');
+        if (tEl) tEl.innerText = subMeta.title;
+        if (sEl) sEl.innerText = subMeta.sub;
+    } else {
+        document.body?.classList.remove('mobile-subpage-active');
     }
     if (targetNavBtn) targetNavBtn.classList.add('active');
     
@@ -1842,6 +1858,15 @@ function switchTabDirect(tabId) {
 }
 window.switchTab = switchTab;
 window.switchTabDirect = switchTabDirect;
+
+function backFromMobileSubpage() {
+    if (typeof window.openMoreHub === 'function') {
+        window.openMoreHub();
+    } else if (typeof window.switchTab === 'function') {
+        window.switchTab('pos');
+    }
+}
+window.backFromMobileSubpage = backFromMobileSubpage;
 
 function factoryReset() {
     if (!_requireAdminAccess('perform factory reset', 'settings')) return;

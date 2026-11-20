@@ -236,105 +236,125 @@
         gap: 10px;
     }
     
-    /* CLASSY 5-ITEM BOTTOM NAVIGATION BAR */
+    /* CLASSY 5-ITEM BOTTOM NAVIGATION BAR (Mobile UI v2 Mint Pill + Emerald Tile) */
     .sidebar { 
         width: 100%; 
         height: auto; 
         flex-direction: row; 
         justify-content: space-around; 
-        padding: 6px 6px 0 6px; 
+        gap: 4px;
+        padding: 6px 8px 0 8px; 
         padding-bottom: max(12px, env(safe-area-inset-bottom, 24px)); 
         position: fixed; 
         bottom: 0; 
         left: 0; 
         z-index: 900 !important; 
         border: none; 
-        background: rgba(255, 255, 255, 0.94) !important; 
+        background: rgba(255, 255, 255, 0.97) !important; 
         backdrop-filter: blur(20px); 
         -webkit-backdrop-filter: blur(20px); 
-        border-top: 1px solid var(--border) !important; 
-        box-shadow: 0 -4px 24px rgba(43, 28, 21, 0.08) !important;
+        border-top: 1px solid #E5E9E7 !important; 
+        box-shadow: var(--shadow-nav, 0 -4px 18px rgba(15, 23, 42, 0.06)) !important;
     }
     .sidebar-brand { display: none; } 
     .nav-btn { 
         flex-direction: column; 
-        padding: 6px 4px; 
+        padding: 5px 4px; 
         gap: 3px; 
         text-align: center; 
-        border-radius: 12px; 
+        border-radius: 14px; 
         margin-bottom: 0; 
         flex: 1; 
         justify-content: center; 
-        min-height: 48px;
+        align-items: center;
+        min-height: 52px;
         min-width: 44px;
-        transition: transform 0.15s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+        color: var(--muted, #64748B);
+        transition: transform 0.15s ease, background 0.18s ease, color 0.18s ease;
         position: relative;
     }
     .nav-btn:active {
         transform: scale(0.96);
     }
+    .nav-btn .icon-box {
+        width: 30px;
+        height: 30px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .nav-btn .icon-box svg {
+        width: 19px;
+        height: 19px;
+    }
     .nav-btn span.icon { font-size: 18px; }
     .nav-btn .nav-text { 
         display: block; 
-        font-size: 11px; 
+        font-size: 10.5px; 
         font-weight: 600; 
         line-height: 1.1; 
         white-space: nowrap; 
-        letter-spacing: 0.2px; 
+        letter-spacing: 0.15px; 
     } 
     .nav-btn.active {
-        background: rgba(20, 56, 50, 0.08);
-        color: var(--primary);
-        font-weight: 800;
-        box-shadow: 0 -2px 8px rgba(20, 56, 50, 0.4);
+        background: var(--mint-bg, #E6F4EF);
+        color: var(--em-dark, #0F3D33);
+        font-weight: 700;
+        box-shadow: none;
     }
     .nav-btn.active::before {
-        content: '';
-        display: block;
-        position: absolute;
-        top: 0;
-        left: 15%;
-        right: 15%;
-        height: 2.5px;
-        background: var(--primary);
-        border-radius: 0 0 3px 3px;
-        box-shadow: 0 1px 6px rgba(20, 56, 50, 0.5);
+        display: none;
     }
     .nav-btn.active .nav-text {
-        font-weight: 800;
-        color: var(--primary);
+        font-weight: 700;
+        color: var(--em-dark, #0F3D33);
     }
     .nav-btn.active .icon-box {
-        background: var(--primary);
+        background: var(--em-dark, #0F3D33);
         color: #FFFFFF;
-        border-color: var(--primary);
-        box-shadow: 0 2px 6px rgba(15, 41, 36, 0.25);
+        border-color: var(--em-dark, #0F3D33);
+        box-shadow: 0 3px 10px rgba(15, 61, 51, 0.24);
     }
     .nav-btn.active svg {
         stroke: #FFFFFF;
-        fill: rgba(255, 255, 255, 0.25);
+        fill: rgba(255, 255, 255, 0.16);
     }
 
-    /* Mobile Bottom Sheet Drawer for More Hub */
+    /* Mobile Bottom Sheet Drawer for More Hub (v2 Blurred Scrim & Crisp Rows) */
     .more-hub-overlay {
         align-items: flex-end !important;
         padding: 0 !important;
+        background: rgba(15, 23, 42, 0.48) !important;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
     }
     .more-hub-box {
         width: 100% !important;
         max-width: 100% !important;
         border-radius: 24px 24px 0 0 !important;
-        padding: 16px 18px !important;
+        padding: 14px 16px !important;
         padding-bottom: max(20px, env(safe-area-inset-bottom, 24px)) !important;
+        background: #FFFFFF !important;
+        box-shadow: var(--shadow-elev, 0 18px 44px rgba(15, 31, 28, 0.24)) !important;
         animation: slideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
         margin: 0 !important;
+    }
+    .more-hub-card {
+        border-radius: 14px !important;
+        border-color: #E5E9E7 !important;
+        background: #FFFFFF !important;
+        box-shadow: var(--shadow-card, 0 2px 10px rgba(15, 23, 42, 0.04));
     }
     .more-hub-handle {
         display: block !important;
         width: 40px;
         height: 4px;
-        background: rgba(0, 0, 0, 0.18);
-        border-radius: 2px;
+        background: #CBD5E1;
+        border-radius: 99px;
         margin: 0 auto 12px auto;
     }
     @keyframes slideUpSheet {
@@ -1385,8 +1405,110 @@ body.printing { background: #fff !important; }
     }
 }
 
-/* --- Live Staff Session Hub Mobile Responsiveness (<= 640px) (Milestone 4) --- */
+/* Desktop/Tablet: hide mobile-only subpage back header */
+.mobile-subpage-header {
+    display: none;
+}
+
+/* --- Live Staff Session Hub & Mobile UI v2 Shell Polish (<= 640px) --- */
 @media screen and (max-width: 640px) {
+    body,
+    .main-wrapper,
+    .app-layout {
+        background: var(--canvas, #F7F8F7) !important;
+    }
+    .topbar {
+        background: #FFFFFF !important;
+        border-bottom: 1px solid #E5E9E7 !important;
+        min-height: 56px;
+        padding: 8px 12px !important;
+    }
+    .topbar-menu-icon-btn {
+        background: var(--em-dark, #0F3D33) !important;
+        color: #FFFFFF !important;
+        border-radius: 11px !important;
+        width: 36px;
+        height: 36px;
+        border: none !important;
+        box-shadow: 0 2px 8px rgba(15, 61, 51, 0.22);
+    }
+    .topbar-brand-texts .brand-title {
+        color: var(--ink, #0F172A);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
+    .topbar-brand-texts .brand-subtitle {
+        background: var(--mint-bg, #E6F4EF);
+        color: var(--em-dark, #0F3D33);
+        padding: 2px 7px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+    }
+    /* Sub-page Top Bar Back Navigation Mode */
+    body.mobile-subpage-active .topbar-brand-minimal {
+        display: none !important;
+    }
+    body.mobile-subpage-active .mobile-subpage-header {
+        display: flex !important;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        flex: 1;
+    }
+    .mobile-subpage-back-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        border: 1px solid #E5E9E7;
+        background: #F7F8F7;
+        color: var(--ink, #0F172A);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.15s ease, transform 0.1s ease;
+    }
+    .mobile-subpage-back-btn:active {
+        transform: scale(0.94);
+        background: var(--mint-bg, #E6F4EF);
+    }
+    .mobile-subpage-titles {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .mobile-subpage-title {
+        font-size: 14.5px;
+        font-weight: 800;
+        color: var(--ink, #0F172A);
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mobile-subpage-sub {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--muted, #64748B);
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* Polished 286px Mobile Admin Actions Popover (deduplicate Settings since More Hub owns it) */
+    .header-actions-dropdown {
+        width: min(286px, calc(100vw - 24px)) !important;
+        border-radius: 18px !important;
+        border: 1px solid #E5E9E7 !important;
+        box-shadow: var(--shadow-elev, 0 18px 44px rgba(15, 31, 28, 0.24)) !important;
+    }
+    .header-actions-dropdown .hdr-action-settings-item {
+        display: none !important;
+    }
+
     #activeSessionsModal .modal-box {
         width: 94vw !important;
         max-width: 94vw !important;

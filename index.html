@@ -3680,6 +3680,15 @@
     <div class="main-wrapper">
         
         <div class="topbar">
+            <div class="mobile-subpage-header" id="mobileSubpageHeader">
+                <button type="button" id="mobileSubpageBackBtn" class="mobile-subpage-back-btn" onclick="backFromMobileSubpage()" aria-label="Back to More Hub" title="Back">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                </button>
+                <div class="mobile-subpage-titles">
+                    <span id="mobileSubpageTitle" class="mobile-subpage-title">Management</span>
+                    <span id="mobileSubpageSubtitle" class="mobile-subpage-sub">Billnaw POS</span>
+                </div>
+            </div>
             <div class="topbar-brand-minimal">
                 <button type="button" class="topbar-menu-icon-btn" onclick="toggleMobileSlideMenu(true)" aria-label="Open Navigation Menu" title="Open Navigation Menu">
                     <svg class="menu-cafe-glyph" width="18" height="18" viewBox="0 0 24 24"><use href="#icon-coffee"></use></svg>
@@ -3792,7 +3801,7 @@
                                 </div>
                             </button>
 
-                            <button type="button" class="header-action-item" onclick="closeHeaderActionsDropdown(); switchTab('settings');" role="menuitem">
+                            <button type="button" class="header-action-item hdr-action-settings-item" onclick="closeHeaderActionsDropdown(); switchTab('settings');" role="menuitem">
                                 <span class="hdr-act-icon settings-icon"><svg width="15" height="15" viewBox="0 0 24 24" style="color: #143832;"><use href="#icon-gear"></use></svg></span>
                                 <div class="hdr-act-text">
                                     <span class="hdr-act-label">Settings &amp; Store Profile</span>

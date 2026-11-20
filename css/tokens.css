@@ -9,6 +9,27 @@
     --emerald-accent: #2DD4BF;   /* Mint / Teal Accent */
     --emerald-glow: rgba(45, 212, 191, 0.35);
 
+    /* ✨ Mobile UI v2 Refreshed Emerald & Mint Tokens */
+    --em-dark: #0F3D33;          /* v2 Primary Emerald */
+    --em-mid: #145345;           /* v2 Hover / Active Accent */
+    --em-hover: #0B2E26;         /* v2 Pressed Emerald */
+    --mint-bg: #E6F4EF;          /* v2 Active Pill / Soft Surface */
+    --mint: #10B981;             /* v2 Emerald-Mint Success */
+    --mint-soft: #D1FAE5;        /* v2 Soft Mint Badge */
+    --canvas: #F7F8F7;           /* v2 Crisp Mobile Neutral Canvas */
+    --ink: #0F172A;              /* v2 Deep Ink */
+    --slate: #475569;            /* v2 Secondary Slate */
+    --muted: #64748B;            /* v2 Muted Label */
+    --danger-v2: #DC2626;
+    --danger-bg: #FEF2F2;
+    --danger-border: #FECACA;
+    --amber: #D97706;
+    --amber-bg: #FFFBEB;
+    --amber-border: #FDE68A;
+    --shadow-card: 0 2px 10px rgba(15, 23, 42, 0.04);
+    --shadow-elev: 0 18px 44px rgba(15, 31, 28, 0.24);
+    --shadow-nav: 0 -4px 18px rgba(15, 23, 42, 0.06);
+
     /* 🏛️ Crisp Neutrals & Surfaces */
     --bg-body: #F8F6F2;          /* Off-White Alabaster (Neutral-50) */
     --bg-surface: #FFFFFF;       /* Crisp White Card Surface */
@@ -185,4 +206,4 @@ button, .btn, .btn-sm, .btn-xs, .btn-outline, .btn-primary, .btn-success, .btn-d
 .form-group { margin-bottom: 14px; text-align: left; }
 .form-group label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 14px; font-weight: 500; background: #FFFFFF; color: var(--text-dark); transition: border-color 0.2s ease, box-shadow 0.2s ease; }
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--milk-choc); background: #fff; box-shadow: 0 0 0 3px rgba(125, 79, 66, 0.15); }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--em-dark); background: #fff; box-shadow: 0 0 0 3px rgba(15, 61, 51, 0.14); }
