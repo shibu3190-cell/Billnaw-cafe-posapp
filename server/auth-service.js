@@ -1739,8 +1739,16 @@ export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode, staffId
   const pinHash = hashStringServer(cleanPin);
   const pinSalt = crypto.randomBytes(16).toString('hex');
   const saltedPinHash = crypto.createHash('sha256').update(`${cleanPin}:${pinSalt}:billnaw_pin_v2`).digest('hex');
+  const hadExistingShopInMemory = Boolean(shop);
   if (!shop) {
-    shop = createDefaultShopDocument(code, 'Billnaw Cafe', normEmail, 'user_' + normEmail, cleanPin);
+    // Cold serverless container safety: NEVER seed default 'Billnaw Cafe' / 'billnaw@upi' / dummy menu
+    // over an existing live Firestore tenant during a PIN reset.
+    shop = {
+      storeCode: code,
+      ownerEmail: normEmail,
+      profile: { ownerEmail: normEmail },
+      staff: []
+    };
     shopStore.set(code, shop);
   }
   if (!shop.profile) shop.profile = {};
@@ -1803,7 +1811,31 @@ export function resetAdminPinWithOtp(ownerEmail, otp, newPin, storeCode, staffId
 
   shop.updatedAt = new Date().toISOString();
   saveAuthStoreToDisk();
-  syncShopToFirestore(code, shop, true);
+  // Safe PIN-only cloud sync: never overwrite live store profile/menu/tables from cold-start memory
+  const pinOnlyProfilePatch = resolvedRole === 'Admin'
+    ? {
+        ownerEmail: normEmail || shop.ownerEmail || '',
+        adminPinHash: pinHash,
+        adminPinSalt: pinSalt,
+        adminSaltedPinHash: saltedPinHash
+      }
+    : undefined;
+  const emailLower = String(normEmail || shop.ownerEmail || '').toLowerCase();
+  const isSyntheticAudit = (
+    code.startsWith('SHOP-AUDITSHO-') ||
+    code.startsWith('SHOP-ALEXCAFE-') ||
+    code.startsWith('SHOP_TEST_') ||
+    emailLower.includes('selftest') ||
+    emailLower.includes('audit_') ||
+    emailLower.endsWith('@billnawcafe.com')
+  );
+  if (!isSyntheticAudit && CONFIG?.firebase?.projectId && CONFIG?.firebase?.firestoreDatabaseId) {
+    syncStoreToFirestoreREST(code, {
+      ownerEmail: normEmail || shop.ownerEmail || undefined,
+      profile: hadExistingShopInMemory ? shop.profile : pinOnlyProfilePatch,
+      staff: [targetStaff]
+    }).catch(() => null);
+  }
 
   return {
     status: 200,

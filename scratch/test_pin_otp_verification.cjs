@@ -12,8 +12,8 @@ async function run() {
 
   const { handler, generateOtpTicket, verifyOtpTicket } = await import('../netlify/functions/api.js');
 
-  const storeOwnerEmail = 'bapi92halder@gmail.com';
-  const storeCode = 'SHOP_BAPI92HALDER';
+  const storeOwnerEmail = 'pin_otp_verify_' + Date.now() + '@billnawcafe.com';
+  const storeCode = 'SHOP_TEST_PIN_OTP_' + Date.now();
   const testIp = '127.0.0.99';
 
   // ---------------------------------------------------------------
