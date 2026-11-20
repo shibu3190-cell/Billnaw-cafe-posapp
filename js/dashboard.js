@@ -1500,12 +1500,22 @@ async function saveDailyClosingSummary(targetDate = null) {
         netCashInDrawer: Number(netCashInDrawer.toFixed(2)),
         netProfit: Number(netProfit.toFixed(2)),
         totalOrders: targetOrders.length,
+        orderCount: targetOrders.length,
         paymentSplit: {
             cash: Number(cashSales.toFixed(2)),
             upi: Number(upiSales.toFixed(2)),
             card: Number(cardSales.toFixed(2))
         },
+        paymentBreakdown: {
+            cash: Number(cashSales.toFixed(2)),
+            upi: Number(upiSales.toFixed(2)),
+            card: Number(cardSales.toFixed(2))
+        },
         orderTypeSplit: {
+            dineIn: dineInCount,
+            takeaway: takeawayCount
+        },
+        orderTypeBreakdown: {
             dineIn: dineInCount,
             takeaway: takeawayCount
         },

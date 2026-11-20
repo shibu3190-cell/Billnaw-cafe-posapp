@@ -1059,6 +1059,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
         expenses: (Array.isArray(cached.expenses) && cTime > fTime) ? cached.expenses : baseResult.expenses,
         customers: (Array.isArray(cached.customers) && cTime > fTime) ? cached.customers : baseResult.customers,
         kots: (Array.isArray(cached.kots) && cTime > fTime) ? cached.kots : baseResult.kots,
+        subscription: (cached.subscription && cTime > fTime) ? cached.subscription : baseResult.subscription,
         updatedAt: (cTime > fTime ? cached.updatedAt : undefined) || baseResult.updatedAt
       });
     }

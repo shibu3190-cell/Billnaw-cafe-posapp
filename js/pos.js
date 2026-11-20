@@ -4490,11 +4490,20 @@ function testThermalPrinter() {
 window.testThermalPrinter = testThermalPrinter;
 
 function markBilled(tableId) {
+    if (typeof canManageTableStatus === 'function' && !canManageTableStatus()) {
+        if (typeof showToast === 'function') showToast("Access Denied: Only Cashier or Admin can update table status");
+        return;
+    }
     const t = tableId || activeTable;
     let tInfo = tablesInfo[t];
     if (!tInfo || !tInfo.items || tInfo.items.length === 0) return (typeof showToast === 'function' ? showToast("Table empty!") : null);
     tInfo.status = 'billed';
-    persistTables();
+    tInfo.updatedAt = new Date().toISOString();
+    if (typeof broadcastTableDelta === 'function') {
+        broadcastTableDelta(t, tInfo);
+    } else {
+        persistTables();
+    }
     syncTableUI();
     if (typeof showToast === 'function') showToast(`Table ${t} marked as Billed`);
 }

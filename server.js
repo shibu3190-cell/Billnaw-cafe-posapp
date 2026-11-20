@@ -25,7 +25,7 @@ import {
   checkFoodImageRateLimit
 } from './server/gemini-service.js';
 import { relayGoogleSheetsAction } from './server/sheets-service.js';
-import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle, syncStoreToFirestoreREST, getStoreFromFirestoreREST, deleteStaffFromFirestoreREST, getInvoicesFromFirestoreREST, getStoreStateFromPersistentCache } from './server/sync-service.js';
+import { getShopStatus, getPublicClientConfig, createShopExportBundle, validateShopImportBundle, syncStoreToFirestoreREST, getStoreFromFirestoreREST, deleteStaffFromFirestoreREST, getInvoicesFromFirestoreREST, getReportsFromFirestoreREST, getStoreStateFromPersistentCache } from './server/sync-service.js';
 import { checkAiQuotaAndKey, recordSuccessfulAiUsage, getClientQuotaInfo, updateClientProfileData, releaseAiQuotaSlot, normalizeShopId, getClientProfileData, getCurrentYearMonth } from './server/quota-service.js';
 import { parseMenuFromText } from './server/menu-parser.js';
 import {
@@ -1532,6 +1532,26 @@ app.get('/api/sync/invoices', async (req, res) => {
   }
 });
 
+app.get('/api/sync/reports', async (req, res) => {
+  try {
+    const code = sanitizeTenantStoreCode(req);
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
+    }
+    const auth = checkTenantAuth(req, res, code, true);
+    if (!auth.authorized) {
+      return res.status(auth.status || 401).json({ success: false, error: auth.error });
+    }
+    const date = req.query.date || null;
+    const pageSize = parseInt(req.query.pageSize, 10) || 30;
+    const pageToken = req.query.pageToken || null;
+    const result = await getReportsFromFirestoreREST(code, { date, pageSize, pageToken });
+    res.status(result.success ? 200 : (result.status >= 400 ? result.status : 500)).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch reports' });
+  }
+});
+
 app.post('/api/sync/store-data', async (req, res) => {
   try {
     const code = sanitizeTenantStoreCode(req);
@@ -1542,7 +1562,7 @@ app.post('/api/sync/store-data', async (req, res) => {
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
-    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots } = req.body || {};
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots, dailyReport } = req.body || {};
 
     if (staff !== undefined || replaceStaff !== undefined || deletedStaffId !== undefined || deletedStaffIds !== undefined) {
       const staffRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'manage_staff' });
@@ -1586,7 +1606,7 @@ app.post('/api/sync/store-data', async (req, res) => {
     const result = await syncStoreToFirestoreREST(code, {
       ownerEmail: normalizedEmail || undefined,
       profile: safeProfile,
-      staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots
+      staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots, dailyReport
     });
     res.status(result.success ? 200 : (result.status >= 400 ? result.status : 500)).json(result);
   } catch (err) {
