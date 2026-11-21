@@ -2671,8 +2671,14 @@ function handleRemoteFirestoreUpdate(data) {
         }
 
         // Authoritative Cloud Isolation: Remote Firestore is the single source of truth for the active tenant's staff roster.
-        // Never union-merge memory from previous shops, and never echo-sync incoming remote reads back to cloud.
-        staffList = cleanRemoteStaff;
+        // Auto-derive canonical permissions & allowedTabs for existing shops that only store { id, name, role }.
+        staffList = cleanRemoteStaff.map(s => {
+            if (typeof buildStaffAccessProfile === 'function') {
+                const access = buildStaffAccessProfile(s);
+                return { ...s, role: access.role, permissions: access.permissions, allowedTabs: access.allowedTabs };
+            }
+            return s;
+        });
         window.staffList = staffList;
         try {
             idb.set('cafe_staff', staffList);
@@ -2683,6 +2689,24 @@ function handleRemoteFirestoreUpdate(data) {
                 if (!shopProfile.adminPinHash) {
                     shopProfile.adminPinHash = aHash;
                     localStorage.setItem('billnaw_admin_pin_hash', aHash);
+                }
+            }
+            // Live Firebase Role/Permission Refresh: if active staff's role or permissions changed in Firebase, update local cache & UI immediately
+            if (activeStaff && activeStaff.id !== undefined) {
+                const latestSelf = staffList.find(s => String(s.id) === String(activeStaff.id));
+                if (latestSelf) {
+                    if (latestSelf.status === 'Inactive' && activeStaff.role !== 'Admin') {
+                        if (typeof lockTerminalByRemote === 'function') {
+                            lockTerminalByRemote({ staffId: activeStaff.id, status: 'REVOKED', reason: 'Staff account deactivated' });
+                        }
+                    } else if (typeof cacheStaffAccessProfile === 'function') {
+                        const prevRoleStr = String(activeStaff.role || '');
+                        const nextAccess = cacheStaffAccessProfile(latestSelf);
+                        if (prevRoleStr !== String(nextAccess.role)) {
+                            if (typeof applyStationProfileRestrictions === 'function') applyStationProfileRestrictions();
+                            if (typeof enforcePermissions === 'function') enforcePermissions();
+                        }
+                    }
                 }
             }
         } catch(e) {}
@@ -2746,9 +2770,14 @@ function handleRemoteFirestoreUpdate(data) {
             ? isStoreAuthenticated()
             : Boolean(localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_shop_session') || localStorage.getItem('billnaw_auth_mode') === 'authenticated');
 
+        // Guard against any unversioned 4-item preset template overwriting an authenticated shop's real menu
+        const isIncomingTemplate = (typeof isDefaultTemplateMenu === 'function') && isDefaultTemplateMenu(data.menu);
+        if (isIncomingTemplate && incomingMenuVersion === 0 && isAuthMode && Array.isArray(menuItems) && menuItems.length > 0 && !isLocalTemplate) {
+            if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
+        }
         // Uninitialized empty remote document (menu: [], version: 0):
         // Preserve demo seeding only for unauthenticated, non-customized empty stores; never wipe existing local items.
-        if (data.menu.length === 0 && incomingMenuVersion === 0) {
+        else if (data.menu.length === 0 && incomingMenuVersion === 0) {
             if (!isAuthMode && !isLocalCustomized && (!Array.isArray(menuItems) || menuItems.length === 0)) {
                 const cleanDefaultMenu = [
                     { id: 1, name: "Samosa", category: "Snacks", price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80&fm=webp" },
@@ -5578,6 +5607,20 @@ function applyStationProfileRestrictions() {
     const activeStaff = (typeof window !== 'undefined' && window.currentStaff) ? window.currentStaff : (typeof currentStaff !== 'undefined' ? currentStaff : null);
     const normRole = activeStaff && activeStaff.role ? (typeof normalizeRole === 'function' ? normalizeRole(activeStaff.role) : activeStaff.role) : null;
     const isSupervisor = (normRole === 'Admin' || normRole === 'Manager');
+    // Role-first RBAC: active staff role ALWAYS takes precedence over stale device stationProfile tags (e.g. WAITER_MOBILE never traps Cashier/Admin!)
+    const effectiveIsChef = normRole ? (normRole === 'Kitchen Chef' || normRole === 'Chef') : (profile === STATION_PROFILES.KDS);
+    const effectiveIsFloorServer = normRole ? (normRole === 'Floor Server' || normRole === 'Server' || normRole === 'Waiter') : (profile === STATION_PROFILES.WAITER_MOBILE);
+
+    const _syncTableBarAfterRole = () => {
+        try {
+            if (typeof updateTableOrderFloatingBar === 'function') {
+                const bar = document.getElementById('tablesOrderFloatingBar');
+                if (bar && bar.style.display && bar.style.display !== 'none') {
+                    updateTableOrderFloatingBar();
+                }
+            }
+        } catch (_) {}
+    };
 
     // Admin & Supervisor Unrestricted Access: Full POS, KDS, Menu, Reports, Inventory & Settings
     if (isSupervisor) {
@@ -5602,11 +5645,12 @@ function applyStationProfileRestrictions() {
             mBtn.innerHTML = '<span>CHECKOUT</span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>';
             mBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(); };
         }
+        _syncTableBarAfterRole();
         if (typeof enforcePermissions === 'function') enforcePermissions();
         return;
     }
 
-    if (profile === STATION_PROFILES.KDS || normRole === 'Kitchen Chef' || normRole === 'Chef') {
+    if (effectiveIsChef) {
         if (navPos) navPos.style.display = 'none';
         if (navTables) navTables.style.display = 'none';
         if (navMenu) navMenu.style.display = 'none';
@@ -5621,7 +5665,7 @@ function applyStationProfileRestrictions() {
         }
         if (checkoutBtn) checkoutBtn.style.display = 'none';
         if (typeof enforcePermissions === 'function') enforcePermissions();
-    } else if (profile === STATION_PROFILES.WAITER_MOBILE || normRole === 'Floor Server' || normRole === 'Server') {
+    } else if (effectiveIsFloorServer) {
         if (navPos) navPos.style.display = 'flex';
         if (navTables) navTables.style.display = 'flex'; // Dedicated Table Floor View accessible to waitstaff
         if (navMenu) navMenu.style.display = 'flex'; // Accessible to Floor Server via 4-Digit Admin PIN
@@ -5682,9 +5726,10 @@ function applyStationProfileRestrictions() {
             mBtn.innerHTML = '<span>Ready for Billing</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>';
             mBtn.onclick = handleReadyForBilling;
         }
+        _syncTableBarAfterRole();
         if (typeof enforcePermissions === 'function') enforcePermissions();
     } else {
-        // Cashier Profile: Can create/edit active orders, checkout, view menu and reports.
+        // Cashier Profile: Full CHECKOUT on desktop, mobile cart & Tables floating bar (never overridden by WAITER_MOBILE device tag)
         if (navPos) navPos.style.display = 'flex';
         if (navKds) navKds.style.display = 'none';
         if (navTables) navTables.style.display = 'flex';
@@ -5706,6 +5751,7 @@ function applyStationProfileRestrictions() {
             mBtn.innerHTML = '<span>CHECKOUT</span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>';
             mBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(); };
         }
+        _syncTableBarAfterRole();
         if (typeof enforcePermissions === 'function') enforcePermissions();
     }
 }
@@ -7054,18 +7100,23 @@ async function initDatabase() {
     const isAuth = (typeof isStoreAuthenticated === 'function') 
         ? isStoreAuthenticated() 
         : Boolean(localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_shop_session') || localStorage.getItem('billnaw_auth_mode') === 'authenticated');
+    const isExplicitDemoMode = (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_auth_mode') === 'demo');
 
-    if (storedMenu && Array.isArray(storedMenu) && storedMenu.length > 0) {
+    // Never allow leftover 4-item preset demo menu in IndexedDB to pollute an authenticated shop!
+    const storedMenuIsTemplate = Array.isArray(storedMenu) && isDefaultTemplateMenu(storedMenu);
+    if (storedMenu && Array.isArray(storedMenu) && storedMenu.length > 0 && !(isAuth && storedMenuIsTemplate)) {
         menuItems = storedMenu;
         window.menuItems = menuItems;
     } else if (isAuth || isMenuCustomized()) {
-        // Authenticated shop or customized menu: check if menu was saved in shop session before defaulting
+        // Authenticated shop or customized menu: check if non-template menu was saved in shop session
         let sessionMenu = null;
         try {
             const raw = localStorage.getItem('billnaw_shop_session');
             if (raw) {
                 const s = JSON.parse(raw);
-                if (Array.isArray(s?.shop?.menu) && s.shop.menu.length > 0) sessionMenu = s.shop.menu;
+                if (Array.isArray(s?.shop?.menu) && s.shop.menu.length > 0 && !isDefaultTemplateMenu(s.shop.menu)) {
+                    sessionMenu = s.shop.menu;
+                }
             }
         } catch(e) {}
         if (sessionMenu) {
@@ -7073,16 +7124,22 @@ async function initDatabase() {
             window.menuItems = menuItems;
             await idb.set('cafe_menu', menuItems);
         } else {
-            // Keep existing menu if non-empty, else empty array while cloud sync hydrates. NEVER inject default template!
+            // Keep existing real menu if non-empty, else empty array while authoritative cloud sync hydrates. NEVER inject 4-item preset!
             if (!Array.isArray(menuItems) || isDefaultTemplateMenu(menuItems)) {
                 menuItems = [];
                 window.menuItems = menuItems;
             }
+            if (storedMenuIsTemplate) {
+                try { await idb.clear('cafe_menu'); } catch (_) {}
+            }
         }
-    } else {
-        menuItems = defaultMenu;
+    } else if (isExplicitDemoMode) {
+        // Strictly Demo Mode: keep 4-item demo menu in-memory ONLY (never persist to IDB where it could leak into a real shop login)
+        menuItems = [...defaultMenu];
         window.menuItems = menuItems;
-        await idb.set('cafe_menu', menuItems);
+    } else {
+        menuItems = [];
+        window.menuItems = menuItems;
     }
 
     const storedCats = await idb.get('cafe_categories');

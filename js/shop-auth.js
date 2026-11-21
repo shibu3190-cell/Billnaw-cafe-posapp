@@ -669,7 +669,7 @@
                             if (shopProfile.logo) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
                         } catch(e) {}
                         if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
-                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0) {
+                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0 && !(typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(data.shop.menu) && Number(data.shop?.menuVersion || 0) === 0)) {
                             menuItems = data.shop.menu;
                             window.menuItems = menuItems;
                             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
@@ -756,18 +756,44 @@
                         }
                     }
 
-                    // Reconcile live shop payload via LWW & tombstone rules
-                    if (data.shop && typeof handleRemoteFirestoreUpdate === 'function') {
-                        const remoteTables = (data.shop.tables && typeof data.shop.tables === 'object' && !Array.isArray(data.shop.tables) && Object.keys(data.shop.tables).length > 0)
-                            ? data.shop.tables
-                            : undefined;
-                        handleRemoteFirestoreUpdate({
-                            profile: data.shop.profile,
-                            menu: data.shop.menu,
-                            categories: data.shop.categories,
-                            tables: remoteTables,
-                            staff: data.shop.staff
-                        });
+                    // Authoritative Cloud Hydration: Always pull canonical Firestore state (/api/sync/store-data) before revealing POS
+                    // Guarantees new & existing devices receive live menu/menuVersion/staff/tables immediately (never preset 4 items!)
+                    if (typeof handleRemoteFirestoreUpdate === 'function') {
+                        let authoritativeCloud = null;
+                        try {
+                            if (typeof setCloudSyncProgress === 'function') setCloudSyncProgress(60, 'Loading live cloud menu & staff...');
+                            const syncRes = await fetch('/api/sync/store-data?storeCode=' + encodeURIComponent(data.storeCode || '') + '&fresh=' + Date.now(), {
+                                headers: {
+                                    ...(data.token ? { 'Authorization': `Bearer ${data.token}` } : {}),
+                                    'Cache-Control': 'no-cache'
+                                }
+                            });
+                            if (syncRes.ok) {
+                                authoritativeCloud = await syncRes.json().catch(() => null);
+                            }
+                        } catch (_) {}
+
+                        const sourceShop = (authoritativeCloud && authoritativeCloud.success) ? authoritativeCloud : data.shop;
+                        if (sourceShop) {
+                            const remoteTables = (sourceShop.tables && typeof sourceShop.tables === 'object' && !Array.isArray(sourceShop.tables) && Object.keys(sourceShop.tables).length > 0)
+                                ? sourceShop.tables
+                                : undefined;
+                            const incomingMenu = Array.isArray(sourceShop.menu) ? sourceShop.menu : undefined;
+                            const isStaleTemplate = incomingMenu && typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(incomingMenu) && Number(sourceShop.menuVersion || 0) === 0;
+                            handleRemoteFirestoreUpdate({
+                                profile: sourceShop.profile,
+                                menu: isStaleTemplate ? undefined : incomingMenu,
+                                menuVersion: Number(sourceShop.menuVersion || 0),
+                                deletedMenuIds: sourceShop.deletedMenuIds,
+                                deletedMenuNames: sourceShop.deletedMenuNames,
+                                categories: sourceShop.categories,
+                                tables: remoteTables,
+                                staff: sourceShop.staff,
+                                history: sourceShop.history,
+                                customers: sourceShop.customers,
+                                expenses: sourceShop.expenses
+                            });
+                        }
                     }
 
                     // Attach real-time Firestore listener for /shops/{storeCode} AFTER database is initialized
@@ -948,7 +974,7 @@
                             if (shopProfile.logo) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
                         } catch(e) {}
                         if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
-                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0) {
+                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0 && !(typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(data.shop.menu) && Number(data.shop?.menuVersion || 0) === 0)) {
                             menuItems = data.shop.menu;
                             window.menuItems = menuItems;
                             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
@@ -1033,18 +1059,44 @@
                         }
                     }
 
-                    // Reconcile live shop payload via LWW & tombstone rules
-                    if (data.shop && typeof handleRemoteFirestoreUpdate === 'function') {
-                        const remoteTables = (data.shop.tables && typeof data.shop.tables === 'object' && !Array.isArray(data.shop.tables) && Object.keys(data.shop.tables).length > 0)
-                            ? data.shop.tables
-                            : undefined;
-                        handleRemoteFirestoreUpdate({
-                            profile: data.shop.profile,
-                            menu: data.shop.menu,
-                            categories: data.shop.categories,
-                            tables: remoteTables,
-                            staff: data.shop.staff
-                        });
+                    // Authoritative Cloud Hydration: Always pull canonical Firestore state (/api/sync/store-data) before revealing POS
+                    // Guarantees new & existing devices receive live menu/menuVersion/staff/tables immediately (never preset 4 items!)
+                    if (typeof handleRemoteFirestoreUpdate === 'function') {
+                        let authoritativeCloud = null;
+                        try {
+                            if (typeof setCloudSyncProgress === 'function') setCloudSyncProgress(60, 'Loading live cloud menu & staff...');
+                            const syncRes = await fetch('/api/sync/store-data?storeCode=' + encodeURIComponent(data.storeCode || '') + '&fresh=' + Date.now(), {
+                                headers: {
+                                    ...(data.token ? { 'Authorization': `Bearer ${data.token}` } : {}),
+                                    'Cache-Control': 'no-cache'
+                                }
+                            });
+                            if (syncRes.ok) {
+                                authoritativeCloud = await syncRes.json().catch(() => null);
+                            }
+                        } catch (_) {}
+
+                        const sourceShop = (authoritativeCloud && authoritativeCloud.success) ? authoritativeCloud : data.shop;
+                        if (sourceShop) {
+                            const remoteTables = (sourceShop.tables && typeof sourceShop.tables === 'object' && !Array.isArray(sourceShop.tables) && Object.keys(sourceShop.tables).length > 0)
+                                ? sourceShop.tables
+                                : undefined;
+                            const incomingMenu = Array.isArray(sourceShop.menu) ? sourceShop.menu : undefined;
+                            const isStaleTemplate = incomingMenu && typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(incomingMenu) && Number(sourceShop.menuVersion || 0) === 0;
+                            handleRemoteFirestoreUpdate({
+                                profile: sourceShop.profile,
+                                menu: isStaleTemplate ? undefined : incomingMenu,
+                                menuVersion: Number(sourceShop.menuVersion || 0),
+                                deletedMenuIds: sourceShop.deletedMenuIds,
+                                deletedMenuNames: sourceShop.deletedMenuNames,
+                                categories: sourceShop.categories,
+                                tables: remoteTables,
+                                staff: sourceShop.staff,
+                                history: sourceShop.history,
+                                customers: sourceShop.customers,
+                                expenses: sourceShop.expenses
+                            });
+                        }
                     }
 
                     // Attach real-time Firestore listener for /shops/{storeCode} AFTER database is initialized
@@ -1442,7 +1494,7 @@
                         }));
                         localStorage.setItem('billnaw_shop_owner', JSON.stringify({ firstName: fn, lastName: ln, shopName: shop, email: resolvedEmail, phone }));
 
-                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0) {
+                        if (Array.isArray(data.shop?.menu) && data.shop.menu.length > 0 && !(typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(data.shop.menu) && Number(data.shop?.menuVersion || 0) === 0)) {
                             menuItems = data.shop.menu;
                             window.menuItems = menuItems;
                             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_menu', menuItems);
@@ -1550,7 +1602,7 @@
             const TENANT_LS_KEYS = [
                 'billnaw_shop_session', 'billnaw_auth_token', 'billnaw_auth_email', 'billnaw_auth_phone',
                 'billnaw_store_code', 'billnaw_shop_code', 'billnaw_active_store_id', 'billnaw_active_user',
-                'billnaw_auth_mode', 'billnaw_last_staff_id', 'billnaw_active_staff', 'billnaw_terminal_locked',
+                'billnaw_auth_mode', 'billnaw_last_staff_id', 'billnaw_active_staff', 'billnaw_staff_access_cache', 'billnaw_terminal_locked',
                 'billnaw_current_session_id', 'billnaw_active_sessions', 'billnaw_active_cart',
                 'billnaw_offline_orders', 'billnaw_authorized_devices', 'billnaw_station_profile',
                 'billnaw_station_name', 'billnaw_is_master', 'billnaw_device_status',

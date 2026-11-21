@@ -152,13 +152,15 @@ check('W6-01: Every staff role can access Settings (scoped to Printer, Updates, 
     assert(settingsJs.includes("querySelectorAll('.settings-group-block')"), 'applySettingsRoleRestrictions must auto-hide empty settings group blocks');
 });
 
-// 7. Complete Device Cache & Cookie Deletion on Cloud Shop Logout
-check('W7-01: Cloud Shop Logout wipes cookies, sessionStorage, SW Cache Storage, localStorage & IndexedDB', () => {
+// 7. Complete Device Cache & Cookie Deletion on Cloud Shop & Staff Logout
+check('W7-01: Shop & Staff Logout flush offline bills and wipe cookies, sessionStorage, SW Cache Storage, localStorage & IndexedDB', () => {
     assert(shopAuthJs.includes('async function purgeDeviceCookiesAndCaches()'), 'shop-auth.js must define purgeDeviceCookiesAndCaches');
     assert(shopAuthJs.includes('await purgeDeviceCookiesAndCaches();'), 'logoutShop must await purgeDeviceCookiesAndCaches');
     assert(shopAuthJs.includes('document.cookie.split'), 'purgeDeviceCookiesAndCaches must expire document.cookie entries');
     assert(shopAuthJs.includes('caches.keys()') && shopAuthJs.includes('caches.delete'), 'purgeDeviceCookiesAndCaches must delete SW caches');
-    assert(!staffJs.slice(staffJs.indexOf('function logoutStaff()'), staffJs.indexOf('function lockSystem()')).includes('purgeDeviceCookiesAndCaches'), 'logoutStaff (shift switch) must NOT wipe shop cookies/caches');
+    const logoutStaffSlice = staffJs.slice(staffJs.indexOf('async function logoutStaff()'), staffJs.indexOf('function lockSystem()'));
+    assert(logoutStaffSlice.includes('flushPendingBackendSyncs'), 'logoutStaff must flush offline bills before clearing cache');
+    assert(logoutStaffSlice.includes("logoutShop({ systemInitiated: true, reason: 'staff_logout' })"), 'logoutStaff must invoke clean device logout returning to Shop Login');
 });
 
 // 8. Unified v3.0.0 Version + Download/Install Progress + Clean Local-Reset & Backend Resync
@@ -206,6 +208,48 @@ check('W9-01: Specialist audit hardening (offline abort, PIN bypass lock, fail-c
     assert(modalsCss.includes('.form-group input.pin-input-clean'), 'modals.css must win specificity over .form-group input');
     assert(responsiveCss.includes('.session-card:not(.minimal-session-card)'), 'responsive.css must not break .minimal-session-card on mobile');
     assert(staffJs.includes('let _terminalPinInFlight = false;'), 'confirmStaffLogin must guard against concurrent PIN submissions');
+});
+
+// 10. Menu Reset Elimination + Role-First Checkout & Firebase Permissions Cache + Clean Staff Logout
+check('W10-01: Cold login never reverts menu to 4 preset items, role-first checkout ignores stale WAITER_MOBILE, Firebase role cache & clean staff logout work', () => {
+    const authServiceJs = read('server/auth-service.js');
+
+    // Issue 1: Preset 4-item menu elimination
+    assert(authServiceJs.includes('const seedStarterMenu = !(options && options.isExistingLogin === true);'), 'createDefaultShopDocument must never seed starter menu on isExistingLogin');
+    assert(authServiceJs.includes('if (!isExistingLogin) {\n      syncShopToFirestore(code, shop);\n    }') || authServiceJs.includes('if (!isExistingLogin) {\r\n      syncShopToFirestore(code, shop);\r\n    }'), 'resolveShopTenant must NEVER overwrite Firestore on cold existing-shop login');
+    assert(serverJs.includes("app.post('/api/auth/verify-otp', async (req, res)"), 'server.js /api/auth/verify-otp must hydrate live Firestore store');
+    assert(serverJs.includes("app.post(['/api/auth/login', '/api/auth/login-password'], async (req, res)"), 'server.js /api/auth/login must hydrate live Firestore store');
+    assert(netlifyApiJs.includes('menuVersion: Number(existingShop.menuVersion || 0)'), 'netlify api login must return menuVersion & deleted tombstones');
+    assert(shopAuthJs.includes("fetch('/api/sync/store-data?storeCode=' + encodeURIComponent(data.storeCode || '')"), 'shop-auth login must pull authoritative /api/sync/store-data');
+    assert(coreJs.includes('const storedMenuIsTemplate = Array.isArray(storedMenu) && isDefaultTemplateMenu(storedMenu);'), 'initDatabase must discard leftover 4-item template from IDB for authenticated shops');
+
+    // Issue 2: Role-first Checkout vs Ready-for-Billing + Firebase role/permissions cache
+    assert(coreJs.includes('const effectiveIsFloorServer = normRole ?'), 'applyStationProfileRestrictions must prioritize active staff role over stale WAITER_MOBILE tag');
+    assert(!posJs.slice(posJs.indexOf('Role-first action button'), posJs.indexOf('Role-first action button') + 600).includes("getStationProfile() : '') === 'WAITER_MOBILE'"), 'updateTableOrderFloatingBar must NOT let WAITER_MOBILE override Cashier/Admin CHECKOUT');
+    assert(staffJs.includes('function buildStaffAccessProfile(staff)'), 'staff.js must define canonical buildStaffAccessProfile');
+    assert(staffJs.includes('function cacheStaffAccessProfile(staff)'), 'staff.js must cache Firebase staff access profile locally');
+    assert(coreJs.includes('Live Firebase Role/Permission Refresh'), 'handleRemoteFirestoreUpdate must refresh active staff permissions live when Firebase updates');
+
+    // Behavioral check on buildStaffAccessProfile (existing shop staff without explicit permissions field)
+    const sandbox = {
+        window: {},
+        ROLES: { ADMIN: 'Admin', MANAGER: 'Manager', CASHIER: 'Cashier', SERVER: 'Floor Server', CHEF: 'Kitchen Chef' },
+        normalizeRole: (r) => r
+    };
+    const bStart = staffJs.indexOf('function buildStaffAccessProfile(staff)');
+    const bEnd = staffJs.indexOf('window.buildStaffAccessProfile = buildStaffAccessProfile;') + 'window.buildStaffAccessProfile = buildStaffAccessProfile;'.length;
+    vm.runInNewContext(staffJs.slice(bStart, bEnd), sandbox);
+
+    const adminAcc = sandbox.buildStaffAccessProfile({ id: 1, name: 'Owner', role: 'Admin' });
+    const cashierAcc = sandbox.buildStaffAccessProfile({ id: 2, name: 'Riya', role: 'Cashier' });
+    const serverAcc = sandbox.buildStaffAccessProfile({ id: 3, name: 'Amit', role: 'Floor Server' });
+    const chefAcc = sandbox.buildStaffAccessProfile({ id: 4, name: 'Raj', role: 'Kitchen Chef' });
+    assert.strictEqual(adminAcc.permissions.canCheckout, true, 'Admin must have canCheckout');
+    assert.strictEqual(cashierAcc.permissions.canCheckout, true, 'Cashier must have canCheckout');
+    assert.strictEqual(serverAcc.permissions.canCheckout, false, 'Floor Server must NOT have canCheckout');
+    assert.strictEqual(serverAcc.permissions.canReadyForBilling, true, 'Floor Server must have canReadyForBilling');
+    assert.strictEqual(chefAcc.permissions.canAccessSettings, true, 'Chef must have Settings access');
+    assert(cashierAcc.allowedTabs.includes('settings') && serverAcc.allowedTabs.includes('settings') && chefAcc.allowedTabs.includes('settings'), 'All roles include settings tab');
 });
 
 console.log(`\nALL ${passed} V3.0.0 CHECKS PASSED!`);

@@ -542,23 +542,109 @@ async function confirmStaffLogin() {
 window.confirmStaffLogin = confirmStaffLogin;
 window.submitStaffPinLogin = confirmStaffLogin;
 
+// ============================================================================
+// 🛡️ CANONICAL FIREBASE STAFF ROLE & PERMISSIONS CACHE (Zero-Migration Safe)
+// Auto-derives permissions & allowedTabs from role for all existing shops and
+// merges any explicit Firebase overrides so role access works offline & live.
+// ============================================================================
+function buildStaffAccessProfile(staff) {
+    const normRole = (staff && staff.role) ? normalizeRole(staff.role) : ROLES.SERVER;
+    const isAdmin = (normRole === ROLES.ADMIN);
+    const isManager = (normRole === ROLES.MANAGER);
+    const isCashier = (normRole === ROLES.CASHIER);
+    const isFloorServer = (normRole === ROLES.SERVER);
+    const isChef = (normRole === ROLES.CHEF);
+
+    const defaultAllowedTabs = isAdmin
+        ? ['pos', 'tables', 'kds', 'menu', 'inventory', 'khata', 'customers', 'dashboard', 'whatsapp', 'staff', 'devices', 'settings']
+        : isManager
+            ? ['pos', 'tables', 'kds', 'menu', 'inventory', 'khata', 'customers', 'settings']
+            : isCashier
+                ? ['pos', 'tables', 'customers', 'khata', 'menu', 'settings']
+                : isChef
+                    ? ['kds', 'settings']
+                    : ['tables', 'pos', 'settings'];
+
+    const defaultPermissions = {
+        canCheckout: isAdmin || isManager || isCashier,
+        canReadyForBilling: isFloorServer,
+        canPrintKot: isAdmin || isManager || isCashier || isFloorServer || isChef,
+        canAccessReports: isAdmin,
+        canManageMenu: isAdmin || isManager || isCashier,
+        canManageStaff: isAdmin,
+        canManageDevices: isAdmin,
+        canAccessWhatsApp: isAdmin,
+        canAccessSettings: true,
+        canCloudShopLogout: isAdmin
+    };
+
+    const mergedPermissions = (staff && staff.permissions && typeof staff.permissions === 'object')
+        ? { ...defaultPermissions, ...staff.permissions, canCheckout: isFloorServer ? false : (staff.permissions.canCheckout !== undefined ? Boolean(staff.permissions.canCheckout) : defaultPermissions.canCheckout) }
+        : defaultPermissions;
+
+    const mergedTabs = (staff && Array.isArray(staff.allowedTabs) && staff.allowedTabs.length > 0)
+        ? Array.from(new Set([...staff.allowedTabs, 'settings']))
+        : defaultAllowedTabs;
+
+    return {
+        id: staff ? staff.id : null,
+        name: staff ? (staff.name || 'Staff') : 'Staff',
+        role: normRole,
+        permissions: mergedPermissions,
+        allowedTabs: mergedTabs,
+        syncedAt: Date.now()
+    };
+}
+window.buildStaffAccessProfile = buildStaffAccessProfile;
+
+function cacheStaffAccessProfile(staff) {
+    const access = buildStaffAccessProfile(staff);
+    const derivedStation = access.role === ROLES.CHEF ? 'KDS'
+        : (access.role === ROLES.SERVER ? 'WAITER_MOBILE'
+        : (access.role === ROLES.ADMIN ? 'ADMIN' : 'BILLING_COUNTER'));
+    const activeObj = {
+        id: access.id,
+        name: access.name,
+        role: access.role,
+        permissions: access.permissions,
+        allowedTabs: access.allowedTabs
+    };
+    currentStaff = activeObj;
+    window.currentStaff = activeObj;
+    window.currentStaffAccess = access;
+    currentRole = (access.role === ROLES.ADMIN) ? 'admin' : 'staff';
+    window.currentRole = currentRole;
+    try {
+        localStorage.setItem('billnaw_active_staff', JSON.stringify(activeObj));
+        localStorage.setItem('billnaw_staff_access_cache', JSON.stringify(access));
+        localStorage.setItem('billnaw_station_profile', derivedStation);
+    } catch (e) {}
+    return access;
+}
+window.cacheStaffAccessProfile = cacheStaffAccessProfile;
+
+function getCachedStaffAccessProfile() {
+    if (typeof window !== 'undefined' && window.currentStaffAccess) return window.currentStaffAccess;
+    try {
+        const raw = localStorage.getItem('billnaw_staff_access_cache');
+        if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    return active ? buildStaffAccessProfile(active) : null;
+}
+window.getCachedStaffAccessProfile = getCachedStaffAccessProfile;
+
 function unlockTerminal(staff, showWelcomeToast = true) {
     isTerminalLocked = false;
     window.isTerminalLocked = false;
     if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = 0;
+    const accessProfile = cacheStaffAccessProfile(staff);
     try {
         sessionStorage.removeItem('billnaw_admin_pin_auth_until');
         localStorage.removeItem('billnaw_terminal_locked');
         localStorage.setItem('billnaw_last_staff_id', staff.id);
-        localStorage.setItem('billnaw_active_staff', JSON.stringify({ id: staff.id, name: staff.name, role: staff.role }));
         localStorage.setItem('billnaw_pin_verified_at', Date.now().toString());
     } catch (e) {}
-
-    currentStaff = staff;
-    window.currentStaff = currentStaff;
-    const normUnlockRole = (typeof normalizeRole === 'function') ? normalizeRole(currentStaff.role) : currentStaff.role;
-    currentRole = (normUnlockRole === ROLES.ADMIN) ? 'admin' : 'staff';
-    if (typeof window !== 'undefined') window.currentRole = currentRole;
 
     // Milestone 4: Staff Session Lifecycle & Cloud Sync
     const devId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id') || 'DEV_MASTER');
@@ -569,7 +655,7 @@ function unlockTerminal(staff, showWelcomeToast = true) {
     } catch (e) {}
 
     const devName = localStorage.getItem('billnaw_station_name') || (window.currentDeviceRecord && window.currentDeviceRecord.deviceName) || 'Counter 1';
-    const stationProfile = (typeof getStationProfile === 'function' ? getStationProfile() : null) || localStorage.getItem('billnaw_station_profile') || (window.currentDeviceRecord && window.currentDeviceRecord.stationProfile) || 'GENERAL_STATION';
+    const stationProfile = localStorage.getItem('billnaw_station_profile') || (accessProfile.role === ROLES.SERVER ? 'WAITER_MOBILE' : (accessProfile.role === ROLES.CHEF ? 'KDS' : 'BILLING_COUNTER'));
     const nowIso = new Date().toISOString();
     const sessionRecord = {
         sessionId: sessionId,
@@ -1572,11 +1658,14 @@ async function saveStaffMember(data = null) {
                 mustChange = data.mustChangePin;
             }
 
+            const accessForSaved = buildStaffAccessProfile({ id: staffList[idx].id, name, role });
             staffList[idx] = { 
                 ...staffList[idx], 
                 name, 
                 role, 
                 stationProfile: derivedStationProfile,
+                permissions: accessForSaved.permissions,
+                allowedTabs: accessForSaved.allowedTabs,
                 phone, 
                 pin_salt: salt, 
                 pin_hash: pinHash, 
@@ -1604,11 +1693,14 @@ async function saveStaffMember(data = null) {
             const salt = generatePinSalt();
             const pinHash = await hashPin(effectivePin, salt);
             const mustChange = (data && data.mustChangePin !== undefined) ? data.mustChangePin : (role !== ROLES.ADMIN);
+            const accessForNew = buildStaffAccessProfile({ id: existingId, name, role });
             const newStaff = {
                 id: existingId,
                 name,
                 role,
                 stationProfile: derivedStationProfile,
+                permissions: accessForNew.permissions,
+                allowedTabs: accessForNew.allowedTabs,
                 phone,
                 pin_salt: salt,
                 pin_hash: pinHash,
@@ -1633,11 +1725,15 @@ async function saveStaffMember(data = null) {
         const salt = generatePinSalt();
         const pinHash = await hashPin(pin, salt);
         const mustChange = (data && data.mustChangePin !== undefined) ? data.mustChangePin : true;
+        const newId = Date.now();
+        const accessForCreated = buildStaffAccessProfile({ id: newId, name, role });
         const newStaff = {
-            id: Date.now(),
+            id: newId,
             name,
             role,
             stationProfile: derivedStationProfile,
+            permissions: accessForCreated.permissions,
+            allowedTabs: accessForCreated.allowedTabs,
             phone,
             pin_salt: salt,
             pin_hash: pinHash,
@@ -1877,37 +1973,88 @@ async function loginAsAdmin() {
 }
 window.loginAsAdmin = loginAsAdmin;
 
-function logoutStaff() { 
+async function logoutStaff() {
+    // 1. Protect unsynced offline bills before wiping device cache
+    try {
+        if (typeof window.flushPendingBackendSyncs === 'function') {
+            await Promise.race([
+                window.flushPendingBackendSyncs().catch(() => false),
+                new Promise(resolve => setTimeout(() => resolve(false), 3000))
+            ]);
+        } else if (typeof window.flushOfflineSyncQueue === 'function') {
+            await Promise.race([
+                window.flushOfflineSyncQueue().catch(() => false),
+                new Promise(resolve => setTimeout(() => resolve(false), 2500))
+            ]);
+        }
+        const rawQueue = typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_offline_sync_queue') : null;
+        if (rawQueue) {
+            const parsedQ = JSON.parse(rawQueue);
+            if (parsedQ && typeof parsedQ === 'object' && Object.keys(parsedQ).length > 0) {
+                if (typeof showToast === 'function') {
+                    showToast('Pending offline bills have not synced yet. Connect to internet before logging out to prevent bill loss.', 'error');
+                }
+                return false;
+            }
+        }
+    } catch (_) {}
+
+    // 2. End active staff session & stop heartbeats
     if (typeof stopSessionHeartbeat === 'function') {
         stopSessionHeartbeat();
     }
     const currentSessId = (typeof window !== 'undefined' && window.currentSessionId) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_current_session_id') : null);
     if (currentSessId && typeof syncSessionRecordToCloud === 'function') {
-        syncSessionRecordToCloud({
-            sessionId: currentSessId,
-            status: 'ENDED',
-            isLocked: true,
-            endedAt: new Date().toISOString()
-        });
+        try {
+            await Promise.race([
+                Promise.resolve(syncSessionRecordToCloud({
+                    sessionId: currentSessId,
+                    status: 'ENDED',
+                    isLocked: true,
+                    endedAt: new Date().toISOString()
+                })).catch(() => {}),
+                new Promise(resolve => setTimeout(resolve, 1200))
+            ]);
+        } catch (_) {}
     }
+
     try {
         localStorage.removeItem('billnaw_current_session_id');
         localStorage.removeItem('billnaw_active_staff');
+        localStorage.removeItem('billnaw_staff_access_cache');
         localStorage.removeItem('billnaw_last_staff_id');
         sessionStorage.removeItem('billnaw_admin_pin_auth_until');
     } catch (e) {}
+
     if (typeof window !== 'undefined') {
         window.currentSessionId = null;
         window.currentStaff = null;
+        window.currentStaffAccess = null;
         window.currentRole = null;
         window._menuAdminPinAuthorizedUntil = 0;
     }
     currentStaff = null;
-    currentRole = null; 
-    lockTerminal(false);
-    if (typeof switchTabDirect === 'function') switchTabDirect('pos'); 
-    enforcePermissions(); 
-    showToast("Terminal locked / Staff logged out.");
+    currentRole = null;
+
+    // 3. Full clean device logout: wipe ALL localStorage, sessionStorage, cookies, IndexedDB & SW Cache Storage and prompt Shop Login as a fresh device
+    if (typeof window.logoutShop === 'function') {
+        return await window.logoutShop({ systemInitiated: true, reason: 'staff_logout' });
+    }
+
+    if (typeof clearAllTenantLocalData === 'function') {
+        await clearAllTenantLocalData();
+    }
+    if (typeof window.purgeDeviceCookiesAndCaches === 'function') {
+        await window.purgeDeviceCookiesAndCaches();
+    }
+    if (typeof openShopAuthModal === 'function') {
+        openShopAuthModal(true);
+    } else {
+        lockTerminal(false);
+    }
+    enforcePermissions();
+    showToast("Logged out & local cache cleared. Sign in to continue.");
+    return true;
 }
 window.logoutStaff = logoutStaff;
 

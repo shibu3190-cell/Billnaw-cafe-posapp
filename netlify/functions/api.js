@@ -1949,6 +1949,9 @@ export async function handler(event, context) {
         staff: existingShop.staff,
         tables: existingShop.tables,
         menu: existingShop.menu,
+        menuVersion: Number(existingShop.menuVersion || 0),
+        deletedMenuIds: Array.isArray(existingShop.deletedMenuIds) ? existingShop.deletedMenuIds : [],
+        deletedMenuNames: Array.isArray(existingShop.deletedMenuNames) ? existingShop.deletedMenuNames : [],
         categories: existingShop.categories
       } : {
         name: resolvedShopName,
@@ -2523,9 +2526,12 @@ export async function handler(event, context) {
           staff: existingShop.staff,
           tables: existingShop.tables,
           menu: existingShop.menu,
+          menuVersion: Number(existingShop.menuVersion || 0),
+          deletedMenuIds: Array.isArray(existingShop.deletedMenuIds) ? existingShop.deletedMenuIds : [],
+          deletedMenuNames: Array.isArray(existingShop.deletedMenuNames) ? existingShop.deletedMenuNames : [],
           categories: existingShop.categories
         }
-      : (localShop || { name: verifiedUser.shopName || body.shopName || storeCode, storeCode });
+      : (localShop ? { ...localShop, menu: [] } : { name: verifiedUser.shopName || body.shopName || storeCode, storeCode });
 
     return jsonResponse(200, {
       success: true,

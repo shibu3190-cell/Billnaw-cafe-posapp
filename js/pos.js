@@ -465,9 +465,14 @@ function updateTableOrderFloatingBar() {
     }
     if (printBtn) printBtn.style.display = 'inline-flex';
     
-    // Role-aware action button (Floor Server/Waiter: Ready for Billing; Cashier/Admin: Checkout)
-    const isFloorServer = (typeof isFloorServerRole === 'function' && isFloorServerRole()) ||
-                          ((typeof getStationProfile === 'function' ? getStationProfile() : '') === 'WAITER_MOBILE');
+    // Role-first action button: ONLY Floor Server gets Ready for Billing; Cashier, Manager & Admin ALWAYS get CHECKOUT (never overridden by WAITER_MOBILE device tag)
+    const activeStaffForBar = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    const barNormRole = activeStaffForBar && activeStaffForBar.role
+        ? (typeof normalizeRole === 'function' ? normalizeRole(activeStaffForBar.role) : activeStaffForBar.role)
+        : '';
+    const isFloorServer = barNormRole
+        ? (barNormRole === 'Floor Server' || barNormRole === 'Server' || barNormRole === 'Waiter')
+        : (typeof isFloorServerRole === 'function' && isFloorServerRole());
     if (checkoutBtn) {
         const btnSpan = checkoutBtn.querySelector('span') || checkoutBtn;
         if (isFloorServer) {

@@ -1046,7 +1046,7 @@ app.post('/api/auth/send-otp', (req, res) => {
 });
 
 // 2. Verify OTP (Validates code, rate-limits attempts, resolves store tenant, mints tokens)
-app.post('/api/auth/verify-otp', (req, res) => {
+app.post('/api/auth/verify-otp', async (req, res) => {
   try {
     const clientIp = req.ip || req.headers['x-forwarded-for'] || 'client';
     const rateCheck = checkRateLimit({
@@ -1060,6 +1060,28 @@ app.post('/api/auth/verify-otp', (req, res) => {
     }
     const { email, otp, shopName, otpTicket } = req.body || {};
     const result = verifyOtp(email, otp, shopName, null, otpTicket, true);
+    if (result.status === 200 && result.data?.success && result.data?.storeCode) {
+      try {
+        const cloudShop = await getStoreFromFirestoreREST(result.data.storeCode).catch(() => null);
+        if (cloudShop && cloudShop.success) {
+          result.data.shop = {
+            ...(result.data.shop || {}),
+            storeCode: result.data.storeCode,
+            name: (cloudShop.profile?.name && cloudShop.profile.name !== 'My Cafe' && cloudShop.profile.name !== 'billnaw')
+              ? cloudShop.profile.name
+              : (result.data.shop?.name || result.data.storeCode),
+            profile: cloudShop.profile || result.data.shop?.profile,
+            staff: Array.isArray(cloudShop.staff) && cloudShop.staff.length > 0 ? cloudShop.staff : result.data.shop?.staff,
+            tables: cloudShop.tables && Object.keys(cloudShop.tables).length > 0 ? cloudShop.tables : result.data.shop?.tables,
+            menu: Array.isArray(cloudShop.menu) ? cloudShop.menu : result.data.shop?.menu,
+            menuVersion: Number(cloudShop.menuVersion || 0),
+            categories: Array.isArray(cloudShop.categories) && cloudShop.categories.length > 0 ? cloudShop.categories : result.data.shop?.categories,
+            deletedMenuIds: Array.isArray(cloudShop.deletedMenuIds) ? cloudShop.deletedMenuIds : [],
+            deletedMenuNames: Array.isArray(cloudShop.deletedMenuNames) ? cloudShop.deletedMenuNames : []
+          };
+        }
+      } catch (_) {}
+    }
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to verify verification code' });
@@ -1268,9 +1290,31 @@ app.post(['/api/auth/signup', '/api/auth/register'], (req, res) => {
 });
 
 // 4. User Login (Email + Password authentication fallback)
-app.post(['/api/auth/login', '/api/auth/login-password'], (req, res) => {
+app.post(['/api/auth/login', '/api/auth/login-password'], async (req, res) => {
   try {
     const result = loginWithPassword(req.body || {});
+    if (result.status === 200 && result.data?.success && result.data?.storeCode) {
+      try {
+        const cloudShop = await getStoreFromFirestoreREST(result.data.storeCode).catch(() => null);
+        if (cloudShop && cloudShop.success) {
+          result.data.shop = {
+            ...(result.data.shop || {}),
+            storeCode: result.data.storeCode,
+            name: (cloudShop.profile?.name && cloudShop.profile.name !== 'My Cafe' && cloudShop.profile.name !== 'billnaw')
+              ? cloudShop.profile.name
+              : (result.data.shop?.name || result.data.storeCode),
+            profile: cloudShop.profile || result.data.shop?.profile,
+            staff: Array.isArray(cloudShop.staff) && cloudShop.staff.length > 0 ? cloudShop.staff : result.data.shop?.staff,
+            tables: cloudShop.tables && Object.keys(cloudShop.tables).length > 0 ? cloudShop.tables : result.data.shop?.tables,
+            menu: Array.isArray(cloudShop.menu) ? cloudShop.menu : result.data.shop?.menu,
+            menuVersion: Number(cloudShop.menuVersion || 0),
+            categories: Array.isArray(cloudShop.categories) && cloudShop.categories.length > 0 ? cloudShop.categories : result.data.shop?.categories,
+            deletedMenuIds: Array.isArray(cloudShop.deletedMenuIds) ? cloudShop.deletedMenuIds : [],
+            deletedMenuNames: Array.isArray(cloudShop.deletedMenuNames) ? cloudShop.deletedMenuNames : []
+          };
+        }
+      } catch (_) {}
+    }
     res.status(result.status).json(result.data);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to authenticate' });

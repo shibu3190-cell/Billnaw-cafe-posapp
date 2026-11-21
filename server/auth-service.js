@@ -642,10 +642,11 @@ export function hashStringServer(str) {
 /**
  * Creates default shop schema compatible with firebase-blueprint and js/core.js
  */
-export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid, adminPin) {
+export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid, adminPin, options = {}) {
   const shopTitle = name || 'Billnaw Cafe';
   const effectivePin = (adminPin && /^\d{4}$/.test(String(adminPin).trim())) ? String(adminPin).trim() : '1234';
   const pinHash = hashStringServer(effectivePin);
+  const seedStarterMenu = !(options && options.isExistingLogin === true);
   return {
     storeCode,
     name: shopTitle,
@@ -653,6 +654,7 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid,
     ownerUid: ownerUid || `usr_${crypto.randomBytes(6).toString('hex')}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    menuVersion: seedStarterMenu ? 1 : 0,
     profile: {
       name: shopTitle,
       address: '12 Park Street, Kolkata',
@@ -673,13 +675,13 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid,
     staff: [
       { id: 1, name: 'Store Owner', role: 'Admin', pin: effectivePin, phone: '+91 98765 43210', status: 'Active' }
     ],
-    categories: ['All', 'Snacks', 'Beverages', 'Main Course'],
-    menu: [
+    categories: seedStarterMenu ? ['All', 'Snacks', 'Beverages', 'Main Course'] : [],
+    menu: seedStarterMenu ? [
       { id: 1, name: 'Samosa', category: 'Snacks', price: 15, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80' },
       { id: 2, name: 'Tea', category: 'Beverages', price: 10, stock: 10, stockQty: 10, trackStock: true, gstRate: 5, image: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80' },
       { id: 3, name: 'Chicken Curry', category: 'Main Course', price: 150, stock: 4, stockQty: 4, trackStock: true, gstRate: 5, image: 'https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?w=600&auto=format&fit=crop&q=80' },
       { id: 4, name: 'Masala Coke', category: 'Beverages', price: 40, stock: 15, stockQty: 15, trackStock: true, gstRate: 5, image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=80' }
-    ],
+    ] : [],
     tables: {},
     history: [],
     expenses: [],
@@ -734,15 +736,18 @@ async function syncShopToFirestore(storeCode, shopData) {
 /**
  * Resolves or initializes shop tenant profile mapped to shops/{storeCode}.
  */
-export function resolveShopTenant(storeCode, shopName, ownerEmail, ownerUid, adminPin) {
+export function resolveShopTenant(storeCode, shopName, ownerEmail, ownerUid, adminPin, options = {}) {
   const code = storeCode || 'SHOP-BILLNAW-01';
+  const isExistingLogin = Boolean(options && options.isExistingLogin === true);
   let shop = shopStore.get(code);
 
   if (!shop) {
-    shop = createDefaultShopDocument(code, shopName, ownerEmail, ownerUid, adminPin);
+    shop = createDefaultShopDocument(code, shopName, ownerEmail, ownerUid, adminPin, { isExistingLogin });
     shopStore.set(code, shop);
-    // Asynchronously replicate to cloud Firestore
-    syncShopToFirestore(code, shop);
+    // ONLY push starter shop doc to Firestore for brand-new shop creation — NEVER overwrite an existing shop on cold-container login!
+    if (!isExistingLogin) {
+      syncShopToFirestore(code, shop);
+    }
   } else {
     let updated = false;
     if (shopName && shopName.trim() && shop.name !== shopName.trim()) {
@@ -1168,7 +1173,7 @@ export function verifyOtp(email, otp, shopName, expectedPurpose = null, otpTicke
     user.shopName = shopName.trim();
   }
 
-  const shop = resolveShopTenant(user.storeCode, user.shopName, user.email, user.uid);
+  const shop = resolveShopTenant(user.storeCode, user.shopName, user.email, user.uid, undefined, { isExistingLogin: true });
 
   // Mint session tokens
   const sessionToken = 'sess_' + crypto.randomBytes(24).toString('hex');
@@ -1306,7 +1311,7 @@ export function registerUser({ firstName, lastName, shopName, email, password, c
   };
   userStore.set(normalizedEmail, user);
 
-  const shop = resolveShopTenant(storeCode, shopName.trim(), normalizedEmail, uid, adminPin);
+  const shop = resolveShopTenant(storeCode, shopName.trim(), normalizedEmail, uid, adminPin, { isNewSignup: true });
   if (shop && shop.profile) {
     shop.profile.phone = cleanPhone;
     shop.profile.ownerPhone = cleanPhone;
@@ -1382,7 +1387,7 @@ export function loginWithPassword({ email, password }) {
     return { status: 401, data: { success: false, error: 'Invalid credentials' } };
   }
 
-  const shop = resolveShopTenant(user.storeCode, user.shopName, user.email, user.uid);
+  const shop = resolveShopTenant(user.storeCode, user.shopName, user.email, user.uid, undefined, { isExistingLogin: true });
 
   const sessionToken = 'sess_' + crypto.randomBytes(24).toString('hex');
   const now = Date.now();
@@ -1468,7 +1473,7 @@ export function verifySession(rawToken) {
   }
 
   const user = session.email ? userStore.get(session.email) : null;
-  const shop = resolveShopTenant(session.storeCode, user?.shopName, session.email, session.uid);
+  const shop = resolveShopTenant(session.storeCode, user?.shopName, session.email, session.uid, undefined, { isExistingLogin: true });
 
   return {
     status: 200,

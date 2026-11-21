@@ -341,12 +341,22 @@ function activateStaffProfileSession(staff) {
         }).catch(() => {});
     }
 
-    // 1. Set global active staff (normalized role, synced to both window and core.js lexical bindings)
+    // 1. Set global active staff (normalized role + Firebase/derived permissions cached locally)
     const normRole = (typeof normalizeRole === 'function') ? normalizeRole(staff.role) : (staff.role || 'Cashier');
-    const activeObj = { id: staff.id, name: staff.name, role: normRole };
+    const accessProfile = (typeof buildStaffAccessProfile === 'function')
+        ? buildStaffAccessProfile({ ...staff, role: normRole })
+        : { id: staff.id, name: staff.name, role: normRole };
+    const activeObj = {
+        id: staff.id,
+        name: staff.name,
+        role: normRole,
+        permissions: accessProfile.permissions,
+        allowedTabs: accessProfile.allowedTabs
+    };
     const resolvedRoleFlag = (normRole === 'Admin') ? 'admin' : 'staff';
     window.currentStaff = activeObj;
     window.currentRole = resolvedRoleFlag;
+    window.currentStaffAccess = accessProfile;
     try { currentStaff = activeObj; } catch (_) {}
     try { currentRole = resolvedRoleFlag; } catch (_) {}
 
@@ -354,8 +364,15 @@ function activateStaffProfileSession(staff) {
     const sessionId = (typeof window !== 'undefined' && window.currentSessionId) || 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     window.currentSessionId = sessionId;
 
+    // Align station profile to the unlocked staff's actual role so stale WAITER_MOBILE tags never trap a Cashier/Admin
+    const derivedStationProfile = normRole === 'Kitchen Chef' ? 'KDS'
+        : (normRole === 'Floor Server' ? 'WAITER_MOBILE'
+        : (normRole === 'Admin' ? 'ADMIN' : 'BILLING_COUNTER'));
+
     try {
         localStorage.setItem('billnaw_active_staff', JSON.stringify(activeObj));
+        localStorage.setItem('billnaw_staff_access_cache', JSON.stringify(accessProfile));
+        localStorage.setItem('billnaw_station_profile', derivedStationProfile);
         localStorage.setItem('billnaw_last_staff_id', String(staff.id));
         localStorage.setItem('billnaw_current_session_id', sessionId);
         localStorage.setItem('billnaw_pin_verified_at', Date.now().toString());
