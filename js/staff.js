@@ -258,7 +258,10 @@ function renderStaffManagementUI() {
         const initials = safeNameRaw ? safeNameRaw.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'ST';
         const roleCls = staff.role ? `role-${_staffEsc(String(staff.role).toLowerCase())}` : 'role-cashier';
         const isActive = staff.status !== 'Inactive' && staff.status !== 'Suspended';
-        const liveSess = sessions.find(s => String(s.staffId) === String(staff.id) || (s.staffName && s.staffName.toLowerCase() === safeNameRaw.toLowerCase()));
+        const matchingSessions = sessions
+            .filter(s => s && s.status !== 'ENDED' && (String(s.staffId) === String(staff.id) || (s.staffName && s.staffName.toLowerCase() === safeNameRaw.toLowerCase())))
+            .sort((a, b) => (Date.parse(b.lastActiveAt || b.shiftStartedAt || '') || 0) - (Date.parse(a.lastActiveAt || a.shiftStartedAt || '') || 0));
+        const liveSess = matchingSessions.find(s => s.status === 'ONLINE' && !s.isLocked) || matchingSessions[0] || null;
 
         // Resolve Assigned Terminal / Station Profile
         const staffDevId = staff.deviceId || staff.assignedDeviceId;
@@ -316,7 +319,8 @@ function renderStaffManagementUI() {
 
         let presenceBadge = '';
         if (liveSess) {
-            const isLocked = liveSess.status === 'LOCKED' || liveSess.status === 'REVOKED' || liveSess.isLocked === true;
+            const isAdminMember = normalizeRole(staff.role) === ROLES.ADMIN;
+            const isLocked = !isAdminMember && liveSess.status !== 'ENDED' && (liveSess.status === 'LOCKED' || liveSess.status === 'REVOKED' || liveSess.isLocked === true);
             if (isLocked) {
                 presenceBadge = `<span style="display: block; font-size: 10px; color: #DC2626; font-weight: 700; margin-top: 2px;">🔴 Locked (${esc(liveSess.deviceName || 'Terminal')})</span>`;
             } else if (isFresh) {
@@ -862,8 +866,12 @@ function formatLastActiveTime(lastActiveAt, now = new Date()) {
 window.formatLastActiveTime = formatLastActiveTime;
 
 function lockTerminalByRemote(lockedSession) {
-    if (typeof isMasterTerminal === 'function' && isMasterTerminal()) return;
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true') return;
+    if (typeof isMasterTerminal === 'function' && isMasterTerminal()) return false;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true') return false;
+    const activeRoleForLock = (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.role)
+        ? normalizeRole(currentStaff.role)
+        : ((typeof window !== 'undefined' && window.currentStaff && window.currentStaff.role) ? normalizeRole(window.currentStaff.role) : '');
+    if (activeRoleForLock === ROLES.ADMIN || (lockedSession && lockedSession.staffRole === 'Admin')) return false;
 
     // 1. Clear in-progress cart (Customer Privacy)
     if (typeof clearCart === 'function') clearCart();
@@ -979,7 +987,7 @@ async function remoteLockStaffSession(sessionId) {
     // Master Admin protection guard
     const myDevId = (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id')) : null);
     const isMaster = (typeof isMasterTerminal === 'function' && isMasterTerminal()) || (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true');
-    if (session.isMaster === true || session.deviceId === 'DEV_MASTER_01' || (session.deviceId === myDevId && isMaster)) {
+    if (session.isMaster === true || session.deviceId === 'DEV_MASTER_01' || (session.deviceId === myDevId && isMaster) || normalizeRole(session.staffRole) === ROLES.ADMIN) {
         if (typeof showToast === 'function') showToast('Master Admin Terminal cannot be remotely locked.', 'warning');
         return { error: { code: 'IMMUNE_TARGET', message: 'Master Admin Terminal cannot be remotely locked' } };
     }
@@ -2010,7 +2018,7 @@ async function logoutStaff() {
                 Promise.resolve(syncSessionRecordToCloud({
                     sessionId: currentSessId,
                     status: 'ENDED',
-                    isLocked: true,
+                    isLocked: false,
                     endedAt: new Date().toISOString()
                 })).catch(() => {}),
                 new Promise(resolve => setTimeout(resolve, 1200))

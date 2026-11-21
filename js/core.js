@@ -3474,20 +3474,44 @@ function subscribeSessionsCloudListener(targetStoreCode = null) {
             if (typeof idb !== 'undefined' && idb.set) { idb.set('billnaw_sessions', sessions); }
 
             const myDevId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id'));
-            const activeStaffId = (typeof window !== 'undefined' && window.currentStaff && window.currentStaff.id) || (typeof currentStaff !== 'undefined' && currentStaff && currentStaff.id);
-            const lockedSession = sessions.find(s => 
-                (s.deviceId === myDevId || s.sessionId === window.currentSessionId || (activeStaffId && String(s.staffId) === String(activeStaffId))) && 
-                (s.status === 'LOCKED' || s.status === 'REVOKED' || s.isLocked === true)
-            );
+            const activeStaffObj = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
+            const activeStaffId = activeStaffObj && activeStaffObj.id;
+            const activeRoleNorm = activeStaffObj && activeStaffObj.role
+                ? (typeof normalizeRole === 'function' ? normalizeRole(activeStaffObj.role) : activeStaffObj.role)
+                : '';
+            const isMasterOrAdmin = (typeof isMasterTerminal === 'function' && isMasterTerminal()) ||
+                (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true') ||
+                activeRoleNorm === 'Admin';
+            const lastPinVerifiedAt = Number((typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_pin_verified_at')) || 0);
+
+            // Never treat a normal shift logout (status === 'ENDED') as a remote lock,
+            // never remotely lock Admin or Master Terminal, and only lock if the session matches our CURRENT session (or a lock timestamp newer than our latest PIN unlock)
+            const lockedSession = isMasterOrAdmin ? null : sessions.find(s => {
+                if (!s || s.status === 'ENDED') return false;
+                const isRemotelyLockedState = (s.status === 'LOCKED' || s.status === 'REVOKED' || s.isLocked === true);
+                if (!isRemotelyLockedState) return false;
+                if (s.staffRole === 'Admin' || s.isMaster === true) return false;
+
+                const matchesCurrentSess = Boolean(window.currentSessionId && (s.sessionId === window.currentSessionId || s.id === window.currentSessionId));
+                const matchesDeviceAndStaff = Boolean(s.deviceId && s.deviceId === myDevId && (!activeStaffId || String(s.staffId) === String(activeStaffId)));
+                if (!matchesCurrentSess && !matchesDeviceAndStaff) return false;
+
+                // Ignore stale historical lock docs from BEFORE this staff's most recent PIN unlock
+                const lockTs = Date.parse(s.lockedAt || s.revokedAt || s.endedAt || s.lastActiveAt || '') || 0;
+                if (lastPinVerifiedAt > 0 && lockTs > 0 && lockTs < lastPinVerifiedAt && !matchesCurrentSess) return false;
+                return true;
+            });
             if (lockedSession) {
                 try { localStorage.setItem('billnaw_session_revoked', 'true'); } catch (e) {}
                 window.dispatchEvent(new CustomEvent('billnaw:session-locked', { detail: { session: lockedSession } }));
+                let didLock = false;
                 if (typeof lockTerminalByRemote === 'function') {
-                    lockTerminalByRemote(lockedSession);
+                    didLock = lockTerminalByRemote(lockedSession) !== false;
                 } else if (typeof lockPosTerminal === 'function') {
                     lockPosTerminal();
+                    didLock = true;
                 }
-                if (typeof showToast === 'function') {
+                if (didLock && typeof showToast === 'function') {
                     showToast(lockedSession.status === 'REVOKED' ? "Your staff session was revoked by Admin. Terminal locked." : "Terminal locked remotely.", "error");
                 }
             }

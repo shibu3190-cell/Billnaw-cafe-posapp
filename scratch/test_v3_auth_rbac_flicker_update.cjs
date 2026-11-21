@@ -252,4 +252,15 @@ check('W10-01: Cold login never reverts menu to 4 preset items, role-first check
     assert(cashierAcc.allowedTabs.includes('settings') && serverAcc.allowedTabs.includes('settings') && chefAcc.allowedTabs.includes('settings'), 'All roles include settings tab');
 });
 
+// 11. Admin Remote Lock Immunity & Ended-Session Filtering
+check('W11-01: Admin profiles & ended shift sessions never trigger "Terminal locked remotely" or Locked badges', () => {
+    assert(coreJs.includes("if (!s || s.status === 'ENDED') return false;"), 'sessions listener must ignore ENDED logout sessions');
+    assert(coreJs.includes("if (s.staffRole === 'Admin' || s.isMaster === true) return false;"), 'sessions listener must never lock Admin/Master sessions');
+    assert(coreJs.includes('if (didLock && typeof showToast === \'function\')'), 'sessions listener must only show remote-lock toast when terminal actually locked');
+    assert(staffJs.includes("if (activeRoleForLock === ROLES.ADMIN || (lockedSession && lockedSession.staffRole === 'Admin')) return false;"), 'lockTerminalByRemote must never lock Admin profiles');
+    assert(staffJs.includes("normalizeRole(session.staffRole) === ROLES.ADMIN"), 'remoteLockStaffSession must protect Admin profiles');
+    assert(staffJs.includes("status: 'ENDED',\n                    isLocked: false,") || staffJs.includes("status: 'ENDED',\r\n                    isLocked: false,"), 'logoutStaff must set isLocked: false on clean shift ENDED record');
+    assert(staffJs.includes('const isAdminMember = normalizeRole(staff.role) === ROLES.ADMIN;'), 'renderStaffManagementUI must not flag Admin profile as Locked from stale sessions');
+});
+
 console.log(`\nALL ${passed} V3.0.0 CHECKS PASSED!`);
