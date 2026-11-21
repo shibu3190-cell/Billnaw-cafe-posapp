@@ -257,7 +257,7 @@
 }
 
 .inv-sim-card {
-    background: linear-gradient(135deg, #FAF7F4 0%, #F5EFEB 100%);
+    background: linear-gradient(135deg, var(--canvas) 0%, var(--surface-soft) 100%);
     border: 1.5px solid var(--border);
     border-radius: 16px;
     padding: 18px 20px;
@@ -762,7 +762,7 @@
 }
 
 .inv-acc-header-btn:hover {
-    background: #FAF7F4;
+    background: var(--canvas);
 }
 
 .inv-acc-title-group {

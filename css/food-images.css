@@ -2,7 +2,7 @@
    📸 FOOD IMAGE MANAGER (MILESTONE M3)
    ============================================================================== */
 .food-image-manager {
-    background: #FAF7F4;
+    background: var(--canvas);
     border: 1px solid var(--border, #E2E8F0);
     border-radius: var(--radius-md, 12px);
     padding: 14px;

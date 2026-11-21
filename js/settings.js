@@ -2828,3 +2828,27 @@ function closeInventoryHubSubView() {
     if (el) el.style.display = 'none';
 }
 window.closeInventoryHubSubView = closeInventoryHubSubView;
+
+function filterSettingsHub(rawQuery) {
+    const q = String(rawQuery || '').trim().toLowerCase();
+    const root = document.getElementById('settings');
+    if (!root) return;
+    const groups = root.querySelectorAll('.settings-group-block');
+    groups.forEach(group => {
+        const rows = group.querySelectorAll('.setting-tile-card');
+        let visibleCount = 0;
+        rows.forEach(row => {
+            const hay = ((row.getAttribute('data-search') || '') + ' ' + (row.textContent || '')).toLowerCase();
+            const match = !q || hay.includes(q);
+            row.classList.toggle('settings-search-hidden', !match);
+            if (match && row.style.display !== 'none') visibleCount++;
+        });
+        group.classList.toggle('settings-search-hidden', visibleCount === 0 && Boolean(q));
+    });
+    const dangerCard = root.querySelector('.settings-danger-action-card');
+    if (dangerCard) {
+        const hay = ((dangerCard.getAttribute('data-search') || '') + ' ' + (dangerCard.textContent || '')).toLowerCase();
+        dangerCard.classList.toggle('settings-search-hidden', Boolean(q) && !hay.includes(q));
+    }
+}
+window.filterSettingsHub = filterSettingsHub;

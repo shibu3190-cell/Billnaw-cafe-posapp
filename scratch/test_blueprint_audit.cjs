@@ -37,7 +37,11 @@ const posJs = fs.readFileSync(path.join(rootDir, 'js', 'pos.js'), 'utf-8');
 console.log('📍 FACTOR 1: CONTRAST & VISIBILITY (SUBTLE FOOD PHOTO BACKDROPS)');
 test('style.css has gradient backdrop on dish photos (.card-img-wrapper::after)', () => {
     assert(styleCss.includes('.card-img-wrapper::after'), 'Missing .card-img-wrapper::after selector');
-    assert(styleCss.includes('linear-gradient(180deg, rgba(0,0,0,0) 25%, rgba(30, 18, 12, 0.65) 100%)'), 'Missing high-contrast gradient backdrop');
+    assert(
+        styleCss.includes('linear-gradient(180deg, rgba(15, 23, 42, 0) 45%, rgba(15, 23, 42, 0.22) 100%)') ||
+        styleCss.includes('linear-gradient(180deg, rgba(0,0,0,0) 25%, rgba(30, 18, 12, 0.65) 100%)'),
+        'Missing high-contrast gradient backdrop'
+    );
     assert(styleCss.includes('z-index: 1'), 'Backdrop should have z-index: 1');
 });
 

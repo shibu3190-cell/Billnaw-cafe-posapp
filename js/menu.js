@@ -332,14 +332,16 @@ function renderMenuUI() {
         const rawThumb = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
         const thumbSrc = _sanitizeMenuImgUrl(rawThumb) || generateFallbackImage(item.name, item.category);
         const safeItemId = _menuEsc(String(item.id));
+        const isOut = Boolean(item.trackStock && item.stockQty <= 0);
         const imageHtml = `<img src="${_menuEsc(thumbSrc)}" class="card-img" alt="${_menuEsc(item.name)}" loading="lazy" decoding="async" data-item-name="${_menuEsc(item.name || '')}" data-item-cat="${_menuEsc(item.category || '')}" onerror="this.onerror=null; this.src=generateFallbackImage(this.dataset.itemName, this.dataset.itemCat);">`;
 
         return `
-        <div class="menu-card" id="menu-card-${item.id}" data-item-id="${item.id}" onclick="addToCart(this.dataset.itemId, event)">
+        <div class="menu-card${isOut ? ' is-out' : ''}" id="menu-card-${item.id}" data-item-id="${item.id}" onclick="addToCart(this.dataset.itemId, event)">
             <div class="card-img-wrapper">
                 ${imageHtml}
                 ${popularBadge}
                 ${item.trackStock && item.stockQty <= 5 && item.stockQty > 0 ? `<div class="stock-badge low">${item.stockQty} left</div>` : (item.trackStock && item.stockQty > 5 ? `<div class="stock-badge">${item.stockQty} left</div>` : '')}
+                ${isOut ? '<div class="sold-overlay"><span class="sold-badge">Sold Out</span></div>' : ''}
                 <div class="card-img-price-pill" style="display: none !important;">₹ ${Number(item.price).toFixed(0)}</div>
             </div>
             <div class="card-content">
@@ -871,7 +873,7 @@ function syncMenuUIQuantities() {
         const safeItemId = _menuEsc(String(item.id));
         let buttonHtml = '';
         if (item.trackStock && item.stockQty <= 0) {
-            buttonHtml = `<button type="button" class="add-btn" style="background:var(--border); color:var(--text-muted); cursor:not-allowed;" disabled>OUT</button>`;
+            buttonHtml = `<button type="button" class="add-btn is-out-btn" disabled>OUT</button>`;
         } else if (qtyInCart > 0) {
             buttonHtml = `<div class="item-qty-control" onclick="event.stopPropagation()"><button type="button" data-item-id="${safeItemId}" onclick="modifyQty(this.dataset.itemId, -1, event)" aria-label="Decrease quantity">−</button><span>${qtyInCart}</span><button type="button" data-item-id="${safeItemId}" onclick="addToCart(this.dataset.itemId, event)" aria-label="Increase quantity">+</button></div>`;
         } else {

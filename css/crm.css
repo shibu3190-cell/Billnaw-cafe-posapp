@@ -86,7 +86,7 @@
     transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .wa-bulk-cust-item:hover {
-    background: #FAF7F4;
+    background: var(--canvas);
 }
 .wa-bulk-cust-item.selected {
     border-color: var(--milk-choc);
@@ -284,7 +284,7 @@
 }
 
 .khata-stat-card {
-    background: #FAF7F4;
+    background: var(--canvas);
     padding: 14px 16px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
@@ -297,7 +297,7 @@
     display: flex;
     gap: 8px;
     margin-bottom: 20px;
-    background: #FAF7F4;
+    background: var(--canvas);
     border: 1.5px solid var(--border);
     border-radius: 16px;
     padding: 6px;
@@ -370,7 +370,7 @@
 
 .wa-tier-header {
     padding: 10px 14px;
-    background: #FAF7F4;
+    background: var(--canvas);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -381,7 +381,7 @@
 }
 
 .wa-tier-header:hover {
-    background: #F5EFEB;
+    background: var(--surface-soft);
 }
 
 .wa-tier-title-group {
@@ -665,7 +665,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #FAF7F4;
+    background: var(--canvas);
     border: 1.5px solid var(--border);
     border-radius: 16px;
     padding: 8px 16px;
@@ -943,7 +943,7 @@
     padding: 10px 14px;
     border-radius: 12px;
     border: 1.5px solid var(--border);
-    background: #FAF7F4;
+    background: var(--canvas);
     font-size: 12.5px;
     font-weight: 700;
     color: #143832;

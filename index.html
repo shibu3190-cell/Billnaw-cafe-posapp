@@ -12,15 +12,15 @@
     <meta property="og:description" content="billnaw point-of-sale terminal with billing, customer loyalty directory, AI-driven WhatsApp marketing, table management, KOT, expense tracking, and reporting.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#F5EFEB">
+    <meta name="theme-color" content="#0F3D33">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
     <script src="js/defensive-stubs.js?v=2922"></script>
-    <link rel="stylesheet" href="style.css?v=2922">
+    <link rel="stylesheet" href="style.css?v=2923">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display: none;" aria-hidden="true">
@@ -2867,16 +2867,16 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             <div style="position: relative; width: 72px; height: 72px; margin-bottom: 20px;">
-                <div style="position: absolute; inset: 0; border: 3px solid rgba(224, 90, 56, 0.25); border-radius: 20px;"></div>
-                <div style="position: absolute; inset: 0; border-top: 3px solid #E05A38; border-radius: 20px; animation: spin 1s linear infinite;"></div>
-                <div style="position: absolute; inset: 12px; display: flex; align-items: center; justify-content: center; color: #E05A38;">
+                <div style="position: absolute; inset: 0; border: 3px solid rgba(16, 185, 129, 0.25); border-radius: 20px;"></div>
+                <div style="position: absolute; inset: 0; border-top: 3px solid #10B981; border-radius: 20px; animation: spin 1s linear infinite;"></div>
+                <div style="position: absolute; inset: 12px; display: flex; align-items: center; justify-content: center; color: #34D399;">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 </div>
             </div>
             <h3 style="font-size: 18px; font-weight: 800; margin: 0 0 6px 0; color: #FFFFFF;">AI Menu Scanner</h3>
             <p id="aiScanningOverlayText" style="font-size: 13px; color: #CBD5E1; margin: 0 0 18px 0; line-height: 1.5;">Analyzing menu layout, extracting dish names, rates &amp; categories...</p>
             <div style="width: 220px; height: 5px; background: rgba(255,255,255,0.18); border-radius: 5px; overflow: hidden; position: relative;">
-                <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 45%; background: linear-gradient(90deg, #E05A38, #F97316); border-radius: 5px; animation: shimmerBar 1.2s ease-in-out infinite alternate;"></div>
+                <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 45%; background: linear-gradient(90deg, #10B981, #34D399); border-radius: 5px; animation: shimmerBar 1.2s ease-in-out infinite alternate;"></div>
             </div>
         </div>
     </div>
@@ -3932,40 +3932,40 @@
                 </div>
 
                 <!-- Interactive Filters & Actions Toolbar -->
-                <div class="card" style="margin-bottom: 16px; padding: 14px 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                        <div style="font-size: 13px; font-weight: 700; color: var(--text-dark);">
-                            <span>Financial Audits & Payment Filters</span>
+                <div class="card dash-filters-card" style="margin-bottom: 14px; padding: 14px 18px;">
+                    <div class="dash-filters-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div style="font-size: 13px; font-weight: 800; color: var(--ink);">
+                            <span>Payment Filter</span>
                         </div>
                     </div>
 
-                    <div style="display: flex; gap: 14px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle); flex-wrap: wrap;">
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Payment:</label>
-                            <select id="dashPayModeFilter" onchange="renderDashboardAnalytics()" style="padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px;">
+                    <div class="dash-filters-row" style="display: flex; gap: 12px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-soft); flex-wrap: wrap;">
+                        <div class="dash-desktop-filter-item" style="display: flex; align-items: center; gap: 6px;">
+                            <label style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Payment:</label>
+                            <select id="dashPayModeFilter" onchange="renderDashboardAnalytics()" style="padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); font-size: 12px; background: var(--surface); color: var(--ink);">
                                 <option value="all">All Methods (Cash/UPI/Card)</option>
                                 <option value="Cash">Cash Only</option>
                                 <option value="UPI">UPI Only</option>
                                 <option value="Card">Card Only</option>
                             </select>
                         </div>
-                        <div class="dashFilterPill-group" style="display: flex; gap: 4px; align-items: center;">
-                            <button type="button" class="filter-pill dashFilterPill dashPayFilterPill active" data-mode="all" onclick="setDashboardPaymentFilter('all')" style="padding: 4px 10px; font-size: 11px;">All</button>
-                            <button type="button" class="filter-pill dashFilterPill dashPayFilterPill" data-mode="Cash" onclick="setDashboardPaymentFilter('Cash')" style="padding: 4px 10px; font-size: 11px;">Cash</button>
-                            <button type="button" class="filter-pill dashFilterPill dashPayFilterPill" data-mode="UPI" onclick="setDashboardPaymentFilter('UPI')" style="padding: 4px 10px; font-size: 11px;">UPI</button>
-                            <button type="button" class="filter-pill dashFilterPill dashPayFilterPill" data-mode="Card" onclick="setDashboardPaymentFilter('Card')" style="padding: 4px 10px; font-size: 11px;">Card</button>
+                        <div class="dashFilterPill-group" style="display: flex; gap: 6px; align-items: center;">
+                            <button type="button" class="filter-pill dashFilterPill dashPayFilterPill active" data-mode="all" onclick="setDashboardPaymentFilter('all')">All</button>
+                            <button type="button" class="filter-pill dashFilterPill dashPayFilterPill" data-mode="Cash" onclick="setDashboardPaymentFilter('Cash')">Cash</button>
+                            <button type="button" class="filter-pill dashFilterPill dashPayFilterPill" data-mode="UPI" onclick="setDashboardPaymentFilter('UPI')">UPI</button>
+                            <button type="button" class="filter-pill dashFilterPill dashPayFilterPill" data-mode="Card" onclick="setDashboardPaymentFilter('Card')">Card</button>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 6px; margin-left: 8px;">
-                            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Order Type:</label>
-                            <select id="dashOrderTypeFilter" onchange="renderDashboardAnalytics()" style="padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px;">
+                        <div class="dash-desktop-filter-item" style="display: flex; align-items: center; gap: 6px; margin-left: 8px;">
+                            <label style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Order Type:</label>
+                            <select id="dashOrderTypeFilter" onchange="renderDashboardAnalytics()" style="padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); font-size: 12px; background: var(--surface); color: var(--ink);">
                                 <option value="all">All Types (Dine-In & Takeaway)</option>
                                 <option value="Dine-In">Dine-In Only</option>
                                 <option value="Takeaway">Takeaway Only</option>
                             </select>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
-                            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Month Picker:</label>
-                            <input type="month" id="reportDateSelect" onchange="onDashboardMonthChanged()" style="padding: 5px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; font-weight: 600;">
+                        <div class="dash-desktop-filter-item" style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
+                            <label style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Month Picker:</label>
+                            <input type="month" id="reportDateSelect" onchange="onDashboardMonthChanged()" style="padding: 5px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--surface); color: var(--ink);">
                         </div>
                     </div>
                 </div>
@@ -3974,10 +3974,10 @@
                     <div class="card" id="dashProgressMetersCard" style="padding: 18px; margin-bottom: 0;">
                         <div class="card-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                             <div>
-                                <h3 class="card-title" style="font-size: 15px; margin: 0; font-weight: 800; color: #143832;">Revenue &amp; Payment Meters</h3>
-                                <p style="margin: 2px 0 0 0; font-size: 11px; color: var(--text-muted);">Clean vertical progress meters for menu categories &amp; settlement channels</p>
+                                <h3 class="card-title" style="font-size: 15px; margin: 0; font-weight: 800; color: var(--em-dark);">Revenue &amp; Payment Meters</h3>
+                                <p style="margin: 2px 0 0 0; font-size: 11px; color: var(--muted);">Clean breakdown for menu categories &amp; settlement channels</p>
                             </div>
-                            <span style="font-size: 10.5px; font-weight: 700; color: #143832; background: #F1F5F9; padding: 3px 8px; border-radius: 10px;">Live Realtime</span>
+                            <span style="font-size: 10.5px; font-weight: 700; color: var(--em-dark); background: var(--mint-bg); padding: 3px 9px; border-radius: 999px;">Live Realtime</span>
                         </div>
                         <div class="dash-vertical-meters-grid">
                             <div class="vertical-meters-cluster">
@@ -5049,14 +5049,14 @@
             </div>
 
             <div id="kds" class="view">
-                <div class="kds-header-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #FAF7F4; border: 1.5px solid #E6DCCD; border-radius: 12px; margin-bottom: 16px;">
+                <div class="kds-header-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-card); margin-bottom: 14px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="display: inline-flex; width: 36px; height: 36px; border-radius: 10px; background: rgba(224, 90, 56, 0.15); color: #E05A38; align-items: center; justify-content: center;">
+                        <span style="display: inline-flex; width: 36px; height: 36px; border-radius: 10px; background: var(--mint-bg); color: var(--em-dark); align-items: center; justify-content: center;">
                             <svg width="20" height="20" viewBox="0 0 24 24"><use href="#icon-coffee"></use></svg>
                         </span>
                         <div>
-                            <h2 style="font-size: 16px; font-weight: 800; color: #143832; margin: 0;">Kitchen Display System (KDS)</h2>
-                            <span style="font-size: 11px; color: var(--text-muted);">Active preparation queue and live timers</span>
+                            <h2 style="font-size: 16px; font-weight: 800; color: var(--ink); margin: 0;">Kitchen Display System (KDS)</h2>
+                            <span style="font-size: 11px; color: var(--muted);">Active preparation queue and live timers</span>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
@@ -5109,30 +5109,34 @@
 
                 <div id="menuInventorySubView">
                     <div id="aiIngestCollapsibleCard" class="bulk-upload-dashed-card" onclick="handleAiIngestCardClick(event);" ondragover="event.preventDefault();" ondrop="handleMenuDrop(event);" title="Drag &amp; drop physical menu photo/PDF or use 1-tap ingest buttons">
-                        <div class="ai-ingest-header-row" style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0;">
+                        <div class="ai-ingest-header-row" style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
                             <div class="bulk-upload-icon-circle">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                             </div>
                             <div class="unified-ai-ingest-content" style="flex: 1; min-width: 0;">
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    <span style="font-weight: 800; font-size: 14px; color: var(--text-dark);">AI Menu Ingestion &amp; Catalog Digitizer</span>
-                                    <span id="aiMenuQuotaPill" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(20,56,50,0.08); color: var(--primary); font-size: 11px; font-weight: 700; border: 1px solid rgba(20,56,50,0.15);">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                    <span style="font-weight: 800; font-size: 13.5px; color: var(--ink);">AI Menu Scanner</span>
+                                    <span id="aiMenuQuotaPill" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--mint-bg); color: var(--em-dark); font-size: 10.5px; font-weight: 700; border: 1px solid rgba(15,61,51,0.14);">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                                         <span id="aiMenuQuotaPillText">15 / 15 free scans</span>
                                     </span>
                                 </div>
-                                <div class="ai-ingest-sub-desc" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Drag &amp; drop physical menu photo/PDF or snap live with camera for instant Gemini OCR review</div>
+                                <div class="ai-ingest-sub-desc" style="font-size: 11px; color: var(--muted); margin-top: 2px;">Snap a photo or upload PDF/Excel for instant Gemini OCR review</div>
                             </div>
+                            <button type="button" class="btn ai-ingest-snap-inline" onclick="event.stopPropagation(); openMenuFilePicker('aiMenuCameraInput')" style="padding: 7px 12px; font-size: 11.5px; border-radius: 10px; flex-shrink: 0;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                                <span>Snap</span>
+                            </button>
                             <span class="ai-ingest-chevron" aria-hidden="true">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                             </span>
                         </div>
                         <div class="unified-ai-ingest-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <button type="button" class="btn btn-outline" onclick="openMenuFilePicker('aiMenuCameraInput')" style="font-size: 12px; padding: 8px 14px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; border: 1.5px solid #CBD5E1; background: #FFFFFF; color: var(--text-dark); cursor: pointer;" title="Snap physical menu with device camera">
+                            <button type="button" class="btn btn-outline" onclick="openMenuFilePicker('aiMenuCameraInput')" style="font-size: 12px; padding: 8px 14px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; border: 1.5px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer;" title="Snap physical menu with device camera">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                                 <span>Camera Snap</span>
                             </button>
-                            <button type="button" class="btn" id="menuCatalogAutoDetectBtn" onclick="openUploadMenuChoiceModal()" style="font-size: 12px; padding: 8px 16px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: linear-gradient(135deg, #143832 0%, #1f5249 100%); color: #FFFFFF; border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(20,56,50,0.22);" title="Upload physical menu photo, PDF or Excel file">
+                            <button type="button" class="btn" id="menuCatalogAutoDetectBtn" onclick="openUploadMenuChoiceModal()" style="font-size: 12px; padding: 8px 16px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: var(--em-dark); color: #FFFFFF; border: none; cursor: pointer;" title="Upload physical menu photo, PDF or Excel file">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                                 <span>Auto-Detect Menu</span>
                             </button>
@@ -5153,7 +5157,7 @@
                         <div class="card-header" style="margin-bottom: 12px;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <h3 class="card-title" style="margin: 0; font-size: 15px;">Manage Categories</h3>
-                                <span id="categoryCountBadge" style="font-size: 11px; font-weight: 700; color: var(--milk-choc); background: #FAF7F4; border: 1px solid var(--border); padding: 2px 8px; border-radius: 12px;"></span>
+                                <span id="categoryCountBadge" style="font-size: 11px; font-weight: 700; color: var(--em-dark); background: var(--mint-bg); border: 1px solid rgba(15,61,51,0.14); padding: 2px 9px; border-radius: 999px;"></span>
                             </div>
                             <span style="font-size: 11px; color: var(--text-muted);">Organize your menu for faster cashier selection</span>
                         </div>
@@ -5294,262 +5298,306 @@
             </div>
 
             <div id="settings" class="view">
-                <div class="settings-profile-header-card">
-                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 14px;">
-                            <div class="settings-store-avatar" id="settingsStoreAvatar">B</div>
-                            <div>
-                                <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: var(--text-dark);" id="settingsStoreName">Billnaw Cafe</h2>
-                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);" id="settingsStorePhone">+91 98765 43210 • Active Terminal</p>
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-outline" onclick="openStoreProfileModal()" style="border-radius: 20px; font-size: 11px; font-weight: 800; padding: 7px 14px; text-transform: uppercase; letter-spacing: 0.5px; border: 1.5px solid var(--border); display: inline-flex; align-items: center; gap: 4px;">
-                            <span>BUSINESS &amp; GST SETTINGS</span>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="subscription-crown-card" onclick="openSubscriptionModal()" title="View and manage subscription plan">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div class="crown-icon-wrap">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: #D97706;"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>
-                                <span style="display:none;">👑</span>
-                            </div>
-                            <div>
-                                <div style="font-weight: 800; font-size: 14px; color: #78350F;">Billnaw Subscription Plan</div>
-                                <div style="font-size: 11px; color: #92400E; margin-top: 2px;" id="settingsSubscriptionSubtitle">Pro Plan Active • Valid till Dec 2026</div>
-                            </div>
-                        </div>
-                        <span style="color: #92400E; font-weight: 800; font-size: 16px;">&gt;</span>
-                    </div>
-                </div>
-
-                <div class="settings-tiles-grid">
-                    
-                    <div class="setting-tile-card" onclick="openStoreProfileModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>Store Profile</h3>
-                                <p>Business name, logo, address, FSSAI & GSTIN</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="openStaffManagementModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24"><use href="#icon-users"></use></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>Staff & Team Management</h3>
-                                <p>Cashiers, waiters, kitchen chefs & PIN security</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" id="settingTileAuthorizedDevices" onclick="openAuthorizedDevicesModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon" style="background: rgba(37, 99, 235, 0.1); color: #2563EB;">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <h3>Authorized Devices &amp; Terminals</h3>
-                                    <span id="pendingDeviceCountBadge" class="badge" style="display: none; font-size: 10px; padding: 2px 7px; border-radius: 10px; background: #FEF3C7; color: #92400E; font-weight: 700;">0 Pending</span>
+                <div class="settings-hub-shell">
+                    <div class="settings-profile-header-card">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div class="settings-store-avatar" id="settingsStoreAvatar">B</div>
+                                <div>
+                                    <h2 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--ink);" id="settingsStoreName">Billnaw Cafe</h2>
+                                    <p style="margin: 2px 0 0 0; font-size: 11.5px; color: var(--muted);" id="settingsStorePhone">+91 98765 43210 • Active Terminal</p>
                                 </div>
-                                <p>Pair secondary counters, KDS screens &amp; waiter mobile tablets</p>
                             </div>
+                            <button type="button" class="btn btn-outline" onclick="openStoreProfileModal()" style="border-radius: 999px; font-size: 11px; font-weight: 700; padding: 7px 13px; display: inline-flex; align-items: center; gap: 5px;">
+                                <span>BUSINESS &amp; GST SETTINGS</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>
                         </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
                     </div>
 
-                    <div class="setting-tile-card" id="settingTileCloudSync" onclick="openCloudSyncDetailModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon" style="background: rgba(16, 185, 129, 0.1); color: #10B981;">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>Firebase Cloud Sync &amp; Database</h3>
-                                <p>Real-time sync status, force sync &amp; multi-terminal cloud mapping</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
+                    <div class="settings-search-wrap">
+                        <span class="settings-search-icon" aria-hidden="true">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </span>
+                        <input type="text" id="settingsSearchInput" class="settings-search-input" placeholder="Search settings (Printer, Devices, GST, Staff)..." oninput="filterSettingsHub(this.value)">
                     </div>
 
-                    <div class="setting-tile-card" onclick="openExpensesDetailModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><circle cx="16" cy="15" r="1.5"></circle></svg>
+                    <div class="subscription-crown-card" onclick="openSubscriptionModal()" title="View and manage subscription plan">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 11px; min-width: 0;">
+                                <div class="crown-icon-wrap">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--amber);"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>
+                                    <span style="display:none;">👑</span>
+                                </div>
+                                <div style="min-width: 0;">
+                                    <div style="font-weight: 800; font-size: 13px; color: var(--ink);">Billnaw Subscription Plan</div>
+                                    <div style="font-size: 11px; color: var(--slate); margin-top: 2px;" id="settingsSubscriptionSubtitle">Pro Plan Active • Valid till Dec 2026</div>
+                                </div>
                             </div>
-                            <div class="setting-tile-info">
-                                <h3>Daily Expenses & Costs</h3>
-                                <p>Record and track raw materials & market supplies</p>
-                            </div>
+                            <span class="settings-row-chevron" aria-hidden="true">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </span>
                         </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
                     </div>
 
-                    <div class="setting-tile-card" onclick="openGstConfigModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>GST & Pricing Mode</h3>
-                                <p>Inclusive vs exclusive tax rules & default rate</p>
+                    <div class="settings-tiles-grid settings-grouped-container">
+                        <!-- GROUP 1: STORE & BILLING -->
+                        <div class="settings-group-block" data-settings-group="Store & Billing">
+                            <div class="settings-group-label">Store &amp; Billing</div>
+                            <div class="settings-group-card">
+                                <div class="setting-tile-card" data-search="store profile business name logo address fssai gstin" onclick="openStoreProfileModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Store Profile &amp; Identity</h3>
+                                            <p>Business name, logo, address, FSSAI &amp; GSTIN</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+
+                                <div class="setting-tile-card" data-search="gst pricing tax inclusive exclusive rate" onclick="openGstConfigModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>GST &amp; Pricing Mode</h3>
+                                            <p>Inclusive vs exclusive tax rules &amp; default rate</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+
+                                <div class="setting-tile-card" data-search="upi dynamic qr payment merchant vpa checkout" onclick="openPaymentConfigModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>UPI &amp; Dynamic QR</h3>
+                                            <p>Merchant VPA, receipt QR code &amp; checkout modes</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+
+                                <div class="setting-tile-card" data-search="discounts promotions offers loyalty limits" onclick="openDiscountSettingsModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24"><use href="#icon-tag"></use></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Discounts &amp; Promotions</h3>
+                                            <p>Max limits, presets &amp; loyalty triggers</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+
+                                <div class="setting-tile-card" data-search="tables seating floors tabs count presets" onclick="openTableManagementModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Tables &amp; Seating Tabs</h3>
+                                            <p>Table counts, floor groups &amp; naming presets</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+
+                                <div class="setting-tile-card" data-search="daily expenses costs raw materials supplies" onclick="openExpensesDetailModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><circle cx="16" cy="15" r="1.5"></circle></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Daily Expenses &amp; Costs</h3>
+                                            <p>Record and track raw materials &amp; market supplies</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
                             </div>
                         </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
+
+                        <!-- GROUP 2: HARDWARE & CLOUD -->
+                        <div class="settings-group-block" data-settings-group="Hardware & Cloud">
+                            <div class="settings-group-label">Hardware &amp; Cloud</div>
+                            <div class="settings-group-card">
+                                <div class="setting-tile-card" data-search="printer thermal 58mm 80mm receipt kot routing" onclick="openPrinterSettingsModal()" id="settingTilePrinterConfig">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Dual Thermal Printers &amp; Routing</h3>
+                                            <p>58mm / 80mm receipt &amp; KOT dispatch</p>
+                                        </div>
+                                    </div>
+                                    <div class="settings-row-right">
+                                        <span class="settings-pill-badge is-mint">Configure</span>
+                                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                    </div>
+                                </div>
+
+                                <div class="setting-tile-card" id="settingTileCloudSync" data-search="firebase cloud sync database backup realtime" onclick="openCloudSyncDetailModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Firebase Cloud Sync</h3>
+                                            <p>Real-time multi-terminal sync &amp; cloud mapping</p>
+                                        </div>
+                                    </div>
+                                    <div class="settings-row-right">
+                                        <span class="settings-pill-badge is-mint">Synced</span>
+                                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                    </div>
+                                </div>
+
+                                <div class="setting-tile-card" data-search="ai quota custom key gemini ocr menu scan" onclick="openClientQuotaModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>AI Quota &amp; Custom Key</h3>
+                                            <p>Monthly OCR scans allowance &amp; dedicated Gemini key</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- GROUP 3: TEAM & ACCESS -->
+                        <div class="settings-group-block" data-settings-group="Team & Access">
+                            <div class="settings-group-label">Team &amp; Access</div>
+                            <div class="settings-group-card">
+                                <div class="setting-tile-card" id="settingTileAuthorizedDevices" data-search="authorized devices terminals pairing kds waiter tablet" onclick="openAuthorizedDevicesModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <div style="display: flex; align-items: center; gap: 6px;">
+                                                <h3>Authorized Devices &amp; Terminals</h3>
+                                                <span id="pendingDeviceCountBadge" class="badge" style="display: none; font-size: 10px; padding: 2px 7px; border-radius: 999px; background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); font-weight: 700;">0 Pending</span>
+                                            </div>
+                                            <p>Pair secondary counters, KDS screens &amp; waiter tablets</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+
+                                <div class="setting-tile-card" onclick="openActiveSessionsModal()" id="settingTileActiveSessions" data-search="active sessions devices revoke login">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Active Devices &amp; Sessions</h3>
+                                            <p>Inspect cloud sessions &amp; revoke counter access</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+
+                                <div class="setting-tile-card" data-search="staff team cashiers waiters chefs pin security roles" onclick="openStaffManagementModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24"><use href="#icon-users"></use></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Staff &amp; Cashier PINs</h3>
+                                            <p>Cashiers, waiters, kitchen chefs &amp; PIN security</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- GROUP 4: SYSTEM -->
+                        <div class="settings-group-block" data-settings-group="System">
+                            <div class="settings-group-label">System</div>
+                            <div class="settings-group-card">
+                                <div class="setting-tile-card" onclick="checkForAppUpdates(true)" id="settingTileAppUpdates" data-search="check updates version cache upgrade">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24"><use href="#icon-download"></use></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Check for Updates</h3>
+                                            <p>POS version &amp; offline cache upgrades</p>
+                                        </div>
+                                    </div>
+                                    <div class="settings-row-right">
+                                        <span class="settings-pill-badge is-slate">v2.4.0</span>
+                                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                    </div>
+                                </div>
+
+                                <div class="setting-tile-card" data-search="contact support whatsapp help email diagnostics" onclick="openContactModal()">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Contact &amp; Support</h3>
+                                            <p>24/7 WhatsApp help, email &amp; cache diagnostics</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+
+                                <div class="setting-tile-card" onclick="logoutShopCloudAccount()" id="settingTileLogoutShop" data-search="logout cloud shop account sign out otp">
+                                    <div class="setting-tile-left">
+                                        <div class="setting-tile-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                                        </div>
+                                        <div class="setting-tile-info">
+                                            <h3>Logout Cloud Shop Account</h3>
+                                            <p>Sign out of shop account &amp; re-verify via Email OTP</p>
+                                        </div>
+                                    </div>
+                                    <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- LOCK TERMINAL / LOGOUT STAFF RED-TINTED CARD -->
+                        <div class="setting-tile-card settings-danger-action-card" data-search="lock terminal logout staff switch cashier" onclick="logoutStaff()">
+                            <div class="setting-tile-left">
+                                <div class="setting-tile-icon is-danger">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                </div>
+                                <div class="setting-tile-info">
+                                    <h3 style="color: var(--danger);">Lock Terminal / Logout Staff</h3>
+                                    <p>Switch shift cashier, protect register &amp; return to login</p>
+                                </div>
+                            </div>
+                            <span class="setting-tile-arrow" style="color: var(--danger);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                        </div>
                     </div>
 
-                    <div class="setting-tile-card" onclick="openPaymentConfigModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    <div class="card settings-reset-card" style="border: 1px solid var(--danger-border); background: var(--danger-bg); padding: 14px 16px; margin-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div>
+                                <h3 style="color: var(--danger); margin: 0; font-size: 13.5px; font-weight: 800;">Reset &amp; Clear All Data</h3>
+                                <p style="margin: 2px 0 0 0; font-size: 11.5px; color: var(--slate);">Permanently wipes local cache and cloud store data.</p>
                             </div>
-                            <div class="setting-tile-info">
-                                <h3>UPI & Dynamic QR</h3>
-                                <p>Merchant VPA, receipt QR code & checkout modes</p>
-                            </div>
+                            <button type="button" class="btn btn-danger" style="padding: 8px 14px; font-size: 12px; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px;" onclick="openClearAllDataModal()">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                <span>Clear All Store Data</span>
+                            </button>
                         </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="openTableManagementModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>Tables & Seating Tabs</h3>
-                                <p>Editable table tabs (T1, T2...), table counts & naming presets</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="openDiscountSettingsModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24"><use href="#icon-tag"></use></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>Discounts & Promotions</h3>
-                                <p>Master toggle, max limits, presets & loyalty triggers</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="openPrinterSettingsModal()" id="settingTilePrinterConfig">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>Dual Thermal Printers &amp; Routing</h3>
-                                <p>Configure independent 58mm / 80mm receipt &amp; KOT printers</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="openClientQuotaModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>AI Quota & Custom Key</h3>
-                                <p>Monthly OCR scans allowance & dedicated Gemini key</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="openContactModal()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3>Contact & Support</h3>
-                                <p>24/7 WhatsApp help, email & cache diagnostics</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="logoutStaff()">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon" style="background: rgba(167, 50, 50, 0.1); color: var(--danger);">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3 style="color: var(--danger);">Lock Terminal / Logout Staff</h3>
-                                <p>Switch shift cashier, protect register & return to login screen</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="openActiveSessionsModal()" id="settingTileActiveSessions">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon" style="background: rgba(45, 212, 191, 0.15); color: #0f766e;">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3 style="color: var(--text-dark);">Active Devices & Sessions</h3>
-                                <p>View active cloud sessions, authorized counter terminals & revoke access</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="checkForAppUpdates(true)" id="settingTileAppUpdates" style="border-left: 3px solid #E05A38;">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon" style="background: rgba(224, 90, 56, 0.1); color: #E05A38;">
-                                <svg width="22" height="22" viewBox="0 0 24 24"><use href="#icon-download"></use></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3 style="color: var(--text-dark);">Check for Updates (v2.4.0)</h3>
-                                <p>Check for newer POS version, offline cache upgrades &amp; features</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-
-                    <div class="setting-tile-card" onclick="logoutShopCloudAccount()" id="settingTileLogoutShop" style="border-left: 3px solid #143832;">
-                        <div class="setting-tile-left">
-                            <div class="setting-tile-icon" style="background: rgba(20, 56, 50, 0.1); color: #143832;">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
-                            </div>
-                            <div class="setting-tile-info">
-                                <h3 style="color: #143832;">Logout Cloud Shop Account</h3>
-                                <p>Sign out of shop account. Log in again via Email OTP or Password</p>
-                            </div>
-                        </div>
-                        <span class="setting-tile-arrow"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>
-                    </div>
-                </div>
-
-                <div class="card" style="border: 1px solid rgba(167, 50, 50, 0.25); background: #FFF8F8; padding: 18px 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <div>
-                            <h3 style="color: var(--danger); margin: 0; font-size: 15px;">Reset &amp; Clear All Data (Local &amp; Cloud Server)</h3>
-                            <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-muted);">Permanently wipes local terminal cache and deletes store data on cloud server, resetting to clean slate.</p>
-                        </div>
-                        <button class="btn btn-danger" style="padding: 8px 16px; font-size: 12px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px;" onclick="openClearAllDataModal()">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                            <span>Clear All Store Data</span>
-                        </button>
                     </div>
                 </div>
             </div>
@@ -5973,7 +6021,7 @@
                         <div id="printer2SlotCard" class="card" style="padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 12px; transition: opacity 0.2s ease;">
                             <div style="display: flex; align-items: center; justify-content: space-between;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <div style="width: 30px; height: 30px; border-radius: 8px; background: rgba(224, 90, 56, 0.1); color: #E05A38; display: flex; align-items: center; justify-content: center;">
+                                    <div style="width: 30px; height: 30px; border-radius: 8px; background: var(--mint-bg); color: var(--em-dark); display: flex; align-items: center; justify-content: center;">
                                         <svg width="16" height="16" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg>
                                     </div>
                                     <div>
@@ -6301,37 +6349,37 @@
 
     <script src="js/shop-auth.js?v=2922"></script>
 
-    <div id="appUpdatePopup" class="app-update-popup" style="display: none; position: fixed; bottom: 24px; right: 24px; z-index: 10000000; background: #143832; color: #FFFFFF; padding: 16px 20px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1.5px solid rgba(255,255,255,0.18); max-width: 360px;">
+    <div id="appUpdatePopup" class="app-update-popup" style="display: none; position: fixed; bottom: 20px; right: 20px; z-index: 10000000; background: #0F3D33; color: #FFFFFF; padding: 14px 16px; border-radius: 16px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.24); border: 1px solid rgba(255, 255, 255, 0.14); max-width: 340px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
-            <div style="width: 38px; height: 38px; border-radius: 12px; background: rgba(224, 90, 56, 0.22); color: #E05A38; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="20" height="20" viewBox="0 0 24 24"><use href="#icon-download"></use></svg>
+            <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.18); color: #34D399; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg width="18" height="18" viewBox="0 0 24 24"><use href="#icon-download"></use></svg>
             </div>
             <div style="flex: 1;">
-                <div style="font-weight: 800; font-size: 14px; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+                <div style="font-weight: 800; font-size: 13.5px; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
                     <span>New Version Available</span>
-                    <span id="updateVersionBadge" style="background: #E05A38; color: #FFFFFF; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 8px;">v2.4.0</span>
+                    <span id="updateVersionBadge" style="background: rgba(16, 185, 129, 0.22); color: #A7F3D0; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px;">v2.4.0</span>
                 </div>
-                <p style="font-size: 12px; color: #CBD5E1; margin: 0 0 12px 0; line-height: 1.4;">A new version with performance improvements and features is available.</p>
+                <p style="font-size: 12px; color: #CBD5E1; margin: 0 0 10px 0; line-height: 1.4;">A new version with performance improvements and features is available.</p>
                 <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn btn-sm" onclick="applyAppUpdate()" style="background: #E05A38; color: #FFFFFF; border: none; border-radius: 8px; font-weight: 700; font-size: 12px; padding: 6px 14px; cursor: pointer;">Update Now</button>
-                    <button type="button" class="btn btn-sm" onclick="dismissAppUpdatePopup()" style="background: rgba(255,255,255,0.12); color: #FFFFFF; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; padding: 6px 12px; cursor: pointer;">Later</button>
+                    <button type="button" class="btn btn-sm" onclick="applyAppUpdate()" style="background: #10B981; color: #FFFFFF; border: none; border-radius: 9px; font-weight: 700; font-size: 12px; padding: 6px 14px; cursor: pointer;">Update Now</button>
+                    <button type="button" class="btn btn-sm" onclick="dismissAppUpdatePopup()" style="background: rgba(255,255,255,0.12); color: #FFFFFF; border: none; border-radius: 9px; font-weight: 600; font-size: 12px; padding: 6px 12px; cursor: pointer;">Later</button>
                 </div>
             </div>
         </div>
     </div>
     <!-- Cloud Sync Loading Overlay -->
-    <div id="cloudSyncOverlay" style="display: none; position: fixed; inset: 0; z-index: 999999; background: linear-gradient(135deg, #143832 0%, #0D2622 100%); flex-direction: column; align-items: center; justify-content: center; color: #FFFFFF; padding: 24px; box-sizing: border-box; text-align: center;">
-        <div style="width: 72px; height: 72px; border-radius: 20px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 12px 30px rgba(0,0,0,0.3);">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#E05A38" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <div id="cloudSyncOverlay" style="display: none; position: fixed; inset: 0; z-index: 999999; background: linear-gradient(135deg, #0F3D33 0%, #0B2E26 100%); flex-direction: column; align-items: center; justify-content: center; color: #FFFFFF; padding: 24px; box-sizing: border-box; text-align: center;">
+        <div style="width: 68px; height: 68px; border-radius: 18px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center; margin-bottom: 18px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
             </svg>
         </div>
-        <h2 style="font-size: 22px; font-weight: 800; margin: 0 0 8px 0; letter-spacing: 0.5px;">Billnaw Cafe Cloud Sync</h2>
-        <p id="cloudSyncStatus" style="font-size: 14px; color: rgba(255,255,255,0.78); margin: 0 0 24px 0; max-width: 320px; line-height: 1.4;">Syncing Shop Profile, Menu &amp; Active Tables...</p>
-        <div style="width: 240px; height: 6px; background: rgba(255,255,255,0.12); border-radius: 99px; overflow: hidden; position: relative;">
-            <div id="cloudSyncBar" style="height: 100%; width: 15%; background: linear-gradient(90deg, #E05A38, #FF7A59); border-radius: 99px; transition: width 0.35s ease;"></div>
+        <h2 style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin: 0 0 8px 0; letter-spacing: -0.02em;">Billnaw Cafe Cloud Sync</h2>
+        <p id="cloudSyncStatus" style="font-size: 13.5px; color: rgba(255,255,255,0.8); margin: 0 0 22px 0; max-width: 320px; line-height: 1.4;">Syncing Shop Profile, Menu &amp; Active Tables...</p>
+        <div style="width: 240px; height: 6px; background: rgba(255,255,255,0.14); border-radius: 99px; overflow: hidden; position: relative;">
+            <div id="cloudSyncBar" style="height: 100%; width: 15%; background: linear-gradient(90deg, #10B981, #34D399); border-radius: 99px; transition: width 0.35s ease;"></div>
         </div>
-        <span id="cloudSyncPct" style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.55); margin-top: 10px;">15%</span>
+        <span id="cloudSyncPct" style="font-size: 12px; font-weight: 700; color: #A7F3D0; margin-top: 10px;">15%</span>
     </div>
 
     <!-- Staff Profile Selector Gateway ("Who's Working?") -->
@@ -6385,7 +6433,7 @@
     <!-- Bluetooth KOT Print Relay Fallback Prompt Modal -->
     <div id="kotRelayFallbackModal" class="modal-overlay" style="display: none; z-index: 1000040;">
         <div class="modal-box" style="max-width: 400px; text-align: center; padding: 24px;">
-            <div style="width: 52px; height: 52px; border-radius: 16px; background: rgba(224, 90, 56, 0.12); color: #E05A38; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px auto;">
+            <div style="width: 52px; height: 52px; border-radius: 16px; background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px auto;">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="1" y1="1" x2="23" y2="23"></line>
                     <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
@@ -6396,11 +6444,11 @@
                     <line x1="12" y1="20" x2="12.01" y2="20"></line>
                 </svg>
             </div>
-            <h3 style="font-size: 17px; font-weight: 800; color: #1E293B; margin: 0 0 6px 0;">Bluetooth Printer Out of Range</h3>
-            <p style="font-size: 13px; color: #64748B; margin: 0 0 20px 0; line-height: 1.4;">The kitchen thermal printer is unreachable from this mobile device. Print via Cashier Device?</p>
+            <h3 style="font-size: 17px; font-weight: 800; color: var(--ink); margin: 0 0 6px 0;">Bluetooth Printer Out of Range</h3>
+            <p style="font-size: 13px; color: var(--muted); margin: 0 0 20px 0; line-height: 1.4;">The kitchen thermal printer is unreachable from this mobile device. Print via Cashier Device?</p>
             <div style="display: flex; gap: 10px;">
                 <button type="button" class="btn btn-outline" style="flex: 1; border-radius: 10px; font-size: 13px;" onclick="cancelKotRelayFallback()">Cancel</button>
-                <button type="button" id="btnConfirmKotRelay" class="btn btn-primary" style="flex: 2; border-radius: 10px; font-size: 13px; font-weight: 700; background: #E05A38; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="confirmKotRelayFallback()">
+                <button type="button" id="btnConfirmKotRelay" class="btn btn-primary" style="flex: 2; border-radius: 10px; font-size: 13px; font-weight: 700; background: var(--em-dark); display: inline-flex; align-items: center; justify-content: center; gap: 6px;" onclick="confirmKotRelayFallback()">
                     <svg width="15" height="15" viewBox="0 0 24 24"><use href="#icon-printer"></use></svg>
                     <span>Print via Cashier</span>
                 </button>
