@@ -86,16 +86,6 @@ export class KotUI {
     }
 
     showToast(`Ticket #${res.data.kot_id} sent to kitchen!`, 'success');
-    
-    // Auto print KOT slip
-    try {
-      const slipPayload = generateKotSlipPayload(res.data);
-      ThermalPrinterBridge.enqueuePrintJob({
-        id: res.data.kot_id,
-        textContent: slipPayload.textContent,
-        rawBytes: slipPayload.escPosBytes
-      });
-    } catch (e) {}
 
     if (typeof window !== 'undefined' && typeof window.persistAllToFirestore === 'function') {
       window.persistAllToFirestore();

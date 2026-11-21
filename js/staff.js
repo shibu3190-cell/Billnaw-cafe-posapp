@@ -1998,7 +1998,15 @@ async function logoutStaff() {
         const rawQueue = typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_offline_sync_queue') : null;
         if (rawQueue) {
             const parsedQ = JSON.parse(rawQueue);
-            if (parsedQ && typeof parsedQ === 'object' && Object.keys(parsedQ).length > 0) {
+            const activeCode = String((typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || localStorage.getItem('billnaw_store_code') || '').trim().toUpperCase();
+            const hasPendingForActiveStore = parsedQ && typeof parsedQ === 'object' && Object.keys(parsedQ).some(k => {
+                const entry = parsedQ[k];
+                if (!entry || typeof entry !== 'object') return false;
+                const entryCode = String(entry.storeCode || k).trim().toUpperCase();
+                if (activeCode && entryCode && entryCode !== activeCode) return false;
+                return Boolean(entry.tables || entry.history || entry.kots || entry.expenses || entry.customers || entry.menu);
+            });
+            if (hasPendingForActiveStore) {
                 if (typeof showToast === 'function') {
                     showToast('Pending offline bills have not synced yet. Connect to internet before logging out to prevent bill loss.', 'error');
                 }

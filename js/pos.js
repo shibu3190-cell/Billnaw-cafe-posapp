@@ -116,6 +116,7 @@ function renderTables() {
         posActiveBadge.innerText = getTableName(activeTable);
     }
 
+    const tableButtonsHtml = [];
     for (let i = 1; i <= totalTables; i++) {
         const tInfo = tablesInfo[i];
         const tableName = getTableName(i);
@@ -161,7 +162,7 @@ function renderTables() {
             : 0;
         const countBadge = itemCount > 0 ? `<span class="table-item-badge">${itemCount}</span>` : '';
 
-        grid.innerHTML += `
+        tableButtonsHtml.push(`
             <button type="button" id="table-btn-${i}" class="${classes}" onclick="selectTable(${i})" title="Table ${escapeHtml(tableName)}">
                 <div class="table-status-dot"></div>
                 <span class="table-num-pill">${i}</span>
@@ -170,8 +171,9 @@ function renderTables() {
                 <span class="table-btn-name" style="display:none;">${escapeHtml(tableName)}</span>
                 ${countBadge}
             </button>
-        `;
+        `);
     }
+    grid.innerHTML = tableButtonsHtml.join('');
 }
 window.renderTables = renderTables;
 
@@ -2300,8 +2302,14 @@ async function confirmCheckout() {
         const safeFilterDate = getLocalISODate(); 
         const finalTableStr = oType === 'Takeaway' ? 'Takeaway' : getTableName(activeTable);
 
-        const currentStartNo = shopProfile.startInvoiceNo || 1001; 
-        const highestExistingBill = orderHistory.length > 0 ? Math.max(...orderHistory.map(o => o.billNo || 0)) : 0;
+        const currentStartNo = Number(shopProfile.startInvoiceNo) || 1001; 
+        const highestExistingBill = orderHistory.length > 0
+            ? orderHistory.reduce((maxNo, o) => {
+                const rawNo = o && (o.billNo ?? o.bill_no);
+                const parsed = typeof rawNo === 'number' ? rawNo : parseInt(String(rawNo || '').replace(/\D/g, ''), 10);
+                return (Number.isFinite(parsed) && parsed > maxNo) ? parsed : maxNo;
+            }, 0)
+            : 0;
         const generatedBillNo = Math.max(currentStartNo, highestExistingBill + 1);
 
         const newOrder = { 
@@ -3159,7 +3167,8 @@ window.handleInteractivePrinterSelect = handleInteractivePrinterSelect;
  * (via local physical thermal printer or local browser print dialog).
  * Customer receipts NEVER queue to Distributed Cloud Print Relay.
  */
-async function sendEscPosToPrinter(order) {
+async function sendEscPosToPrinter(rawOrder) {
+    const order = (rawOrder && typeof rawOrder === 'object') ? { ...rawOrder } : {};
     if (typeof document !== 'undefined' && document.body && document.body.classList) {
         document.body.classList.remove('printing-kot');
     }
@@ -3358,7 +3367,7 @@ async function sendEscPosToPrinter(order) {
         }
     }
 
-    // Attach calculated GST summary, subtotal, storeProfile, logoBytes & qrBytes to order so ThermalPrinterBridge has exact tax breakdown & assets
+    // Attach calculated GST summary, subtotal, storeProfile, logoBytes & qrBytes to cloned order so ThermalPrinterBridge has exact tax breakdown & assets without mutating orderHistory
     order.gstMode = gstMode;
     order.subtotal = rawSubtotal;
     order.totalTax = totalTax;

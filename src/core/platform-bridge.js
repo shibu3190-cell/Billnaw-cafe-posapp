@@ -966,10 +966,15 @@ export const ThermalPrinterBridge = {
    * @param {Object} [options={}] - Options (e.g. { storeProfile, isKot: boolean })
    * @returns {Uint8Array}
    */
-  generateEscPosCommands(data, width = '58mm', options = {}) {
+  generateEscPosCommands(data, width = '58mm', options = {}, legacyRole = '') {
+    data = data || {};
     if (typeof width === 'object' && width !== null) {
       options = width;
       width = options.width || '58mm';
+    }
+    options = (options && typeof options === 'object') ? options : {};
+    if (legacyRole && !options.role) {
+      options = { ...options, role: legacyRole, isKot: legacyRole === 'KOT' || Boolean(options.isKot) };
     }
     const encoder = new TextEncoder();
     const encodeClean = (str) => encoder.encode(sanitizeEscPosText(str));
@@ -992,7 +997,13 @@ export const ThermalPrinterBridge = {
     // Helper: Safely resolve structured item objects even if legacy/history order only has string `items` (e.g. "Samosa (x1)")
     const resolveStructuredItems = (orderData) => {
       const catalog = (typeof window !== 'undefined' && Array.isArray(window.menuItems)) ? window.menuItems : [];
-      const totalOrderAmt = Number(orderData.amount || (orderData.final_payable_paise ? orderData.final_payable_paise / 100 : 0)) || 0;
+      const totalOrderAmt = Number(
+        orderData.amount ??
+        orderData.total ??
+        orderData.finalTotal ??
+        orderData.netTotal ??
+        (orderData.final_payable_paise ? orderData.final_payable_paise / 100 : (orderData.final_total_paise ? orderData.final_total_paise / 100 : 0))
+      ) || 0;
 
       const normalizeItem = (it) => {
         let name = it.name || it.item_name || it.menuItemName || it.title || it.dishName || 'Item';
@@ -1411,11 +1422,20 @@ export const ThermalPrinterBridge = {
       // Totals Section
       // Right Align
       parts.push(new Uint8Array([0x1B, 0x61, 0x02]));
+      const fallbackOrderTotal = (data.amount !== undefined && data.amount !== null)
+        ? Number(data.amount)
+        : ((data.total !== undefined && data.total !== null)
+            ? Number(data.total)
+            : ((data.finalTotal !== undefined && data.finalTotal !== null)
+                ? Number(data.finalTotal)
+                : ((data.netTotal !== undefined && data.netTotal !== null)
+                    ? Number(data.netTotal)
+                    : Math.max(0, computedGrossSubtotal - discountAmount + (gstMode === 'exclusive' ? totalTax : 0)))));
       const totalPaise = data.final_payable_paise !== undefined 
         ? data.final_payable_paise 
         : (data.final_total_paise !== undefined 
             ? data.final_total_paise 
-            : ((data.amount || 0) * 100));
+            : Math.round((Number(fallbackOrderTotal) || 0) * 100));
       const totalRupees = (totalPaise / 100).toFixed(2);
 
       // Double Size + Bold (wrapped at dCols so it fits cleanly)
@@ -1427,10 +1447,11 @@ export const ThermalPrinterBridge = {
       parts.push(encodeClean('\n'));
       parts.push(new Uint8Array([0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00]));
 
-      if (data.paymentMode === 'Cash' && data.amountTendered && Number(data.amountTendered) > Number(data.amount || 0)) {
+      const effectiveNumericTotal = Number(totalRupees) || 0;
+      if (data.paymentMode === 'Cash' && data.amountTendered && Number(data.amountTendered) > effectiveNumericTotal) {
         parts.push(new Uint8Array([0x1B, 0x61, 0x00])); // Left Align
         parts.push(encodeClean(formatKeyValRow('Cash Tendered:', `Rs. ${Number(data.amountTendered).toFixed(2)}`)));
-        parts.push(encodeClean(formatKeyValRow('Change Due:', `Rs. ${Number(data.changeReturned || (data.amountTendered - data.amount)).toFixed(2)}`)));
+        parts.push(encodeClean(formatKeyValRow('Change Due:', `Rs. ${Number(data.changeReturned ?? (Number(data.amountTendered) - effectiveNumericTotal)).toFixed(2)}`)));
         parts.push(encodeClean(divider));
       }
 

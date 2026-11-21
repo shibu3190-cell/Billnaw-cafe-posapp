@@ -783,8 +783,10 @@ async function renderDashboardAnalytics() {
     const customStart = document.getElementById('reportCustomStartDate')?.value || '';
     const customEnd = document.getElementById('reportCustomEndDate')?.value || '';
     
-    // 1. Date Range Filtering
+    // 1. Date Range Filtering (excluding VOID / cancelled invoices from revenue & KPIs)
+    const _isVoidedOrder = (o) => Boolean(o && (String(o.status || '').toUpperCase() === 'VOID' || o.isVoided === true || o.voided === true || (o.void_audit && typeof o.void_audit === 'object') || (typeof isOrderVoided === 'function' && isOrderVoided(o))));
     let filteredOrders = orderHistory.filter(o => {
+        if (_isVoidedOrder(o)) return false;
         const fDate = getOrderFilterDate(o);
         if (currentDashboardRange === 'today') return fDate === todayISO;
         if (currentDashboardRange === 'yesterday') return fDate === yesterdayISO;
@@ -1254,16 +1256,16 @@ async function renderDonutChart(orders, expenses) {
             backgroundColors = labels.map((_, i) => palette[i % palette.length]);
         }
     } else if (currentDonutDataset === 'payment') {
-        const payMap = { 'Cash': 0, 'UPI': 0, 'Card': 0 };
+        const payMap = { 'Cash': 0, 'UPI': 0, 'Card': 0, 'Khata': 0 };
         (lastDonutOrders || []).forEach(o => {
-            const mode = (o.paymentMode || 'Cash').trim();
-            const normalized = mode.toUpperCase() === 'UPI' ? 'UPI' : (mode.toUpperCase() === 'CARD' ? 'Card' : 'Cash');
+            const mode = (o.paymentMode || 'Cash').trim().toUpperCase();
+            const normalized = mode === 'UPI' ? 'UPI' : (mode === 'CARD' ? 'Card' : (mode === 'KHATA' ? 'Khata' : 'Cash'));
             payMap[normalized] = (payMap[normalized] || 0) + (Number(o.amount) || 0);
         });
 
-        labels = ['Cash', 'UPI', 'Card'];
-        datasetData = [payMap['Cash'], payMap['UPI'], payMap['Card']];
-        backgroundColors = ['#2D6A4F', '#4361EE', '#F77F00'];
+        labels = payMap['Khata'] > 0 ? ['Cash', 'UPI', 'Card', 'Khata'] : ['Cash', 'UPI', 'Card'];
+        datasetData = payMap['Khata'] > 0 ? [payMap['Cash'], payMap['UPI'], payMap['Card'], payMap['Khata']] : [payMap['Cash'], payMap['UPI'], payMap['Card']];
+        backgroundColors = payMap['Khata'] > 0 ? ['#2D6A4F', '#4361EE', '#F77F00', '#DC2626'] : ['#2D6A4F', '#4361EE', '#F77F00'];
         if (datasetData.every(v => v === 0)) {
             labels = ['No Payment Data'];
             datasetData = [1];
@@ -1461,6 +1463,7 @@ window.exportExpensesCSV = exportExpensesCSV;
 async function saveDailyClosingSummary(targetDate = null) {
     const todayISO = targetDate || ((typeof getLocalISODate === 'function') ? getLocalISODate() : new Date().toISOString().slice(0, 10));
     const targetOrders = (Array.isArray(orderHistory) ? orderHistory : []).filter(o => {
+        if (o && (String(o.status || '').toUpperCase() === 'VOID' || o.isVoided === true || o.voided === true || (o.void_audit && typeof o.void_audit === 'object') || (typeof isOrderVoided === 'function' && isOrderVoided(o)))) return false;
         const fDate = (typeof getOrderFilterDate === 'function') ? getOrderFilterDate(o) : (o.filterDate || (o.date && o.date.slice(0, 10)));
         return fDate === todayISO;
     });
@@ -1477,6 +1480,7 @@ async function saveDailyClosingSummary(targetDate = null) {
     const cashSales = targetOrders.filter(o => (o.paymentMode || 'Cash').toLowerCase() === 'cash').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
     const upiSales = targetOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'upi').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
     const cardSales = targetOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'card').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const khataSales = targetOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'khata').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
 
     const dineInCount = targetOrders.filter(o => (o.orderType || 'Dine-In') === 'Dine-In').length;
     const takeawayCount = targetOrders.filter(o => (o.orderType || '') === 'Takeaway').length;
@@ -1504,12 +1508,14 @@ async function saveDailyClosingSummary(targetDate = null) {
         paymentSplit: {
             cash: Number(cashSales.toFixed(2)),
             upi: Number(upiSales.toFixed(2)),
-            card: Number(cardSales.toFixed(2))
+            card: Number(cardSales.toFixed(2)),
+            khata: Number(khataSales.toFixed(2))
         },
         paymentBreakdown: {
             cash: Number(cashSales.toFixed(2)),
             upi: Number(upiSales.toFixed(2)),
-            card: Number(cardSales.toFixed(2))
+            card: Number(cardSales.toFixed(2)),
+            khata: Number(khataSales.toFixed(2))
         },
         orderTypeSplit: {
             dineIn: dineInCount,
@@ -1851,9 +1857,27 @@ function voidTransaction(orderId, bypassRoleCheck = false) {
     const confirmVoid = confirm(`⚠️ Are you sure you want to cancel / void Bill #${order.billNo || order.id} (₹ ${order.amount})?\n\nThis will remove it from sales records and recalculate revenue.`);
     if (!confirmVoid) return;
 
-    // Remove from orderHistory
+    // Soft-void in orderHistory so cloud/mesh sync propagates status: 'VOID' instead of resurrecting deleted IDs
+    const voidedAtIso = new Date().toISOString();
+    const voidedByName = (typeof currentStaff !== 'undefined' && currentStaff?.name) || 'Admin';
+    order.status = 'VOID';
+    order.isVoided = true;
+    order.voided = true;
+    order.voided_by = voidedByName;
+    order.voided_at = voidedAtIso;
+    order.void_reason = 'Cancelled by Manager/Admin';
+    order.void_audit = {
+        voided_by: voidedByName,
+        voided_at: voidedAtIso,
+        reason: 'Cancelled by Manager/Admin'
+    };
+    order.updatedAt = Date.now();
     orderHistory = orderHistory.filter(o => String(o.id) !== String(orderId));
+    if (typeof window !== 'undefined') window.orderHistory = orderHistory;
     saveToLocal();
+    if (typeof persistHistoryFirebase === 'function') {
+        try { persistHistoryFirebase(order); } catch (e) {}
+    }
     if (typeof persistAllToFirestore === 'function') persistAllToFirestore();
 
     closeTransactionActionSheet();
@@ -2021,12 +2045,14 @@ function renderVerticalProgressMeters(orders) {
         }).join('');
     }
 
-    // 2. Calculate Payment Channels: Cash, UPI, Card
-    const payTotals = { 'Cash': 0, 'UPI': 0, 'Card': 0 };
+    // 2. Calculate Payment Channels: Cash, UPI, Card, Khata
+    const payTotals = { 'Cash': 0, 'UPI': 0, 'Card': 0, 'Khata': 0 };
     list.forEach(o => {
+        if (o && (String(o.status || '').toUpperCase() === 'VOID' || o.isVoided === true || o.voided === true || (o.void_audit && typeof o.void_audit === 'object') || (typeof isOrderVoided === 'function' && isOrderVoided(o)))) return;
         const mode = (o.paymentMode || 'Cash').trim().toUpperCase();
         if (mode === 'UPI') payTotals['UPI'] += (Number(o.amount) || 0);
         else if (mode === 'CARD') payTotals['Card'] += (Number(o.amount) || 0);
+        else if (mode === 'KHATA') payTotals['Khata'] += (Number(o.amount) || 0);
         else payTotals['Cash'] += (Number(o.amount) || 0);
     });
 

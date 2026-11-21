@@ -708,12 +708,20 @@ document.addEventListener('click', (event) => {
 });
 
 // 📸 Upload Menu Choice Dialog Handlers & Quota Telemetry Pill
-async function refreshAiMenuQuotaPill() {
+let _lastAiQuotaFetchAt = 0;
+let _lastAiQuotaShopId = '';
+async function refreshAiMenuQuotaPill(force = false) {
     try {
         const activeShopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || 
                              (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || 
                              (typeof localStorage !== 'undefined' ? (localStorage.getItem('billnaw_store_code') || localStorage.getItem('storeCode')) : null) || 
                              'SHOP-BILLNAW-01';
+        const now = Date.now();
+        if (!force && activeShopId === _lastAiQuotaShopId && (now - _lastAiQuotaFetchAt) < 60000) {
+            return;
+        }
+        _lastAiQuotaShopId = activeShopId;
+        _lastAiQuotaFetchAt = now;
         const res = await fetch(`/api/ai/quota?shopId=${encodeURIComponent(activeShopId)}`).catch(() => null);
         if (!res || !res.ok) return;
         const data = await res.json().catch(() => null);
@@ -740,7 +748,7 @@ function openUploadMenuChoiceModal() {
     const modal = document.getElementById('uploadMenuChoiceModal');
     if (modal) modal.style.display = 'flex';
     if (typeof refreshAiMenuQuotaPill === 'function') {
-        refreshAiMenuQuotaPill();
+        refreshAiMenuQuotaPill(true);
     }
 }
 window.openUploadMenuChoiceModal = openUploadMenuChoiceModal;
@@ -977,13 +985,18 @@ function closeForYouModal() {
 window.closeForYouModal = closeForYouModal;
 
 function syncMenuUIQuantities() {
-    let currentCart = tablesInfo[activeTable]?.items || [];
+    const currentCart = tablesInfo[activeTable]?.items || [];
+    const cartQtyById = new Map();
+    for (let c = 0; c < currentCart.length; c++) {
+        const ci = currentCart[c];
+        if (ci && ci.id !== undefined) {
+            cartQtyById.set(String(ci.id), Number(ci.qty) || 0);
+        }
+    }
     menuItems.forEach(item => {
         const wrapper = document.getElementById(`menu-action-wrap-${item.id}`);
         if(!wrapper) return;
-        let qtyInCart = 0; 
-        const existing = currentCart.find(i => String(i.id) === String(item.id)); 
-        if(existing) qtyInCart = existing.qty;
+        const qtyInCart = cartQtyById.get(String(item.id)) || 0;
 
         const safeItemId = _menuEsc(String(item.id));
         let buttonHtml = '';

@@ -1464,7 +1464,7 @@ function calculateOrderTotals(items, discountObj = null) {
             const qty = Number(item.qty) || 0;
             const itemGross = rate * qty;
             const itemDiscounted = itemGross * discountRatio;
-            const itemGstRate = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0)
+            const itemGstRate = (item.gstRate !== undefined && item.gstRate !== null && item.gstRate !== '' && !isNaN(item.gstRate) && Number(item.gstRate) >= 0)
                 ? Number(item.gstRate)
                 : defaultRate;
             const itemTax = (itemDiscounted * itemGstRate) / 100;
@@ -1493,7 +1493,7 @@ function calculateOrderTotals(items, discountObj = null) {
             const qty = Number(item.qty) || 0;
             const itemGross = rate * qty;
             const itemDiscounted = itemGross * discountRatio;
-            const itemGstRate = (item.gstRate !== undefined && item.gstRate !== null && !isNaN(item.gstRate) && Number(item.gstRate) > 0)
+            const itemGstRate = (item.gstRate !== undefined && item.gstRate !== null && item.gstRate !== '' && !isNaN(item.gstRate) && Number(item.gstRate) >= 0)
                 ? Number(item.gstRate)
                 : defaultRate;
             const basePrice = itemGstRate > 0 ? (itemDiscounted / (1 + (itemGstRate / 100))) : itemDiscounted;
@@ -3672,8 +3672,12 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
                     if (!orderMap.has(key)) {
                         hasNewInvoices = true;
                         const totalAmount = inv.amount !== undefined ? Number(inv.amount) : (inv.final_payable_paise !== undefined ? inv.final_payable_paise / 100 : 0);
-                        const rawItems = inv.rawItems || inv.items || [];
+                        const rawItems = Array.isArray(inv.rawItems) ? inv.rawItems : (Array.isArray(inv.items) ? inv.items : []);
+                        const itemsDisplay = typeof inv.items === 'string' && inv.items.trim()
+                            ? inv.items
+                            : rawItems.map(it => `${it.qty || it.quantity || 1}x ${it.name || 'Item'}`).join(', ');
                         const formattedOrder = {
+                            ...inv,
                             id: inv.id || Date.now(),
                             billNo: inv.billNo || inv.bill_no || inv.id,
                             date: inv.date || (inv.created_at ? new Date(inv.created_at).toLocaleString() : new Date().toLocaleString()),
@@ -3683,11 +3687,11 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
                             paymentMode: inv.paymentMode || inv.payment_mode || inv.payment_method || 'Cash',
                             customer: inv.customer || inv.customer_name || '',
                             biller: inv.biller || inv.biller_name || 'Staff',
-                            items: rawItems.map(it => `${it.qty || it.quantity || 1}x ${it.name || 'Item'}`).join(', '),
+                            items: itemsDisplay,
                             rawItems: rawItems,
                             amount: totalAmount,
-                            grossSubtotal: inv.grossSubtotal || totalAmount,
-                            subtotal: inv.subtotal || totalAmount,
+                            grossSubtotal: inv.grossSubtotal !== undefined ? Number(inv.grossSubtotal) : totalAmount,
+                            subtotal: inv.subtotal !== undefined ? Number(inv.subtotal) : totalAmount,
                             tax: inv.tax || 0,
                             discountAmount: inv.discountAmount || 0,
                             status: inv.status,
@@ -4291,18 +4295,20 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
         const queuedForStore = existingQueueKey ? qMapBefore[existingQueueKey] : null;
         const finalPayload = { ...(queuedForStore || {}), ...payloadToSend, storeCode: targetStoreCode };
 
-        // Role-aware payload sanitization: prevent queued Admin-only fields (like staff) from causing 403 on Cashier/Server table/menu syncs
+        // Role-aware payload sanitization: prevent queued Admin-only fields (like staff/profile) from causing 403 on Cashier/Server table/menu/expense syncs
         try {
             const pinAuthUntil = Number((typeof window !== 'undefined' && window._menuAdminPinAuthorizedUntil) || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('billnaw_admin_pin_auth_until')) || 0);
             const isPinElevated = pinAuthUntil > Date.now();
             const activeStaffObj = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
             const normStaffRole = activeStaffObj && activeStaffObj.role ? String(activeStaffObj.role).trim().toLowerCase() : 'admin';
             const isAdminStaff = normStaffRole === 'admin' || normStaffRole === 'owner';
-            if (!isAdminStaff && (finalPayload.tables !== undefined || finalPayload.menu !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined)) {
+            const hasOperationalFields = finalPayload.tables !== undefined || finalPayload.menu !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined || finalPayload.expenses !== undefined || finalPayload.dailyReport !== undefined;
+            if (!isAdminStaff && hasOperationalFields) {
                 delete finalPayload.staff;
                 delete finalPayload.replaceStaff;
                 delete finalPayload.deletedStaffId;
                 delete finalPayload.deletedStaffIds;
+                delete finalPayload.profile;
             }
             const canSyncMenu = isAdminStaff || isPinElevated || normStaffRole === 'manager' || normStaffRole === 'cashier' || (typeof canCurrentStaffManageMenu === 'function' && canCurrentStaffManageMenu());
             if (!canSyncMenu) {
@@ -4311,7 +4317,7 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                 delete finalPayload.deletedMenuIds;
                 delete finalPayload.deletedMenuNames;
                 delete finalPayload.categories;
-                const hasRemainingFields = finalPayload.tables !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined || finalPayload.expenses !== undefined;
+                const hasRemainingFields = finalPayload.tables !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined || finalPayload.expenses !== undefined || finalPayload.dailyReport !== undefined;
                 if (!hasRemainingFields) {
                     return false;
                 }
@@ -4373,14 +4379,13 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                 writeOfflineSyncQueueMap(qMapAfter);
                 return true;
             } else if (res && (res.status === 401 || res.status === 403)) {
-                console.warn(`[BACKEND SYNC] RBAC/Auth rejected (${res.status}) - preserving offline queue and prompting auth`);
-                const qMapErr = readOfflineSyncQueueMap();
-                const qKey = existingQueueKey || targetStoreCode;
-                qMapErr[qKey] = { ...(qMapErr[qKey] || {}), ...finalPayload, storeCode: targetStoreCode };
-                writeOfflineSyncQueueMap(qMapErr);
-                setCloudSyncStatus('offline', 'Auth Required (Saved Locally)');
-
+                console.warn(`[BACKEND SYNC] RBAC/Auth rejected (${res.status}) - handling queue safely`);
                 if (res.status === 401) {
+                    const qMapErr = readOfflineSyncQueueMap();
+                    const qKey = existingQueueKey || targetStoreCode;
+                    qMapErr[qKey] = { ...(qMapErr[qKey] || {}), ...finalPayload, storeCode: targetStoreCode };
+                    writeOfflineSyncQueueMap(qMapErr);
+                    setCloudSyncStatus('offline', 'Auth Required (Saved Locally)');
                     try {
                         localStorage.removeItem('billnaw_auth_token');
                         localStorage.removeItem('billnaw_auth_mode');
@@ -4388,6 +4393,17 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                     } catch (e) {}
                     if (typeof openShopAuthModal === 'function') {
                         openShopAuthModal(true);
+                    }
+                } else {
+                    // 403 Forbidden (role boundary rejection): only retain operational bill/table data, drop restricted admin fields so queue never deadlocks
+                    const qMapErr = readOfflineSyncQueueMap();
+                    Object.keys(qMapErr).forEach(k => {
+                        if (String(qMapErr[k]?.storeCode || k).trim().toUpperCase() === String(targetStoreCode).trim().toUpperCase()) {
+                            delete qMapErr[k];
+                        }
+                    });
+                    writeOfflineSyncQueueMap(qMapErr);
+                }
                     }
                 }
                 return false;

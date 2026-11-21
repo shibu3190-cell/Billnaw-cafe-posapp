@@ -2664,8 +2664,8 @@ export async function handler(event, context) {
       confirmPassword,
       phone,
       adminPin,
-      otp: submittedOtp,
-      otpTicket: body.otpTicket
+      otp: otpValid ? undefined : submittedOtp,
+      otpTicket: otpValid ? undefined : body.otpTicket
     });
 
     if (regResult.status !== 200 || !regResult.data?.success) {

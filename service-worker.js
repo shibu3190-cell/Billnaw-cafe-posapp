@@ -153,16 +153,7 @@ self.addEventListener('fetch', (event) => {
             })
             .catch(() => cachedResponse);
 
-          const isCodeAsset =
-          url.pathname === '/' ||
-          url.pathname.endsWith('.html') ||
-          url.pathname.endsWith('.js') ||
-          url.pathname.endsWith('.css');
-
-        if (isCodeAsset) {
-          return fetchPromise;
-        }
-        return cachedResponse || fetchPromise;
+          return cachedResponse || fetchPromise;
         });
       })
     );
@@ -172,7 +163,7 @@ self.addEventListener('fetch', (event) => {
   // 4. Stale-While-Revalidate for static assets
   event.respondWith(
     caches.open(CACHE_VERSION).then((cache) => {
-      return cache.match(req).then((cachedResponse) => {
+      return cache.match(req, { ignoreSearch: true }).then((cachedResponse) => {
         const fetchPromise = fetch(req)
           .then((networkResponse) => {
             if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
@@ -180,11 +171,12 @@ self.addEventListener('fetch', (event) => {
             }
             return networkResponse;
           })
-          .catch((networkErr) => {
+          .catch(async (networkErr) => {
             if (cachedResponse) return cachedResponse;
 
             if (req.headers.get('accept')?.includes('text/html')) {
-              return cache.match('./index.html') || cache.match('/index.html');
+              const fallbackHtml = (await cache.match('./index.html', { ignoreSearch: true })) || (await cache.match('/index.html', { ignoreSearch: true }));
+              if (fallbackHtml) return fallbackHtml;
             }
 
             throw networkErr;
@@ -216,6 +208,9 @@ self.addEventListener('message', (event) => {
 
   if (event.data.action === 'clearCache' || event.data.type === 'CLEAR_CACHE') {
     console.log('[SW] Clear cache requested');
-    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
+    const clearPromise = caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
+    if (typeof event.waitUntil === 'function') {
+      event.waitUntil(clearPromise);
+    }
   }
 });

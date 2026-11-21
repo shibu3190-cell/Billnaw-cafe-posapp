@@ -330,7 +330,7 @@ function isExplicitTableReset(tData) {
   return ['empty', 'available', 'vacant', 'cleared', 'billed'].includes(status);
 }
 
-function mergeTableEntry(existingTable, incomingTable) {
+export function mergeTableEntry(existingTable, incomingTable) {
   if (!incomingTable || typeof incomingTable !== 'object' || Array.isArray(incomingTable)) {
     return existingTable ?? incomingTable;
   }
