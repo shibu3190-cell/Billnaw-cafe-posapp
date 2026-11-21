@@ -3101,7 +3101,8 @@ export async function handler(event, context) {
   // -----------------------------------------------------------
   if (event.httpMethod === 'GET' && cleanPath === '/version') {
     return jsonResponse(200, {
-      version: '1.0.0',
+      version: '3.0.0',
+      requiresCleanResync: true,
       status: 'online',
       runtime: 'netlify-serverless',
       timestamp: Date.now()

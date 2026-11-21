@@ -165,11 +165,12 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Health check endpoint
 const APP_BUILD_TIMESTAMP = Date.now().toString();
-const APP_VERSION = "2.4.0";
+const APP_VERSION = "3.0.0";
 
 app.get('/api/version', (req, res) => {
   res.json({
     version: APP_VERSION,
+    requiresCleanResync: true,
     buildTime: APP_BUILD_TIMESTAMP,
     subscription: {
       plan: 'billnaw Pro',

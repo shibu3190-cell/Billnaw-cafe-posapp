@@ -295,6 +295,7 @@ function updateProfileVisuals() {
 window.updateProfileVisuals = updateProfileVisuals;
 
 async function loadLogo(event) { 
+    if (typeof _requireAdminAccess === 'function' && !_requireAdminAccess('update shop logo', 'storeProfileModal')) return;
     const file = event.target.files[0]; 
     if (!file) return;
     try {
@@ -641,7 +642,6 @@ function applySettingsRoleRestrictions() {
         ? (typeof normalizeRole === 'function' ? normalizeRole(active.role) : active.role)
         : 'Floor Server';
     const isRestricted = (role !== 'Admin');
-    const isFloorServer = (role === 'Floor Server');
 
     // 1. Profile header button ("Business & GST Settings")
     const storeProfileBtn = document.querySelector('#settings .settings-profile-header-card button');
@@ -655,27 +655,35 @@ function applySettingsRoleRestrictions() {
         subCrownCard.style.display = isRestricted ? 'none' : 'block';
     }
 
-    // 3. Settings tiles in .settings-tiles-grid
+    // 3. Settings tiles: Every staff role can access Printer Config, Check for Updates, and Lock Terminal / Logout Staff.
+    //    Admin-only tiles & Cloud Shop Logout remain hidden for non-Admin staff.
     const tilesGrid = document.querySelector('.settings-tiles-grid');
     if (tilesGrid) {
         const tiles = tilesGrid.querySelectorAll('.setting-tile-card');
         tiles.forEach(tile => {
-            const isPrinterTile = tile.id === 'settingTilePrinterConfig' || 
-                                  (tile.getAttribute('onclick') && tile.getAttribute('onclick').includes('openPrinterSettingsModal'));
+            const oc = tile.getAttribute('onclick') || '';
+            const isPrinterTile = tile.id === 'settingTilePrinterConfig' || oc.includes('openPrinterSettingsModal');
+            const isUpdatesTile = tile.id === 'settingTileAppUpdates' || oc.includes('checkForAppUpdates');
+            const isStaffLogoutTile = tile.classList.contains('settings-danger-action-card') || oc.includes('logoutStaff');
             if (isRestricted) {
-                if (isFloorServer && isPrinterTile) {
-                    tile.style.display = 'flex';
-                } else {
-                    tile.style.display = 'none';
-                }
+                tile.style.display = (isPrinterTile || isUpdatesTile || isStaffLogoutTile) ? 'flex' : 'none';
             } else {
                 tile.style.display = 'flex';
             }
         });
+
+        // Auto-hide empty .settings-group-block sections so non-Admin staff never see empty headers
+        const groups = tilesGrid.querySelectorAll('.settings-group-block');
+        groups.forEach(group => {
+            const visibleChild = Array.from(group.querySelectorAll('.setting-tile-card')).some(
+                t => t.style.display !== 'none'
+            );
+            group.style.display = visibleChild ? '' : 'none';
+        });
     }
 
-    // 4. Reset & Clear All Data danger card
-    const dangerCards = document.querySelectorAll('#settings .card');
+    // 4. Reset & Clear All Data danger card (Admin only)
+    const dangerCards = document.querySelectorAll('#settings .card, #settings .settings-reset-card');
     dangerCards.forEach(card => {
         if (card.querySelector('button[onclick*="openClearAllDataModal"]') || (card.innerText && card.innerText.includes('Reset & Clear All Data'))) {
             card.style.display = isRestricted ? 'none' : 'block';
@@ -847,7 +855,7 @@ async function saveClientQuotaSettings() {
 window.saveClientQuotaSettings = saveClientQuotaSettings;
 
 function openStoreProfileModal() {
-    if (checkFloorServerModalBlock('storeProfileModal')) return;
+    if (typeof _requireAdminAccess === 'function' ? !_requireAdminAccess('manage store profile', 'storeProfileModal') : checkFloorServerModalBlock('storeProfileModal')) return;
     const el = document.getElementById('storeProfileModal');
     if (el) {
         const nameInput = document.getElementById('shopNameInput');
@@ -889,7 +897,7 @@ function closeStoreProfileModal() {
 window.closeStoreProfileModal = closeStoreProfileModal;
 
 function openStaffManagementModal() {
-    if (checkFloorServerModalBlock('staffManagementDetailModal')) return;
+    if (typeof _requireAdminAccess === 'function' ? !_requireAdminAccess('manage staff and PINs', 'staffManagementDetailModal') : checkFloorServerModalBlock('staffManagementDetailModal')) return;
     const el = document.getElementById('staffManagementDetailModal');
     if (el) {
         if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
@@ -1120,7 +1128,7 @@ async function submitAdminSubscriptionUpdate() {
 window.submitAdminSubscriptionUpdate = submitAdminSubscriptionUpdate;
 
 function openSubscriptionModal() {
-    if (checkFloorServerModalBlock('subscriptionDetailModal')) return;
+    if (typeof _requireAdminAccess === 'function' ? !_requireAdminAccess('manage subscription', 'subscriptionDetailModal') : checkFloorServerModalBlock('subscriptionDetailModal')) return;
     const el = document.getElementById('subscriptionDetailModal') || document.getElementById('subscriptionModal');
     if (el) {
         refreshCurrentStoreSubscriptionUI();
@@ -1136,7 +1144,7 @@ function closeSubscriptionModal() {
 window.closeSubscriptionModal = closeSubscriptionModal;
 
 function openExpensesDetailModal() {
-    if (checkFloorServerModalBlock('expensesDetailModal')) return;
+    if (typeof _requireAdminAccess === 'function' ? !_requireAdminAccess('manage daily expenses', 'expensesDetailModal') : checkFloorServerModalBlock('expensesDetailModal')) return;
     const el = document.getElementById('expensesDetailModal');
     if (el) {
         if (typeof renderExpensesUI === 'function') renderExpensesUI();
@@ -1159,7 +1167,7 @@ function closeExpensesDetailModal() {
 window.closeExpensesDetailModal = closeExpensesDetailModal;
 
 function openDiscountSettingsModal() {
-    if (checkFloorServerModalBlock('discountConfigModal')) return;
+    if (typeof _requireAdminAccess === 'function' ? !_requireAdminAccess('manage discount rules', 'discountConfigModal') : checkFloorServerModalBlock('discountConfigModal')) return;
     const el = document.getElementById('discountConfigModal');
     if (el) {
         const enableInput = document.getElementById('settingDiscountsEnabled');
@@ -1256,7 +1264,7 @@ function saveDiscountSettings() {
 window.saveDiscountSettings = saveDiscountSettings;
 
 function openGstConfigModal() {
-    if (checkFloorServerModalBlock('gstConfigModal')) return;
+    if (typeof _requireAdminAccess === 'function' ? !_requireAdminAccess('configure GST settings', 'gstConfigModal') : checkFloorServerModalBlock('gstConfigModal')) return;
     const el = document.getElementById('gstConfigModal');
     if (el) {
         const modeSel = document.getElementById('gstPricingModeInput');
@@ -1275,7 +1283,7 @@ function closeGstConfigModal() {
 window.closeGstConfigModal = closeGstConfigModal;
 
 function openPaymentConfigModal() {
-    if (checkFloorServerModalBlock('paymentConfigModal')) return;
+    if (typeof _requireAdminAccess === 'function' ? !_requireAdminAccess('configure UPI & payment settings', 'paymentConfigModal') : checkFloorServerModalBlock('paymentConfigModal')) return;
     const el = document.getElementById('paymentConfigModal');
     if (el) {
         const upiInp = document.getElementById('upiIdInput');
@@ -1454,7 +1462,7 @@ window.applyTableNamingPreset = applyTableNamingPreset;
 
 
 function openCloudSyncDetailModal() {
-    if (checkFloorServerModalBlock('cloudSyncDetailModal')) return;
+    if (typeof _requireAdminAccess === 'function' ? !_requireAdminAccess('manage cloud sync settings', 'cloudSyncDetailModal') : checkFloorServerModalBlock('cloudSyncDetailModal')) return;
     const el = document.getElementById('cloudSyncDetailModal');
     if (el) {
         const storeCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : (localStorage.getItem('billnaw_store_code') || 'N/A');
@@ -2305,71 +2313,91 @@ function renderAuthorizedDevicesHub() {
         }
     }
 
-    // 2. Render Authorized Devices
+    // 2. Render Authorized Devices (Clean Minimal Emerald/Mint/Slate Cards)
     if (authListEl) {
         if (authorizedDevices.length === 0) {
             authListEl.innerHTML = `
-                <div style="background: rgba(0, 0, 0, 0.02); border: 1px dashed var(--border); border-radius: 12px; padding: 18px; text-align: center; color: var(--text-muted); font-size: 12px;">
+                <div class="minimal-empty-card">
                     No authorized terminals registered yet.
                 </div>
             `;
         } else {
+            const myDevId = (typeof getOrCreateDeviceId === 'function')
+                ? getOrCreateDeviceId()
+                : (localStorage.getItem('billnaw_device_id') || localStorage.getItem('bongbhoj_device_id') || '');
+            const sessions = (typeof window !== 'undefined' && Array.isArray(window.activeStaffSessions)) ? window.activeStaffSessions : [];
+
             authListEl.innerHTML = authorizedDevices.map(dev => {
                 const isMaster = Boolean(dev.isMaster);
                 const isRevoked = (dev.status === 'REVOKED');
-                const profileBadge = dev.stationProfile || 'GENERAL_STATION';
-                const nameDisplay = _settingsEsc(dev.deviceName || 'Terminal');
-                const safeDevId = _settingsEsc(String(dev.deviceId || ''));
+                const isThisDevice = Boolean(myDevId && (dev.deviceId === myDevId || dev.id === myDevId));
+                const profileRaw = dev.stationProfile || 'GENERAL_STATION';
+                const profileLabel = profileRaw === 'BILLING_COUNTER' ? 'Counter'
+                    : profileRaw === 'WAITER_MOBILE' ? 'Waiter'
+                    : profileRaw === 'KDS' ? 'Kitchen KDS'
+                    : profileRaw === 'ADMIN' ? 'Admin'
+                    : 'Terminal';
+                const isMobileDev = profileRaw === 'WAITER_MOBILE' || /mobile|phone|android|iphone/i.test(String(dev.deviceName || ''));
+                const nameDisplay = _settingsEsc(dev.deviceName || 'POS Terminal');
+                const rawDevId = String(dev.deviceId || dev.id || '');
+                const safeDevId = _settingsEsc(rawDevId);
+                const shortId = _settingsEsc(rawDevId.slice(-6));
 
-                // Cross-reference with active staff sessions to display current staff
-                const sessions = (typeof window !== 'undefined' && Array.isArray(window.activeStaffSessions)) ? window.activeStaffSessions : [];
-                const activeSessionForDev = sessions.find(s => (s.deviceId === dev.deviceId || s.deviceId === dev.id) && s.status !== 'REVOKED');
-                const staffInfoStr = activeSessionForDev ? ` • Staff: ${activeSessionForDev.staffName} (${activeSessionForDev.staffRole || 'Staff'})` : '';
+                const activeSessionForDev = sessions.find(s => (s.deviceId === dev.deviceId || s.deviceId === dev.id) && s.status !== 'REVOKED' && s.status !== 'ENDED');
+                const staffLine = activeSessionForDev
+                    ? `${_settingsEsc(activeSessionForDev.staffName || 'Staff')} · ${_settingsEsc(activeSessionForDev.staffRole || 'Staff')}`
+                    : 'No active staff';
 
-                // Activity / Last Seen Telemetry
                 const now = Date.now();
                 const lastSeenMs = dev.lastSeenAt ? new Date(dev.lastSeenAt).getTime() : 0;
                 const diffM = lastSeenMs ? Math.floor((now - lastSeenMs) / 60000) : 0;
-                const isOnline = !isRevoked && (isMaster || (lastSeenMs && (now - lastSeenMs) <= 15 * 60 * 1000));
+                const isOnline = !isRevoked && (isThisDevice || isMaster || (lastSeenMs && (now - lastSeenMs) <= 15 * 60 * 1000));
 
-                let telemetryText = '';
+                let statusDotCls = 'is-idle';
+                let statusText = 'Offline';
                 if (isRevoked) {
-                    telemetryText = `Revoked ${dev.revokedAt ? new Date(dev.revokedAt).toLocaleTimeString() : 'by Admin'}`;
+                    statusDotCls = 'is-revoked';
+                    statusText = 'Revoked';
                 } else if (isOnline) {
-                    telemetryText = '🟢 Active now';
+                    statusDotCls = 'is-online';
+                    statusText = 'Active now';
                 } else if (lastSeenMs) {
-                    telemetryText = diffM < 60 ? `⚪ Inactive for ${Math.max(1, diffM)}m` : `⚪ Inactive for ${Math.floor(diffM / 60)}h`;
-                } else {
-                    telemetryText = '⚪ Offline';
+                    statusText = diffM < 60 ? `${Math.max(1, diffM)}m ago` : `${Math.floor(diffM / 60)}h ago`;
                 }
 
+                const deviceIconSvg = isMobileDev
+                    ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>'
+                    : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
+
                 return `
-                    <div class="auth-device-card" style="background: var(--bg-surface); border: 1px solid ${isRevoked ? '#FECACA' : 'var(--border)'}; border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; border-radius: 10px; background: ${isMaster ? 'rgba(20, 56, 50, 0.1)' : (isRevoked ? 'rgba(220, 38, 38, 0.1)' : 'rgba(37, 99, 235, 0.1)')}; color: ${isMaster ? 'var(--primary)' : (isRevoked ? 'var(--danger)' : '#2563EB')}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                    <line x1="8" y1="21" x2="16" y2="21"></line>
-                                    <line x1="12" y1="17" x2="12" y2="21"></line>
-                                </svg>
+                    <div class="auth-device-card minimal-device-card ${isRevoked ? 'is-revoked' : ''}">
+                        <div class="minimal-device-main">
+                            <div class="minimal-device-icon ${isMaster ? 'is-master' : (isRevoked ? 'is-revoked' : '')}">
+                                ${deviceIconSvg}
                             </div>
-                            <div>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <strong style="font-size: 14px; color: var(--text-dark);">${nameDisplay}</strong>
-                                    ${isMaster ? '<span style="font-size: 10px; font-weight: 700; background: #DCFCE7; color: #15803D; padding: 2px 7px; border-radius: 10px;">Master Terminal</span>' : (isRevoked ? '<span style="font-size: 10px; font-weight: 700; background: #FEE2E2; color: #B91C1C; padding: 2px 7px; border-radius: 10px;">REVOKED</span>' : `<span style="font-size: 10px; font-weight: 700; background: #EFF6FF; color: #1D4ED8; padding: 2px 7px; border-radius: 10px;">${_settingsEsc(profileBadge)}</span>`)}
+                            <div class="minimal-device-info">
+                                <div class="minimal-device-title-row">
+                                    <strong class="minimal-device-name">${nameDisplay}</strong>
+                                    ${isThisDevice ? '<span class="minimal-pill is-mint">This Device</span>' : ''}
+                                    ${isMaster ? '<span class="minimal-pill is-emerald">Master</span>' : (isRevoked ? '<span class="minimal-pill is-danger">Revoked</span>' : `<span class="minimal-pill is-slate">${_settingsEsc(profileLabel)}</span>`)}
                                 </div>
-                                <p style="font-size: 11px; color: var(--text-muted); margin: 3px 0 0 0; font-family: monospace;">ID: ${safeDevId} • ${_settingsEsc(telemetryText)}${_settingsEsc(staffInfoStr)}</p>
+                                <div class="minimal-device-meta">
+                                    <span class="minimal-status-dot ${statusDotCls}"></span>
+                                    <span>${_settingsEsc(statusText)}</span>
+                                    <span class="minimal-meta-sep">·</span>
+                                    <span>${staffLine}</span>
+                                    <span class="minimal-meta-sep">·</span>
+                                    <span class="minimal-device-id">#${shortId}</span>
+                                </div>
                             </div>
                         </div>
-                        <div>
+                        <div class="minimal-device-actions">
                             ${isMaster ? '' : (isRevoked ? `
-                                <button type="button" class="btn btn-outline js-resume-device-btn" data-device-id="${safeDevId}" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: #16A34A; border-color: rgba(22, 163, 74, 0.3); display: inline-flex; align-items: center; gap: 6px;">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <button type="button" class="btn btn-outline minimal-action-btn is-resume js-resume-device-btn" data-device-id="${safeDevId}">
                                     <span>Resume</span>
                                 </button>
                             ` : `
-                                <button type="button" class="btn btn-outline js-revoke-device-btn" data-device-id="${safeDevId}" style="padding: 7px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; color: var(--danger); border-color: rgba(220, 38, 38, 0.3); display: inline-flex; align-items: center; gap: 6px;">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                                <button type="button" class="btn btn-outline minimal-action-btn is-danger js-revoke-device-btn" data-device-id="${safeDevId}">
                                     <span>Revoke</span>
                                 </button>
                             `)}

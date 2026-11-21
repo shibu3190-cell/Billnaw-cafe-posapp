@@ -9,7 +9,12 @@
             if (isExplicitLogin) {
                 modal.dataset.relogin = 'true';
             }
-            modal.style.display = 'flex';
+            if (typeof window.setActiveAuthOverlay === 'function') {
+                window.setActiveAuthOverlay('shopAuthModal');
+            } else {
+                modal.style.zIndex = '1000030';
+                modal.style.display = 'flex';
+            }
             const closeBtn = document.getElementById('shopAuthCloseBtn') || modal.querySelector('.shop-auth-close-btn');
             if (closeBtn) {
                 // Strict security: Top right cross button is completely removed for re-login and unauthenticated access
@@ -1636,8 +1641,104 @@
     }
     window.clearAllTenantLocalData = clearAllTenantLocalData;
 
-    async function logoutShop() {
-        const activeToken = localStorage.getItem('billnaw_auth_token');
+    async function purgeDeviceCookiesAndCaches() {
+        // 1. Delete ALL accessible cookies on this device across root path, current path, and host/domain variants
+        try {
+            if (typeof document !== 'undefined' && typeof document.cookie === 'string' && document.cookie.trim()) {
+                const cookies = document.cookie.split(';');
+                const hostname = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : '';
+                const pathname = (typeof window !== 'undefined' && window.location && window.location.pathname) ? window.location.pathname : '/';
+                const paths = Array.from(new Set(['/', pathname]));
+                const domains = [''];
+                if (hostname && hostname !== 'localhost' && !/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+                    domains.push(hostname, '.' + hostname);
+                    const parts = hostname.split('.');
+                    if (parts.length > 2) {
+                        domains.push('.' + parts.slice(-2).join('.'));
+                    }
+                }
+                cookies.forEach(c => {
+                    const eqIdx = c.indexOf('=');
+                    const name = (eqIdx > -1 ? c.slice(0, eqIdx) : c).trim();
+                    if (!name) return;
+                    paths.forEach(p => {
+                        domains.forEach(d => {
+                            const domAttr = d ? `; domain=${d}` : '';
+                            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; path=${p}${domAttr}`;
+                        });
+                    });
+                });
+            }
+        } catch (e) {}
+
+        // 2. Delete ALL Service Worker Cache Storage buckets
+        try {
+            if (typeof caches !== 'undefined' && typeof caches.keys === 'function') {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(k => caches.delete(k).catch(() => {})));
+            }
+        } catch (e) {}
+
+        // 3. Clear sessionStorage completely
+        try {
+            if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.clear();
+            }
+        } catch (e) {}
+
+        // 4. Wipe all non-hardware localStorage keys + IndexedDB tenant stores
+        try {
+            if (typeof localStorage !== 'undefined') {
+                const HARDWARE_PRESERVE = new Set([
+                    'billnaw_device_id', 'bongbhoj_device_id',
+                    'billnaw_printers_config', 'pos_dual_printers',
+                    'billnaw_single_printer_mode', 'billnaw_master_print_hub',
+                    'billnaw_kot_relay_mode', 'billnaw_pos_version', 'billnaw_data_epoch'
+                ]);
+                const allKeys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && !HARDWARE_PRESERVE.has(k)) allKeys.push(k);
+                }
+                allKeys.forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+            }
+        } catch (e) {}
+
+        // 5. Close active IDB connection and delete IndexedDB databases (with explicit fallback when indexedDB.databases is unavailable)
+        try {
+            if (typeof idb !== 'undefined' && idb.db && typeof idb.db.close === 'function') {
+                try { idb.db.close(); } catch (_) {}
+                idb.db = null;
+                if ('initPromise' in idb) idb.initPromise = null;
+            }
+            const knownDbs = new Set(['CafePOS_DB', 'firebaseLocalStorageDb']);
+            if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
+                const dbs = await indexedDB.databases().catch(() => []);
+                (dbs || []).forEach(d => { if (d && d.name) knownDbs.add(d.name); });
+            }
+            if (typeof indexedDB !== 'undefined' && typeof indexedDB.deleteDatabase === 'function') {
+                await Promise.all(Array.from(knownDbs).map(dbName => new Promise(resolve => {
+                    try {
+                        const req = indexedDB.deleteDatabase(dbName);
+                        req.onsuccess = req.onerror = req.onblocked = () => resolve();
+                        setTimeout(resolve, 600);
+                    } catch (_) { resolve(); }
+                })));
+            }
+        } catch (e) {}
+    }
+    window.purgeDeviceCookiesAndCaches = purgeDeviceCookiesAndCaches;
+
+    async function logoutShop(options = {}) {
+        if (!options || !options.systemInitiated) {
+            const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+            const normRole = active && active.role ? (typeof normalizeRole === 'function' ? normalizeRole(active.role) : active.role) : '';
+            if (active && normRole && normRole !== 'Admin') {
+                if (typeof showToast === 'function') showToast('Only Store Admin can sign out of the Cloud Shop account. Use Lock Terminal / Logout Staff instead.', 'warning');
+                return false;
+            }
+        }
+        const activeToken = localStorage.getItem('billnaw_auth_token') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('billnaw_auth_token') : null);
         const activeEmail = localStorage.getItem('billnaw_auth_email') || (document.getElementById('shopAuthEmail') ? document.getElementById('shopAuthEmail').value.trim() : '');
 
         // 1. Unsubscribe real-time Firestore listeners & stop heartbeats immediately
@@ -1684,8 +1785,9 @@
         }
         window.currentAuthUser = null;
 
-        // 4. Purge storage & IndexedDB
+        // 4. Purge ALL storage, IndexedDB, cookies & SW Cache Storage on device logout
         await clearAllTenantLocalData();
+        await purgeDeviceCookiesAndCaches();
 
         // 5. Reset reactive in-memory state (tablesInfo MUST be an Object {}, never [])
         window.currentStaff = null;
@@ -1763,6 +1865,12 @@
 
     // 📱 Active Sessions Management Handlers
     async function openActiveSessionsModal() {
+        const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+        const normRole = active && active.role ? (typeof normalizeRole === 'function' ? normalizeRole(active.role) : active.role) : '';
+        if (!active || normRole !== 'Admin') {
+            if (typeof showToast === 'function') showToast('Active Devices & Sessions is restricted to Store Admin.', 'warning');
+            return;
+        }
         if (typeof checkFloorServerModalBlock === 'function' && checkFloorServerModalBlock('activeSessionsModal')) return;
         const modal = document.getElementById('activeSessionsModal');
         if (modal) modal.style.display = 'flex';
@@ -1803,7 +1911,7 @@
                 const currentSessExists = activeToken ? res.sessions.some(s => s.token === activeToken) : false;
                 if (activeToken && !currentSessExists) {
                     if (typeof showToast === 'function') showToast('Terminal session was revoked remotely.', 'warning');
-                    logoutShop();
+                    logoutShop({ systemInitiated: true });
                     return;
                 }
 
@@ -1815,30 +1923,37 @@
                     const isCurrent = activeToken && s.token === activeToken;
                     const createdDate = new Date(s.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                     const sessionKey = safeEsc(s.id || s.token || '');
+                    const isMobileDev = /mobile|android|iphone|ipad/i.test(String(s.device || ''));
+                    const devIconSvg = isMobileDev
+                        ? '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>'
+                        : '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
 
                     return `
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #FAF7F4; border: 1.5px solid #E6DCCD; border-radius: 10px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div style="width: 32px; height: 32px; border-radius: 8px; background: #143832; color: #2DD4BF; display: flex; align-items: center; justify-content: center;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                        <div class="session-card minimal-session-card">
+                            <div class="minimal-device-main">
+                                <div class="minimal-device-icon ${isCurrent ? 'is-master' : ''}">
+                                    ${devIconSvg}
                                 </div>
-                                <div>
-                                    <div style="font-weight: 800; font-size: 13px; color: var(--text-dark);">
-                                        ${safeEsc(s.device || 'POS Terminal')}
-                                        ${isCurrent ? '<span style="color: #047857; background: #D1FAE5; font-size: 10px; padding: 2px 6px; border-radius: 8px; margin-left: 6px;">Current Device</span>' : ''}
+                                <div class="minimal-device-info">
+                                    <div class="minimal-device-title-row">
+                                        <strong class="minimal-device-name">${safeEsc(s.device || 'POS Terminal')}</strong>
+                                        ${isCurrent ? '<span class="minimal-pill is-mint">This Device</span>' : '<span class="minimal-pill is-slate">Cloud Session</span>'}
                                     </div>
-                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
-                                        IP: ${safeEsc(s.ip || '127.0.0.1')} • Connected: ${safeEsc(createdDate)}
+                                    <div class="minimal-device-meta">
+                                        <span class="minimal-status-dot is-online"></span>
+                                        <span>Active</span>
+                                        <span class="minimal-meta-sep">·</span>
+                                        <span>${safeEsc(createdDate)}</span>
                                     </div>
                                 </div>
                             </div>
-                            <div>
+                            <div class="minimal-device-actions">
                                 ${!isCurrent ? `
-                                    <button type="button" class="btn btn-outline js-revoke-session-btn" data-session-id="${sessionKey}" style="color: var(--danger); border-color: var(--danger); font-size: 11px; padding: 4px 8px; border-radius: 8px;">
+                                    <button type="button" class="btn btn-outline minimal-action-btn is-danger js-revoke-session-btn" data-session-id="${sessionKey}">
                                         Revoke
                                     </button>
                                 ` : `
-                                    <button type="button" class="btn btn-outline js-logout-session-btn" data-session-id="${sessionKey}" style="color: var(--danger); border-color: var(--danger); font-size: 11px; padding: 4px 8px; border-radius: 8px;">
+                                    <button type="button" class="btn btn-outline minimal-action-btn is-danger js-logout-session-btn" data-session-id="${sessionKey}">
                                         Sign Out
                                     </button>
                                 `}
@@ -1955,6 +2070,12 @@
 
     // 🪑 Floor & Table Management Functions
     function openTableManagementModal() {
+        const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+        const normRole = active && active.role ? (typeof normalizeRole === 'function' ? normalizeRole(active.role) : active.role) : '';
+        if (!active || normRole !== 'Admin') {
+            if (typeof showToast === 'function') showToast('Table layout settings are restricted to Store Admin.', 'warning');
+            return;
+        }
         if (typeof checkFloorServerModalBlock === 'function' && checkFloorServerModalBlock('tableManagementModal')) return;
         const modal = document.getElementById('tableManagementModal');
         if (!modal) return;
@@ -2013,6 +2134,12 @@
     window.toggleTablesVisibility = toggleTablesVisibility;
 
     function saveTableSettings() {
+        const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+        const normRole = active && active.role ? (typeof normalizeRole === 'function' ? normalizeRole(active.role) : active.role) : '';
+        if (!active || normRole !== 'Admin') {
+            if (typeof showToast === 'function') showToast('Only Store Admin can save table layout settings.', 'warning');
+            return;
+        }
         const countInput = document.getElementById('tblMgmtCountInput');
         const showToggle = document.getElementById('tblMgmtShowTables');
         const alertToggle = document.getElementById('tblMgmtUnpaidAlert');
@@ -2189,12 +2316,11 @@
         const hasAuthParam = window.location.search && window.location.search.includes('auth=login');
 
         if (hasAuthParam || (!isAuth && !isExplicitDemo)) {
-            setTimeout(() => {
-                if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
-                if (hasAuthParam) {
-                    try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
-                }
-            }, 60);
+            // Open synchronously (no 60ms delay) so PIN/profile overlays never flicker underneath
+            if (typeof openShopAuthModal === 'function') openShopAuthModal(true);
+            if (hasAuthParam) {
+                try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+            }
         }
     }
 
@@ -2203,69 +2329,280 @@
     } else {
         checkStrictRootAuth();
     }
-    // App Version & Update Manager
+
+    // App Version & Update Manager (v3.0.0 Unified + Clean Local-Reset & Backend Resync)
+    const CLIENT_APP_VERSION = '3.0.0';
+    window.CLIENT_APP_VERSION = CLIENT_APP_VERSION;
     let appUpdateWorker = null;
+    let _latestServerVersion = CLIENT_APP_VERSION;
+    let _updatePopupDismissedThisSession = false;
+
+    function _setUpdateInstallProgress(pct, stageTitle, stageSubtitle) {
+        const overlay = document.getElementById('appUpdateInstallOverlay');
+        if (!overlay) return;
+        const bar = document.getElementById('updateInstallProgressBar');
+        const pctEl = document.getElementById('updateInstallProgressPct');
+        const titleEl = document.getElementById('updateInstallStageTitle');
+        const subEl = document.getElementById('updateInstallStageSub');
+        if (bar) bar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+        if (pctEl) pctEl.innerText = `${Math.round(pct)}%`;
+        if (titleEl && stageTitle) titleEl.innerText = stageTitle;
+        if (subEl && stageSubtitle) subEl.innerText = stageSubtitle;
+    }
+
+    function showAppUpdateInstallOverlay(targetVer = CLIENT_APP_VERSION) {
+        const verEl = document.getElementById('updateInstallTargetVersion');
+        if (verEl) verEl.innerText = 'v' + targetVer;
+        const popup = document.getElementById('appUpdatePopup');
+        if (popup) popup.style.display = 'none';
+        if (typeof window.setActiveAuthOverlay === 'function') {
+            window.setActiveAuthOverlay('appUpdateInstallOverlay');
+        } else {
+            const ov = document.getElementById('appUpdateInstallOverlay');
+            if (ov) {
+                ov.style.zIndex = '1000050';
+                ov.style.display = 'flex';
+            }
+        }
+        _setUpdateInstallProgress(12, 'Preparing Billnaw POS v' + targetVer, 'Checking pending offline orders...');
+    }
+    window.showAppUpdateInstallOverlay = showAppUpdateInstallOverlay;
+
+    function _hideAppUpdateInstallOverlay() {
+        const ov = document.getElementById('appUpdateInstallOverlay');
+        if (ov) ov.style.display = 'none';
+    }
 
     function checkForAppUpdates(isManual = false) {
-        fetch('/api/version?t=' + Date.now())
+        if (isManual) _updatePopupDismissedThisSession = false;
+        fetch('/api/version?t=' + Date.now(), { cache: 'no-store' })
             .then(res => res.json())
             .then(data => {
-                const currentVer = localStorage.getItem('billnaw_pos_version') || '1.0.0';
-                const serverVer = data.version || '2.4.0';
+                const serverVer = (data && data.version) ? String(data.version) : CLIENT_APP_VERSION;
+                _latestServerVersion = serverVer;
+
+                // Fresh brand-new v3.0.0 installs (no stored version AND no legacy shop session) seed v3.0.0 cleanly to avoid false-positive prompts over #shopAuthModal.
+                // Existing shops upgrading from v1/v2 (which already have shop auth/session or old version key) immediately see the v3.0.0 Update button!
+                let storedVer = localStorage.getItem('billnaw_pos_version');
+                if (!storedVer) {
+                    const hasLegacyShopState = Boolean(
+                        localStorage.getItem('billnaw_auth_token') ||
+                        localStorage.getItem('billnaw_shop_session') ||
+                        localStorage.getItem('billnaw_store_code')
+                    );
+                    if (!hasLegacyShopState) {
+                        storedVer = CLIENT_APP_VERSION;
+                        try { localStorage.setItem('billnaw_pos_version', CLIENT_APP_VERSION); } catch (_) {}
+                    } else {
+                        storedVer = '1.0.0';
+                    }
+                }
+
                 const badge = document.getElementById('updateVersionBadge');
                 if (badge) badge.innerText = 'v' + serverVer;
+                const settingsBadge = document.getElementById('settingsAppVersionBadge');
+                if (settingsBadge) settingsBadge.innerText = 'v' + storedVer;
 
-                if (serverVer !== currentVer) {
-                    const popup = document.getElementById('appUpdatePopup');
-                    if (popup) popup.style.display = 'block';
+                if (serverVer !== storedVer) {
+                    const activeOv = (typeof window.getActiveAuthOverlay === 'function') ? window.getActiveAuthOverlay() : null;
+                    const isBlockingAuthOpen = ['shopAuthModal', 'cloudSyncOverlay', 'appUpdateInstallOverlay', 'devicePairingOverlay'].includes(activeOv);
+                    if (isManual || (!_updatePopupDismissedThisSession && !isBlockingAuthOpen)) {
+                        const popup = document.getElementById('appUpdatePopup');
+                        if (popup) popup.style.display = 'block';
+                    }
+                    if (isManual && typeof showToast === 'function') {
+                        showToast(`Update v${serverVer} is ready! Tap "Update Now" to install cleanly.`, 'info');
+                    }
                 } else if (isManual) {
                     if (typeof showToast === 'function') {
-                        showToast('🎉 You are using the latest version of Billnaw POS (v' + serverVer + ')');
+                        showToast('You are running the latest Billnaw POS (v' + serverVer + ').', 'success');
                     }
                 }
             })
             .catch(() => {
                 if (isManual && typeof showToast === 'function') {
-                    showToast('Unable to check for updates right now.');
+                    showToast('Unable to check for updates right now.', 'warning');
                 }
             });
     }
     window.checkForAppUpdates = checkForAppUpdates;
 
-    function applyAppUpdate() {
-        if (appUpdateWorker) {
-            try { 
-                appUpdateWorker.postMessage({ type: 'SKIP_WAITING', action: 'skipWaiting' }); 
-            } catch(e) {}
+    async function applyAppUpdate() {
+        // Hard safety gate: never wipe local caches while offline so existing shops never lose unsynced bills
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            if (typeof showToast === 'function') {
+                showToast('Please connect to the internet before installing v3.0.0 so pending bills sync safely.', 'warning');
+            }
+            return false;
         }
-        if ('caches' in window) {
+
+        let targetVer = _latestServerVersion || CLIENT_APP_VERSION;
+        window._isApplyingAppUpdate = true;
+        showAppUpdateInstallOverlay(targetVer);
+
+        try {
+            // Stage 1 (24%): Verify target version & drain BOTH debounced in-memory syncs AND offline sync queue
+            _setUpdateInstallProgress(24, 'Backing up pending orders...', 'Flushing offline queue so no bills are lost.');
             try {
-                caches.keys().then(keys => Promise.all(
-                    keys.map(k => k !== 'billnaw-pos-v2.7.0' ? caches.delete(k) : null)
-                )).catch(() => {});
-            } catch(e) {}
+                const verRes = await fetch('/api/version?t=' + Date.now(), { cache: 'no-store' });
+                if (verRes.ok) {
+                    const verData = await verRes.json();
+                    if (verData && verData.version) targetVer = String(verData.version);
+                }
+            } catch (_) {}
+
+            let queueDrained = true;
+            if (typeof window.flushPendingBackendSyncs === 'function') {
+                queueDrained = await Promise.race([
+                    window.flushPendingBackendSyncs().catch(() => false),
+                    new Promise(resolve => setTimeout(() => resolve(false), 4500))
+                ]);
+            } else if (typeof window.flushOfflineSyncQueue === 'function') {
+                await Promise.race([
+                    window.flushOfflineSyncQueue().catch(() => false),
+                    new Promise(resolve => setTimeout(resolve, 3500))
+                ]);
+            }
+
+            // Double-check localStorage offline queue before wiping anything
+            try {
+                const rawQueue = localStorage.getItem('billnaw_offline_sync_queue');
+                if (rawQueue) {
+                    const parsedQ = JSON.parse(rawQueue);
+                    if (parsedQ && typeof parsedQ === 'object' && Object.keys(parsedQ).length > 0) {
+                        queueDrained = false;
+                    }
+                }
+            } catch (_) {}
+
+            if (!queueDrained) {
+                window._isApplyingAppUpdate = false;
+                _hideAppUpdateInstallOverlay();
+                if (typeof showToast === 'function') {
+                    showToast('Pending offline bills could not sync yet. Update paused to protect your bills — please retry when online.', 'error');
+                }
+                return false;
+            }
+
+            // Stage 2 (48%): Preserve verified shop auth & hardware bindings (Zero-Re-OTP for existing shops)
+            _setUpdateInstallProgress(48, 'Securing shop session & printer bindings...', 'Preserving verified shop credentials for seamless resync.');
+            const PRESERVE_KEYS = [
+                'billnaw_auth_token', 'billnaw_auth_email', 'billnaw_auth_phone',
+                'billnaw_auth_mode', 'billnaw_shop_session', 'billnaw_shop_name', 'billnaw_store_code',
+                'billnaw_shop_code', 'billnaw_active_store_id', 'billnaw_active_user',
+                'billnaw_last_device_email', 'billnaw_last_store_code',
+                'billnaw_device_id', 'bongbhoj_device_id', 'billnaw_hardware_device_id',
+                'billnaw_is_master', 'billnaw_device_status', 'billnaw_device_auth_timestamp',
+                'billnaw_station_profile', 'billnaw_station_name',
+                'billnaw_printers_config', 'pos_dual_printers',
+                'billnaw_single_printer_mode', 'billnaw_master_print_hub', 'billnaw_kot_relay_mode',
+                'billnaw_data_epoch', 'billnaw_app_data_epoch'
+            ];
+            const preservedSnapshot = {};
+            const sessionAuthToken = (typeof sessionStorage !== 'undefined') ? sessionStorage.getItem('billnaw_auth_token') : null;
+            try {
+                PRESERVE_KEYS.forEach(k => {
+                    const v = localStorage.getItem(k);
+                    if (v !== null) preservedSnapshot[k] = v;
+                });
+                if (!preservedSnapshot.billnaw_auth_token && sessionAuthToken) {
+                    preservedSnapshot.billnaw_auth_token = sessionAuthToken;
+                }
+            } catch (_) {}
+
+            // Stage 3 (68%): Clean stale local business caches, IndexedDB stores & old SW Cache Storage
+            _setUpdateInstallProgress(68, 'Downloading v' + targetVer + ' & clearing stale cache...', 'Removing old menu, staff & asset caches to prevent conflicts.');
+            try {
+                if (typeof idb !== 'undefined' && typeof idb.clear === 'function') {
+                    const storesToClean = [
+                        'cafe_menu', 'cafe_categories', 'cafe_history', 'cafe_tables',
+                        'cafe_customers', 'cafe_expenses', 'cafe_staff', 'cafe_profile',
+                        'cafe_logo', 'cafe_khata', 'cafe_raw_materials', 'cafe_sub_recipes',
+                        'cafe_unsettled_orders', 'billnaw_devices', 'billnaw_sessions'
+                    ];
+                    await Promise.all(storesToClean.map(s => idb.clear(s).catch(() => {})));
+                }
+            } catch (_) {}
+
+            try {
+                if ('caches' in window && typeof caches.keys === 'function') {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(k => caches.delete(k).catch(() => {})));
+                }
+            } catch (_) {}
+
+            try {
+                localStorage.clear();
+                Object.entries(preservedSnapshot).forEach(([k, v]) => {
+                    try { localStorage.setItem(k, v); } catch (_) {}
+                });
+                // Clear active staff shift & mark terminal locked so staff cleanly selects profile & enters 4-digit PIN after resync
+                localStorage.removeItem('billnaw_active_staff');
+                localStorage.removeItem('billnaw_current_session_id');
+                localStorage.removeItem('billnaw_pin_verified_at');
+                localStorage.setItem('billnaw_terminal_locked', 'true');
+                localStorage.setItem('billnaw_pos_version', targetVer);
+                localStorage.setItem('billnaw_pending_clean_resync', targetVer);
+                if (typeof sessionStorage !== 'undefined') {
+                    sessionStorage.clear();
+                    if (sessionAuthToken) sessionStorage.setItem('billnaw_auth_token', sessionAuthToken);
+                }
+            } catch (_) {}
+
+            // Stage 4 (88%): Activate new v4.0.0 Service Worker & pre-warm bundle
+            _setUpdateInstallProgress(88, 'Installing Billnaw POS v' + targetVer + '...', 'Activating updated application shell.');
+            if (appUpdateWorker) {
+                try {
+                    appUpdateWorker.postMessage({ type: 'SKIP_WAITING', action: 'skipWaiting' });
+                } catch (_) {}
+            } else if ('serviceWorker' in navigator) {
+                try {
+                    const reg = await navigator.serviceWorker.getRegistration();
+                    if (reg) {
+                        await reg.update().catch(() => {});
+                        if (reg.waiting) {
+                            reg.waiting.postMessage({ type: 'SKIP_WAITING', action: 'skipWaiting' });
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 450));
+            _setUpdateInstallProgress(100, 'Update Installed!', 'Restarting into clean v' + targetVer + ' & syncing with cloud...');
+
+            setTimeout(() => {
+                const base = window.location.origin + window.location.pathname;
+                window.location.replace(`${base}?v=${encodeURIComponent(targetVer)}&upgraded=1`);
+            }, 450);
+            return true;
+        } catch (err) {
+            console.warn('[AppUpdate] Upgrade fallback notice:', err);
+            window._isApplyingAppUpdate = false;
+            _hideAppUpdateInstallOverlay();
+            if (typeof showToast === 'function') {
+                showToast('Update interrupted. Please check your connection and try again.', 'warning');
+            }
+            return false;
         }
-        fetch('/api/version')
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.version) localStorage.setItem('billnaw_pos_version', data.version);
-            })
-            .catch(() => {})
-            .finally(() => {
-                if (typeof showToast === 'function') showToast('Updating application and clearing stale cache...');
-                setTimeout(() => {
-                    window.location.reload(true);
-                }, 400);
-            });
     }
     window.applyAppUpdate = applyAppUpdate;
     window.applyAppUpdateNow = applyAppUpdate;
 
     function dismissAppUpdatePopup() {
+        _updatePopupDismissedThisSession = true;
         const popup = document.getElementById('appUpdatePopup');
         if (popup) popup.style.display = 'none';
     }
     window.dismissAppUpdatePopup = dismissAppUpdatePopup;
+
+    // Auto-check for v3.0.0 updates shortly after boot so all existing shop devices see the Update prompt
+    setTimeout(() => {
+        try {
+            if (!localStorage.getItem('billnaw_pending_clean_resync')) {
+                checkForAppUpdates(false);
+            }
+        } catch (_) {}
+    }, 2500);
 
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then(reg => {

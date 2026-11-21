@@ -9,42 +9,62 @@ const _csEsc = (str) => (typeof escapeHtml === 'function')
 // 1. CLOUD SYNC LOADING OVERLAY (Full-Screen Branded Hydration Screen)
 // ============================================================================
 
+let _cloudSyncHideTimer = null;
+
 function showCloudSyncOverlay(message = 'Syncing Shop Profile, Menu & Active Tables...') {
+    if (_cloudSyncHideTimer) {
+        clearTimeout(_cloudSyncHideTimer);
+        _cloudSyncHideTimer = null;
+    }
     let overlay = document.getElementById('cloudSyncOverlay');
     const activeShopName = (typeof shopProfile !== 'undefined' && shopProfile?.name) || localStorage.getItem('billnaw_shop_name') || 'Billnaw POS';
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'cloudSyncOverlay';
-        overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:linear-gradient(135deg,#143832 0%,#0D2622 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#FFFFFF;font-family:inherit;padding:24px;box-sizing:border-box;text-align:center;';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:1000040;background:linear-gradient(135deg,#0F3D33 0%,#0B2E26 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#FFFFFF;font-family:inherit;padding:24px;box-sizing:border-box;text-align:center;';
         overlay.innerHTML = `
             <div style="width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 12px 30px rgba(0,0,0,0.3);">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#E05A38" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
                 </svg>
             </div>
-            <h2 style="font-size:22px;font-weight:800;margin:0 0 8px 0;letter-spacing:0.5px;">${_csEsc(activeShopName)} Cloud Sync</h2>
+            <h2 style="font-size:22px;font-weight:800;margin:0 0 8px 0;letter-spacing:0.2px;">${_csEsc(activeShopName)} Cloud Sync</h2>
             <p id="cloudSyncStatus" style="font-size:14px;color:rgba(255,255,255,0.78);margin:0 0 24px 0;max-width:320px;line-height:1.4;">${_csEsc(message)}</p>
             <div style="width:240px;height:6px;background:rgba(255,255,255,0.12);border-radius:99px;overflow:hidden;position:relative;">
-                <div id="cloudSyncBar" style="height:100%;width:15%;background:linear-gradient(90deg,#E05A38,#FF7A59);border-radius:99px;transition:width 0.35s ease;"></div>
+                <div id="cloudSyncBar" style="height:100%;width:15%;background:linear-gradient(90deg,#10B981,#34D399);border-radius:99px;transition:width 0.35s ease;"></div>
             </div>
-            <span id="cloudSyncPct" style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.55);margin-top:10px;">15%</span>
+            <span id="cloudSyncPct" style="font-size:12px;font-weight:700;color:#A7F3D0;margin-top:10px;">15%</span>
         `;
         document.body.appendChild(overlay);
     } else {
         const titleEl = overlay.querySelector('h2');
         if (titleEl) titleEl.innerText = `${activeShopName} Cloud Sync`;
-        overlay.style.display = 'flex';
         setCloudSyncProgress(15, message);
+    }
+    if (typeof window.setActiveAuthOverlay === 'function') {
+        window.setActiveAuthOverlay('cloudSyncOverlay');
+    } else if (overlay) {
+        overlay.style.zIndex = '1000040';
+        overlay.style.display = 'flex';
     }
 }
 
-function hideCloudSyncOverlay() {
+function hideCloudSyncOverlay(immediate = false) {
+    if (_cloudSyncHideTimer) {
+        clearTimeout(_cloudSyncHideTimer);
+        _cloudSyncHideTimer = null;
+    }
     const overlay = document.getElementById('cloudSyncOverlay');
     if (overlay) {
         setCloudSyncProgress(100, 'Cloud Sync Complete');
-        setTimeout(() => {
+        if (immediate) {
             overlay.style.display = 'none';
-        }, 300);
+        } else {
+            _cloudSyncHideTimer = setTimeout(() => {
+                _cloudSyncHideTimer = null;
+                overlay.style.display = 'none';
+            }, 250);
+        }
     }
 }
 
@@ -71,18 +91,50 @@ function showStaffProfileSelector(shopName = '') {
     const overlay = document.getElementById('staffProfileSelector');
     if (!overlay) return;
 
+    // Never flicker under/over higher-priority shop login, sync, pairing, or v3 update overlays
+    const activeOv = (typeof window.getActiveAuthOverlay === 'function') ? window.getActiveAuthOverlay() : null;
+    if (activeOv === 'shopAuthModal' || activeOv === 'appUpdateInstallOverlay' || activeOv === 'cloudSyncOverlay' || activeOv === 'devicePairingOverlay') {
+        return;
+    }
+
     const sName = shopName || (window.shopProfile && (window.shopProfile.name || window.shopProfile.shopName)) || 'BillNaw Cafe';
     const titleEl = document.getElementById('staffSelectorShopName');
     if (titleEl) titleEl.innerText = sName;
 
+    // Hide the "Skip" link whenever terminal is locked / requires fresh PIN verification (prevents post-upgrade PIN bypass)
+    const skipBtn = overlay.querySelector('button[onclick*="hideStaffProfileSelector"]');
+    const mustVerifyPin = (typeof localStorage !== 'undefined') && (
+        localStorage.getItem('billnaw_terminal_locked') === 'true' ||
+        !localStorage.getItem('billnaw_pin_verified_at')
+    );
+    if (skipBtn) {
+        skipBtn.style.display = mustVerifyPin ? 'none' : '';
+    }
+
     _renderStaffProfileCards();
-    overlay.style.display = 'flex';
+    if (typeof window.setActiveAuthOverlay === 'function') {
+        window.setActiveAuthOverlay('staffProfileSelector');
+    } else {
+        overlay.style.zIndex = '1000001';
+        overlay.style.display = 'flex';
+    }
 }
 
-function hideStaffProfileSelector() {
+function hideStaffProfileSelector(force = false) {
+    const mustVerifyPin = !force && (typeof localStorage !== 'undefined') && (
+        localStorage.getItem('billnaw_terminal_locked') === 'true' ||
+        !localStorage.getItem('billnaw_pin_verified_at')
+    );
+    if (mustVerifyPin) {
+        if (typeof showToast === 'function') {
+            showToast('Please select your staff profile and enter your 4-digit PIN.', 'warning');
+        }
+        return false;
+    }
     const overlay = document.getElementById('staffProfileSelector');
     if (overlay) overlay.style.display = 'none';
     _cancelStaffPinEntry();
+    return true;
 }
 
 function _renderStaffProfileCards() {
@@ -208,7 +260,9 @@ function backspaceGatewayPin() {
     }
 }
 
+let _gatewayPinInFlight = false;
 async function confirmStaffProfilePin() {
+    if (_gatewayPinInFlight) return;
     if (!_pendingSelectedStaff) return;
     const input = document.getElementById('staffGatewayPinInput');
     const enteredPin = input ? input.value.trim() : '';
@@ -218,50 +272,55 @@ async function confirmStaffProfilePin() {
         return;
     }
 
-    let isValid = false;
-    let targetStaff = null;
+    _gatewayPinInFlight = true;
+    try {
+        let isValid = false;
+        let targetStaff = null;
 
-    if (_pendingSelectedStaff.role === 'Admin' || _pendingSelectedStaff.id === 'admin') {
-        if (typeof verifyAdminPin === 'function') {
-            isValid = await verifyAdminPin(enteredPin);
-        } else {
-            isValid = (enteredPin === '1234');
-        }
-        if (isValid) {
-            const list = (typeof window !== 'undefined' && Array.isArray(window.staffList)) ? window.staffList : [];
-            targetStaff = list.find(s => s && (s.role === 'Admin' || s.id === 'admin' || s.id === 1)) || _pendingSelectedStaff;
-        }
-    } else {
-        const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList)) ? window.staffList : [];
-        const matched = staffSource.find(s => String(s.id) === String(_pendingSelectedStaff.id));
-        if (matched) {
-            if (typeof verifyStaffPin === 'function') {
-                isValid = await verifyStaffPin(matched, enteredPin);
-            } else if (typeof verifyPin === 'function' && (matched.pin_salt || matched.pinSalt) && (matched.pin_hash || matched.pinHash)) {
-                isValid = await verifyPin(enteredPin, matched.pin_salt || matched.pinSalt, matched.pin_hash || matched.pinHash);
+        if (_pendingSelectedStaff.role === 'Admin' || _pendingSelectedStaff.id === 'admin') {
+            if (typeof verifyAdminPin === 'function') {
+                isValid = await verifyAdminPin(enteredPin);
+            } else {
+                isValid = (enteredPin === '1234');
             }
             if (isValid) {
-                targetStaff = matched;
+                const list = (typeof window !== 'undefined' && Array.isArray(window.staffList)) ? window.staffList : [];
+                targetStaff = list.find(s => s && (s.role === 'Admin' || s.id === 'admin' || s.id === 1)) || _pendingSelectedStaff;
+            }
+        } else {
+            const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList)) ? window.staffList : [];
+            const matched = staffSource.find(s => String(s.id) === String(_pendingSelectedStaff.id));
+            if (matched) {
+                if (typeof verifyStaffPin === 'function') {
+                    isValid = await verifyStaffPin(matched, enteredPin);
+                } else if (typeof verifyPin === 'function' && (matched.pin_salt || matched.pinSalt) && (matched.pin_hash || matched.pinHash)) {
+                    isValid = await verifyPin(enteredPin, matched.pin_salt || matched.pinSalt, matched.pin_hash || matched.pinHash);
+                }
+                if (isValid) {
+                    targetStaff = matched;
+                }
             }
         }
-    }
 
-    if (isValid && targetStaff) {
-        const isFirstLogin = targetStaff.mustChangePin === true || (targetStaff.initialOtp && !targetStaff.otpConsumed);
-        if (isFirstLogin) {
-            _cancelStaffPinEntry();
-            hideStaffProfileSelector();
-            if (typeof openFirstLoginPinModal === 'function') {
-                openFirstLoginPinModal(targetStaff);
-            } else {
-                activateStaffProfileSession(targetStaff);
+        if (isValid && targetStaff) {
+            const isFirstLogin = targetStaff.mustChangePin === true || (targetStaff.initialOtp && !targetStaff.otpConsumed);
+            if (isFirstLogin) {
+                _cancelStaffPinEntry();
+                hideStaffProfileSelector(true);
+                if (typeof openFirstLoginPinModal === 'function') {
+                    openFirstLoginPinModal(targetStaff);
+                } else {
+                    activateStaffProfileSession(targetStaff);
+                }
+                return;
             }
-            return;
+            activateStaffProfileSession(targetStaff);
+        } else {
+            if (typeof showToast === 'function') showToast("Incorrect PIN / OTP. Please try again.", "error");
+            clearGatewayPin();
         }
-        activateStaffProfileSession(targetStaff);
-    } else {
-        if (typeof showToast === 'function') showToast("Incorrect PIN / OTP. Please try again.", "error");
-        clearGatewayPin();
+    } finally {
+        _gatewayPinInFlight = false;
     }
 }
 
@@ -274,7 +333,7 @@ function _cancelStaffPinEntry() {
 
 function activateStaffProfileSession(staff) {
     _cancelStaffPinEntry();
-    hideStaffProfileSelector();
+    hideStaffProfileSelector(true);
 
     if (typeof ensureShopProfileHydrated === 'function') {
         Promise.resolve(ensureShopProfileHydrated()).then(() => {

@@ -386,7 +386,9 @@ async function initApp() {
                 const isActivationShowing = actOverlay && actOverlay.style.display !== 'none';
                 if (!isActivationShowing) {
                     openShopAuthModal(true);
-                    if (!isAuth && !isDemo && !hasAuthLoginParam && typeof switchShopAuthTab === 'function') {
+                    if (window._resyncAuthRejected && typeof switchShopAuthTab === 'function') {
+                        switchShopAuthTab('login');
+                    } else if (!isAuth && !isDemo && !hasAuthLoginParam && typeof switchShopAuthTab === 'function') {
                         switchShopAuthTab('signup');
                     }
                     if (hasAuthLoginParam) {

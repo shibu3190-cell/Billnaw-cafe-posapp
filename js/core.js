@@ -225,9 +225,93 @@ function escapeHtml(str) {
 }
 window.escapeHtml = escapeHtml;
 
+// ============================================================================
+// 🛡️ MUTUALLY-EXCLUSIVE AUTH / PIN / SYNC OVERLAY STATE MACHINE
+// Eliminates z-index fighting and simultaneous overlay flickering across login,
+// cloud sync, staff profile selector, terminal PIN lock, pairing & v3 updates.
+// ============================================================================
+const AUTH_OVERLAY_IDS = [
+    'shopAuthModal',
+    'cloudSyncOverlay',
+    'staffProfileSelector',
+    'loginOverlay',
+    'staffSwitchModal',
+    'spotManagerOverrideModal',
+    'firstLoginPinModal',
+    'adminForgotPinModal',
+    'devicePairingOverlay',
+    'deviceRevokedOverlay',
+    'deviceLockedOverlay',
+    'appUpdateInstallOverlay'
+];
+
+const AUTH_OVERLAY_ZINDEX = {
+    staffProfileSelector: '1000001',
+    loginOverlay: '1000005',
+    staffSwitchModal: '1000015',
+    firstLoginPinModal: '1000018',
+    spotManagerOverrideModal: '1000020',
+    adminForgotPinModal: '1000022',
+    devicePairingOverlay: '1000025',
+    deviceRevokedOverlay: '1000028',
+    deviceLockedOverlay: '1000029',
+    shopAuthModal: '1000030',
+    cloudSyncOverlay: '1000040',
+    appUpdateInstallOverlay: '1000050'
+};
+
+function getActiveAuthOverlay() {
+    if (typeof document === 'undefined') return null;
+    for (const id of AUTH_OVERLAY_IDS) {
+        const el = document.getElementById(id);
+        if (el && el.style.display && el.style.display !== 'none') {
+            return id;
+        }
+    }
+    return null;
+}
+
+function setActiveAuthOverlay(activeId) {
+    if (typeof document === 'undefined') return;
+    AUTH_OVERLAY_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (id === activeId) {
+            if (AUTH_OVERLAY_ZINDEX[id]) {
+                el.style.zIndex = AUTH_OVERLAY_ZINDEX[id];
+            }
+            el.style.display = 'flex';
+        } else {
+            el.style.display = 'none';
+        }
+    });
+}
+window.AUTH_OVERLAY_IDS = AUTH_OVERLAY_IDS;
+window.AUTH_OVERLAY_ZINDEX = AUTH_OVERLAY_ZINDEX;
+window.getActiveAuthOverlay = getActiveAuthOverlay;
+window.setActiveAuthOverlay = setActiveAuthOverlay;
+
 function openMoreHub() {
     const modal = document.getElementById('moreHubModal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+        // Fail-closed: hide cards when unauthenticated or not permitted for active staff role
+        const activeStaffObj = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+        const cards = modal.querySelectorAll('.more-hub-card');
+        cards.forEach(card => {
+            if (!activeStaffObj || !activeStaffObj.role) {
+                card.style.display = 'none';
+                return;
+            }
+            const oc = card.getAttribute('onclick') || '';
+            const m = oc.match(/switchTab\(['"]([a-zA-Z0-9_-]+)['"]\)/);
+            if (m && m[1] && typeof canStaffAccessTab === 'function') {
+                const targetTab = m[1];
+                const allowed = targetTab === 'settings' ? true : canStaffAccessTab(activeStaffObj, targetTab);
+                card.style.display = allowed ? 'flex' : 'none';
+            }
+        });
+        modal.style.display = 'flex';
+    }
 }
 window.openMoreHub = openMoreHub;
 
@@ -4279,6 +4363,30 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
 }
 window.dispatchBackendStoreSync = dispatchBackendStoreSync;
 
+async function flushPendingBackendSyncs() {
+    const storeKeys = Object.keys(pendingBackendSyncByStore || {});
+    for (const sc of storeKeys) {
+        if (backendSyncTimers[sc]) {
+            clearTimeout(backendSyncTimers[sc]);
+            delete backendSyncTimers[sc];
+        }
+        const pending = pendingBackendSyncByStore[sc];
+        if (pending && Object.keys(pending).length > 0) {
+            await dispatchBackendStoreSync(pending, true).catch(() => false);
+        }
+    }
+    if (typeof flushOfflineSyncQueue === 'function') {
+        await flushOfflineSyncQueue().catch(() => false);
+    }
+    try {
+        const q = readOfflineSyncQueueMap();
+        return Object.keys(q || {}).length === 0;
+    } catch (_) {
+        return true;
+    }
+}
+window.flushPendingBackendSyncs = flushPendingBackendSyncs;
+
 async function flushOfflineSyncQueue() {
     try {
         const activeStoreCode = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) ||
@@ -4345,6 +4453,8 @@ window.flushOfflineSyncQueue = flushOfflineSyncQueue;
 
 // Proactively reconcile and sync forward existing shop data to Cloud (Netlify & Server)
 async function reconcileExistingShopCloudSync() {
+    if (typeof window !== 'undefined' && window._v3ResyncFailed) return;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_pending_clean_resync')) return;
     const storeCode = (typeof getActiveStoreIdentifier === 'function') ? getActiveStoreIdentifier() : null;
     if (!storeCode) return;
 
@@ -5503,12 +5613,14 @@ function applyStationProfileRestrictions() {
         if (navReports) navReports.style.display = 'none';
         if (navInventory) navInventory.style.display = 'none';
         if (navKhata) navKhata.style.display = 'none';
-        if (navMore) navMore.style.display = 'none';
+        // Kitchen Chef keeps More Hub access so they can reach Settings (Printer, Updates & Staff Logout)
+        if (navMore) navMore.style.display = 'flex';
         if (navKds) {
             navKds.style.display = 'flex';
             navKds.classList.add('active');
         }
         if (checkoutBtn) checkoutBtn.style.display = 'none';
+        if (typeof enforcePermissions === 'function') enforcePermissions();
     } else if (profile === STATION_PROFILES.WAITER_MOBILE || normRole === 'Floor Server' || normRole === 'Server') {
         if (navPos) navPos.style.display = 'flex';
         if (navTables) navTables.style.display = 'flex'; // Dedicated Table Floor View accessible to waitstaff
@@ -5520,7 +5632,7 @@ function applyStationProfileRestrictions() {
         if (navMore) navMore.style.display = 'flex';
         if (cartDiscountWrap) cartDiscountWrap.style.display = 'none';
         
-        // Floor Server: replace Checkout button with "Ready for Billing - Notify Cashier" (or direct CHECKOUT if Bluetooth printer is connected)
+        // Floor Server: strict boundary — Print/Send KOT & Ready for Billing ONLY (never direct Checkout even if BLE printer paired)
         const handleReadyForBilling = () => {
             const curT = (typeof activeTable !== 'undefined') ? activeTable : 1;
             const tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[curT] : null;
@@ -5559,27 +5671,16 @@ function applyStationProfileRestrictions() {
         };
         window.handleReadyForBilling = handleReadyForBilling;
 
-        const hasDirectBlePrinter = (typeof isBluetoothPrinterConnected === 'function' && isBluetoothPrinterConnected());
         const dBtn = document.getElementById('desktopCheckoutBtn');
         if (dBtn) {
-            if (hasDirectBlePrinter) {
-                dBtn.innerHTML = '<span>CHECKOUT</span><span id="desktopCheckoutBtnSub" style="display: inline-flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg></span>';
-                dBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(true); };
-            } else {
-                dBtn.innerHTML = '<span>Ready for Billing - Notify Cashier</span>';
-                dBtn.onclick = handleReadyForBilling;
-            }
+            dBtn.innerHTML = '<span>Ready for Billing - Notify Cashier</span>';
+            dBtn.onclick = handleReadyForBilling;
         }
 
         const mBtn = document.querySelector('.sc-right');
         if (mBtn) {
-            if (hasDirectBlePrinter) {
-                mBtn.innerHTML = '<span>CHECKOUT</span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>';
-                mBtn.onclick = () => { if (typeof openCheckoutModal === 'function') openCheckoutModal(true); };
-            } else {
-                mBtn.innerHTML = '<span>Ready for Billing</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>';
-                mBtn.onclick = handleReadyForBilling;
-            }
+            mBtn.innerHTML = '<span>Ready for Billing</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>';
+            mBtn.onclick = handleReadyForBilling;
         }
         if (typeof enforcePermissions === 'function') enforcePermissions();
     } else {
@@ -6375,7 +6476,12 @@ function showDevicePairingOverlay() {
     }
     const overlay = document.getElementById('devicePairingOverlay');
     if (!overlay) return;
-    overlay.style.display = 'flex';
+    if (typeof window.setActiveAuthOverlay === 'function') {
+        window.setActiveAuthOverlay('devicePairingOverlay');
+    } else {
+        overlay.style.zIndex = '1000025';
+        overlay.style.display = 'flex';
+    }
     
     const devId = getOrCreateDeviceId();
     let code = localStorage.getItem('billnaw_pairing_code');
@@ -6548,8 +6654,130 @@ function updateAllUI() {
 }
 window.updateAllUI = updateAllUI;
 
+async function runPendingCleanUpgradeResync() {
+    if (typeof localStorage === 'undefined') return { resynced: false };
+    const pendingVer = localStorage.getItem('billnaw_pending_clean_resync');
+    if (!pendingVer) return { resynced: false };
+
+    const activeToken = localStorage.getItem('billnaw_auth_token') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('billnaw_auth_token') : null);
+    const authMode = localStorage.getItem('billnaw_auth_mode');
+    if (!activeToken || authMode !== 'authenticated') {
+        try { localStorage.removeItem('billnaw_pending_clean_resync'); } catch (e) {}
+        return { resynced: false, reason: 'unauthenticated' };
+    }
+
+    let storeCode = localStorage.getItem('billnaw_store_code') || localStorage.getItem('billnaw_shop_code') || localStorage.getItem('billnaw_active_store_id') || '';
+    try {
+        if (!storeCode) {
+            const rawSess = localStorage.getItem('billnaw_shop_session');
+            if (rawSess) {
+                const parsed = JSON.parse(rawSess);
+                storeCode = parsed?.storeCode || parsed?.shop?.storeCode || '';
+            }
+        }
+    } catch (e) {}
+
+    if (typeof window.showCloudSyncOverlay === 'function') {
+        window.showCloudSyncOverlay(`Upgrading to v${pendingVer} — Verifying shop session...`);
+    }
+    if (typeof window.setCloudSyncProgress === 'function') {
+        window.setCloudSyncProgress(25, 'Verifying authentication & shop identity...');
+    }
+
+    try {
+        const res = await fetch('/api/sync/store-data?storeCode=' + encodeURIComponent(storeCode) + '&fresh=' + Date.now(), {
+            headers: {
+                'Authorization': `Bearer ${activeToken}`,
+                'Cache-Control': 'no-cache'
+            }
+        });
+
+        if (res.status === 401 || res.status === 403) {
+            // Session expired or revoked on backend: wipe ALL stale tenant caches & prompt secure Login (not Signup)
+            try {
+                localStorage.removeItem('billnaw_pending_clean_resync');
+                if (typeof clearAllTenantLocalData === 'function') {
+                    await clearAllTenantLocalData();
+                }
+                if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('billnaw_auth_token');
+                localStorage.removeItem('billnaw_auth_token');
+                localStorage.removeItem('billnaw_auth_mode');
+                localStorage.removeItem('billnaw_shop_session');
+            } catch (e) {}
+            window._resyncAuthRejected = true;
+            if (typeof window.hideCloudSyncOverlay === 'function') window.hideCloudSyncOverlay(true);
+            if (typeof window.openShopAuthModal === 'function') window.openShopAuthModal(true);
+            if (typeof window.switchShopAuthTab === 'function') window.switchShopAuthTab('login');
+            return { resynced: false, reason: 'auth_rejected' };
+        }
+
+        if (!res.ok) {
+            // Preserve billnaw_pending_clean_resync so clean resync retries on next boot/reconnect — NEVER mask 5xx/429 as synced!
+            window._v3ResyncFailed = true;
+            if (typeof window.hideCloudSyncOverlay === 'function') window.hideCloudSyncOverlay(true);
+            if (typeof showToast === 'function') {
+                showToast('Cloud sync paused (server busy). Reload once connected to finish v' + pendingVer + ' sync.', 'warning');
+            }
+            return { resynced: false, reason: 'http_' + res.status };
+        }
+
+        if (typeof window.setCloudSyncProgress === 'function') {
+            window.setCloudSyncProgress(65, 'Loading latest menu, staff roles & invoices...');
+        }
+        const cloudData = await res.json();
+        if (cloudData && typeof handleRemoteFirestoreUpdate === 'function') {
+            handleRemoteFirestoreUpdate(cloudData);
+        }
+        if (typeof window.setCloudSyncProgress === 'function') {
+            window.setCloudSyncProgress(92, 'Finalizing clean v' + pendingVer + ' workspace...');
+        }
+
+        try {
+            localStorage.removeItem('billnaw_pending_clean_resync');
+            localStorage.setItem('billnaw_pos_version', pendingVer);
+            localStorage.setItem('billnaw_data_epoch', APP_DATA_EPOCH);
+            localStorage.removeItem('billnaw_active_staff');
+            localStorage.removeItem('billnaw_pin_verified_at');
+            localStorage.setItem('billnaw_terminal_locked', 'true');
+            if (typeof window !== 'undefined' && window.location && window.location.search && window.location.search.includes('upgraded=1')) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        } catch (e) {}
+
+        window._justCompletedV3CleanResync = true;
+        if (typeof window.hideCloudSyncOverlay === 'function') {
+            window.hideCloudSyncOverlay(true);
+        }
+        if (typeof window.showStaffProfileSelector === 'function') {
+            window.showStaffProfileSelector((window.shopProfile && window.shopProfile.name) || '');
+        } else if (typeof window.lockTerminal === 'function') {
+            window.lockTerminal(false);
+        }
+        if (typeof showToast === 'function') {
+            showToast(`Billnaw POS v${pendingVer} synced cleanly. Select your staff profile & PIN.`, 'success');
+        }
+        return { resynced: true, version: pendingVer };
+    } catch (err) {
+        console.warn('[v3CleanResync] Network error — keeping pending resync flag for retry:', err?.message || err);
+        window._v3ResyncFailed = true;
+        if (typeof window.hideCloudSyncOverlay === 'function') window.hideCloudSyncOverlay(true);
+        if (typeof showToast === 'function') {
+            showToast('Offline during v' + pendingVer + ' sync. Reconnect & reload to finish cloud resync.', 'warning');
+        }
+        return { resynced: false, reason: 'network_error' };
+    }
+}
+window.runPendingCleanUpgradeResync = runPendingCleanUpgradeResync;
+
 async function initDatabase() {
     await idb.init();
+    if (typeof runPendingCleanUpgradeResync === 'function') {
+        try {
+            await runPendingCleanUpgradeResync();
+        } catch (resyncErr) {
+            console.warn('[v3CleanResync] initDatabase notice:', resyncErr);
+        }
+    }
     if (typeof checkAndApplySessionEpoch === 'function') {
         try {
             await checkAndApplySessionEpoch();
@@ -7123,7 +7351,15 @@ function initStaffSystem() {
     if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
 
     // Check terminal lock persistence & 24-hour shift session persistence
+    // Strictly suppress PIN overlay if store is unauthenticated or if a higher-priority auth/sync/upgrade overlay is active
     try {
+        const isAuthStoreNow = (typeof isStoreAuthenticated === 'function')
+            ? isStoreAuthenticated()
+            : Boolean(localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_auth_mode') === 'demo');
+        const activeOverlayNow = (typeof window.getActiveAuthOverlay === 'function') ? window.getActiveAuthOverlay() : null;
+        const skipLockOverlay = !isAuthStoreNow || Boolean(window._justCompletedV3CleanResync) ||
+            ['shopAuthModal', 'cloudSyncOverlay', 'staffProfileSelector', 'appUpdateInstallOverlay', 'devicePairingOverlay'].includes(activeOverlayNow);
+
         const isLocked = localStorage.getItem('billnaw_terminal_locked') === 'true';
         const isAuthorized = localStorage.getItem('billnaw_device_status') === 'AUTHORIZED';
         const isExpired = (typeof checkDeviceAuthExpiration === 'function') ? checkDeviceAuthExpiration() : false;
@@ -7131,7 +7367,7 @@ function initStaffSystem() {
         const lastPinVerification = localStorage.getItem('billnaw_pin_verified_at');
         const is24hShiftValid = Boolean(lastPinVerification && (Date.now() - Number(lastPinVerification)) < (24 * 60 * 60 * 1000));
 
-        if (!isExpired && isAuthorized && currentStaff) {
+        if (!skipLockOverlay && !isExpired && isAuthorized && currentStaff) {
             if (isLocked || !is24hShiftValid) {
                 // Multi-device or single-device: lock terminal ONLY if manually locked OR if 24 hours have elapsed
                 if (typeof lockTerminal === 'function' && typeof document !== 'undefined' && document.getElementById('loginOverlay')) {
@@ -7143,7 +7379,7 @@ function initStaffSystem() {
                     unlockTerminal(currentStaff, false);
                 }
             }
-        } else if (isLocked && typeof lockTerminal === 'function') {
+        } else if (!skipLockOverlay && isLocked && typeof lockTerminal === 'function') {
             lockTerminal(false);
         }
     } catch(e) {}

@@ -1379,6 +1379,13 @@ function switchCustomerHubTab(tabName) {
         }
     }
     const activeTab = (tabName === 'whatsapp') ? 'marketing' : tabName;
+    if (activeTab === 'marketing' && typeof canStaffAccessTab === 'function') {
+        const activeStaff = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+        if (!canStaffAccessTab(activeStaff, 'whatsapp')) {
+            if (typeof showToast === 'function') showToast('WhatsApp Campaigns are restricted to Store Admin.', 'warning');
+            return;
+        }
+    }
     
     // Update segmented tab buttons
     const tabBtns = {

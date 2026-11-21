@@ -457,7 +457,9 @@ function selectLoginStaff(staffId) {
 window.selectLoginStaff = selectLoginStaff;
 
 // 🔒 Fast Unlock & Smart PIN Recognition
+let _terminalPinInFlight = false;
 async function confirmStaffLogin() {
+    if (_terminalPinInFlight) return;
     if (pinLockoutUntil && Date.now() < pinLockoutUntil) {
         const remainingSec = Math.ceil((pinLockoutUntil - Date.now()) / 1000);
         showToast(`Keypad locked due to failed attempts. Try again in ${remainingSec}s.`, "error");
@@ -471,6 +473,8 @@ async function confirmStaffLogin() {
         return showToast("Please enter your 4-digit PIN.");
     }
 
+    _terminalPinInFlight = true;
+    try {
     let staffToLogin = null;
 
     // 1. Check pre-selected staff first
@@ -530,6 +534,9 @@ async function confirmStaffLogin() {
         } else {
             showToast(`❌ Incorrect PIN. (${5 - failedPinAttempts} attempts remaining)`);
         }
+    }
+    } finally {
+        _terminalPinInFlight = false;
     }
 }
 window.confirmStaffLogin = confirmStaffLogin;
@@ -623,6 +630,15 @@ function unlockTerminal(staff, showWelcomeToast = true) {
 window.unlockTerminal = unlockTerminal;
 
 function lockTerminal(notify = true) {
+    // Do NOT open PIN lock overlay while unauthenticated, during shop login, cloud sync, or v3 update install
+    const isAuthStore = (typeof isStoreAuthenticated === 'function')
+        ? isStoreAuthenticated()
+        : Boolean((typeof localStorage !== 'undefined') && (localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_auth_mode') === 'demo'));
+    const activeOv = (typeof window.getActiveAuthOverlay === 'function') ? window.getActiveAuthOverlay() : null;
+    if (!isAuthStore || activeOv === 'shopAuthModal' || activeOv === 'cloudSyncOverlay' || activeOv === 'appUpdateInstallOverlay' || activeOv === 'devicePairingOverlay') {
+        return;
+    }
+
     isTerminalLocked = true;
     window.isTerminalLocked = true;
     if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = 0;
@@ -631,16 +647,20 @@ function lockTerminal(notify = true) {
         localStorage.setItem('billnaw_terminal_locked', 'true');
     } catch (e) {}
 
-    const overlay = document.getElementById('loginOverlay');
-    if (overlay) {
-        overlay.style.display = 'flex';
-        overlay.style.zIndex = '1000005';
+    if (typeof window.setActiveAuthOverlay === 'function') {
+        window.setActiveAuthOverlay('loginOverlay');
+    } else {
+        const overlay = document.getElementById('loginOverlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            overlay.style.zIndex = '1000005';
+        }
     }
     renderLoginStaffPicker();
     const pinInput = document.getElementById('staffLoginPinInput');
     if (pinInput) {
         pinInput.value = '';
-        setTimeout(() => pinInput.focus(), 80);
+        setTimeout(() => pinInput.focus(), 60);
     }
     if (notify && typeof showToast === 'function') {
         showToast("🔒 POS Terminal Locked. Enter staff PIN to resume.", "info");
@@ -797,11 +817,21 @@ function lockTerminalByRemote(lockedSession) {
     if (typeof window !== 'undefined') window.isTerminalLocked = true;
     try { localStorage.setItem('billnaw_terminal_locked', 'true'); } catch (e) {}
 
-    // 5. Engage #loginOverlay
-    const overlay = typeof document !== 'undefined' ? document.getElementById('loginOverlay') : null;
-    if (overlay) {
-        overlay.style.display = 'flex';
-        overlay.style.zIndex = '1000005';
+    // 5. Engage #loginOverlay via state machine (only if store is authenticated; never trample shopAuth/pairing/update overlays)
+    const isAuthStoreRemote = (typeof isStoreAuthenticated === 'function')
+        ? isStoreAuthenticated()
+        : Boolean(typeof localStorage !== 'undefined' && (localStorage.getItem('billnaw_auth_token') || localStorage.getItem('billnaw_auth_mode') === 'demo'));
+    const curOvRemote = (typeof window.getActiveAuthOverlay === 'function') ? window.getActiveAuthOverlay() : null;
+    if (isAuthStoreRemote && curOvRemote !== 'shopAuthModal' && curOvRemote !== 'appUpdateInstallOverlay' && curOvRemote !== 'devicePairingOverlay') {
+        if (typeof window.setActiveAuthOverlay === 'function') {
+            window.setActiveAuthOverlay('loginOverlay');
+        } else {
+            const overlay = typeof document !== 'undefined' ? document.getElementById('loginOverlay') : null;
+            if (overlay) {
+                overlay.style.display = 'flex';
+                overlay.style.zIndex = '1000005';
+            }
+        }
     }
 
     // 6. Render login staff picker
@@ -1000,46 +1030,44 @@ function renderLiveSessionCards() {
 
         let actionHtml = '';
         if (isMasterDevice) {
-            actionHtml = `<span class="session-current-badge">Master Terminal (Protected)</span>`;
+            actionHtml = `<span class="minimal-pill is-emerald">Master</span>`;
         } else if (isCurrent) {
-            actionHtml = `<span class="session-current-badge">Current Device</span>`;
+            actionHtml = `<span class="minimal-pill is-mint">This Device</span>`;
         } else if (isLocked) {
-            actionHtml = `<span class="presence-dot locked" style="margin-right: 4px;"></span><span style="font-size: 11px; font-weight: 700; color: var(--danger);">Remotely Locked</span>`;
+            actionHtml = `<span class="minimal-pill is-danger">Locked</span>`;
         } else {
             actionHtml = `
-                <button type="button" class="btn btn-outline session-remote-lock-btn" data-session-id="${esc(String(s.sessionId || ''))}" onclick="remoteLockStaffSession(this.dataset.sessionId)" aria-label="Remote Lock ${esc(staffName)}">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button type="button" class="btn btn-outline minimal-action-btn is-danger session-remote-lock-btn" data-session-id="${esc(String(s.sessionId || s.id || ''))}" onclick="remoteLockStaffSession(this.dataset.sessionId)" aria-label="Remote Lock ${esc(staffName)}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                         <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                     </svg>
-                    <span>Remote Lock</span>
+                    <span>Lock</span>
                 </button>
             `;
         }
 
+        const dotStateCls = isLocked ? 'is-revoked' : (isOnline ? 'is-online' : 'is-idle');
         return `
-            <div class="session-card ${isLocked ? 'is-locked' : ''}">
-                <div class="session-staff-col">
-                    <div class="session-avatar">${esc(initials)}</div>
-                    <div style="flex: 1; min-width: 0;">
-                        <div class="session-meta-name">
-                            <span class="${dotClass}" title="${esc(statusTitle)}"></span>
-                            <span>${esc(staffName)}</span>
-                            <span class="${roleBadgeClass}" style="font-size: 10px; padding: 2px 7px; border-radius: 8px;">${esc(staffRole)}</span>
+            <div class="session-card minimal-session-card ${isLocked ? 'is-locked' : ''}">
+                <div class="minimal-device-main">
+                    <div class="session-avatar minimal-session-avatar">${esc(initials)}</div>
+                    <div class="minimal-device-info">
+                        <div class="minimal-device-title-row">
+                            <strong class="minimal-device-name">${esc(staffName)}</strong>
+                            <span class="${roleBadgeClass} minimal-role-chip">${esc(staffRole)}</span>
                         </div>
-                        <div class="session-telemetry">
-                            <span class="session-telemetry-item">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                                <span>${esc(devName)}${devId ? ` (${esc(devId)})` : ''}</span>
-                            </span>
-                            <span class="session-telemetry-item">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                <span>Shift: ${esc(durationStr)} • ${esc(activityStr)}</span>
-                            </span>
+                        <div class="minimal-device-meta">
+                            <span class="minimal-status-dot ${dotStateCls}" title="${esc(statusTitle)}"></span>
+                            <span>${esc(activityStr)}</span>
+                            <span class="minimal-meta-sep">·</span>
+                            <span>${esc(devName)}</span>
+                            <span class="minimal-meta-sep">·</span>
+                            <span>Shift ${esc(durationStr)}</span>
                         </div>
                     </div>
                 </div>
-                <div>
+                <div class="minimal-device-actions">
                     ${actionHtml}
                 </div>
             </div>
@@ -1156,13 +1184,24 @@ function openStaffSwitchModal() {
         }).join('');
     }
     const pinInput = document.getElementById('quickSwitchPinInput');
-    if (pinInput) pinInput.value = '';
-    const modal = document.getElementById('staffSwitchModal');
-    if (modal) modal.style.display = 'flex';
+    if (pinInput) {
+        pinInput.value = '';
+    }
+    if (typeof window.setActiveAuthOverlay === 'function') {
+        window.setActiveAuthOverlay('staffSwitchModal');
+    } else {
+        const modal = document.getElementById('staffSwitchModal');
+        if (modal) modal.style.display = 'flex';
+    }
+    if (pinInput) {
+        setTimeout(() => pinInput.focus(), 60);
+    }
 }
 window.openStaffSwitchModal = openStaffSwitchModal;
 
+let _quickSwitchPinInFlight = false;
 async function confirmQuickStaffSwitch() {
+    if (_quickSwitchPinInFlight) return false;
     const pinInput = document.getElementById('quickSwitchPinInput');
     const enteredPin = pinInput ? pinInput.value.trim() : '';
     const staffSource = (typeof window !== 'undefined' && Array.isArray(window.staffList) && window.staffList.length > 0)
@@ -1179,36 +1218,41 @@ async function confirmQuickStaffSwitch() {
         return false;
     }
 
-    const isTargetAdmin = (matchedStaff.role === 'Admin');
-    const isMatch = await verifyStaffPin(matchedStaff, enteredPin);
-    const isMasterAdminPin = (typeof verifyAdminPin === 'function')
-        ? await verifyAdminPin(enteredPin)
-        : ((typeof hashString === 'function' && shopProfile?.adminPinHash && hashString(enteredPin) === shopProfile.adminPinHash) || (!shopProfile?.adminPinHash && enteredPin === '1234'));
+    _quickSwitchPinInFlight = true;
+    try {
+        const isTargetAdmin = (matchedStaff.role === 'Admin');
+        const isMatch = await verifyStaffPin(matchedStaff, enteredPin);
+        const isMasterAdminPin = (typeof verifyAdminPin === 'function')
+            ? await verifyAdminPin(enteredPin)
+            : ((typeof hashString === 'function' && shopProfile?.adminPinHash && hashString(enteredPin) === shopProfile.adminPinHash) || (!shopProfile?.adminPinHash && enteredPin === '1234'));
 
-    // Switching to Admin requires Master Admin PIN (or Admin's own PIN if designated).
-    // Switching to staff roles requires entering that staff member's 4-digit PIN.
-    const isValid = isTargetAdmin ? (isMasterAdminPin || isMatch) : isMatch;
+        // Switching to Admin requires Master Admin PIN (or Admin's own PIN if designated).
+        // Switching to staff roles requires entering that staff member's 4-digit PIN.
+        const isValid = isTargetAdmin ? (isMasterAdminPin || isMatch) : isMatch;
 
-    if (isValid) {
-        const isFirstLogin = matchedStaff.mustChangePin === true || Boolean(matchedStaff.initialOtp && !matchedStaff.otpConsumed);
-        if (isFirstLogin) {
+        if (isValid) {
+            const isFirstLogin = matchedStaff.mustChangePin === true || Boolean(matchedStaff.initialOtp && !matchedStaff.otpConsumed);
+            if (isFirstLogin) {
+                const modal = document.getElementById('staffSwitchModal');
+                if (modal) modal.style.display = 'none';
+                openFirstLoginPinModal(matchedStaff);
+                return true;
+            }
+            unlockTerminal(matchedStaff);
             const modal = document.getElementById('staffSwitchModal');
             if (modal) modal.style.display = 'none';
-            openFirstLoginPinModal(matchedStaff);
+            showToast(`Switched active staff to ${currentStaff.name}`);
             return true;
+        } else {
+            if (pinInput) {
+                pinInput.value = '';
+                pinInput.focus();
+            }
+            showToast("Incorrect PIN for " + matchedStaff.name, "error");
+            return false;
         }
-        unlockTerminal(matchedStaff);
-        const modal = document.getElementById('staffSwitchModal');
-        if (modal) modal.style.display = 'none';
-        showToast(`Switched active staff to ${currentStaff.name}`);
-        return true;
-    } else {
-        if (pinInput) {
-            pinInput.value = '';
-            pinInput.focus();
-        }
-        showToast("Incorrect PIN for " + matchedStaff.name, "error");
-        return false;
+    } finally {
+        _quickSwitchPinInFlight = false;
     }
 }
 window.confirmQuickStaffSwitch = confirmQuickStaffSwitch;
@@ -1278,11 +1322,13 @@ function requestManagerOverride({ title, actionDescription, requiredRole = 'Mana
     }
 
     modal.style.display = 'flex';
-    modal.style.zIndex = '1000010';
+    modal.style.zIndex = '1000020';
 }
 window.requestManagerOverride = requestManagerOverride;
 
+let _spotOverrideInFlight = false;
 async function confirmSpotManagerOverride() {
+    if (_spotOverrideInFlight) return;
     const pinInput = document.getElementById('spotOverridePinInput');
     const enteredPin = pinInput ? pinInput.value.trim() : '';
 
@@ -1290,56 +1336,61 @@ async function confirmSpotManagerOverride() {
         return showToast("Please enter 4-digit Manager/Admin PIN.", "warning");
     }
 
-    let authorized = false;
-    let authorizingManager = null;
+    _spotOverrideInFlight = true;
+    try {
+        let authorized = false;
+        let authorizingManager = null;
 
-    const isStrictAdminRequired = (spotOverrideRequiredRole === 'Admin');
-    const managersAndAdmins = staffList.filter(s => {
-        if (s.status === 'Inactive') return false;
-        const norm = normalizeRole(s.role);
-        if (isStrictAdminRequired) return norm === 'Admin';
-        return norm === 'Admin' || norm === 'Manager';
-    });
-    for (const mgr of managersAndAdmins) {
-        const isMatch = await verifyStaffPin(mgr, enteredPin);
-        if (isMatch) {
-            authorized = true;
-            authorizingManager = mgr;
-            break;
+        const isStrictAdminRequired = (spotOverrideRequiredRole === 'Admin');
+        const managersAndAdmins = staffList.filter(s => {
+            if (s.status === 'Inactive') return false;
+            const norm = normalizeRole(s.role);
+            if (isStrictAdminRequired) return norm === 'Admin';
+            return norm === 'Admin' || norm === 'Manager';
+        });
+        for (const mgr of managersAndAdmins) {
+            const isMatch = await verifyStaffPin(mgr, enteredPin);
+            if (isMatch) {
+                authorized = true;
+                authorizingManager = mgr;
+                break;
+            }
         }
-    }
 
-    if (!authorized) {
-        const isAdminPin = (typeof verifyAdminPin === 'function')
-            ? await verifyAdminPin(enteredPin)
-            : ((typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234'));
-        if (isAdminPin) {
-            authorized = true;
-            authorizingManager = { name: 'Admin', role: 'Admin' };
+        if (!authorized) {
+            const isAdminPin = (typeof verifyAdminPin === 'function')
+                ? await verifyAdminPin(enteredPin)
+                : ((typeof hashString === 'function' && hashString(enteredPin) === shopProfile?.adminPinHash) || (enteredPin === '1234'));
+            if (isAdminPin) {
+                authorized = true;
+                authorizingManager = { name: 'Admin', role: 'Admin' };
+            }
         }
-    }
 
-    if (authorized) {
-        if (spotOverrideGrantMenuSession && authorizingManager && normalizeRole(authorizingManager.role) === 'Admin') {
-            const authUntil = Date.now() + (30 * 60 * 1000);
-            if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = authUntil;
-            try { sessionStorage.setItem('billnaw_admin_pin_auth_until', String(authUntil)); } catch (e) {}
+        if (authorized) {
+            if (spotOverrideGrantMenuSession && authorizingManager && normalizeRole(authorizingManager.role) === 'Admin') {
+                const authUntil = Date.now() + (30 * 60 * 1000);
+                if (typeof window !== 'undefined') window._menuAdminPinAuthorizedUntil = authUntil;
+                try { sessionStorage.setItem('billnaw_admin_pin_auth_until', String(authUntil)); } catch (e) {}
+            }
+            spotOverrideGrantMenuSession = false;
+            closeSpotManagerOverrideModal(false);
+            showToast(`Action approved by ${authorizingManager.name} (${authorizingManager.role})`, "success");
+            if (typeof spotOverrideCallback === 'function') {
+                const cb = spotOverrideCallback;
+                spotOverrideCallback = null;
+                spotOverrideCancelCallback = null;
+                cb();
+            }
+        } else {
+            if (pinInput) {
+                pinInput.value = '';
+                pinInput.focus();
+            }
+            showToast("❌ Access Denied: Invalid Manager PIN.", "error");
         }
-        spotOverrideGrantMenuSession = false;
-        closeSpotManagerOverrideModal(false);
-        showToast(`Action approved by ${authorizingManager.name} (${authorizingManager.role})`, "success");
-        if (typeof spotOverrideCallback === 'function') {
-            const cb = spotOverrideCallback;
-            spotOverrideCallback = null;
-            spotOverrideCancelCallback = null;
-            cb();
-        }
-    } else {
-        if (pinInput) {
-            pinInput.value = '';
-            pinInput.focus();
-        }
-        showToast("❌ Access Denied: Invalid Manager PIN.", "error");
+    } finally {
+        _spotOverrideInFlight = false;
     }
 }
 window.confirmSpotManagerOverride = confirmSpotManagerOverride;
@@ -1390,6 +1441,11 @@ window.backspaceOverridePin = backspaceOverridePin;
 
 // 👤 Staff CRUD Operations with Unique PIN Validation & Salted SHA-256
 function openAddStaffModal() {
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (!active || normalizeRole(active.role) !== ROLES.ADMIN) {
+        if (typeof showToast === 'function') showToast('Only Store Admin can add staff members.', 'warning');
+        return false;
+    }
     const currentCount = Array.isArray(staffList) ? staffList.length : 0;
     if (currentCount >= MAX_STAFF_PROFILES) {
         showToast("⚠️ Maximum limit of 10 staff profiles reached for this shop. Remove an existing profile before adding a new one.", "warning");
@@ -1412,6 +1468,11 @@ function openAddStaffModal() {
 window.openAddStaffModal = openAddStaffModal;
 
 function openEditStaffModal(id) {
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (!active || normalizeRole(active.role) !== ROLES.ADMIN) {
+        if (typeof showToast === 'function') showToast('Only Store Admin can edit staff profiles or PINs.', 'warning');
+        return false;
+    }
     const staff = staffList.find(s => String(s.id) === String(id));
     if (!staff) return;
     document.getElementById('staffModalTitle').innerText = "Edit Staff Member";
@@ -1844,7 +1905,7 @@ function logoutStaff() {
     currentStaff = null;
     currentRole = null; 
     lockTerminal(false);
-    if (typeof switchTab === 'function') switchTab('pos'); 
+    if (typeof switchTabDirect === 'function') switchTabDirect('pos'); 
     enforcePermissions(); 
     showToast("Terminal locked / Staff logged out.");
 }
@@ -1876,9 +1937,12 @@ function canStaffAccessTab(staff, tabId) {
 
     if (normRole === ROLES.ADMIN) return true;
 
+    // Shop-wide baseline: EVERY authenticated staff role can open Settings (scoped to Printer, Updates & Staff Logout)
+    if (tabId === 'settings') return true;
+
     if (normRole === ROLES.MANAGER) {
-        // Admin-only areas: Reports/Dashboard, Settings, Staff Hub, Devices, WhatsApp Marketing
-        if (['dashboard', 'settings', 'staff', 'devices', 'whatsapp'].includes(tabId)) return false;
+        // Admin-only areas: Reports/Dashboard, Staff Hub, Devices, WhatsApp Marketing
+        if (['dashboard', 'staff', 'devices', 'whatsapp'].includes(tabId)) return false;
         return ['pos', 'tables', 'kds', 'menu', 'inventory', 'khata', 'customers'].includes(tabId);
     }
 
@@ -1894,7 +1958,7 @@ function canStaffAccessTab(staff, tabId) {
         if (tabId === 'menu' && isMenuPinSessionActive()) {
             return true;
         }
-        return ['tables', 'pos', 'settings'].includes(tabId);
+        return ['tables', 'pos'].includes(tabId);
     }
 
     return false;
@@ -1933,7 +1997,7 @@ function enforcePermissions() {
         });
     } else if (normRole === ROLES.MANAGER) {
         if (navReports) navReports.classList.add('locked');
-        if (navSettings) navSettings.classList.add('locked');
+        if (navSettings) navSettings.classList.remove('locked');
         if (navMenu) navMenu.classList.remove('locked');
         if (navInventory) navInventory.classList.remove('locked');
         if (navKhata) navKhata.classList.remove('locked');
@@ -1943,7 +2007,7 @@ function enforcePermissions() {
         if (resetTile) resetTile.style.opacity = '0.5';
     } else if (normRole === ROLES.CASHIER) {
         if (navReports) navReports.classList.add('locked');
-        if (navSettings) navSettings.classList.add('locked');
+        if (navSettings) navSettings.classList.remove('locked');
         if (navInventory) navInventory.classList.add('locked');
         if (navMenu) navMenu.classList.remove('locked');
         if (navKhata) navKhata.classList.remove('locked');
@@ -1951,7 +2015,7 @@ function enforcePermissions() {
         if (navCustomers) navCustomers.classList.remove('locked');
     } else if (normRole === ROLES.CHEF) {
         if (navReports) navReports.classList.add('locked');
-        if (navSettings) navSettings.classList.add('locked');
+        if (navSettings) navSettings.classList.remove('locked');
         if (navInventory) navInventory.classList.add('locked');
         if (navMenu) navMenu.classList.add('locked');
         if (navKhata) navKhata.classList.add('locked');
@@ -1969,10 +2033,19 @@ function enforcePermissions() {
         if (navTables) navTables.classList.remove('locked');
     }
 
-    // Dynamic settings role enforcement
+    // Dynamic settings role enforcement + hide Admin-only topbar/popover/WhatsApp triggers for non-Admin staff
     if (typeof applySettingsRoleRestrictions === 'function') {
         applySettingsRoleRestrictions();
     }
+    try {
+        const isAdminRole = (normRole === ROLES.ADMIN);
+        const waTabBtn = document.getElementById('custTabBtn-marketing');
+        if (waTabBtn) waTabBtn.style.display = isAdminRole ? '' : 'none';
+        document.querySelectorAll('.brand-edit-hint, [onclick*="openStoreProfileModal"], [onclick*="openActiveSessionsModal"]').forEach(el => {
+            if (el.closest('#settings')) return; // Settings hub manages its own tiles
+            el.style.display = isAdminRole ? '' : 'none';
+        });
+    } catch (_) {}
 
     // Dynamic KDS Role Presentation: present solely for Chef or for Supervisor on KDS-assigned terminal
     if (navKds) {

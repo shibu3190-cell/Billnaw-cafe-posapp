@@ -510,6 +510,16 @@ function checkoutFromTableView() {
         if (typeof showToast === 'function') showToast(`Table ${curT} has no active order to checkout!`, 'warning');
         return;
     }
+    const active = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    const normRole = active && active.role ? (typeof normalizeRole === 'function' ? normalizeRole(active.role) : active.role) : '';
+    if (normRole === 'Floor Server' || normRole === 'Server' || normRole === 'Waiter') {
+        if (typeof handleReadyForBilling === 'function') {
+            handleReadyForBilling();
+        } else if (typeof showToast === 'function') {
+            showToast('Floor Server can print KOT & mark Ready for Billing. Counter Cashier settles bills.', 'info');
+        }
+        return;
+    }
     if (typeof openCheckoutModal === 'function') openCheckoutModal();
 }
 window.checkoutFromTableView = checkoutFromTableView;
@@ -1907,21 +1917,39 @@ function openCheckoutModal(bypassRoleCheck = false) {
         if (typeof showToast === 'function') showToast("Transaction blocked: device pending authorization or revoked.");
         return;
     }
-    if (!bypassRoleCheck && typeof currentStaff !== 'undefined' && currentStaff) {
-        const isBleConnected = isBluetoothPrinterConnected();
-        const canSettle = isBleConnected || (typeof hasPermission === 'function' ? hasPermission(currentStaff, 'can_settle_bills') : (currentStaff.role !== 'Waiter' && currentStaff.role !== 'Floor Server' && currentStaff.role !== 'Kitchen Chef'));
+    if (!bypassRoleCheck) {
+        const activeStaff = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+        if (!activeStaff || !activeStaff.role) {
+            if (typeof showToast === 'function') showToast('Please unlock terminal with a cashier or admin PIN before checkout.', 'warning');
+            if (typeof lockTerminal === 'function') lockTerminal(false);
+            return;
+        }
+        const normRole = typeof normalizeRole === 'function' ? normalizeRole(activeStaff.role) : activeStaff.role;
+        const isFloorServerRole = (normRole === 'Floor Server' || normRole === 'Server' || normRole === 'Waiter');
+        if (isFloorServerRole) {
+            // Strict Floor Server boundary: KOT print/send & Ready for Billing only — never direct cash/UPI settlement even with BLE printer
+            if (typeof handleReadyForBilling === 'function') {
+                handleReadyForBilling();
+            } else if (typeof showToast === 'function') {
+                showToast('Floor Server can print KOT & mark Ready for Billing. Counter Cashier settles bills.', 'info');
+            }
+            return;
+        }
+        const canSettle = (typeof hasPermission === 'function' ? hasPermission(activeStaff, 'can_settle_bills') : (normRole !== 'Kitchen Chef'));
         if (!canSettle) {
             if (typeof requestManagerOverride === 'function') {
                 requestManagerOverride({
                     title: "Manager Authorization Required",
-                    actionDescription: `${currentStaff.role} role cannot settle bills. Enter Manager or Admin PIN to authorize payment settlement:`,
+                    actionDescription: `${activeStaff.role} role cannot settle bills. Enter Manager or Admin PIN to authorize payment settlement:`,
                     requiredRole: 'Manager',
                     onSuccess: () => {
+                        window._spotCheckoutOverrideActive = true;
                         openCheckoutModal(true);
                     }
                 });
                 return;
             }
+            return;
         }
     }
 
@@ -2193,6 +2221,24 @@ async function confirmCheckout() {
         if (typeof showToast === 'function') showToast("Transaction blocked: device revoked or pending authorization.");
         throw new Error('Device revoked; transaction aborted');
     }
+    // Fail-closed settlement RBAC guard (strict Floor Server & unauthenticated protection)
+    const activeStaffSettlement = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    if (!activeStaffSettlement || !activeStaffSettlement.role) {
+        if (typeof showToast === 'function') showToast('Please unlock terminal with a cashier or admin PIN before settling bills.', 'warning');
+        return;
+    }
+    const settleNormRole = typeof normalizeRole === 'function' ? normalizeRole(activeStaffSettlement.role) : activeStaffSettlement.role;
+    const isFloorServerSettle = (settleNormRole === 'Floor Server' || settleNormRole === 'Server' || settleNormRole === 'Waiter');
+    const isPermittedToSettle = !isFloorServerSettle && (typeof hasPermission === 'function' ? hasPermission(activeStaffSettlement, 'can_settle_bills') : (settleNormRole !== 'Kitchen Chef'));
+    if (!isPermittedToSettle && !window._spotCheckoutOverrideActive) {
+        if (isFloorServerSettle && typeof handleReadyForBilling === 'function') {
+            handleReadyForBilling();
+        } else if (typeof showToast === 'function') {
+            showToast(`${activeStaffSettlement.role} role is not permitted to settle bills.`, 'warning');
+        }
+        return;
+    }
+    window._spotCheckoutOverrideActive = false;
     if (typeof flushDebouncedTablePersist === 'function') flushDebouncedTablePersist();
     let tInfo = tablesInfo[activeTable]; 
     if(!tInfo || tInfo.items.length === 0) return showToast(`Table ${activeTable} is empty!`);

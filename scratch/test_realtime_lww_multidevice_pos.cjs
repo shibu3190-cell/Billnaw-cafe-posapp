@@ -289,11 +289,11 @@ async function run() {
     // =========================================================================
     console.log('\n📍 SECTION 4: BILLING BY CASHIER, ADMIN, OR BLUETOOTH-CONNECTED DEVICE');
 
-    test('BILL-01: isBluetoothPrinterConnected unlocks direct checkout & billing alerts on any Bluetooth-paired device', () => {
+    test('BILL-01: Strict Floor Server boundary (KOT & Ready for Billing only) while Cashier/Admin settle bills & BLE alerts remain active', () => {
       assert(posSrc.includes('function isBluetoothPrinterConnected()'), 'isBluetoothPrinterConnected helper must exist in js/pos.js');
       assert(posSrc.includes('window.isBluetoothPrinterConnected = isBluetoothPrinterConnected;'), 'isBluetoothPrinterConnected must be exposed globally');
-      assert(posSrc.includes('const isBleConnected = isBluetoothPrinterConnected();'), 'openCheckoutModal must check isBleConnected');
-      assert(posSrc.includes('const canSettle = isBleConnected ||'), 'openCheckoutModal must allow privileged roles or Bluetooth-connected device');
+      assert(posSrc.includes('const isFloorServerRole ='), 'openCheckoutModal must explicitly guard Floor Server role');
+      assert(posSrc.includes('handleReadyForBilling()'), 'openCheckoutModal must route Floor Server to Ready for Billing');
       assert(coreSrc.includes("if (typeof isBluetoothPrinterConnected === 'function' && isBluetoothPrinterConnected()) return true;"), 'isBillingAlertEligibleRole must return true when Bluetooth printer is connected');
     });
 

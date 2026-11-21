@@ -213,6 +213,41 @@ function filterMenu(category) {
 }
 window.filterMenu = filterMenu;
 
+const _failedMenuImageUrls = new Set();
+
+function _resolveStableMenuThumb(item) {
+    const rawThumb = item.image || item.image_url || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
+    const sanitized = _sanitizeMenuImgUrl(rawThumb);
+    if (!sanitized || _failedMenuImageUrls.has(sanitized)) {
+        return generateFallbackImage(item.name, item.category);
+    }
+    return sanitized;
+}
+
+function _handleMenuImgError(imgEl) {
+    if (!imgEl) return;
+    imgEl.onerror = null;
+    const failedUrl = imgEl.dataset?.resolvedSrc || imgEl.getAttribute('src') || '';
+    if (failedUrl && !failedUrl.startsWith('data:')) {
+        _failedMenuImageUrls.add(failedUrl);
+    }
+    const fallback = generateFallbackImage(imgEl.dataset?.itemName || '', imgEl.dataset?.itemCat || '');
+    imgEl.dataset.resolvedSrc = fallback;
+    if (imgEl.src !== fallback) {
+        imgEl.src = fallback;
+    }
+}
+if (typeof window !== 'undefined') {
+    window._handleMenuImgError = _handleMenuImgError;
+    window._failedMenuImageUrls = _failedMenuImageUrls;
+}
+
+function _isMenuCatalogViewActive() {
+    if (typeof document === 'undefined') return false;
+    const menuView = document.getElementById('menu');
+    return Boolean(menuView && menuView.classList.contains('active'));
+}
+
 function renderMenuUI() {
     if (typeof window !== 'undefined' && Array.isArray(window.menuItems) && window.menuItems.length > 0 && (!Array.isArray(menuItems) || menuItems.length === 0)) {
         menuItems = window.menuItems;
@@ -244,7 +279,7 @@ function renderMenuUI() {
                 </div>
             </div>
         `;
-        renderMenuCatalogUI();
+        if (_isMenuCatalogViewActive()) renderMenuCatalogUI();
         return;
     }
 
@@ -273,11 +308,11 @@ function renderMenuUI() {
                 </button>
             </div>
         `;
-        renderMenuCatalogUI();
+        if (_isMenuCatalogViewActive()) renderMenuCatalogUI();
         return;
     }
 
-    // ⚡ FLICKER-FREE TARGETED DOM DIFFING & IN-PLACE PATCHING
+    // ⚡ FLICKER-FREE TARGETED DOM DIFFING & IN-PLACE PATCHING (preserves <img> nodes)
     const existingCards = posGrid.querySelectorAll('.menu-card');
     const existingCardIds = Array.from(existingCards).map(c => c.getAttribute('data-item-id'));
     const targetCardIds = filteredMenu.map(i => String(i.id));
@@ -286,11 +321,50 @@ function renderMenuUI() {
                             existingCardIds.every((id, idx) => id === targetCardIds[idx]);
 
     if (canPatchInPlace) {
-        filteredMenu.forEach(item => {
-            const safeIdAttr = String(item.id);
-            const cardEl = Array.from(existingCards).find(c => c.getAttribute('data-item-id') === safeIdAttr) || document.getElementById(`menu-card-${safeIdAttr}`);
+        filteredMenu.forEach((item, idx) => {
+            const cardEl = existingCards[idx];
             if (!cardEl) return;
-            
+
+            // Patch name & category only when changed
+            const nameEl = cardEl.querySelector('.name');
+            if (nameEl && nameEl.textContent !== item.name) {
+                nameEl.textContent = item.name;
+            }
+            const catEl = cardEl.querySelector('.cat-label');
+            const expectedCat = item.category || '';
+            if (catEl && catEl.textContent !== expectedCat) {
+                catEl.textContent = expectedCat;
+            }
+
+            // Patch image ONLY if resolved source genuinely changed (zero flicker; re-arm onerror)
+            const imgEl = cardEl.querySelector('img.card-img');
+            if (imgEl) {
+                const expectedThumb = _resolveStableMenuThumb(item);
+                if (imgEl.dataset.resolvedSrc !== expectedThumb) {
+                    imgEl.dataset.resolvedSrc = expectedThumb;
+                    imgEl.dataset.itemName = item.name || '';
+                    imgEl.dataset.itemCat = item.category || '';
+                    imgEl.onerror = function() { _handleMenuImgError(this); };
+                    imgEl.src = expectedThumb;
+                }
+            }
+
+            // Patch sold-out state & overlay
+            const isOut = Boolean(item.trackStock && item.stockQty <= 0);
+            cardEl.classList.toggle('is-out', isOut);
+            const imgWrap = cardEl.querySelector('.card-img-wrapper');
+            if (imgWrap) {
+                let soldOverlay = imgWrap.querySelector('.sold-overlay');
+                if (isOut && !soldOverlay) {
+                    soldOverlay = document.createElement('div');
+                    soldOverlay.className = 'sold-overlay';
+                    soldOverlay.innerHTML = '<span class="sold-badge">Sold Out</span>';
+                    imgWrap.appendChild(soldOverlay);
+                } else if (!isOut && soldOverlay) {
+                    soldOverlay.remove();
+                }
+            }
+
             // Patch rate/price directly
             const priceEl = cardEl.querySelector('.card-price-col .price');
             const expectedPrice = `₹ ${item.price}`;
@@ -298,7 +372,7 @@ function renderMenuUI() {
                 priceEl.textContent = expectedPrice;
             }
 
-            // Patch stock pill and stock badges
+            // Patch stock badge without rebuilding card
             const stockBadge = cardEl.querySelector('.stock-badge');
             if (item.trackStock && item.stockQty <= 5 && item.stockQty > 0) {
                 if (stockBadge) {
@@ -317,7 +391,7 @@ function renderMenuUI() {
             }
         });
         syncMenuUIQuantities();
-        renderMenuCatalogUI();
+        if (_isMenuCatalogViewActive()) renderMenuCatalogUI();
         return;
     }
 
@@ -329,11 +403,10 @@ function renderMenuUI() {
             stockIndicator = item.stockQty > 0 ? `<span class="stock-indicator green"><i></i> In Stock</span>` : `<span class="stock-indicator red"><i></i> Out of Stock</span>`;
         }
 
-        const rawThumb = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
-        const thumbSrc = _sanitizeMenuImgUrl(rawThumb) || generateFallbackImage(item.name, item.category);
+        const thumbSrc = _resolveStableMenuThumb(item);
         const safeItemId = _menuEsc(String(item.id));
         const isOut = Boolean(item.trackStock && item.stockQty <= 0);
-        const imageHtml = `<img src="${_menuEsc(thumbSrc)}" class="card-img" alt="${_menuEsc(item.name)}" loading="lazy" decoding="async" data-item-name="${_menuEsc(item.name || '')}" data-item-cat="${_menuEsc(item.category || '')}" onerror="this.onerror=null; this.src=generateFallbackImage(this.dataset.itemName, this.dataset.itemCat);">`;
+        const imageHtml = `<img src="${_menuEsc(thumbSrc)}" data-resolved-src="${_menuEsc(thumbSrc)}" class="card-img" alt="${_menuEsc(item.name)}" loading="lazy" decoding="async" data-item-name="${_menuEsc(item.name || '')}" data-item-cat="${_menuEsc(item.category || '')}" onerror="_handleMenuImgError(this)">`;
 
         return `
         <div class="menu-card${isOut ? ' is-out' : ''}" id="menu-card-${item.id}" data-item-id="${item.id}" onclick="addToCart(this.dataset.itemId, event)">
@@ -363,7 +436,7 @@ function renderMenuUI() {
 
     posGrid.innerHTML = cardsHtml.join('');
     syncMenuUIQuantities();
-    renderMenuCatalogUI();
+    if (_isMenuCatalogViewActive()) renderMenuCatalogUI();
 }
 window.renderMenuUI = renderMenuUI;
 
@@ -427,20 +500,25 @@ function renderMenuCatalogUI() {
         refreshAiMenuQuotaPill();
     }
 
-    // 2. Render Category Filter Chips
+    // 2. Render Category Filter Chips (skip rebuild when unchanged)
     const chipsContainer = document.getElementById('catalogCategoryChips');
     if (chipsContainer) {
-        const chipsHtml = (Array.isArray(menuCategories) ? menuCategories : []).map(cat => `
-            <button type="button" class="btn btn-outline" data-category="${_menuEsc(cat)}" onclick="filterCatalogByCategory(this.dataset.category)" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; ${catalogActiveCategoryFilter === cat ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'color: #4B5563; background: #FFFFFF;'}">
-                ${_menuEsc(cat)}
-            </button>
-        `).join('');
-        const addBtnHtml = `
-            <button type="button" class="btn btn-outline" onclick="promptAddNewCategoryFromModal()" title="Add New Category" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; color: #143832; background: #E6F4EA; border: 1px dashed #34A853;">
-                + Category
-            </button>
-        `;
-        chipsContainer.innerHTML = chipsHtml + addBtnHtml;
+        const catsArr = Array.isArray(menuCategories) ? menuCategories : [];
+        const chipsSig = `${catalogActiveCategoryFilter || 'All'}||${catsArr.join('|')}`;
+        if (chipsContainer.dataset.renderSig !== chipsSig) {
+            const chipsHtml = catsArr.map(cat => `
+                <button type="button" class="btn btn-outline" data-category="${_menuEsc(cat)}" onclick="filterCatalogByCategory(this.dataset.category)" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; ${catalogActiveCategoryFilter === cat ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'color: #4B5563; background: #FFFFFF;'}">
+                    ${_menuEsc(cat)}
+                </button>
+            `).join('');
+            const addBtnHtml = `
+                <button type="button" class="btn btn-outline" onclick="promptAddNewCategoryFromModal()" title="Add New Category" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; color: #143832; background: #E6F4EA; border: 1px dashed #34A853;">
+                    + Category
+                </button>
+            `;
+            chipsContainer.innerHTML = chipsHtml + addBtnHtml;
+            chipsContainer.dataset.renderSig = chipsSig;
+        }
     }
 
     // 3. Search and Category Filter
@@ -458,7 +536,7 @@ function renderMenuCatalogUI() {
         );
     }
 
-    // 4. Render Clean Item Cards matching Screenshot 1
+    // 4. Render Clean Item Cards with flicker-free keyed in-place DOM diffing
     if (cleanCardsContainer) {
         if (!Array.isArray(menuItems) || menuItems.length === 0) {
             cleanCardsContainer.innerHTML = `
@@ -487,29 +565,66 @@ function renderMenuCatalogUI() {
                 </div>
             `;
         } else {
-            cleanCardsContainer.innerHTML = itemsToRender.map(item => {
-                let stockClass = 'unlimited';
-                let stockLabel = '∞ Unlimited';
-                if (item.trackStock) {
-                    if (item.stockQty > 5) {
-                        stockClass = 'in-stock';
-                        stockLabel = `${item.stockQty} in stock`;
-                    } else if (item.stockQty > 0) {
-                        stockClass = 'low-stock';
-                        stockLabel = `${item.stockQty} low`;
-                    } else {
-                        stockClass = 'out-stock';
-                        stockLabel = 'Out of stock';
-                    }
-                }
+            const getCatalogStockMeta = (item) => {
+                if (!item.trackStock) return { cls: 'unlimited', label: '∞ Unlimited' };
+                if (item.stockQty > 5) return { cls: 'in-stock', label: `${item.stockQty} in stock` };
+                if (item.stockQty > 0) return { cls: 'low-stock', label: `${item.stockQty} low` };
+                return { cls: 'out-stock', label: 'Out of stock' };
+            };
 
-                const rawThumb = item.image || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
-                const thumbSrc = _sanitizeMenuImgUrl(rawThumb) || generateFallbackImage(item.name, item.category);
+            const existingCatalogCards = cleanCardsContainer.querySelectorAll('.clean-item-card[data-catalog-item-id]');
+            const existingIds = Array.from(existingCatalogCards).map(el => el.getAttribute('data-catalog-item-id'));
+            const targetIds = itemsToRender.map(item => String(item.id));
+            const canPatchCatalog = existingIds.length === targetIds.length &&
+                                    existingIds.every((id, idx) => id === targetIds[idx]);
+
+            if (canPatchCatalog) {
+                itemsToRender.forEach((item, idx) => {
+                    const cardEl = existingCatalogCards[idx];
+                    if (!cardEl) return;
+
+                    const nameEl = cardEl.querySelector('.clean-item-name');
+                    if (nameEl && nameEl.textContent !== item.name) nameEl.textContent = item.name;
+
+                    const catEl = cardEl.querySelector('.clean-item-category-tag');
+                    const expectedCat = item.category || 'General';
+                    if (catEl && catEl.textContent !== expectedCat) catEl.textContent = expectedCat;
+
+                    const priceEl = cardEl.querySelector('.clean-item-price');
+                    const expectedPrice = `₹ ${Number(item.price).toFixed(2)}`;
+                    if (priceEl && priceEl.textContent !== expectedPrice) priceEl.textContent = expectedPrice;
+
+                    const stockMeta = getCatalogStockMeta(item);
+                    const stockEl = cardEl.querySelector('.clean-item-stock-tag');
+                    if (stockEl) {
+                        const expectedCls = `clean-item-stock-tag ${stockMeta.cls}`;
+                        if (stockEl.className !== expectedCls) stockEl.className = expectedCls;
+                        if (stockEl.textContent !== stockMeta.label) stockEl.textContent = stockMeta.label;
+                    }
+
+                    const imgEl = cardEl.querySelector('img.clean-item-thumb');
+                    if (imgEl) {
+                        const expectedThumb = _resolveStableMenuThumb(item);
+                        if (imgEl.dataset.resolvedSrc !== expectedThumb) {
+                            imgEl.dataset.resolvedSrc = expectedThumb;
+                            imgEl.dataset.itemName = item.name || '';
+                            imgEl.dataset.itemCat = item.category || '';
+                            imgEl.onerror = function() { _handleMenuImgError(this); };
+                            imgEl.src = expectedThumb;
+                        }
+                    }
+                });
+                return;
+            }
+
+            cleanCardsContainer.innerHTML = itemsToRender.map(item => {
+                const stockMeta = getCatalogStockMeta(item);
+                const thumbSrc = _resolveStableMenuThumb(item);
                 const safeItemId = _menuEsc(String(item.id));
                 return `
-                <div class="clean-item-card">
+                <div class="clean-item-card" data-catalog-item-id="${safeItemId}">
                     <div class="clean-item-left">
-                        <img src="${_menuEsc(thumbSrc)}" class="clean-item-thumb" alt="${_menuEsc(item.name)}" loading="lazy" decoding="async" data-item-name="${_menuEsc(item.name || '')}" data-item-cat="${_menuEsc(item.category || '')}" onerror="this.onerror=null; this.src=generateFallbackImage(this.dataset.itemName, this.dataset.itemCat);">
+                        <img src="${_menuEsc(thumbSrc)}" data-resolved-src="${_menuEsc(thumbSrc)}" class="clean-item-thumb" alt="${_menuEsc(item.name)}" loading="lazy" decoding="async" data-item-name="${_menuEsc(item.name || '')}" data-item-cat="${_menuEsc(item.category || '')}" onerror="_handleMenuImgError(this)">
                         <div class="clean-item-info">
                             <div class="clean-item-title-row">
                                 <span class="clean-item-name">${_menuEsc(item.name)}</span>
@@ -517,7 +632,7 @@ function renderMenuCatalogUI() {
                             </div>
                             <div class="clean-item-meta-row">
                                 <span class="clean-item-price">₹ ${Number(item.price).toFixed(2)}</span>
-                                <span class="clean-item-stock-tag ${stockClass}">${stockLabel}</span>
+                                <span class="clean-item-stock-tag ${stockMeta.cls}">${stockMeta.label}</span>
                             </div>
                         </div>
                     </div>

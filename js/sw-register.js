@@ -16,9 +16,10 @@ if ('serviceWorker' in navigator) {
                 console.warn('[SW] Registration failed:', err);
             });
 
-        // Auto-refresh when new deployment service worker takes control
+        // Auto-refresh when new deployment service worker takes control (skip mid-upgrade while applyAppUpdate manages reload)
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (window._isApplyingAppUpdate) return;
             if (!refreshing) {
                 refreshing = true;
                 console.log('[SW] New deployment detected, refreshing for latest version...');

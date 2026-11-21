@@ -1609,7 +1609,7 @@ body.printing { background: #fff !important; }
         padding: 16px;
         margin: 0 auto;
     }
-    .session-card {
+    .session-card:not(.minimal-session-card) {
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
@@ -1622,7 +1622,7 @@ body.printing { background: #fff !important; }
         flex-wrap: wrap;
         gap: 8px;
     }
-    .session-remote-lock-btn {
+    .session-remote-lock-btn:not(.minimal-action-btn) {
         width: 100%;
         justify-content: center;
         min-height: 44px;

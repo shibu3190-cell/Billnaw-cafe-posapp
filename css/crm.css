@@ -998,11 +998,23 @@
     gap: 20px;
     align-items: start;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.inv-desktop-split-layout > .inv-main-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 @media screen and (max-width: 1023px) {
     .inv-desktop-split-layout {
         display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
     }
     .inv-desktop-split-layout > .inv-sidebar-aside {
         margin-top: 24px;

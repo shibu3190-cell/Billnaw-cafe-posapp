@@ -14,7 +14,7 @@ async function runTests() {
   console.log('Test 1 (rawUrl):', res1.statusCode, res1.body);
   const data1 = JSON.parse(res1.body);
   assert.strictEqual(res1.statusCode, 200);
-  assert.strictEqual(data1.version, '1.0.0');
+  assert.strictEqual(data1.version, '3.0.0');
 
   // Test 2: Netlify rewrite with x-nf-original-url
   const res2 = await handler({
@@ -25,7 +25,7 @@ async function runTests() {
   console.log('Test 2 (x-nf-original-url):', res2.statusCode, res2.body);
   const data2 = JSON.parse(res2.body);
   assert.strictEqual(res2.statusCode, 200);
-  assert.strictEqual(data2.version, '1.0.0');
+  assert.strictEqual(data2.version, '3.0.0');
 
   // Test 3: Direct /api/version path
   const res3 = await handler({
@@ -36,7 +36,7 @@ async function runTests() {
   console.log('Test 3 (direct /api/version):', res3.statusCode, res3.body);
   const data3 = JSON.parse(res3.body);
   assert.strictEqual(res3.statusCode, 200);
-  assert.strictEqual(data3.version, '1.0.0');
+  assert.strictEqual(data3.version, '3.0.0');
 
   // Test 4: /.netlify/functions/api/version path
   const res4 = await handler({
@@ -47,7 +47,7 @@ async function runTests() {
   console.log('Test 4 (direct functions path):', res4.statusCode, res4.body);
   const data4 = JSON.parse(res4.body);
   assert.strictEqual(res4.statusCode, 200);
-  assert.strictEqual(data4.version, '1.0.0');
+  assert.strictEqual(data4.version, '3.0.0');
 
   // Test 5: /api/gemini/status with x-nf-original-url
   const res5 = await handler({
