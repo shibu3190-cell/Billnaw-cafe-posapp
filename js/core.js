@@ -4404,8 +4404,6 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                     });
                     writeOfflineSyncQueueMap(qMapErr);
                 }
-                    }
-                }
                 return false;
             } else {
                 throw new Error(`Sync HTTP ${res ? res.status : 'unknown'}`);

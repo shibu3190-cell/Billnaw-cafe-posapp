@@ -710,7 +710,8 @@ document.addEventListener('click', (event) => {
 // 📸 Upload Menu Choice Dialog Handlers & Quota Telemetry Pill
 let _lastAiQuotaFetchAt = 0;
 let _lastAiQuotaShopId = '';
-async function refreshAiMenuQuotaPill(force = false) {
+async function refreshAiMenuQuotaPill() {
+    const force = arguments[0] === true;
     try {
         const activeShopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || 
                              (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || 

@@ -87,6 +87,34 @@ async function runFullDiagnosis() {
     assert.strictEqual(missingScripts.length, 0, `Missing script files referenced in index.html: ${missingScripts.join(', ')}`);
     console.log(`  ✅ PASS: All ${htmlScripts.length} local <script> tags in index.html resolve cleanly on disk.`);
 
+    // Strict Syntax Check across ALL JS files (both classic browser scripts via vm.Script and ES modules via node --check)
+    const cp = require('child_process');
+    const jsFilesToCheck = ['app.js', 'server.js', 'service-worker.js'];
+    const walkJs = (dirRel) => {
+        const abs = path.join(ROOT, dirRel);
+        if (!fs.existsSync(abs)) return;
+        for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+            const rel = path.join(dirRel, entry.name);
+            if (entry.isDirectory()) walkJs(rel);
+            else if (entry.name.endsWith('.js')) jsFilesToCheck.push(rel);
+        }
+    };
+    ['js', 'server', 'netlify/functions', 'src'].forEach(walkJs);
+    const syntaxFailures = [];
+    for (const rel of jsFilesToCheck) {
+        const abs = path.join(ROOT, rel);
+        const code = fs.readFileSync(abs, 'utf8');
+        const isEsm = /^\s*(import|export)\s/m.test(code);
+        if (isEsm) {
+            const r = cp.spawnSync(process.execPath, ['--check', abs], { encoding: 'utf8' });
+            if (r.status !== 0) syntaxFailures.push(`${rel}: ${(r.stderr || '').trim().split('\n')[0]}`);
+        } else {
+            try { new vm.Script(code, { filename: rel }); } catch (e) { syntaxFailures.push(`${rel}: ${e.message}`); }
+        }
+    }
+    assert.strictEqual(syntaxFailures.length, 0, `JS syntax errors detected:\n  ${syntaxFailures.join('\n  ')}`);
+    console.log(`  ✅ PASS: All ${jsFilesToCheck.length} JavaScript files (classic & ESM) compiled with 0 syntax errors.`);
+
     // =========================================================================
     // 3. AUTH, COLD-START LOGIN SAFETY, CROSS-CONTAINER SIGNUP & TENANT ISOLATION
     // =========================================================================

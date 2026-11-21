@@ -152,12 +152,11 @@ export async function registerStaffMember(staffData) {
       created_at: new Date().toISOString()
     };
 
-    const staffList = getRegisteredStaff();
-    staffList.push(memberDoc);
+    const updatedStaffList = [...staffList, memberDoc];
 
     if (typeof localStorage !== 'undefined') {
       try {
-        localStorage.setItem('pos_staff_members', JSON.stringify(staffList));
+        localStorage.setItem('pos_staff_members', JSON.stringify(updatedStaffList));
       } catch (e) {}
     }
 
