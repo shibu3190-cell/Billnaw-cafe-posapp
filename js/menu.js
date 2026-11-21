@@ -2001,10 +2001,10 @@ async function processAIMenu(event) {
                 reader.onload = (e) => {
                     const img = new Image();
                     img.onload = () => {
-                        const canvas = document.createElement('canvas'); const MAX_DIM = 1200; let w = img.width, h = img.height;
+                        const canvas = document.createElement('canvas'); const MAX_DIM = 1600; let w = img.width, h = img.height;
                         if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
-                        canvas.width = w; canvas.height = h; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
-                        resolve(canvas.toDataURL('image/jpeg', 0.7));
+                        canvas.width = Math.round(w); canvas.height = Math.round(h); const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.82));
                     }; img.onerror = () => reject(new Error("Image load failed.")); img.src = e.target.result;
                 }; reader.onerror = () => reject(new Error("File reading failed.")); reader.readAsDataURL(file);
             });
@@ -2018,39 +2018,12 @@ async function processAIMenu(event) {
         pendingUploadPayload = payload;
         lastUploadedMenuPreviewUrl = (base64Data && base64Data.startsWith('data:image')) ? base64Data : null;
 
-        // Check Gemini AI Operational status
-        let isGeminiReady = false;
-        try {
-            const statusHeaders = {};
-            if (customKey) statusHeaders['x-gemini-api-key'] = customKey;
-            if (activeShopId) {
-                statusHeaders['x-shop-id'] = activeShopId;
-                statusHeaders['x-store-code'] = activeShopId;
-                statusHeaders['x-client-id'] = activeShopId;
-            }
-
-            const statusRes = await fetch(`/api/gemini/status?clientId=${encodeURIComponent(activeShopId || '')}&storeCode=${encodeURIComponent(activeShopId || '')}&shopId=${encodeURIComponent(activeShopId || '')}`, { headers: statusHeaders });
-            if (statusRes.ok) {
-                const statusData = await statusRes.json();
-                isGeminiReady = Boolean(statusData && statusData.operational);
-            }
-        } catch (statusErr) {
-            console.warn("Could not check Gemini operational status:", statusErr);
-        }
-
-        if (isGeminiReady) {
-            if (customKey) {
-                if (scanText) scanText.innerText = "Scanning menu using Dedicated Gemini API Key...";
-                showToast("🤖 Analyzing menu with Dedicated Gemini Key...");
-            } else {
-                if (scanText) scanText.innerText = "Uploading & analyzing menu document...";
-                showToast("🤖 Converting menu with Google Gemini AI Vision (Primary Engine)...");
-            }
-            await executeMenuExtraction(payload, false);
+        if (customKey) {
+            if (scanText) scanText.innerText = "Scanning menu using Dedicated Gemini API Key...";
         } else {
-            showToast("📄 Parsing menu with Smart Layout Parser...");
-            await executeMenuExtraction(payload, true);
+            if (scanText) scanText.innerText = "Uploading & analyzing menu with Gemini AI Vision...";
         }
+        await executeMenuExtraction(payload, false);
     } catch (error) { 
         console.warn("AI Menu Processing:", error.message); 
         showToast("⚠️ " + error.message); 
@@ -2106,34 +2079,43 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
                 payload.shopEmail = activeShopEmail;
             }
 
-            let serverRes = await fetch('/api/ai/scan-menu', {
-                method: 'POST',
-                headers: requestHeaders,
-                body: JSON.stringify(payload)
-            }).catch(() => null);
-
-            if (!serverRes || serverRes.status === 404) {
-                serverRes = await fetch('/api/extract-menu', {
+            const scanController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const scanTimer = scanController ? setTimeout(() => scanController.abort(), 60000) : null;
+            let serverRes = null;
+            try {
+                serverRes = await fetch('/api/ai/scan-menu', {
                     method: 'POST',
                     headers: requestHeaders,
-                    body: JSON.stringify(payload)
-                });
+                    body: JSON.stringify(payload),
+                    signal: scanController ? scanController.signal : undefined
+                }).catch(() => null);
+
+                if (!serverRes || serverRes.status === 404) {
+                    serverRes = await fetch('/api/extract-menu', {
+                        method: 'POST',
+                        headers: requestHeaders,
+                        body: JSON.stringify(payload),
+                        signal: scanController ? scanController.signal : undefined
+                    });
+                }
+            } finally {
+                if (scanTimer) clearTimeout(scanTimer);
             }
 
-            if (serverRes.ok) {
+            if (serverRes && serverRes.ok) {
                 serverData = await serverRes.json();
-            } else if (serverRes.status === 429) {
+            } else if (serverRes && serverRes.status === 429) {
                 const errData = await serverRes.json().catch(() => ({}));
                 const quotaMsg = errData.error || "Monthly scan quota of 15 scans reached for this shop.";
-                showToast("⚠️ " + quotaMsg);
+                showToast("⚠️ " + quotaMsg, "error");
                 throw new Error(quotaMsg);
-            } else if (serverRes.status === 401 || serverRes.status === 403) {
+            } else if (serverRes && (serverRes.status === 401 || serverRes.status === 403)) {
                 const errData = await serverRes.json().catch(() => ({}));
                 const keyMsg = errData.error || "Invalid or unauthorized Gemini API key. Please check your key in Settings.";
-                showToast("❌ " + keyMsg);
+                showToast("❌ " + keyMsg, "error");
                 throw new Error(keyMsg);
             } else {
-                console.warn(`Server extraction status: ${serverRes.status}, applying smart layout parser.`);
+                console.warn(`Server extraction status: ${serverRes ? serverRes.status : 'network error'}, applying smart layout parser.`);
             }
         } catch (fetchErr) {
             if (fetchErr.message && (fetchErr.message.includes("quota") || fetchErr.message.includes("Gemini API key") || fetchErr.message.includes("unauthorized"))) {
@@ -2142,13 +2124,22 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
             console.warn("Server connection failed or offline, switching to smart layout parser:", fetchErr);
         }
 
-        // Automatic smart layout fallback if server returned error or empty
+        // Automatic smart layout fallback ONLY if server returned no categories — while PRESERVING any server AI diagnostic warning (e.g. HTTP 402 credits depleted / 429 rate limit)
+        const serverDiagnosticWarning = serverData && serverData.warning ? serverData.warning : null;
+        const serverAiErrorCode = serverData && serverData.aiErrorCode ? serverData.aiErrorCode : null;
         if (!serverData || !serverData.categories || serverData.categories.length === 0) {
-            serverData = parseLocalMenuFallback(payload);
+            const localFallback = parseLocalMenuFallback(payload);
+            serverData = {
+                ...localFallback,
+                warning: serverDiagnosticWarning || localFallback.warning,
+                aiErrorCode: serverAiErrorCode || null
+            };
         }
 
         if (serverData.isFallback) {
-            showToast("ℹ️ " + (serverData.warning || "Menu extracted using smart layout parser. Review items before import."));
+            const fallbackMsg = serverData.warning || "Menu extracted using smart layout parser. Review items before import.";
+            const toastType = (serverData.aiErrorCode === 'BILLING_DEPLETED' || serverData.aiErrorCode === 'INVALID_API_KEY' || serverData.aiErrorCode === 'GEMINI_RATE_LIMIT') ? 'error' : 'info';
+            showToast((toastType === 'error' ? '⚠️ ' : 'ℹ️ ') + fallbackMsg, toastType);
         } else if (serverData.quota) {
             showToast(`🤖 AI Scanned! Quota remaining this month: ${serverData.quota.remaining}/${serverData.quota.limit}`);
         } else if (customKey) {
@@ -2158,7 +2149,10 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
         pendingAiItems = [];
         pendingAiFallbackNotice = serverData.isFallback ? (serverData.warning || "Menu digitized using Smart Layout Parser.") : null;
 
-        if (serverData.categories && Array.isArray(serverData.categories)) {
+        // Never pollute the user's real menu scan with generic hardcoded starter template dishes when Vision OCR failed with an API/billing/key error
+        const isGenericStarterFallback = Boolean(serverData.isFallback && serverData.fallbackSource === 'starter_template' && serverData.aiErrorCode);
+
+        if (!isGenericStarterFallback && serverData.categories && Array.isArray(serverData.categories)) {
             serverData.categories.forEach(cat => {
                 const catName = String(cat.name || cat.category || "General").trim();
                 if (cat.items && Array.isArray(cat.items)) {
@@ -2192,7 +2186,15 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
         if (scanOverlay) scanOverlay.style.display = 'none';
 
         if (pendingAiItems.length === 0) {
-            showToast("ℹ️ No clear dishes detected. Please upload a high resolution photo or add items manually.");
+            if (!serverDiagnosticWarning) {
+                showToast("ℹ️ No clear dishes detected. Please upload a high resolution photo or add items manually.");
+            }
+            if (serverAiErrorCode || serverDiagnosticWarning) {
+                // Open AI Preview modal with the diagnostic banner & quick "Configure Key" action so admin can fix in 1 click
+                renderAiPreviewModal();
+                const prevModal = document.getElementById('aiPreviewModal');
+                if (prevModal) prevModal.style.display = 'flex';
+            }
             return;
         }
 
@@ -2278,30 +2280,36 @@ function renderAiPreviewModal() {
     const badge = document.getElementById('aiPreviewItemCountBadge');
     if (badge) badge.innerText = `${pendingAiItems.length} Item${pendingAiItems.length === 1 ? '' : 's'}`;
 
+    let noticeHtml = '';
+    if (pendingAiFallbackNotice) {
+        const isError = /could not be|failed|invalid|depleted|402|429|unauthorized|rate.?limit/i.test(pendingAiFallbackNotice);
+        const bg = isError ? 'rgba(220,38,38,0.08)' : 'rgba(20,56,50,0.06)';
+        const border = isError ? '#DC2626' : 'var(--primary)';
+        const textCol = isError ? '#991B1B' : 'var(--primary)';
+        noticeHtml = `<div style="background: ${bg}; border-left: 4px solid ${border}; padding: 10px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; color: ${textCol}; line-height: 1.45; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="display: flex; align-items: flex-start; gap: 8px;">
+                <svg width="16" height="16" style="flex-shrink:0; margin-top:2px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span>${escapeHtml(pendingAiFallbackNotice)}</span>
+            </div>
+            <button type="button" onclick="closeAiPreviewModal(); openClientQuotaModal();" style="background: #FFFFFF; border: 1px solid ${border}; color: ${textCol}; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: opacity 0.15s;" title="Configure Gemini AI Key">Configure AI Key</button>
+        </div>`;
+    }
+
     if (pendingAiItems.length === 0) {
         container.innerHTML = `
-            <div style="text-align: center; padding: 30px 20px; color: var(--text-muted);">
-                <p style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">No items in review.</p>
-                <button type="button" class="btn btn-outline" style="padding: 8px 16px; font-size: 12px;" onclick="addManualPendingAiItem()">Add Item</button>
+            ${noticeHtml}
+            <div style="text-align: center; padding: 24px 20px; color: var(--text-muted);">
+                <p style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">No items detected yet.</p>
+                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;" onclick="closeAiPreviewModal(); openClientQuotaModal();">Configure Dedicated Gemini Key</button>
+                    <button type="button" class="btn btn-outline" style="padding: 8px 16px; font-size: 12px;" onclick="addManualPendingAiItem()">Add Item Manually</button>
+                </div>
             </div>
         `;
         return;
     }
 
-    let html = '';
-    if (pendingAiFallbackNotice) {
-        const isError = pendingAiFallbackNotice.includes('could not be') || pendingAiFallbackNotice.includes('failed') || pendingAiFallbackNotice.includes('invalid');
-        const bg = isError ? 'rgba(230,81,0,0.08)' : 'rgba(20,56,50,0.06)';
-        const border = isError ? 'var(--warning)' : 'var(--primary)';
-        const textCol = isError ? '#b75500' : 'var(--primary)';
-        html += `<div style="background: ${bg}; border-left: 4px solid ${border}; padding: 8px 12px; border-radius: 8px; font-size: 11px; margin-bottom: 8px; color: ${textCol}; line-height: 1.4; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <span>${escapeHtml(pendingAiFallbackNotice)}</span>
-            </div>
-            <button type="button" onclick="closeAiPreviewModal(); openClientQuotaModal();" style="background: none; border: 1px solid ${border}; color: ${textCol}; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: opacity 0.15s;" title="Configure Gemini AI Key">AI Key</button>
-        </div>`;
-    }
+    let html = noticeHtml;
 
     pendingAiItems.forEach((item, index) => {
         const safeName = _menuEsc(item.name || '');

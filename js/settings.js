@@ -770,20 +770,28 @@ async function testGeminiApiKey() {
     }
 
     try {
-        const res = await fetch('/api/gemini/status', {
+        const res = await fetch('/api/gemini/status?liveTest=1', {
             headers: { 'x-gemini-api-key': keyVal }
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.operational) {
-            showToast("✅ Gemini API key is valid & operational!");
+            const modelInfo = data.modelTested ? ` (${data.modelTested})` : '';
+            showToast(`✅ Gemini API key is valid & operational${modelInfo}!`);
             if (badge) {
-                badge.innerText = "Verified Operational";
+                badge.innerText = `Verified Operational${modelInfo}`;
                 badge.style.color = "var(--success)";
             }
         } else {
-            showToast("❌ Key verification failed. Check credentials.", "error");
+            const reasonMsg = data.reason || (data.code === 'BILLING_DEPLETED'
+                ? 'Prepayment/billing credits are depleted (HTTP 402).'
+                : data.code === 'GEMINI_RATE_LIMIT'
+                    ? 'API rate limit / free-tier quota exceeded (HTTP 429).'
+                    : 'Key verification failed. Check credentials.');
+            showToast("❌ " + reasonMsg, "error");
             if (badge) {
-                badge.innerText = "Invalid Key Credentials";
+                badge.innerText = data.code === 'BILLING_DEPLETED'
+                    ? 'Credits Depleted (HTTP 402)'
+                    : (data.code === 'GEMINI_RATE_LIMIT' ? 'Rate Limited (HTTP 429)' : 'Invalid Key Credentials');
                 badge.style.color = "var(--danger)";
             }
         }
@@ -848,6 +856,7 @@ async function saveClientQuotaSettings() {
         }
         closeClientQuotaModal();
         refreshAiQuotaDisplay();
+        if (typeof refreshAiMenuQuotaPill === 'function') refreshAiMenuQuotaPill(true);
     } catch (err) {
         alert("Error updating client quota: " + err.message);
     }

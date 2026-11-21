@@ -17,6 +17,8 @@ import {
   searchDishFoodImages,
   generateMarketingCampaign,
   isGeminiKeyOperational,
+  verifyGeminiKeyDetailed,
+  invalidateGeminiKeyCache,
   clearGeminiCaches,
   resolveGeminiApiKey,
   generateImagenFoodImage,
@@ -249,6 +251,7 @@ app.post('/api/admin/client-quota', async (req, res) => {
     }
     if (typeof customGeminiKey === 'string') {
       updates.customGeminiKey = customGeminiKey.trim();
+      invalidateGeminiKeyCache(updates.customGeminiKey || null);
     }
 
     const success = await updateClientProfileData(rawId, updates);
@@ -399,13 +402,21 @@ app.get('/api/gemini/status', async (req, res) => {
 
     const resolvedApiKey = resolveGeminiApiKey(customKey || keyCheck?.apiKey);
     const hasKey = Boolean(resolvedApiKey && resolvedApiKey.length > 5);
-    const operational = hasKey ? await isGeminiKeyOperational(resolvedApiKey) : false;
+    const liveProbe = req.query.liveTest === '1' || req.query.liveTest === 'true' || req.query.live === '1';
+    const verification = hasKey
+      ? await verifyGeminiKeyDetailed(resolvedApiKey, { liveProbe })
+      : { operational: false, statusCode: 401, code: 'NO_API_KEY', reason: 'No Gemini API key configured.' };
+    const operational = Boolean(verification.operational);
     const isCustomKey = Boolean(customKey || (keyCheck && keyCheck.isCustomKey));
 
     res.json({
       operational,
       hasKey,
       isCustomKey,
+      code: verification.code || (operational ? 'OK' : 'UNAVAILABLE'),
+      statusCode: verification.statusCode || (operational ? 200 : 401),
+      reason: verification.reason || '',
+      modelTested: verification.modelTested || null,
       keySource: customKey ? 'header_byok' : (keyCheck?.isCustomKey ? 'profile_byok' : 'server_env'),
       quota: keyCheck ? {
         limit: keyCheck.monthlyLimit,
@@ -460,51 +471,68 @@ const handleMenuScanRequest = async (req, res) => {
     const isCustomKey = Boolean((customKey && customKey.length > 15) || (keyCheck && keyCheck.isCustomKey));
     const resolvedApiKey = isCustomKey ? (customKey || keyCheck?.apiKey) : resolveGeminiApiKey();
 
-    // If custom key was provided, ensure it is operational; otherwise fail with 401
-    if (isCustomKey && resolvedApiKey) {
-      const isCustomKeyValid = await isGeminiKeyOperational(resolvedApiKey);
-      if (!isCustomKeyValid) {
-        if (slotReserved) {
-          releaseAiQuotaSlot(shopId);
-          slotReserved = false;
-        }
-        return res.status(401).json({
-          error: 'Custom Gemini API key is unauthorized or invalid. Please verify your key in Settings > AI Quota & Custom Key.',
-          invalidCustomKey: true
-        });
-      }
-    }
+    let aiFailureCode = null;
+    let aiFailureStatus = null;
+    let aiFailureDetail = '';
 
-    let isOperationalKey = false;
     if (base64Data && resolvedApiKey) {
       try {
-        isOperationalKey = await isGeminiKeyOperational(resolvedApiKey);
-        if (isOperationalKey) {
-          const result = await extractMenuFromDocument({
-            base64Data,
-            mimeType,
-            apiKey: resolvedApiKey
+        const result = await extractMenuFromDocument({
+          base64Data,
+          mimeType,
+          apiKey: resolvedApiKey
+        });
+
+        if (result && Array.isArray(result.categories) && result.categories.length > 0) {
+          // Increment usage counter upon successful extraction (also decrements in-flight slot)
+          const quotaInfo = await recordSuccessfulAiUsage(shopId, keyCheck || { currentUsage: 0, monthlyLimit: 15, currentMonth: getCurrentYearMonth() }).catch(() => null);
+          slotReserved = false;
+
+          return res.json({
+            ...result,
+            isFallback: false,
+            keySource: isCustomKey ? 'dedicated' : 'default',
+            quota: quotaInfo
           });
-
-          if (result && Array.isArray(result.categories) && result.categories.length > 0) {
-            // Increment usage counter upon successful extraction (also decrements in-flight slot)
-            const quotaInfo = await recordSuccessfulAiUsage(shopId, keyCheck || { currentUsage: 0, monthlyLimit: 15, currentMonth: getCurrentYearMonth() }).catch(() => null);
-            slotReserved = false;
-
-            return res.json({
-              ...result,
-              isFallback: false,
-              quota: quotaInfo
-            });
-          }
         }
       } catch (geminiError) {
-        console.warn('[Menu Digitizer] Vision OCR model generation failed:', geminiError?.message || geminiError);
-        // Continue to structured layout fallback
+        const errStatus = Number(geminiError?.status || 0);
+        const errCode = geminiError?.code || '';
+        const cleanMsg = sanitizeErrorForClient(String(geminiError?.message || geminiError), resolvedApiKey);
+        console.warn(`[Menu Digitizer] Vision OCR failed (${errStatus || errCode || 'ERR'}):`, cleanMsg);
+
+        if (errCode === 'INVALID_API_KEY' || errStatus === 401) {
+          if (slotReserved) {
+            releaseAiQuotaSlot(shopId);
+            slotReserved = false;
+          }
+          if (isCustomKey) {
+            return res.status(401).json({
+              error: 'Your Dedicated Gemini API key is invalid or unauthorized. Please double-check it in Settings > AI Quota & Custom Key.',
+              invalidCustomKey: true,
+              aiErrorCode: 'INVALID_API_KEY'
+            });
+          }
+          aiFailureCode = 'INVALID_API_KEY';
+          aiFailureStatus = 401;
+          aiFailureDetail = cleanMsg;
+        } else if (errCode === 'BILLING_DEPLETED' || errStatus === 402 || /prepayment credits are depleted/i.test(cleanMsg)) {
+          aiFailureCode = 'BILLING_DEPLETED';
+          aiFailureStatus = 402;
+          aiFailureDetail = cleanMsg;
+        } else if (errCode === 'GEMINI_RATE_LIMIT' || errStatus === 429 || /RESOURCE_EXHAUSTED|rate.?limit/i.test(cleanMsg)) {
+          aiFailureCode = 'GEMINI_RATE_LIMIT';
+          aiFailureStatus = 429;
+          aiFailureDetail = cleanMsg;
+        } else {
+          aiFailureCode = errCode || 'VISION_FAILED';
+          aiFailureStatus = errStatus || 502;
+          aiFailureDetail = cleanMsg;
+        }
       }
     }
 
-    // 2. Fallback parser (Extracts text lines or populates editable category starter)
+    // 2. Fallback parser (Extracts text lines or returns actionable AI diagnostic warning)
     if (slotReserved) {
       releaseAiQuotaSlot(shopId);
       slotReserved = false;
@@ -514,9 +542,19 @@ const handleMenuScanRequest = async (req, res) => {
 
     let warningMessage = 'Menu digitized using Smart Layout Parser.';
     if (!resolvedApiKey) {
-      warningMessage = 'Menu digitized using Smart Layout Parser. (Server Gemini key is not configured; tap AI Key to add your key in Settings).';
-    } else if (!isOperationalKey) {
-      warningMessage = 'Menu digitized using Smart Layout Parser. (Configured Gemini Key could not be verified; check your key in Settings > AI Quota & Key).';
+      warningMessage = 'Server Gemini API key is not configured. Add your Gemini API key in Settings > AI Quota & Custom Key.';
+    } else if (aiFailureCode === 'BILLING_DEPLETED') {
+      warningMessage = isCustomKey
+        ? 'Your Dedicated Gemini API key has depleted prepayment/billing credits (HTTP 402). Top up in Google AI Studio or switch to an active Gemini key in Settings > AI Quota & Key.'
+        : 'Default server Gemini AI credits are depleted (HTTP 402). Please add your own Gemini API key from Google AI Studio (aistudio.google.com) in Settings > AI Quota & Key.';
+    } else if (aiFailureCode === 'GEMINI_RATE_LIMIT') {
+      warningMessage = isCustomKey
+        ? 'Your Dedicated Gemini API key hit its rate/free-tier limit (HTTP 429). Wait 30 seconds and retry, or check billing in Google AI Studio.'
+        : 'Default server Gemini AI is rate-limited (HTTP 429). Wait 30 seconds or add your Dedicated Gemini API key in Settings > AI Quota & Key.';
+    } else if (aiFailureCode === 'INVALID_API_KEY') {
+      warningMessage = 'Default server Gemini API key is unauthorized. Please add a valid Dedicated Gemini API key in Settings > AI Quota & Key.';
+    } else if (aiFailureDetail) {
+      warningMessage = `AI Vision scan failed (${aiFailureDetail}). Check your Gemini API key in Settings > AI Quota & Key or try a clearer image.`;
     }
 
     return res.json({
@@ -524,6 +562,10 @@ const handleMenuScanRequest = async (req, res) => {
       isFallback: true,
       fallbackSource: fallbackData.source,
       warning: warningMessage,
+      aiErrorCode: aiFailureCode,
+      aiErrorStatus: aiFailureStatus,
+      aiErrorDetail: aiFailureDetail || null,
+      keySource: isCustomKey ? 'dedicated' : 'default',
       quota: keyCheck ? {
         limit: keyCheck.monthlyLimit,
         used: keyCheck.currentUsage,

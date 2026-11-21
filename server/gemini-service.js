@@ -14,6 +14,18 @@ export function clearGeminiCaches() {
   return true;
 }
 
+export function invalidateGeminiKeyCache(apiKey = null) {
+  const key = (apiKey || '').trim();
+  if (key) {
+    clientsCache.delete(key);
+    keyVerificationCache.delete(key);
+  } else {
+    clientsCache.clear();
+    keyVerificationCache.clear();
+  }
+  return true;
+}
+
 export function resolveGeminiApiKey(customKey = null) {
   const custom = (customKey || '').trim();
   if (custom && custom.length > 15) {
@@ -29,57 +41,148 @@ export function getGeminiClient(customKey = null) {
   }
 
   if (!clientsCache.has(key)) {
-    clientsCache.set(key, new GoogleGenAI({
-      apiKey: key,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build'
-        }
-      }
-    }));
+    // Only AI Studio Build prepayment keys (AQ.*) expect the aistudio-build User-Agent header.
+    // Standard Google AI Studio dedicated keys (AIza*) must use the default SDK headers.
+    const clientOpts = key.startsWith('AQ.')
+      ? { apiKey: key, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }
+      : { apiKey: key };
+    clientsCache.set(key, new GoogleGenAI(clientOpts));
   }
 
   return clientsCache.get(key);
 }
 
 /**
+ * Detailed key & billing check used by Settings > Test Key and status diagnostics.
+ * Supports optional liveProbe (tiny 1-token generateContent) to detect 402 billing depletion
+ * and model availability that GET /v1beta/models does not report.
+ */
+export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false } = {}) {
+  const key = resolveGeminiApiKey(apiKey);
+  if (!key || key.length < 15) {
+    return { operational: false, statusCode: 401, code: 'NO_API_KEY', reason: 'No valid Gemini API key configured.' };
+  }
+
+  if (!liveProbe) {
+    const cached = keyVerificationCache.get(key);
+    if (cached) {
+      const age = Date.now() - cached.timestamp;
+      const maxAge = cached.operational ? 300000 : 30000;
+      if (age < maxAge) {
+        return {
+          operational: cached.operational,
+          statusCode: cached.statusCode || (cached.operational ? 200 : 401),
+          code: cached.code || (cached.operational ? 'OK' : 'INVALID_API_KEY'),
+          reason: cached.reason || (cached.operational ? 'Operational' : 'Key not operational'),
+          modelTested: cached.modelTested || null
+        };
+      }
+    }
+  }
+
+  // Step 1: Fast models list check (catches invalid keys & fetches enabled models)
+  let availableModels = [];
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=100`, {
+      signal: AbortSignal.timeout(4500)
+    });
+    const bodyText = await res.text().catch(() => '');
+    let parsedBody = null;
+    try { parsedBody = bodyText ? JSON.parse(bodyText) : null; } catch (_) {}
+
+    if (res.ok) {
+      if (parsedBody && Array.isArray(parsedBody.models)) {
+        availableModels = parsedBody.models.map(m => String(m.name || '').replace(/^models\//, '')).filter(Boolean);
+      }
+      if (!liveProbe) {
+        const entry = { operational: true, statusCode: 200, code: 'OK', reason: 'Operational', timestamp: Date.now() };
+        keyVerificationCache.set(key, entry);
+        return entry;
+      }
+    } else {
+      const errMsg = String(parsedBody?.error?.message || bodyText || `HTTP ${res.status}`);
+      const isDefiniteInvalidKey =
+        res.status === 401 ||
+        (res.status === 400 && /api.?key|invalid/i.test(errMsg)) ||
+        (res.status === 403 && /api.?key|unauthenticated|disabled|forbidden|not.?valid|referer|referrer|ip/i.test(errMsg));
+
+      if (res.status === 402 || /prepayment credits are depleted|billing/i.test(errMsg)) {
+        const entry = { operational: false, statusCode: 402, code: 'BILLING_DEPLETED', reason: 'Gemini prepayment/billing credits are depleted (HTTP 402).', timestamp: Date.now() };
+        keyVerificationCache.set(key, entry);
+        return entry;
+      }
+      if (isDefiniteInvalidKey) {
+        const entry = { operational: false, statusCode: res.status, code: 'INVALID_API_KEY', reason: sanitizeErrorForClient(errMsg, key), timestamp: Date.now() };
+        keyVerificationCache.set(key, entry);
+        return entry;
+      }
+    }
+  } catch (_) {
+    if (!liveProbe) {
+      const looksValid = Boolean(key && key.length >= 20);
+      const entry = { operational: looksValid, statusCode: looksValid ? 200 : 401, code: looksValid ? 'OK' : 'INVALID_API_KEY', reason: looksValid ? 'Reachable (fallback)' : 'Invalid key length', timestamp: Date.now() };
+      keyVerificationCache.set(key, entry);
+      return entry;
+    }
+  }
+
+  // Step 2 (liveProbe === true): Run a tiny 1-token generateContent check so 402 / 429 / model permissions are caught immediately!
+  const ai = getGeminiClient(key);
+  const probeOrder = key.startsWith('AIza')
+    ? ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.0-flash', 'gemini-3.5-flash-lite']
+    : ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+  const preferredProbes = availableModels.length > 0
+    ? [...probeOrder.filter(m => availableModels.includes(m)), ...probeOrder.filter(m => !availableModels.includes(m))]
+    : probeOrder;
+
+  let lastProbeErr = null;
+  for (const modelName of Array.from(new Set(preferredProbes)).slice(0, 4)) {
+    try {
+      const resp = await executeWithTimeout(async () => {
+        return await ai.models.generateContent({
+          model: modelName,
+          contents: [{ role: 'user', parts: [{ text: 'Reply with OK' }] }],
+          config: { maxOutputTokens: 4 }
+        });
+      }, 8000, `Probe timed out on ${modelName}`);
+      if (resp) {
+        const entry = { operational: true, statusCode: 200, code: 'OK', reason: `Verified operational (${modelName})`, modelTested: modelName, timestamp: Date.now() };
+        keyVerificationCache.set(key, entry);
+        return entry;
+      }
+    } catch (probeErr) {
+      lastProbeErr = probeErr;
+      const msg = String(probeErr?.message || probeErr);
+      if (probeErr?.status === 402 || /prepayment credits are depleted|code":402/i.test(msg)) {
+        const entry = { operational: false, statusCode: 402, code: 'BILLING_DEPLETED', reason: 'Gemini prepayment/billing credits are depleted (HTTP 402). Top up in Google AI Studio or use another Gemini key.', timestamp: Date.now() };
+        keyVerificationCache.set(key, entry);
+        return entry;
+      }
+      if (probeErr?.status === 401 || /API_KEY_INVALID|API key not valid|UNAUTHENTICATED|ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(msg)) {
+        const entry = { operational: false, statusCode: 401, code: 'INVALID_API_KEY', reason: 'Invalid or unauthorized Gemini API key.', timestamp: Date.now() };
+        keyVerificationCache.set(key, entry);
+        return entry;
+      }
+      if (probeErr?.status === 429 || /RESOURCE_EXHAUSTED|quota exceeded|rate.?limit/i.test(msg)) {
+        const entry = { operational: false, statusCode: 429, code: 'GEMINI_RATE_LIMIT', reason: 'Gemini API rate limit or free-tier quota exceeded (HTTP 429). Wait a minute or enable billing in Google AI Studio.', timestamp: Date.now() };
+        keyVerificationCache.set(key, entry);
+        return entry;
+      }
+    }
+  }
+
+  const fallbackReason = lastProbeErr ? sanitizeErrorForClient(String(lastProbeErr.message || lastProbeErr), key) : 'Unable to reach Gemini generateContent API.';
+  const failEntry = { operational: false, statusCode: lastProbeErr?.status || 502, code: 'PROBE_FAILED', reason: fallbackReason, timestamp: Date.now() };
+  keyVerificationCache.set(key, failEntry);
+  return failEntry;
+}
+
+/**
  * Validates whether a Gemini API key is currently active and authenticated.
- * Uses the official GoogleGenAI SDK to test key validity.
  */
 export async function isGeminiKeyOperational(apiKey = null) {
-  const key = resolveGeminiApiKey(apiKey);
-  if (!key || key.length < 15) return false;
-
-  const cached = keyVerificationCache.get(key);
-  if (cached) {
-    const age = Date.now() - cached.timestamp;
-    // Cache successful verification for 5 mins; failed checks for 30s
-    const maxAge = cached.operational ? 300000 : 30000;
-    if (age < maxAge) {
-      return cached.operational;
-    }
-  }
-
-  // Fast, non-quota-consuming API key check via models endpoint with 3s timeout
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=1`, {
-      signal: AbortSignal.timeout(3000)
-    });
-    if (res.ok) {
-      keyVerificationCache.set(key, { operational: true, timestamp: Date.now() });
-      return true;
-    }
-    if (res.status === 401 || res.status === 403) {
-      keyVerificationCache.set(key, { operational: false, timestamp: Date.now() });
-      return false;
-    }
-  } catch (netErr) {
-    // On transient network timeout, fallback to structure check
-  }
-
-  const looksValid = Boolean(key && key.length >= 20);
-  keyVerificationCache.set(key, { operational: looksValid, timestamp: Date.now() });
-  return looksValid;
+  const details = await verifyGeminiKeyDetailed(apiKey, { liveProbe: false });
+  return Boolean(details && details.operational);
 }
 
 export const CANDIDATE_TIMEOUT_MS = 7000;
@@ -311,13 +414,11 @@ export async function extractMenuFromDocument({ base64Data, mimeType, apiKey }) 
   }
 
   const resolvedKey = resolveGeminiApiKey(apiKey);
-  if (!resolvedKey || resolvedKey.length < 5) {
-    throw new Error('NO_API_KEY: Gemini API Key is required for Vision OCR.');
-  }
-
-  const isOperational = await isGeminiKeyOperational(resolvedKey);
-  if (!isOperational) {
-    throw new Error('UNAUTHENTICATED: Gemini API key is not operational or lacks active credentials.');
+  if (!resolvedKey || resolvedKey.length < 15) {
+    const err = new Error('NO_API_KEY: Gemini API Key is required for Vision OCR.');
+    err.status = 401;
+    err.code = 'NO_API_KEY';
+    throw err;
   }
 
   const ai = getGeminiClient(resolvedKey);
@@ -394,54 +495,131 @@ Schema:
     }
   ];
 
-  // Prioritize fast flash-lite models for vision OCR, preserving candidate order
-  const candidateModels = Array.from(new Set(CANDIDATE_MODELS.filter(Boolean)));
-  
+  // Build smart runtime model cascade:
+  // - Standard Google AI Studio dedicated keys (AIza*) lead with universally available GA vision models (2.5-flash, 2.5-flash-lite, flash-latest, 2.0-flash)
+  // - AI Studio Build keys (AQ.*) lead with CANDIDATE_MODELS then fall back to GA vision models
+  const isStandardStudioKey = resolvedKey.startsWith('AIza');
+  const runtimeModelOrder = isStandardStudioKey
+    ? [
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-flash-latest',
+        'gemini-flash-lite-latest',
+        'gemini-2.0-flash',
+        ...CANDIDATE_MODELS
+      ]
+    : [
+        ...CANDIDATE_MODELS,
+        'gemini-flash-lite-latest',
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash'
+      ];
+  const candidateModels = Array.from(new Set(runtimeModelOrder.filter(Boolean)));
+
   let response = null;
   let successfulModel = null;
   let lastError = null;
   const startTime = Date.now();
-  const MAX_TOTAL_CASCADE_MS = 8500; // Safeguard for Netlify serverless 10s ceiling, leaving buffer for fallback parsing
+  const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+  // Real menu photos with 25-100 dishes take 8-22s on Vision OCR.
+  // Use generous timeouts on Express/Node (28s/model, 55s total) and safe Netlify bounds (12s/model, 23s total).
+  const PER_MODEL_CAP_MS = isServerless ? 12000 : 28000;
+  const MAX_TOTAL_CASCADE_MS = isServerless ? 23000 : 55000;
 
   for (const modelName of candidateModels) {
     const elapsed = Date.now() - startTime;
     const remainingBudget = MAX_TOTAL_CASCADE_MS - elapsed;
-    if (remainingBudget < 1500) {
-      // Insufficient time for another remote model call before serverless deadline; drop to layout fallback
+    if (remainingBudget < 2000) {
       break;
     }
-    const perModelTimeout = Math.min(CANDIDATE_TIMEOUT_MS, remainingBudget);
+    const perModelTimeout = Math.min(PER_MODEL_CAP_MS, remainingBudget);
 
-    try {
+    const invokeModel = async (includeThinkingZero) => {
       const modelConfig = {
         responseMimeType: 'application/json'
       };
-      // Models with configurable reasoning (e.g. gemini-3.1-flash-lite, gemini-2.5-flash) accept thinkingBudget: 0 to bypass thinking latency.
-      // gemini-3.5-flash-lite does not support thinkingConfig and throws 400 INVALID_ARGUMENT if thinkingConfig is supplied.
-      if (modelName !== 'gemini-3.5-flash-lite' && (modelName.includes('3.1') || modelName.includes('2.5') || modelName.includes('thinking'))) {
-        modelConfig.thinkingConfig = {
-          thinkingBudget: 0
-        };
+      if (includeThinkingZero && (modelName === 'gemini-2.5-flash' || modelName === 'gemini-3.1-flash-lite')) {
+        modelConfig.thinkingConfig = { thinkingBudget: 0 };
       }
-
-      response = await executeWithTimeout(async () => {
+      return await executeWithTimeout(async () => {
         return await ai.models.generateContent({
           model: modelName,
           contents: [{ role: 'user', parts: promptParts }],
           config: modelConfig
         });
       }, perModelTimeout, `Model '${modelName}' request exceeded ${perModelTimeout}ms timeout`);
+    };
+
+    try {
+      try {
+        response = await invokeModel(true);
+      } catch (firstErr) {
+        const firstMsg = String(firstErr?.message || firstErr);
+        // Retry once without thinkingConfig if model rejects thinkingBudget
+        if ((firstErr?.status === 400 || firstMsg.includes('INVALID_ARGUMENT')) && /thinking/i.test(firstMsg)) {
+          response = await invokeModel(false);
+        } else {
+          throw firstErr;
+        }
+      }
 
       if (response && response.text) {
         successfulModel = modelName;
+        keyVerificationCache.set(resolvedKey, {
+          operational: true,
+          statusCode: 200,
+          code: 'OK',
+          reason: `Operational (${modelName})`,
+          modelTested: modelName,
+          timestamp: Date.now()
+        });
         break;
       }
     } catch (modelErr) {
       lastError = modelErr;
       const errMsg = String(modelErr?.message || modelErr);
-      const isAuthError = modelErr.status === 401 || modelErr.status === 403 || errMsg.includes('UNAUTHENTICATED') || errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || errMsg.includes('API_KEY_INVALID');
-      if (isAuthError) {
+      const status = Number(modelErr?.status || 0);
+
+      // 1. Billing / prepayment credits depleted -> fail fast & mark key cache
+      if (status === 402 || /prepayment credits are depleted|"code":\s*402/i.test(errMsg)) {
+        const billingErr = new Error('Gemini API prepayment/billing credits are depleted (HTTP 402).');
+        billingErr.status = 402;
+        billingErr.code = 'BILLING_DEPLETED';
+        lastError = billingErr;
+        keyVerificationCache.set(resolvedKey, {
+          operational: false,
+          statusCode: 402,
+          code: 'BILLING_DEPLETED',
+          reason: billingErr.message,
+          timestamp: Date.now()
+        });
         break;
+      }
+
+      // 2. Definite key-level auth failure -> fail fast (do NOT break on model-specific 403/404!)
+      const isDefiniteKeyAuthError =
+        status === 401 ||
+        /API_KEY_INVALID|API key not valid|UNAUTHENTICATED|ACCESS_TOKEN_TYPE_UNSUPPORTED|API key expired/i.test(errMsg);
+      if (isDefiniteKeyAuthError) {
+        const authErr = new Error('Invalid or unauthorized Gemini API key.');
+        authErr.status = 401;
+        authErr.code = 'INVALID_API_KEY';
+        lastError = authErr;
+        keyVerificationCache.set(resolvedKey, {
+          operational: false,
+          statusCode: 401,
+          code: 'INVALID_API_KEY',
+          reason: authErr.message,
+          timestamp: Date.now()
+        });
+        break;
+      }
+
+      // 3. Rate limit (429) or model 403/404/timeout -> continue cascade to next model!
+      if (status === 429 || /RESOURCE_EXHAUSTED|quota exceeded|rate.?limit/i.test(errMsg)) {
+        lastError.status = 429;
+        lastError.code = 'GEMINI_RATE_LIMIT';
       }
       continue;
     }

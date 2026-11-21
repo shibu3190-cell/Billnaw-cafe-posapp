@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import path from 'path';
 import {
   isGeminiKeyOperational,
+  verifyGeminiKeyDetailed,
+  invalidateGeminiKeyCache,
   extractMenuFromDocument,
   generateMenuItemImage,
   generateMarketingCampaign,
@@ -769,18 +771,24 @@ export async function handler(event, context) {
       }
     }
     const resolvedApiKey = resolveGeminiApiKey(customKey || keyCheck?.apiKey);
-    let operational = true;
+    const liveProbe = event.queryStringParameters?.liveTest === '1' || event.queryStringParameters?.liveTest === 'true' || event.queryStringParameters?.live === '1';
+    let verification = { operational: false, statusCode: 401, code: 'NO_API_KEY', reason: 'No Gemini API key configured.' };
     try {
       if (resolvedApiKey) {
-        operational = await isGeminiKeyOperational(resolvedApiKey);
+        verification = await verifyGeminiKeyDetailed(resolvedApiKey, { liveProbe });
       }
     } catch (e) {
-      operational = true;
+      verification = { operational: false, statusCode: 502, code: 'PROBE_FAILED', reason: sanitizeErrorForClient(e.message, resolvedApiKey || '') };
     }
+    const operational = Boolean(verification.operational);
     return jsonResponse(200, {
       operational,
       keyAvailable: Boolean(resolvedApiKey),
       isCustomKey: Boolean(customKey || (keyCheck && keyCheck.isCustomKey)),
+      code: verification.code || (operational ? 'OK' : 'UNAVAILABLE'),
+      statusCode: verification.statusCode || (operational ? 200 : 401),
+      reason: verification.reason || '',
+      modelTested: verification.modelTested || null,
       model: CONFIG?.gemini?.model || 'gemini-3.5-flash-lite',
       scansRemaining: keyCheck ? Math.max(0, keyCheck.monthlyLimit - keyCheck.currentUsage) : 15,
       monthlyLimit: keyCheck?.monthlyLimit || 15,
@@ -841,6 +849,7 @@ export async function handler(event, context) {
     }
     if (typeof customGeminiKey === 'string') {
       updates.customGeminiKey = customGeminiKey.trim();
+      invalidateGeminiKeyCache(updates.customGeminiKey || null);
     }
 
     const success = await updateClientProfileData(clientId, updates);
@@ -946,38 +955,57 @@ export async function handler(event, context) {
       const isCustomKey = Boolean((customKey && customKey.length > 15) || (keyCheck && keyCheck.isCustomKey));
       const resolvedApiKey = isCustomKey ? (customKey || keyCheck?.apiKey) : resolveGeminiApiKey();
 
-      if (isCustomKey && resolvedApiKey) {
-        const isCustomKeyValid = await isGeminiKeyOperational(resolvedApiKey);
-        if (!isCustomKeyValid) {
-          if (slotReserved) {
-            releaseAiQuotaSlot(shopId);
-            slotReserved = false;
-          }
-          return jsonResponse(401, {
-            error: 'Custom Gemini API key is unauthorized or invalid. Please verify your key in Settings > AI Quota & Custom Key.',
-            invalidCustomKey: true
-          });
-        }
-      }
+      let aiFailureCode = null;
+      let aiFailureStatus = null;
+      let aiFailureDetail = '';
 
       if (base64Data && resolvedApiKey) {
         try {
-          const isOperationalKey = await isGeminiKeyOperational(resolvedApiKey);
-          if (isOperationalKey) {
-            const result = await extractMenuFromDocument({ base64Data, mimeType, apiKey: resolvedApiKey });
-            if (result && Array.isArray(result.categories) && result.categories.length > 0) {
-              const quotaInfo = await recordSuccessfulAiUsage(shopId, keyCheck || { currentUsage: 0, monthlyLimit: 15, currentMonth: getCurrentYearMonth() }).catch(() => null);
-              slotReserved = false;
-              return jsonResponse(200, {
-                ...result,
-                isFallback: false,
-                quota: quotaInfo
-              });
-            }
+          const result = await extractMenuFromDocument({ base64Data, mimeType, apiKey: resolvedApiKey });
+          if (result && Array.isArray(result.categories) && result.categories.length > 0) {
+            const quotaInfo = await recordSuccessfulAiUsage(shopId, keyCheck || { currentUsage: 0, monthlyLimit: 15, currentMonth: getCurrentYearMonth() }).catch(() => null);
+            slotReserved = false;
+            return jsonResponse(200, {
+              ...result,
+              isFallback: false,
+              keySource: isCustomKey ? 'dedicated' : 'default',
+              quota: quotaInfo
+            });
           }
         } catch (geminiError) {
-          console.warn('[Menu Digitizer Netlify] Vision OCR failed:', geminiError?.message || geminiError);
-          // Continue to fallback
+          const errStatus = Number(geminiError?.status || 0);
+          const errCode = geminiError?.code || '';
+          const cleanMsg = sanitizeErrorForClient(String(geminiError?.message || geminiError), resolvedApiKey);
+          console.warn(`[Menu Digitizer Netlify] Vision OCR failed (${errStatus || errCode || 'ERR'}):`, cleanMsg);
+
+          if (errCode === 'INVALID_API_KEY' || errStatus === 401) {
+            if (slotReserved) {
+              releaseAiQuotaSlot(shopId);
+              slotReserved = false;
+            }
+            if (isCustomKey) {
+              return jsonResponse(401, {
+                error: 'Your Dedicated Gemini API key is invalid or unauthorized. Please double-check it in Settings > AI Quota & Custom Key.',
+                invalidCustomKey: true,
+                aiErrorCode: 'INVALID_API_KEY'
+              });
+            }
+            aiFailureCode = 'INVALID_API_KEY';
+            aiFailureStatus = 401;
+            aiFailureDetail = cleanMsg;
+          } else if (errCode === 'BILLING_DEPLETED' || errStatus === 402 || /prepayment credits are depleted/i.test(cleanMsg)) {
+            aiFailureCode = 'BILLING_DEPLETED';
+            aiFailureStatus = 402;
+            aiFailureDetail = cleanMsg;
+          } else if (errCode === 'GEMINI_RATE_LIMIT' || errStatus === 429 || /RESOURCE_EXHAUSTED|rate.?limit/i.test(cleanMsg)) {
+            aiFailureCode = 'GEMINI_RATE_LIMIT';
+            aiFailureStatus = 429;
+            aiFailureDetail = cleanMsg;
+          } else {
+            aiFailureCode = errCode || 'VISION_FAILED';
+            aiFailureStatus = errStatus || 502;
+            aiFailureDetail = cleanMsg;
+          }
         }
       }
 
@@ -989,13 +1017,29 @@ export async function handler(event, context) {
       const fallback = parseMenuFromText(extractedText || '');
       let fallbackWarning = 'Menu processed using smart layout parser.';
       if (!resolvedApiKey) {
-        fallbackWarning = 'Menu processed using smart layout parser. (Server Gemini key is not configured; tap AI Key to add your key or set GEMINI_API_KEY in Netlify).';
+        fallbackWarning = 'Server Gemini API key is not configured. Add your Gemini API key in Settings > AI Quota & Custom Key.';
+      } else if (aiFailureCode === 'BILLING_DEPLETED') {
+        fallbackWarning = isCustomKey
+          ? 'Your Dedicated Gemini API key has depleted prepayment/billing credits (HTTP 402). Top up in Google AI Studio or switch to an active Gemini key in Settings > AI Quota & Key.'
+          : 'Default server Gemini AI credits are depleted (HTTP 402). Please add your own Gemini API key from Google AI Studio (aistudio.google.com) in Settings > AI Quota & Key.';
+      } else if (aiFailureCode === 'GEMINI_RATE_LIMIT') {
+        fallbackWarning = isCustomKey
+          ? 'Your Dedicated Gemini API key hit its rate/free-tier limit (HTTP 429). Wait 30 seconds and retry, or check billing in Google AI Studio.'
+          : 'Default server Gemini AI is rate-limited (HTTP 429). Wait 30 seconds or add your Dedicated Gemini API key in Settings > AI Quota & Key.';
+      } else if (aiFailureCode === 'INVALID_API_KEY') {
+        fallbackWarning = 'Default server Gemini API key is unauthorized. Please add a valid Dedicated Gemini API key in Settings > AI Quota & Key.';
+      } else if (aiFailureDetail) {
+        fallbackWarning = `AI Vision scan failed (${aiFailureDetail}). Check your Gemini API key in Settings > AI Quota & Key or try a clearer image.`;
       }
       return jsonResponse(200, {
         categories: fallback.categories,
         isFallback: true,
         fallbackSource: fallback.source,
         warning: fallbackWarning,
+        aiErrorCode: aiFailureCode,
+        aiErrorStatus: aiFailureStatus,
+        aiErrorDetail: aiFailureDetail || null,
+        keySource: isCustomKey ? 'dedicated' : 'default',
         quota: keyCheck ? {
           limit: keyCheck.monthlyLimit,
           used: keyCheck.currentUsage,
@@ -1009,7 +1053,7 @@ export async function handler(event, context) {
         releaseAiQuotaSlot(shopId);
         slotReserved = false;
       }
-      return jsonResponse(500, { error: sanitizeErrorForClient(err.message, resolvedApiKey || '') });
+      return jsonResponse(500, { error: sanitizeErrorForClient(err.message, customKey || '') });
     }
   }
 
