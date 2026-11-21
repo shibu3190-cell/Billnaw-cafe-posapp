@@ -4,9 +4,9 @@
 .tier-silver { background: #E6ECF2; color: #334155; border: 1px solid rgba(51, 65, 85, 0.2); }
 .tier-gold { background: #FEF3C7; color: #B45309; border: 1px solid rgba(180, 83, 9, 0.2); }
 .tier-platinum { background: #F3E8FF; color: #6B21A8; border: 1px solid rgba(107, 33, 168, 0.2); }
-.customer-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, #7D4F42, #33231B); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.customer-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--em-dark), var(--em-mid)); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12.5px; flex-shrink: 0; }
 .timeline-card { border-left: 2px solid var(--border); padding-left: 14px; margin-bottom: 14px; position: relative; text-align: left; }
-.timeline-card::before { content: ''; position: absolute; left: -6px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--milk-choc); }
+.timeline-card::before { content: ''; position: absolute; left: -6px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--em-mid); }
 
 /* Customer Action Hub Quick Tiles */
 .hub-action-btn {
@@ -57,7 +57,7 @@
 }
 
 /* STAFF STYLING */
-.staff-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #4A332A, #7D4F42); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.staff-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--em-dark), var(--em-mid)); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0; }
 .staff-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
 .role-admin { background: #F3E8FF; color: #6B21A8; border: 1px solid rgba(107, 33, 168, 0.2); }
 .role-manager { background: #E0E7FF; color: #3730A3; border: 1px solid rgba(55, 48, 163, 0.2); }
@@ -89,8 +89,8 @@
     background: var(--canvas);
 }
 .wa-bulk-cust-item.selected {
-    border-color: var(--milk-choc);
-    background: #FAF5F0;
+    border-color: var(--em-dark);
+    background: var(--mint-bg);
 }
 
 /* 1-Tap Broadcast Queue Item */
@@ -114,41 +114,44 @@
 .cust-hub-segmented-tabs {
     display: flex;
     align-items: center;
-    gap: 8px;
-    background: #E2E8F0;
-    padding: 6px;
-    border-radius: 16px;
-    margin-bottom: 20px;
+    gap: 4px;
+    background: var(--surface-soft);
+    padding: 4px;
+    border-radius: 14px;
+    margin-bottom: 14px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
 }
 
 .cust-segment-btn {
+    flex: 1;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 18px;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 14px;
     background: transparent;
     border: none;
-    border-radius: 12px;
-    font-size: 13px;
+    border-radius: 11px;
+    font-size: 12.5px;
     font-weight: 700;
-    color: #475569;
+    color: var(--slate);
     cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.12s ease;
     white-space: nowrap;
     position: relative;
+    min-height: 40px;
 }
 
 .cust-segment-btn:hover {
-    color: #143832;
+    color: var(--em-dark);
     background: rgba(255, 255, 255, 0.7);
 }
 
 .cust-segment-btn.active {
-    background: #143832;
+    background: var(--em-dark);
     color: #FFFFFF;
-    box-shadow: 0 4px 12px rgba(20, 56, 50, 0.25);
+    box-shadow: var(--shadow-xs);
 }
 
 .cust-segment-btn.active svg {
@@ -157,6 +160,140 @@
 
 .cust-segment-btn:active {
     transform: scale(0.97);
+}
+
+/* Customer Directory Compact KPI Row & Horizontal Tier Filter Strip */
+.cust-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.cust-kpi-card {
+    background: var(--canvas);
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    min-width: 0;
+}
+.cust-kpi-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cust-kpi-val {
+    font-size: 19px;
+    font-weight: 800;
+    margin-top: 4px;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cust-tier-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+}
+.cust-tier-pills .filter-pill {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* WhatsApp Campaign Segments, Offer Grid & Responsive Step 3 Layout */
+.wa-segments-scroll {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.wa-offer-inputs-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.wa-hub-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 18px;
+}
+@media screen and (max-width: 640px) {
+    .cust-hub-segmented-tabs {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+    }
+    .cust-segment-btn {
+        padding: 8px 6px;
+        font-size: 11px;
+        gap: 4px;
+        flex-direction: column;
+        min-height: 46px;
+    }
+    .cust-segment-btn span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+    .cust-dir-card {
+        padding: 14px !important;
+    }
+    .cust-dir-actions {
+        width: 100%;
+        display: grid !important;
+        grid-template-columns: auto 1fr;
+    }
+    .cust-kpi-grid {
+        gap: 8px;
+    }
+    .cust-kpi-card {
+        padding: 10px 9px;
+    }
+    .cust-kpi-label {
+        font-size: 9px;
+    }
+    .cust-kpi-val {
+        font-size: 15px;
+    }
+    .wa-segments-scroll {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 2px;
+    }
+    .wa-segments-scroll .filter-pill {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .wa-var-chips-bar {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .wa-var-chip {
+        flex-shrink: 0;
+    }
+    .wa-offer-inputs-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .wa-offer-inputs-grid input,
+    #waCampaignEditableText {
+        font-size: 16px !important;
+    }
+    #aiWhatsAppMarketingHub {
+        padding: 14px !important;
+    }
 }
 
 .cust-tab-pane {
@@ -294,46 +431,44 @@
    📦 3-TAB REDESIGNED INVENTORY & CULINARY PRODUCTION SUITE
    ============================================================ */
 .inv-hub-segmented-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 20px;
-    background: var(--canvas);
-    border: 1.5px solid var(--border);
-    border-radius: 16px;
-    padding: 6px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 16px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 4px;
 }
 
 .inv-segment-btn {
-    flex: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 10px 16px;
-    border-radius: 12px;
+    gap: 6px;
+    padding: 9px 10px;
+    border-radius: 11px;
     border: none;
     background: transparent;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 700;
-    color: #475569;
+    color: var(--slate);
     cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.16s ease, color 0.16s ease, transform 0.12s ease;
     white-space: nowrap;
-    min-height: 44px;
+    min-height: 42px;
     position: relative;
 }
 
 .inv-segment-btn:hover {
-    color: #143832;
+    color: var(--em-dark);
     background: rgba(255, 255, 255, 0.7);
 }
 
 .inv-segment-btn.active {
-    background: #143832;
+    background: var(--em-dark);
     color: #FFFFFF;
-    box-shadow: 0 4px 12px rgba(20, 56, 50, 0.25);
+    box-shadow: var(--shadow-xs);
 }
 
 .inv-segment-btn.active svg {
@@ -624,24 +759,25 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: calc(100% - 32px);
-        max-width: 400px;
-        max-height: 88vh;
+        width: calc(100% - 28px);
+        max-width: 390px;
+        max-height: 86dvh;
         overflow-y: auto;
-        z-index: 100002;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+        z-index: 1000025;
+        box-shadow: var(--shadow-elev);
+        border-radius: 20px;
         animation: popIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .wa-preview-backdrop {
         display: none;
         position: fixed;
-        top: 0;
-        left: 0;
+        inset: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.65);
+        background: rgba(15, 23, 42, 0.56);
         backdrop-filter: blur(4px);
-        z-index: 100001;
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 1000020;
     }
     .wa-preview-backdrop.active {
         display: block !important;
@@ -824,27 +960,31 @@
 
 @media screen and (max-width: 767px) {
     .wa-stepper-bar {
-        padding: 6px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        padding: 4px;
         gap: 4px;
+        overflow-x: visible;
     }
     .wa-step-indicator {
-        min-width: 100px;
-        padding: 6px 8px;
-        gap: 6px;
+        min-width: 0;
+        padding: 7px 6px;
+        gap: 5px;
+        justify-content: center;
     }
     .wa-step-num {
-        width: 24px;
-        height: 24px;
+        width: 22px;
+        height: 22px;
         font-size: 11px;
     }
     .wa-step-title {
-        font-size: 11px;
+        font-size: 10.5px;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
-    .wa-step-sub {
-        display: none;
-    }
+    .wa-step-sub,
     .wa-step-connector {
-        width: 10px;
+        display: none;
     }
 }
 

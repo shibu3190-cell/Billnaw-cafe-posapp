@@ -20,7 +20,7 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
     <script src="js/defensive-stubs.js?v=2922"></script>
-    <link rel="stylesheet" href="style.css?v=2923">
+    <link rel="stylesheet" href="style.css?v=2924">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display: none;" aria-hidden="true">
@@ -2437,15 +2437,20 @@
 
             <input type="hidden" id="rtrRestockItemId">
 
-            <div style="background: #F8FAFC; border: 1.5px solid #E2E8F0; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div id="rtrRestockItemName" style="font-weight: 800; font-size: 15px; color: var(--text-dark);">Item Name</div>
-                        <div id="rtrRestockItemCategory" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Category</div>
+            <div id="rtrRestockMaterialPickerWrap" class="form-group" style="display: none; margin-bottom: 12px;">
+                <label for="rtrRestockMaterialSelect" style="font-weight: 700; font-size: 11px; margin-bottom: 4px; display: block;">Select Raw Material to Restock</label>
+                <select id="rtrRestockMaterialSelect" onchange="window.culinaryInventory.onRestockMaterialSelectChange(this.value)" style="width: 100%; min-height: 42px; padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 13px; font-weight: 700; background: var(--surface); color: var(--ink);"></select>
+            </div>
+
+            <div style="background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <div style="min-width: 0;">
+                        <div id="rtrRestockItemName" style="font-weight: 800; font-size: 14.5px; color: var(--ink);">Item Name</div>
+                        <div id="rtrRestockItemCategory" style="font-size: 11px; color: var(--muted); margin-top: 2px;">Category</div>
                     </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Current Stock</div>
-                        <div id="rtrRestockCurrentStock" style="font-size: 16px; font-weight: 800; color: #143832;">0.00</div>
+                    <div style="text-align: right; flex-shrink: 0;">
+                        <div style="font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase;">Current Stock</div>
+                        <div id="rtrRestockCurrentStock" style="font-size: 15px; font-weight: 800; color: var(--em-dark);">0.00</div>
                     </div>
                 </div>
             </div>
@@ -4116,50 +4121,50 @@
 
                 <div id="custTabDirectory" class="cust-tab-pane active" style="display: block;">
                     <div id="customerDirectoryDetailedSubView" style="display: block;">
-                    <div class="card" style="border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 20px;">
-                        <div class="card-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                    <div class="card cust-dir-card" style="border: 1px solid var(--border); box-shadow: var(--shadow-card); margin-bottom: 18px;">
+                        <div class="card-header cust-dir-header" style="flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
                             <div>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span class="icon-box-lg" style="background: #F3E8FF; border-color: #E9D5FF; color: #7E22CE;"><svg width="20" height="20" viewBox="0 0 24 24"><use href="#icon-users"></use></svg></span>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span class="icon-box-lg" style="background: var(--mint-bg); border-color: rgba(15, 61, 51, 0.14); color: var(--em-dark);"><svg width="20" height="20" viewBox="0 0 24 24"><use href="#icon-users"></use></svg></span>
                                 <div>
-                                    <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--text-dark);">
-                                        Customer Directory & Loyalty
+                                    <h2 class="card-title" style="margin: 0; font-size: 17px; font-weight: 800; color: var(--ink);">
+                                        Customer Directory &amp; Loyalty
                                     </h2>
-                                    <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-muted);">
-                                        Click on any customer row to view history, start bill, edit, delete, or send WhatsApp / text messages.
+                                    <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--muted);">
+                                        Tap any customer to view history, start billing, edit, or message on WhatsApp.
                                     </p>
                                 </div>
                             </div>
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button type="button" class="btn btn-outline" style="border-radius: 20px; font-size: 12px; padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="exportCustomerDirectoryCSV()">
+                        <div class="cust-dir-actions" style="display: flex; gap: 8px;">
+                            <button type="button" class="btn btn-outline" style="border-radius: 12px; font-size: 12px; padding: 8px 13px; display: inline-flex; align-items: center; gap: 6px;" onclick="exportCustomerDirectoryCSV()">
                                 <svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-download"></use></svg>
-                                <span>Download CSV</span>
+                                <span>CSV</span>
                             </button>
-                            <button type="button" class="btn btn-success" style="border-radius: 20px; font-size: 12px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;" onclick="openAddCustomerModal()">
+                            <button type="button" class="btn btn-primary" style="border-radius: 12px; font-size: 12px; padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px;" onclick="openAddCustomerModal()">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
                                 <span>Add Customer</span>
                             </button>
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
-                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Customers</div>
-                            <div id="custStatTotal" style="font-size: 22px; font-weight: 800; color: var(--primary); margin-top: 4px;">0</div>
+                    <div class="cust-kpi-grid">
+                        <div class="cust-kpi-card">
+                            <div class="cust-kpi-label">Customers</div>
+                            <div id="custStatTotal" class="cust-kpi-val" style="color: var(--em-dark);">0</div>
                         </div>
-                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Loyalty Points</div>
-                            <div id="custStatPoints" style="font-size: 22px; font-weight: 800; color: var(--warning); margin-top: 4px;">0 pts</div>
+                        <div class="cust-kpi-card">
+                            <div class="cust-kpi-label">Loyalty Pts</div>
+                            <div id="custStatPoints" class="cust-kpi-val" style="color: var(--amber);">0 pts</div>
                         </div>
-                        <div style="background: #FAF7F4; padding: 14px 16px; border-radius: var(--radius-md); border: 1px solid var(--border);">
-                            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Customer Lifetime Spend</div>
-                            <div id="custStatRevenue" style="font-size: 22px; font-weight: 800; color: var(--success); margin-top: 4px;">₹ 0</div>
+                        <div class="cust-kpi-card">
+                            <div class="cust-kpi-label">Total Spend</div>
+                            <div id="custStatRevenue" class="cust-kpi-val" style="color: var(--success);">₹ 0</div>
                         </div>
                     </div>
 
-                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
-                        <div class="filter-pills-bar" style="margin-bottom: 0;">
+                    <div class="cust-tier-filter-wrap" style="margin-bottom: 12px;">
+                        <div class="filter-pills-bar cust-tier-pills" style="margin-bottom: 0;">
                             <button type="button" class="filter-pill active" id="cFilter-all" onclick="filterCustomersByTier('all')">All Customers</button>
                             <button type="button" class="filter-pill" id="cFilter-platinum" onclick="filterCustomersByTier('Platinum')" style="display: inline-flex; align-items: center; gap: 5px;">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
@@ -4265,16 +4270,16 @@
                     </div>
 
                     <div id="waWizardStep-1" class="wa-wizard-step active" style="display: block;">
-                        <div id="aiWeeklyScanBanner" style="background: linear-gradient(135deg, #FBF8F5, #F4ECE6); border: 1px solid #E5D5C8; border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 16px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                                    <strong style="font-size: 13px; color: var(--primary);">Weekly AI Targeting Scan:</strong>
-                                    <span id="aiScanSummaryText" style="font-size: 12px; color: var(--text-dark);">Scanned customer directory. 4 high-converting segments ready.</span>
+                        <div id="aiWeeklyScanBanner" style="background: var(--canvas); border: 1px solid var(--border); border-radius: 14px; padding: 13px 14px; margin-bottom: 14px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 7px; flex-wrap: wrap;">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--em-dark)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                    <strong style="font-size: 12.5px; color: var(--em-dark);">Weekly AI Targeting Scan</strong>
+                                    <span id="aiScanSummaryText" style="font-size: 11.5px; color: var(--slate);">Scanned customer directory. 4 high-converting segments ready.</span>
                                 </div>
-                                <span style="font-size: 11px; font-weight: 700; color: var(--milk-choc); background: #FFFFFF; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);">Updated This Week</span>
+                                <span style="font-size: 10.5px; font-weight: 700; color: var(--em-mid); background: var(--mint-bg); padding: 3px 9px; border-radius: 999px;">Updated This Week</span>
                             </div>
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="aiSegmentsContainer">
+                            <div class="wa-segments-scroll" id="aiSegmentsContainer">
                                 <button type="button" class="filter-pill active" onclick="selectAiSegment('all')" id="aiSeg-all" style="display: inline-flex; align-items: center; gap: 5px;">
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
                                     <span>All Patrons (<span id="aiSegCount-all">0</span>)</span>
@@ -4348,8 +4353,8 @@
                                 </div>
                             </div>
 
-                            <div class="wa-var-chips-bar" id="waVarChipsBar" style="margin-bottom: 12px; background: #FAF7F4; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border);">
-                                <span style="font-size: 12px; font-weight: 700; color: #143832; display: inline-flex; align-items: center; gap: 5px;">
+                            <div class="wa-var-chips-bar" id="waVarChipsBar" style="margin-bottom: 12px; background: var(--canvas); padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);">
+                                <span style="font-size: 11.5px; font-weight: 700; color: var(--em-dark); display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
                                     <span>Insert Tag:</span>
                                 </span>
@@ -4360,33 +4365,33 @@
                                 <button type="button" class="wa-var-chip" onclick="insertCampaignVariable('{valid_till}')" title="Insert Campaign Validity">{valid_till}</button>
                             </div>
 
-                            <textarea id="waCampaignEditableText" rows="6" class="form-group" style="width: 100%; padding: 12px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border); font-size: 13.5px; line-height: 1.55; font-family: inherit; resize: vertical; margin-bottom: 12px;" oninput="onCustomCampaignTextEdited()"></textarea>
+                            <textarea id="waCampaignEditableText" rows="6" class="form-group" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--border); font-size: 13.5px; line-height: 1.55; font-family: inherit; resize: vertical; margin-bottom: 12px;" oninput="onCustomCampaignTextEdited()"></textarea>
 
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; font-size: 11px; margin-bottom: 14px;">
+                            <div class="wa-offer-inputs-grid">
                                 <div>
-                                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Discount (%)</label>
-                                    <input type="number" id="waQuickDiscount" value="15" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700;" onchange="updateCampaignVariable('discount', this.value)">
+                                    <label style="font-weight: 700; color: var(--muted); display: block; margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">Discount (%)</label>
+                                    <input type="number" id="waQuickDiscount" value="15" style="width: 100%; padding: 8px 10px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 13px; font-weight: 700; color: var(--ink);" oninput="updateCampaignVariable('discount', this.value)" onchange="updateCampaignVariable('discount', this.value)">
                                 </div>
                                 <div>
-                                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Promo Code</label>
-                                    <input type="text" id="waQuickDiscountCode" value="BILLNAW15" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700; text-transform: uppercase;" onchange="updateCampaignVariable('discountCode', this.value)">
+                                    <label style="font-weight: 700; color: var(--muted); display: block; margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">Promo Code</label>
+                                    <input type="text" id="waQuickDiscountCode" value="BILLNAW15" style="width: 100%; padding: 8px 10px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 13px; font-weight: 700; text-transform: uppercase; color: var(--ink);" oninput="updateCampaignVariable('discountCode', this.value)" onchange="updateCampaignVariable('discountCode', this.value)">
                                 </div>
                                 <div>
-                                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Min Order (₹)</label>
-                                    <input type="number" id="waQuickMinOrder" value="199" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 700;" onchange="updateCampaignVariable('minOrder', this.value)">
+                                    <label style="font-weight: 700; color: var(--muted); display: block; margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">Min Order (₹)</label>
+                                    <input type="number" id="waQuickMinOrder" value="199" style="width: 100%; padding: 8px 10px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 13px; font-weight: 700; color: var(--ink);" oninput="updateCampaignVariable('minOrder', this.value)" onchange="updateCampaignVariable('minOrder', this.value)">
                                 </div>
                                 <div>
-                                    <label style="font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px;">Valid Till</label>
-                                    <input type="text" id="waQuickValidTill" value="This Sunday" style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px;" onchange="updateCampaignVariable('validTill', this.value)">
+                                    <label style="font-weight: 700; color: var(--muted); display: block; margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">Valid Till</label>
+                                    <input type="text" id="waQuickValidTill" value="This Sunday" style="width: 100%; padding: 8px 10px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 13px; color: var(--ink);" oninput="updateCampaignVariable('validTill', this.value)" onchange="updateCampaignVariable('validTill', this.value)">
                                 </div>
                             </div>
 
-                            <div style="background: #FFFDF9; border: 1.5px dashed #CBD5E1; border-radius: 10px; padding: 12px 14px;">
+                            <div style="background: var(--canvas); border: 1.5px dashed rgba(15, 61, 51, 0.28); border-radius: 12px; padding: 12px 14px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                    <span style="font-size: 11px; font-weight: 800; color: #143832; text-transform: uppercase; letter-spacing: 0.5px;">Live Draft Preview</span>
-                                    <span style="font-size: 10.5px; color: var(--text-muted);">Real variable interpolation</span>
+                                    <span style="font-size: 10.5px; font-weight: 800; color: var(--em-dark); text-transform: uppercase; letter-spacing: 0.05em;">Live Draft Preview</span>
+                                    <span style="font-size: 10.5px; color: var(--muted);">Real variable interpolation</span>
                                 </div>
-                                <div id="waStep2LivePreview" style="font-size: 12.5px; line-height: 1.5; color: var(--text-dark); white-space: pre-wrap; font-style: italic;"><span id="waStep2PreviewBubble">Drafting preview will render here...</span></div>
+                                <div id="waStep2LivePreview" style="font-size: 12.5px; line-height: 1.5; color: var(--ink); white-space: pre-wrap;"><span id="waStep2PreviewBubble">Drafting preview will render here...</span></div>
                             </div>
                         </div>
 
@@ -4431,7 +4436,7 @@
                             </div>
                         </div>
 
-                        <div class="wa-hub-grid" style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px;">
+                        <div class="wa-hub-grid">
                             <div>
                                 <div class="wa-phone-mockup" id="waPhoneMockupCard" style="margin-bottom: 14px;">
                                     <div class="wa-phone-header">
@@ -5178,77 +5183,77 @@
             <div id="inventory" class="view">
                 <div id="inventoryLandingHub" style="display: block; min-width: 0; width: 100%; max-width: 1240px; margin: 0 auto 24px auto; overflow-x: hidden;">
                     
-                    <div class="inv-header-card" style="background: linear-gradient(135deg, #143832 0%, #0F2D28 50%, #0A1F1B 100%); border-radius: 24px; padding: 24px 26px; color: #FFFFFF; margin-bottom: 20px; box-shadow: 0 8px 24px rgba(20,56,50,0.25); position: relative; overflow: hidden;">
-                        <div style="position: absolute; right: -20px; bottom: -20px; opacity: 0.10; pointer-events: none;">
+                    <div class="inv-header-card" style="background: linear-gradient(135deg, var(--em-dark) 0%, var(--em-hover) 100%); border-radius: 20px; padding: 20px 22px; color: #FFFFFF; margin-bottom: 16px; box-shadow: var(--shadow-md); position: relative; overflow: hidden;">
+                        <div style="position: absolute; right: -20px; bottom: -20px; opacity: 0.08; pointer-events: none;">
                             <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; position: relative; z-index: 1;">
                             <div>
-                                <h1 style="margin: 0 0 6px 0; font-size: 24px; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 10px;">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-                                    <span>Kitchen &amp; Inventory Management</span>
+                                <h1 style="margin: 0 0 4px 0; font-size: 21px; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 9px;">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                                    <span>Kitchen &amp; Inventory</span>
                                 </h1>
-                                <p style="margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.9); font-weight: 500;">
-                                    Track raw materials, prep recipes, and manage inventory operations
+                                <p style="margin: 0; font-size: 12.5px; color: rgba(255, 255, 255, 0.82); font-weight: 500;">
+                                    Track raw materials, morning prep batches &amp; live dish costing
                                 </p>
                             </div>
-                            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                                <button type="button" class="btn btn-outline" onclick="window.culinaryInventory.openAddMaterialModal()" style="background: rgba(255,255,255,0.15); color: #FFFFFF; font-weight: 700; border-radius: 20px; font-size: 12px; padding: 8px 16px; border: 1px solid rgba(255,255,255,0.25); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                            <div class="inv-hero-actions">
+                                <button type="button" class="btn btn-outline inv-hero-btn-ghost" onclick="window.culinaryInventory.openAddMaterialModal()">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                    <span>+ Add Material</span>
+                                    <span>Add Material</span>
                                 </button>
-                                <button type="button" class="btn btn-outline" onclick="renderInventoryTelemetryUI(); if(typeof showToast==='function') showToast('Stock telemetry refreshed');" style="background: rgba(255,255,255,0.15); color: #FFFFFF; font-weight: 700; border-radius: 20px; font-size: 12px; padding: 8px 16px; border: 1px solid rgba(255,255,255,0.25); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                                    <span>Refresh Telemetry</span>
-                                </button>
-                                <button type="button" class="btn btn-primary" onclick="openRestockExpenseModal()" style="background: #2DD4BF; color: #0D2622; font-weight: 800; border-radius: 20px; font-size: 12px; padding: 8px 18px; border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(45,212,191,0.3); display: inline-flex; align-items: center; gap: 6px;">
+                                <button type="button" class="btn btn-primary inv-hero-btn-mint" onclick="openRestockExpenseModal()">
                                     <svg width="14" height="14" viewBox="0 0 24 24"><use href="#icon-plus"></use></svg>
-                                    <span>+ Quick Restock / Purchase</span>
+                                    <span>Quick Restock</span>
+                                </button>
+                                <button type="button" class="btn btn-outline inv-hero-btn-refresh" onclick="renderInventoryTelemetryUI(); window.culinaryInventory.init(); if(typeof showToast==='function') showToast('Stock telemetry refreshed');" aria-label="Refresh Telemetry" title="Refresh Telemetry">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                    <span class="inv-refresh-label">Refresh</span>
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <div id="inventoryLossAversionBanner" class="loss-aversion-banner" style="display: none !important; margin-bottom: 20px;">
+                    <div id="inventoryLossAversionBanner" class="loss-aversion-banner" style="display: none !important; margin-bottom: 16px;">
                         <div class="loss-alert-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
                         <div id="inventoryLossAlertText" style="font-size: 13px; color: #7F1D1D; line-height: 1.45;"></div>
                     </div>
 
-                    <div class="inv-kpi-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 20px;">
-                        <div class="card inv-kpi-card" onclick="window.culinaryInventory.filterRawStockCategory('all')" style="padding: 16px; background: #FFFFFF; border: 1.5px solid var(--border); border-radius: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); cursor: pointer; transition: all 0.2s ease;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Items</div>
-                                <span class="inv-kpi-tag" style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #F1F5F9; color: #475569;">Tracked</span>
+                    <div class="inv-kpi-grid">
+                        <div class="card inv-kpi-card is-active-kpi" data-inv-filter="all" onclick="window.culinaryInventory.filterRawStockCategory('all')">
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
+                                <div class="inv-kpi-label">Total Items</div>
+                                <span class="inv-kpi-tag" style="background: var(--surface-soft); color: var(--slate);">Tracked</span>
                             </div>
-                            <div id="invStatTotalCount" style="font-size: 24px; font-weight: 800; color: #143832; margin-top: 6px;">0 Items</div>
-                            <div id="invStatTotalSub" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Across 0 categories</div>
+                            <div id="invStatTotalCount" class="inv-kpi-val" style="color: var(--em-dark);">0 Items</div>
+                            <div id="invStatTotalSub" class="inv-kpi-sub">Across 0 categories</div>
                         </div>
 
-                        <div class="card inv-kpi-card" onclick="window.culinaryInventory.filterRawStockCategory('low')" style="padding: 16px; background: #FFFFFF; border: 1.5px solid #FDE68A; border-radius: 18px; box-shadow: 0 2px 10px rgba(245,158,11,0.06); cursor: pointer; transition: all 0.2s ease;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-size: 11px; font-weight: 700; color: #B45309; text-transform: uppercase;">Low Stock</div>
-                                <span class="inv-kpi-tag" style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #FEF3C7; color: #B45309;">Reorder</span>
+                        <div class="card inv-kpi-card" data-inv-filter="low" onclick="window.culinaryInventory.filterRawStockCategory('low')" style="border-color: var(--amber-border);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
+                                <div class="inv-kpi-label" style="color: var(--amber);">Low Stock</div>
+                                <span class="inv-kpi-tag" style="background: var(--amber-bg); color: var(--amber);">Reorder</span>
                             </div>
-                            <div id="invStatRiskCount" style="font-size: 24px; font-weight: 800; color: #D97706; margin-top: 6px;">0 Low Stock</div>
-                            <div id="invStatRiskSummary" style="font-size: 11px; color: #92400E; margin-top: 2px;">Requires reordering</div>
+                            <div id="invStatRiskCount" class="inv-kpi-val" style="color: var(--amber);">0 Low</div>
+                            <div id="invStatRiskSummary" class="inv-kpi-sub">Requires reordering</div>
                         </div>
 
-                        <div class="card inv-kpi-card" onclick="window.culinaryInventory.filterRawStockCategory('instock')" style="padding: 16px; background: #FFFFFF; border: 1.5px solid #A7F3D0; border-radius: 18px; box-shadow: 0 2px 10px rgba(16,185,129,0.06); cursor: pointer; transition: all 0.2s ease;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-size: 11px; font-weight: 700; color: #065F46; text-transform: uppercase;">In Stock</div>
-                                <span class="inv-kpi-tag" style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #D1FAE5; color: #065F46;">Optimal</span>
+                        <div class="card inv-kpi-card" data-inv-filter="instock" onclick="window.culinaryInventory.filterRawStockCategory('instock')" style="border-color: rgba(16, 185, 129, 0.3);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
+                                <div class="inv-kpi-label" style="color: var(--success);">In Stock</div>
+                                <span class="inv-kpi-tag" style="background: var(--mint-soft); color: var(--em-dark);">Optimal</span>
                             </div>
-                            <div id="invStatReadyPercent" style="font-size: 24px; font-weight: 800; color: #059669; margin-top: 6px;">0 Items</div>
-                            <div id="invStatReadySummary" style="font-size: 11px; color: #047857; margin-top: 2px;">Optimal safety levels</div>
+                            <div id="invStatReadyPercent" class="inv-kpi-val" style="color: var(--success);">0 Items</div>
+                            <div id="invStatReadySummary" class="inv-kpi-sub">Optimal safety levels</div>
                         </div>
 
-                        <div class="card inv-kpi-card" onclick="window.culinaryInventory.filterRawStockCategory('out')" style="padding: 16px; background: #FFFFFF; border: 1.5px solid #FECACA; border-radius: 18px; box-shadow: 0 2px 10px rgba(239,68,68,0.06); cursor: pointer; transition: all 0.2s ease;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-size: 11px; font-weight: 700; color: #991B1B; text-transform: uppercase;">Out of Stock</div>
-                                <span class="inv-kpi-tag" style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #FEE2E2; color: #991B1B;">Critical</span>
+                        <div class="card inv-kpi-card" data-inv-filter="out" onclick="window.culinaryInventory.filterRawStockCategory('out')" style="border-color: var(--danger-border);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
+                                <div class="inv-kpi-label" style="color: var(--danger);">Out of Stock</div>
+                                <span class="inv-kpi-tag" style="background: var(--danger-bg); color: var(--danger);">Critical</span>
                             </div>
-                            <div id="invStatOutCount" style="font-size: 24px; font-weight: 800; color: #DC2626; margin-top: 6px;">0 Items</div>
-                            <div id="invStatOutSummary" style="font-size: 11px; color: #7F1D1D; margin-top: 2px;">Needs immediate attention</div>
+                            <div id="invStatOutCount" class="inv-kpi-val" style="color: var(--danger);">0 Items</div>
+                            <div id="invStatOutSummary" class="inv-kpi-sub">Zero stockouts</div>
                         </div>
                     </div>
 
@@ -6340,10 +6345,10 @@
     <script src="js/staff.js?v=2922"></script>
     <script src="js/pos.js?v=2922"></script>
     <script src="js/menu.js?v=2922"></script>
-    <script src="js/customers.js?v=2922"></script>
+    <script src="js/customers.js?v=2924"></script>
     <script src="js/dashboard.js?v=2922"></script>
     <script src="js/marketing_inventory.js?v=2922"></script>
-    <script src="js/culinary_inventory.js?v=2922"></script>
+    <script src="js/culinary_inventory.js?v=2924"></script>
     <script src="js/settings.js?v=2922"></script>
     <script src="app.js?v=2922"></script>
 

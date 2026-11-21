@@ -29,15 +29,15 @@
 }
 
 .inv-telemetry-table th {
-    background: #F8F6F2;
+    background: var(--canvas);
     padding: 12px 14px;
-    font-size: 11.5px;
+    font-size: 11px;
     line-height: 1.35;
     font-weight: 800;
-    color: #143832;
+    color: var(--muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 2px solid #E2E8F0;
+    letter-spacing: 0.05em;
+    border-bottom: 1.5px solid var(--border);
     white-space: nowrap;
     box-sizing: border-box;
 }
@@ -46,13 +46,13 @@
     padding: 13px 14px;
     font-size: 13px;
     line-height: 1.35;
-    border-bottom: 1px solid #F1F5F9;
+    border-bottom: 1px solid var(--border-soft);
     vertical-align: middle;
     box-sizing: border-box;
 }
 
 .inv-telemetry-table tr:hover td {
-    background: #FBF9F6;
+    background: var(--canvas);
 }
 
 /* Stock Status Badges: In Stock, Low Stock, Out (Explicit Line-Height & Vertical Padding) */
@@ -224,7 +224,7 @@
 }
 
 .inv-costing-table tr:hover td {
-    background: #FBF9F6;
+    background: var(--canvas);
 }
 
 .inv-margin-badge {
@@ -818,6 +818,215 @@
 
 .inv-acc-body {
     padding: 16px 18px 20px 18px;
-    border-top: 1px solid var(--border-subtle);
-    background: #FCFBF9;
+    border-top: 1px solid var(--border-soft);
+    background: var(--canvas);
+}
+
+/* ============================================================
+   INVENTORY HERO, KPI CARDS, TOOLBAR & MOBILE BOTTOM SHEETS
+   ============================================================ */
+.inv-hero-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.inv-hero-btn-ghost {
+    background: rgba(255, 255, 255, 0.14);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 14px;
+    min-height: 38px;
+}
+.inv-hero-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.24);
+    color: #FFFFFF;
+    border-color: rgba(255, 255, 255, 0.4);
+}
+.inv-hero-btn-mint {
+    background: var(--mint);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 8px 15px;
+    min-height: 38px;
+}
+.inv-hero-btn-mint:hover {
+    background: #059669;
+}
+.inv-hero-btn-refresh {
+    background: rgba(255, 255, 255, 0.12);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 12px;
+    min-height: 38px;
+}
+.inv-hero-btn-refresh:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: #FFFFFF;
+}
+
+.inv-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.inv-kpi-card {
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    margin-bottom: 0;
+}
+.inv-kpi-card.is-active-kpi {
+    border-color: var(--em-dark) !important;
+    box-shadow: 0 0 0 2px rgba(15, 61, 51, 0.14);
+}
+.inv-kpi-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.inv-kpi-tag {
+    font-size: 9.5px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.inv-kpi-val {
+    font-size: 20px;
+    font-weight: 800;
+    margin-top: 6px;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+.inv-kpi-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+.inv-toolbar-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.inv-cat-chips-scroll {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+    max-width: 100%;
+    flex: 1 1 320px;
+}
+.inv-cat-chip {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    white-space: nowrap;
+}
+.inv-search-wrap {
+    position: relative;
+    flex: 0 1 280px;
+    min-width: 200px;
+    width: 100%;
+}
+.inv-search-input {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px 8px 36px;
+    font-size: 13px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.inv-search-input:focus {
+    border-color: var(--em-dark);
+    box-shadow: 0 0 0 3px rgba(15, 61, 51, 0.12);
+}
+
+@media screen and (max-width: 900px) {
+    .inv-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+@media screen and (max-width: 640px) {
+    .inv-hero-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 8px;
+    }
+    .inv-hero-actions .btn {
+        justify-content: center;
+        padding: 9px 10px;
+        min-height: 40px;
+        font-size: 12px;
+    }
+    .inv-refresh-label {
+        display: none;
+    }
+    .inv-toolbar-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .inv-cat-chips-scroll {
+        flex: none;
+        width: 100%;
+    }
+    .inv-search-wrap {
+        flex: none;
+        min-width: 0;
+        width: 100%;
+    }
+    .inv-kpi-card {
+        padding: 12px;
+    }
+    .inv-kpi-val {
+        font-size: 17px;
+    }
+    .inv-kpi-sub {
+        font-size: 10px;
+    }
+    #restockExpenseModal,
+    #invAddMaterialModal {
+        align-items: flex-end;
+        padding: 0;
+    }
+    #restockExpenseModal .modal-box,
+    #invAddMaterialModal .modal-box {
+        width: 100%;
+        max-width: 100%;
+        max-height: 92dvh;
+        border-radius: 24px 24px 0 0;
+        margin: 0;
+        padding: 18px 16px max(16px, env(safe-area-inset-bottom, 18px));
+        overflow-y: auto;
+    }
 }

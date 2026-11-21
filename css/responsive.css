@@ -1934,47 +1934,43 @@ body.printing { background: #fff !important; }
         border-color: var(--em-dark);
     }
 
-    /* WhatsApp Marketing Hub: 148px Bottom Clearance Above Floating Preview Pill */
+    /* WhatsApp Marketing Hub & Customer Directory: Full Clearance Above Floating Pill & Bottom Nav */
+    #customers #custTabDirectory {
+        padding-bottom: 92px;
+    }
+    #customers #custTabMarketing,
+    #custTabMarketing,
     #customers #custTabWhatsapp,
     #custTabWhatsapp {
         padding-bottom: 148px;
     }
     #waFloatingPreviewPill {
         bottom: calc(74px + env(safe-area-inset-bottom, 24px));
-        background: var(--em-mid);
-        border-radius: 16px;
+        right: 14px;
+        background: var(--em-dark);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 999px;
         box-shadow: var(--shadow-elev);
     }
 
-    /* Kitchen & Inventory: Compact Emerald Hero + 2x2 KPI Grid */
+    /* Kitchen & Inventory: Compact Emerald Hero + 2x2 KPI Grid + Bottom Clearance */
+    #inventory #inventoryLandingHub {
+        padding-bottom: 92px;
+    }
     #inventory .inv-header-card {
-        border-radius: 20px;
-        padding: 16px;
-        margin-bottom: 14px;
-        background: linear-gradient(135deg, var(--em-dark) 0%, var(--em-hover) 100%);
+        border-radius: 18px;
+        padding: 15px;
+        margin-bottom: 12px;
     }
     #inventory .inv-header-card h1 {
-        font-size: 18px;
+        font-size: 17px;
     }
-    #inventory .inv-kpi-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-        margin-bottom: 14px;
-    }
-    #inventory .inv-kpi-card {
-        padding: 12px;
-        border-radius: 16px;
-        min-width: 0;
-        box-shadow: var(--shadow-card);
-    }
-    #inventory .inv-kpi-card [id^="invStat"] {
-        font-size: 18px;
-        font-variant-numeric: tabular-nums;
-    }
-    #inventory .inv-hub-segmented-tabs {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: 4px;
+    #inventory .inv-segment-btn {
+        font-size: 11px;
+        padding: 8px 6px;
+        gap: 4px;
+        flex-direction: column;
+        min-height: 46px;
     }
 
     /* Settings Hub & Dual Thermal Printers Bottom Sheet (44px Selects) */

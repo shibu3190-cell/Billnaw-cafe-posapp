@@ -36,6 +36,15 @@ function getInitials(name = "") {
 }
 window.getInitials = getInitials;
 
+function formatWhatsAppPhone(phone = "") {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.length > 10 && digits.startsWith('0')) return `91${digits.slice(-10)}`;
+    return digits;
+}
+window.formatWhatsAppPhone = formatWhatsAppPhone;
+
 function renderCustomersUI() {
     const tbody = document.getElementById('customersTableBody');
     if (!tbody) return;
@@ -69,33 +78,33 @@ function renderCustomersUI() {
     });
 
     if (displayList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 35px; color: var(--text-muted); font-size: 13px;">No customer records found matching your filters. Click <strong>➕ Add Customer</strong> above to create one.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 32px 16px; color: var(--muted); font-size: 13px;">No customer records found matching your filters. Tap <strong>Add Customer</strong> above to create one.</td></tr>`;
         return;
     }
 
     tbody.innerHTML = displayList.map(cust => {
         const tier = getCustomerTier(cust.totalVisits || 0);
         const initials = getInitials(cust.name);
-        const notesSnippet = cust.notes ? `<div style="font-size: 11px; color: var(--text-muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>${escapeHtml(cust.notes)}</div>` : '';
+        const notesSnippet = cust.notes ? `<div style="font-size: 11px; color: var(--muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>${escapeHtml(cust.notes)}</div>` : '';
         const visits = cust.totalVisits || 0;
         const totalSpent = Number(cust.totalSpend || 0).toFixed(2);
         const points = cust.loyaltyPoints || 0;
         const lastVisit = cust.lastVisitDate || cust.createdDate || '-';
-        const cleanPhone = (cust.phone || '').replace(/\D/g, '');
+        const waPhone = formatWhatsAppPhone(cust.phone || '');
         const phoneDisplay = cust.phone 
-            ? `<a href="tel:${escapeHtml(cust.phone)}" onclick="event.stopPropagation();" class="cust-phone-link" style="font-family: monospace; font-size: 13px; font-weight: 600; color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 8px; background: rgba(28, 77, 38, 0.06); border: 1px solid rgba(28, 77, 38, 0.12);" title="Click to call ${escapeHtml(cust.phone)}">
+            ? `<a href="tel:${escapeHtml(cust.phone)}" onclick="event.stopPropagation();" class="cust-phone-link" style="font-family: monospace; font-size: 12.5px; font-weight: 700; color: var(--em-dark); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 8px; background: var(--mint-bg); border: 1px solid rgba(15, 61, 51, 0.14);" title="Click to call ${escapeHtml(cust.phone)}">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                 <span>${escapeHtml(cust.phone)}</span>
               </a>` 
-            : '<span style="color:var(--text-muted)">-</span>';
+            : '<span style="color:var(--muted)">-</span>';
 
         return `
             <tr style="cursor: pointer; transition: background 0.15s ease;" onclick="openCustomerActionHub(${cust.id})" title="Click to view history, bill, edit, delete, or send WhatsApp / SMS">
                 <td>
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <div class="customer-avatar">${initials}</div>
-                        <div>
-                            <div style="font-weight: 700; color: var(--primary); font-size: 14px;">${escapeHtml(cust.name)}</div>
+                        <div style="min-width: 0;">
+                            <div style="font-weight: 800; color: var(--ink); font-size: 13.5px;">${escapeHtml(cust.name)}</div>
                             ${notesSnippet}
                         </div>
                     </div>
@@ -107,7 +116,7 @@ function renderCustomersUI() {
                     <span class="cust-badge ${tier.class}">
                         ${tier.icon} <span>${tier.name}</span>
                     </span>
-                    <div style="font-size: 11px; font-weight: 700; color: var(--warning); margin-top: 2px; display: inline-flex; align-items: center; gap: 3px;">
+                    <div style="font-size: 11px; font-weight: 700; color: var(--amber); margin-top: 2px; display: inline-flex; align-items: center; gap: 3px;">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 6v12M15 9.5a2.5 2.5 0 0 0-5 0c0 3 5 2 5 5a2.5 2.5 0 0 1-5 0"></path></svg>
                         <span>${points} pts</span>
                     </div>
@@ -118,17 +127,17 @@ function renderCustomersUI() {
                 <td style="font-weight: 800; color: var(--success); font-size: 14px;">
                     ₹ ${totalSpent}
                 </td>
-                <td style="font-size: 12px; color: var(--text-muted);">
+                <td style="font-size: 12px; color: var(--muted);">
                     ${lastVisit}
                 </td>
                 <td style="text-align: right; white-space: nowrap;">
                     <div style="display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end;">
-                        <button type="button" class="btn btn-outline" style="padding: 5px 9px; font-size: 11px; font-weight: 700; border-radius: 12px; color: var(--success); border-color: rgba(40,167,69,0.3); background: rgba(40,167,69,0.06); display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); startOrderForCustomer(${cust.id})" title="Start Order & Bill for ${escapeHtml(cust.name)}">
+                        <button type="button" class="btn btn-outline" style="padding: 6px 10px; font-size: 11.5px; font-weight: 700; border-radius: 10px; color: var(--em-dark); border-color: rgba(15,61,51,0.2); background: var(--mint-bg); display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); startOrderForCustomer(${cust.id})" title="Start Order & Bill for ${escapeHtml(cust.name)}">
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                             <span>Bill</span>
                         </button>
-                        ${cleanPhone ? `
-                        <a href="https://wa.me/91${cleanPhone}" target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="padding: 5px 9px; font-size: 11px; font-weight: 700; border-radius: 12px; color: #128C7E; border-color: rgba(18,140,126,0.3); background: rgba(18,140,126,0.06); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation();" title="Chat on WhatsApp">
+                        ${waPhone ? `
+                        <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="padding: 6px 10px; font-size: 11.5px; font-weight: 700; border-radius: 10px; color: #059669; border-color: rgba(16,185,129,0.28); background: rgba(16,185,129,0.08); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation();" title="Chat on WhatsApp">
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                             <span>WhatsApp</span>
                         </a>` : ''}
@@ -196,7 +205,7 @@ window.filterCustomersByTier = filterCustomersByTier;
 
 function openAddCustomerModal() {
     document.getElementById('customerEditId').value = '';
-    document.getElementById('customerModalTitle').innerText = '➕ Add Customer';
+    document.getElementById('customerModalTitle').innerText = 'Add Customer';
     document.getElementById('custNameInput').value = '';
     document.getElementById('custPhoneInput').value = '';
     document.getElementById('custNotesInput').value = '';
@@ -213,7 +222,7 @@ function openEditCustomerModal(id) {
     const cust = customersList.find(c => c.id === id);
     if (!cust) return showToast("Customer profile not found");
     document.getElementById('customerEditId').value = cust.id;
-    document.getElementById('customerModalTitle').innerText = '✏️ Edit Customer';
+    document.getElementById('customerModalTitle').innerText = 'Edit Customer';
     document.getElementById('custNameInput').value = cust.name || '';
     document.getElementById('custPhoneInput').value = cust.phone || '';
     document.getElementById('custNotesInput').value = cust.notes || '';
@@ -720,6 +729,9 @@ function toggleSelectTierCustomers(tierKey, checked) {
 }
 window.toggleSelectTierCustomers = toggleSelectTierCustomers;
 
+let _waMockupHomePlaceholder = null;
+const waDispatchedCustomerIds = new Set();
+
 function toggleWaPreviewExpand(expand) {
     const pill = document.getElementById('waFloatingPreviewPill');
     const mockup = document.getElementById('waPhoneMockupCard');
@@ -729,15 +741,33 @@ function toggleWaPreviewExpand(expand) {
     const shouldExpand = (typeof expand === 'boolean') ? expand : !isCurrentlyExpanded;
 
     if (shouldExpand) {
+        if (typeof updateWaSimulatedBubble === 'function') updateWaSimulatedBubble();
         if (pill) pill.classList.remove('minimized');
         if (mockup) {
+            // Portal mockup to document.body so preview works from Step 1, Step 2, OR Step 3 even when Step 3 is display:none
+            if (mockup.parentNode && mockup.parentNode !== document.body) {
+                if (!_waMockupHomePlaceholder) {
+                    _waMockupHomePlaceholder = document.createComment('waPhoneMockupHome');
+                }
+                mockup.parentNode.insertBefore(_waMockupHomePlaceholder, mockup);
+                document.body.appendChild(mockup);
+            }
             mockup.classList.add('expanded');
-            mockup.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-        if (backdrop) backdrop.classList.add('active');
+        if (backdrop) {
+            if (backdrop.parentNode && backdrop.parentNode !== document.body) {
+                document.body.appendChild(backdrop);
+            }
+            backdrop.classList.add('active');
+        }
     } else {
-        if (pill) pill.classList.add('minimized');
-        if (mockup) mockup.classList.remove('expanded');
+        if (pill) pill.classList.remove('minimized');
+        if (mockup) {
+            mockup.classList.remove('expanded');
+            if (_waMockupHomePlaceholder && _waMockupHomePlaceholder.parentNode) {
+                _waMockupHomePlaceholder.parentNode.insertBefore(mockup, _waMockupHomePlaceholder);
+            }
+        }
         if (backdrop) backdrop.classList.remove('active');
     }
 }
@@ -907,6 +937,19 @@ function renderAiWhatsAppHubUI() {
     const totalCount = customersList.length;
     const selectedCount = waBulkSelectedCustomerIds.size;
 
+    // Populate live segment pill counts in Step 1
+    const segCounts = {
+        all: customersList.length,
+        weekend: customersList.filter(c => (c.totalVisits || 0) >= 3).length,
+        vip: customersList.filter(c => (c.totalVisits || 0) >= 10).length,
+        inactive: customersList.filter(c => (c.totalVisits || 0) <= 2).length,
+        loyalty: customersList.filter(c => (c.loyaltyPoints || 0) >= 20).length
+    };
+    Object.keys(segCounts).forEach(k => {
+        const el = document.getElementById(`aiSegCount-${k}`);
+        if (el) el.textContent = String(segCounts[k]);
+    });
+
     // Update count labels across header, dock, and badges
     updateWaStepperCounters();
     updateWaAudienceSummary();
@@ -963,18 +1006,18 @@ function renderAiWhatsAppHubUI() {
                         const initials = getInitials(cust.name);
 
                         return `
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; border: 1px solid ${isChecked ? 'var(--primary)' : 'var(--border)'}; background: ${isChecked ? '#FFFBF7' : '#FFFFFF'}; transition: all 0.15s ease;">
-                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; margin: 0;">
-                                    <input type="checkbox" style="width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer;" ${isChecked ? 'checked' : ''} onchange="toggleSelectCustomerForBroadcast(${cust.id})">
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 9px 11px; border-radius: 10px; border: 1px solid ${isChecked ? 'var(--em-dark)' : 'var(--border)'}; background: ${isChecked ? 'var(--mint-bg)' : 'var(--surface)'}; transition: background-color 0.15s ease, border-color 0.15s ease; gap: 8px;">
+                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; min-width: 0; margin: 0;">
+                                    <input type="checkbox" style="width: 17px; height: 17px; accent-color: var(--em-dark); cursor: pointer; flex-shrink: 0;" ${isChecked ? 'checked' : ''} onchange="toggleSelectCustomerForBroadcast(${cust.id})">
                                     <div class="customer-avatar" style="width: 32px; height: 32px; font-size: 12px;">${initials}</div>
-                                    <div>
-                                        <div style="font-weight: 700; font-size: 13px; color: var(--text-dark);">${escapeHtml(cust.name)}</div>
-                                        <div style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${escapeHtml(cust.phone || 'No phone')}</div>
+                                    <div style="min-width: 0;">
+                                        <div style="font-weight: 700; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cust.name)}</div>
+                                        <div style="font-size: 11px; font-family: monospace; color: var(--muted);">${escapeHtml(cust.phone || 'No phone')}</div>
                                     </div>
                                 </label>
-                                <div style="text-align: right;">
+                                <div style="text-align: right; flex-shrink: 0;">
                                     <span class="cust-badge ${tier.class}" style="font-size: 10px; padding: 2px 6px;">${tier.icon} ${tier.name}</span>
-                                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${cust.totalVisits || 0} visits</div>
+                                    <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">${cust.totalVisits || 0} visits</div>
                                 </div>
                             </div>
                         `;
@@ -1023,26 +1066,23 @@ window.toggleSelectCustomerForBroadcast = toggleSelectCustomerForBroadcast;
 function selectAiSegment(segmentKey) {
     activeAiSegmentKey = segmentKey;
 
-    // Update segment buttons UI
-    document.querySelectorAll('.segment-btn').forEach(btn => btn.classList.remove('active'));
-    const clickedBtn = document.getElementById(`segBtn_${segmentKey}`);
+    // Update segment pills UI (both current #aiSegmentsContainer pills and legacy .segment-btn)
+    document.querySelectorAll('#aiSegmentsContainer .filter-pill, .segment-btn').forEach(btn => btn.classList.remove('active'));
+    const clickedBtn = document.getElementById(`aiSeg-${segmentKey}`) || document.getElementById(`segBtn_${segmentKey}`);
     if (clickedBtn) clickedBtn.classList.add('active');
 
     waBulkSelectedCustomerIds.clear();
+    waDispatchedCustomerIds.clear();
 
     if (segmentKey === 'all') {
         customersList.forEach(c => waBulkSelectedCustomerIds.add(c.id));
     } else if (segmentKey === 'weekend') {
-        // Diners with 3+ visits
         customersList.filter(c => (c.totalVisits || 0) >= 3).forEach(c => waBulkSelectedCustomerIds.add(c.id));
     } else if (segmentKey === 'vip') {
-        // Diners with 10+ visits (Gold & Platinum)
         customersList.filter(c => (c.totalVisits || 0) >= 10).forEach(c => waBulkSelectedCustomerIds.add(c.id));
     } else if (segmentKey === 'inactive') {
-        // Diners who haven't visited recently or visits <= 2
         customersList.filter(c => (c.totalVisits || 0) <= 2).forEach(c => waBulkSelectedCustomerIds.add(c.id));
     } else if (segmentKey === 'loyalty') {
-        // Diners with 20+ points
         customersList.filter(c => (c.loyaltyPoints || 0) >= 20).forEach(c => waBulkSelectedCustomerIds.add(c.id));
     }
 
@@ -1052,36 +1092,39 @@ function selectAiSegment(segmentKey) {
 window.selectAiSegment = selectAiSegment;
 
 function runWeeklyAiMarketingScan() {
-    const scanSummaryEl = document.getElementById('aiWeeklyScanSummary');
+    const scanSummaryEl = document.getElementById('aiScanSummaryText') || document.getElementById('aiWeeklyScanSummary');
     if (scanSummaryEl) {
         scanSummaryEl.innerText = "Scanning customer purchase recency, average spends & repeat visits...";
     }
 
     setTimeout(() => {
-        // Recommend weekend or VIP segment based on diner data
-        const vipCount = customersList.filter(c => (c.totalVisits || 0) >= 8).length;
-        const targetTheme = vipCount >= 2 ? 'vip' : 'weekend';
+        const vipCount = customersList.filter(c => (c.totalVisits || 0) >= 10).length;
+        const weekendCount = customersList.filter(c => (c.totalVisits || 0) >= 3).length;
+        const targetTheme = vipCount >= 2 ? 'vip' : (weekendCount >= 1 ? 'weekend' : 'all');
         selectAiSegment(targetTheme);
 
         if (scanSummaryEl) {
-            scanSummaryEl.innerHTML = `✨ <strong>Weekly AI Scan Complete:</strong> Found <strong>${waBulkSelectedCustomerIds.size} high-potential diners</strong> for this week's campaign. Text tailored to customer names below!`;
+            scanSummaryEl.innerHTML = `Weekly AI Scan Complete: <strong>${waBulkSelectedCustomerIds.size} high-potential diners</strong> selected for this week's campaign.`;
         }
-        showToast(`✨ Weekly AI scan found ${waBulkSelectedCustomerIds.size} diners for campaign!`);
-    }, 450);
+        showToast(`Weekly AI scan selected ${waBulkSelectedCustomerIds.size} diners for campaign!`);
+    }, 350);
 }
 window.runWeeklyAiMarketingScan = runWeeklyAiMarketingScan;
 
 async function generateAiCampaignCopy() {
-    const btn = document.getElementById('btnAiRegenerate');
+    const btn = document.getElementById('generateAiCampaignBtn') || document.getElementById('btnAiRegenerate');
     const origText = btn ? btn.innerHTML : '';
-    if (btn) btn.innerHTML = `<span>⏳</span> Generating AI Copy...`;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>Generating...</span>`;
+    }
 
     let theme = "Weekend Cafe Brunch & Artisanal Coffee";
     if (activeAiSegmentKey === 'vip') theme = "Exclusive VIP Diner Appreciation & Secret Menu";
     if (activeAiSegmentKey === 'inactive') theme = "Win-Back Special Welcome Gift for Valued Patron";
     if (activeAiSegmentKey === 'loyalty') theme = "Loyalty Points Multiplier & Free Dessert";
 
-    const activeStoreName = shopProfile.name || "billnaw";
+    const activeStoreName = (window.shopProfile && window.shopProfile.name) || "Billnaw Cafe";
     try {
         const response = await fetch('/api/generate-campaign', {
             method: 'POST',
@@ -1103,25 +1146,30 @@ async function generateAiCampaignCopy() {
                 const txtArea = document.getElementById('waCampaignEditableText');
                 if (txtArea) txtArea.value = waCampaignTemplateText;
                 updateWaSimulatedBubble();
-                showToast("✨ AI generated personalized campaign copy!");
+                showToast("AI generated personalized campaign copy!");
+                return;
             }
-        } else {
-            throw new Error("API fallback");
         }
+        throw new Error("API fallback");
     } catch (err) {
-        // Fallback intelligent copywriting
-        let fallback = `Hello {customer_name}! ☕✨ Greetings from ${activeStoreName}.\n\nEnjoy an exclusive {discount_pct}% OFF on all orders above ₹{min_order} this week! Show this message at checkout to redeem.\n\nValid till {valid_till}. We can't wait to see you!`;
+        let fallback = `Hello {customer_name}! Greetings from ${activeStoreName}.\n\nEnjoy an exclusive {discount_pct}% OFF (Code: {discount_code}) on orders above ₹{min_order} this week! Show this message at checkout to redeem.\n\nValid till {valid_till}. We can't wait to see you!`;
         if (activeAiSegmentKey === 'vip') {
-            fallback = `Hello {customer_name}! ⭐ As one of ${activeStoreName}'s most cherished VIP patrons, we've reserved a special table & {discount_pct}% VIP discount just for you on orders above ₹{min_order}.\n\nValid till {valid_till}. Come enjoy your favourite brew on us!`;
+            fallback = `Hello {customer_name}! As one of ${activeStoreName}'s cherished VIP patrons, enjoy {discount_pct}% OFF (Code: {discount_code}) on orders above ₹{min_order}.\n\nValid till {valid_till}. Come enjoy your favourite brew!`;
         } else if (activeAiSegmentKey === 'inactive') {
-            fallback = `Hello {customer_name}! ☕ It's been a little while since your last visit to ${activeStoreName}, and we miss you! Drop in this week and enjoy {discount_pct}% OFF your entire order above ₹{min_order}.\n\nValid till {valid_till}. See you soon!`;
+            fallback = `Hello {customer_name}! It's been a while since your last visit to ${activeStoreName}, and we miss you! Drop in this week for {discount_pct}% OFF (Code: {discount_code}) above ₹{min_order}.\n\nValid till {valid_till}. See you soon!`;
+        } else if (activeAiSegmentKey === 'loyalty') {
+            fallback = `Hello {customer_name}! You have loyalty points waiting at ${activeStoreName}. Redeem them with {discount_pct}% OFF (Code: {discount_code}) on orders above ₹{min_order}.\n\nValid till {valid_till}!`;
         }
         waCampaignTemplateText = fallback;
         const txtArea = document.getElementById('waCampaignEditableText');
         if (txtArea) txtArea.value = waCampaignTemplateText;
         updateWaSimulatedBubble();
+        showToast("Campaign copy drafted and personalized!");
     } finally {
-        if (btn) btn.innerHTML = origText;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
     }
 }
 window.generateAiCampaignCopy = generateAiCampaignCopy;
@@ -1182,6 +1230,12 @@ function cyclePreviewCustomer() {
 }
 window.cyclePreviewCustomer = cyclePreviewCustomer;
 
+function markWaCustomerDispatched(custId) {
+    waDispatchedCustomerIds.add(custId);
+    renderBroadcastQueueUI();
+}
+window.markWaCustomerDispatched = markWaCustomerDispatched;
+
 function renderBroadcastQueueUI() {
     const queueContainer = document.getElementById('waSelectedBroadcastQueue');
     if (!queueContainer) return;
@@ -1191,13 +1245,13 @@ function renderBroadcastQueueUI() {
     if (countEl) countEl.innerText = selectedList.length;
 
     if (selectedList.length === 0) {
-        queueContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">No diners selected yet. Select customers in Step 1 to review the dispatch queue.</div>`;
+        queueContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--muted); font-size: 13px;">No diners selected yet. Select customers in Step 1 to review the dispatch queue.</div>`;
         return;
     }
 
     queueContainer.innerHTML = selectedList.map(cust => {
-        const cleanPhone = (cust.phone || '').replace(/\D/g, '');
-        const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const fullPhone = formatWhatsAppPhone(cust.phone || '');
+        const isSent = waDispatchedCustomerIds.has(cust.id);
         const personalizedMsg = (waCampaignTemplateText || '')
             .replace(/\{customer_name\}/g, cust.name)
             .replace(/\{discount_code\}/g, waCampaignVariables.discountCode || 'BILLNAW15')
@@ -1205,19 +1259,20 @@ function renderBroadcastQueueUI() {
             .replace(/\{min_order\}/g, waCampaignVariables.minOrder)
             .replace(/\{valid_till\}/g, waCampaignVariables.validTill);
 
-        const waLink = `https://wa.me/${fullPhone}?text=${encodeURIComponent(personalizedMsg)}`;
+        const waLink = fullPhone ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(personalizedMsg)}` : '';
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #FFFFFF; border: 1px solid var(--border); border-radius: 8px; gap: 10px;">
-                <div>
-                    <div style="font-weight: 700; font-size: 13px; color: var(--text-dark);">${escapeHtml(cust.name)}</div>
-                    <div style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${cust.phone || 'No phone'}</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 9px 11px; background: ${isSent ? 'var(--mint-bg)' : 'var(--surface)'}; border: 1px solid ${isSent ? 'rgba(16,185,129,0.3)' : 'var(--border)'}; border-radius: 10px; gap: 10px;">
+                <div style="min-width: 0; flex: 1;">
+                    <div style="font-weight: 700; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cust.name)}</div>
+                    <div style="font-size: 11px; font-family: monospace; color: var(--muted);">${escapeHtml(cust.phone || 'No phone')}</div>
                 </div>
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <a href="${waLink}" target="_blank" class="btn btn-success" style="padding: 5px 12px; font-size: 11px; font-weight: 700; border-radius: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;" title="Open WhatsApp Chat">
+                <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+                    ${waLink ? `
+                    <a href="${waLink}" target="_blank" rel="noopener noreferrer" onclick="markWaCustomerDispatched(${cust.id})" class="btn ${isSent ? 'btn-outline' : 'btn-success'}" style="padding: 6px 11px; font-size: 11px; font-weight: 700; border-radius: 10px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; min-height: 34px;" title="Open WhatsApp Chat">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                        <span>Send WhatsApp</span>
-                    </a>
+                        <span>${isSent ? 'Sent' : 'Send'}</span>
+                    </a>` : `<span style="font-size: 11px; color: var(--muted);">No phone</span>`}
                 </div>
             </div>
         `;
@@ -1225,23 +1280,32 @@ function renderBroadcastQueueUI() {
 }
 
 function triggerBulkWhatsAppBroadcast() {
-    const selectedList = getSelectedCustomerList();
+    const selectedList = getSelectedCustomerList().filter(c => formatWhatsAppPhone(c.phone || '').length >= 10);
     if (selectedList.length === 0) {
-        return showToast("⚠️ Please select at least one customer first.");
+        return showToast("Please select at least one customer with a valid phone number.");
     }
-    // Open the first customer in WhatsApp directly
-    const firstCust = selectedList[0];
-    const cleanPhone = (firstCust.phone || '').replace(/\D/g, '');
-    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    // Advance cleanly to next unsent diner in queue (reset cycle if all already dispatched)
+    let nextCust = selectedList.find(c => !waDispatchedCustomerIds.has(c.id));
+    if (!nextCust) {
+        waDispatchedCustomerIds.clear();
+        nextCust = selectedList[0];
+    }
+    const fullPhone = formatWhatsAppPhone(nextCust.phone || '');
     const personalizedMsg = (waCampaignTemplateText || '')
-        .replace(/\{customer_name\}/g, firstCust.name)
+        .replace(/\{customer_name\}/g, nextCust.name)
         .replace(/\{discount_code\}/g, waCampaignVariables.discountCode || 'BILLNAW15')
         .replace(/\{discount_pct\}/g, waCampaignVariables.discount)
         .replace(/\{min_order\}/g, waCampaignVariables.minOrder)
         .replace(/\{valid_till\}/g, waCampaignVariables.validTill);
 
+    waDispatchedCustomerIds.add(nextCust.id);
+    renderBroadcastQueueUI();
+
+    const remaining = selectedList.filter(c => !waDispatchedCustomerIds.has(c.id)).length;
     window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(personalizedMsg)}`, '_blank');
-    showToast(`🚀 Dispatched WhatsApp for ${firstCust.name}! Next in queue is ready.`);
+    showToast(remaining > 0
+        ? `Opened WhatsApp for ${nextCust.name} (${remaining} remaining in queue).`
+        : `Opened WhatsApp for ${nextCust.name} — all ${selectedList.length} diners dispatched!`);
 }
 window.triggerBulkWhatsAppBroadcast = triggerBulkWhatsAppBroadcast;
 
