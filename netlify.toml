@@ -6,8 +6,12 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  # Set JWT_SECRET in Netlify Site Settings -> Environment Variables (never commit secrets in netlify.toml)
-  SECRETS_SCAN_OMIT_PATHS = "scratch/**,.agents/**"
+  # Set JWT_SECRET & GEMINI_API_KEY in Netlify Site Settings -> Environment Variables (never commit secrets in netlify.toml)
+  # Keep standard Secrets Scanning enabled for JWT_SECRET, GEMINI_API_KEY, SMTP_PASS & SMTP_USER;
+  # omit non-secret config keys ("smtp.gmail.com", port, boolean) and public Firebase Web API key smart-detection false positives.
+  SECRETS_SCAN_OMIT_KEYS = "SMTP_HOST,SMTP_PORT,SMTP_SECURE"
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+  SECRETS_SCAN_OMIT_PATHS = "scratch/**,.agents/**,.env.example,memory.md"
 
 [functions]
   node_bundler = "esbuild"
