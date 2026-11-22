@@ -1566,8 +1566,24 @@ const idb = {
                         menuStore.createIndex('by_category', 'category', { unique: false });
                         menuStore.createIndex('by_name', 'name', { unique: false });
                     }
+                    if (!db.objectStoreNames.contains('offline_sync_queue')) {
+                        const queueStore = db.createObjectStore('offline_sync_queue', { keyPath: 'id', autoIncrement: true });
+                        queueStore.createIndex('timestamp', 'timestamp', { unique: false });
+                        queueStore.createIndex('status', 'status', { unique: false });
+                    }
+                    if (!db.objectStoreNames.contains('local_settings')) {
+                        db.createObjectStore('local_settings', { keyPath: 'key' });
+                    }
                 };
-                req.onsuccess = (e) => { this.db = e.target.result; resolve(); };
+                req.onsuccess = (e) => {
+                    this.db = e.target.result;
+                    this.db.onversionchange = () => {
+                        try { this.db.close(); } catch (_) {}
+                        this.db = null;
+                        this.initPromise = null;
+                    };
+                    resolve();
+                };
                 req.onerror = (e) => {
                     console.warn('[IDB] Opening failed, falling back to storage:', e);
                     resolve();
@@ -1615,19 +1631,32 @@ const idb = {
         await this.init(); 
         idbMemoryStore[key] = val;
         if (!this.db) return;
-        try {
-            const tx = this.db.transaction('store', 'readwrite'); 
-            tx.objectStore('store').put(val, key);
-        } catch (e) {}
+        return new Promise((resolve) => {
+            try {
+                const tx = this.db.transaction('store', 'readwrite'); 
+                tx.objectStore('store').put(val, key);
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => resolve(false);
+                tx.onabort = () => resolve(false);
+            } catch (e) { resolve(false); }
+        });
     },
     delete: async function(key) {
         await this.init();
         delete idbMemoryStore[key];
         if (!this.db) return;
-        try {
-            const tx = this.db.transaction('store', 'readwrite');
-            tx.objectStore('store').delete(key);
-        } catch (e) {}
+        return new Promise((resolve) => {
+            try {
+                const tx = this.db.transaction('store', 'readwrite');
+                tx.objectStore('store').delete(key);
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => resolve(false);
+                tx.onabort = () => resolve(false);
+            } catch (e) { resolve(false); }
+        });
+    },
+    del: async function(key) {
+        return this.delete(key);
     },
     clear: async function(key) {
         await this.init();
@@ -1637,14 +1666,19 @@ const idb = {
             Object.keys(idbMemoryStore).forEach(k => delete idbMemoryStore[k]);
         }
         if (!this.db) return;
-        try {
-            const tx = this.db.transaction('store', 'readwrite');
-            if (key) {
-                tx.objectStore('store').delete(key);
-            } else {
-                tx.objectStore('store').clear();
-            }
-        } catch (e) {}
+        return new Promise((resolve) => {
+            try {
+                const tx = this.db.transaction('store', 'readwrite');
+                if (key) {
+                    tx.objectStore('store').delete(key);
+                } else {
+                    tx.objectStore('store').clear();
+                }
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => resolve(false);
+                tx.onabort = () => resolve(false);
+            } catch (e) { resolve(false); }
+        });
     }
 };
 window.idb = idb;
@@ -2231,15 +2265,54 @@ if (posMeshChannel) {
     };
 }
 
+// Helper: Persist highest seen bill number outside 10-day rolling cache so billNo never resets to startInvoiceNo
+function recordHighestBillNumber(ordersOrNum) {
+    try {
+        let maxBill = Math.max(
+            Number((typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_last_bill_no') : 0) || 0) || 0,
+            Number((typeof shopProfile !== 'undefined' && shopProfile && shopProfile.lastBillNo) || 0) || 0
+        );
+        const extractNum = (val) => {
+            if (typeof val === 'number' && Number.isFinite(val)) return Math.floor(val);
+            const parsed = parseInt(String(val || '').replace(/\D/g, ''), 10);
+            return Number.isFinite(parsed) ? parsed : 0;
+        };
+        if (Array.isArray(ordersOrNum)) {
+            for (let i = 0; i < ordersOrNum.length; i++) {
+                const o = ordersOrNum[i];
+                if (!o) continue;
+                const n = extractNum(o.billNo ?? o.bill_no);
+                if (n > maxBill) maxBill = n;
+            }
+        } else if (ordersOrNum && typeof ordersOrNum === 'object') {
+            const n = extractNum(ordersOrNum.billNo ?? ordersOrNum.bill_no);
+            if (n > maxBill) maxBill = n;
+        } else if (ordersOrNum !== undefined && ordersOrNum !== null) {
+            const n = extractNum(ordersOrNum);
+            if (n > maxBill) maxBill = n;
+        }
+        if (maxBill > 0) {
+            if (typeof localStorage !== 'undefined') localStorage.setItem('billnaw_last_bill_no', String(maxBill));
+            if (typeof shopProfile !== 'undefined' && shopProfile) shopProfile.lastBillNo = maxBill;
+        }
+        return maxBill;
+    } catch (_) {
+        return 0;
+    }
+}
+window.recordHighestBillNumber = recordHighestBillNumber;
+
 // Strict 10-Day Rolling Cache Eviction
 async function pruneClientTransactionalCache(retentionDays = 10) {
     const cutoffMs = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
     const cutoffISO = new Date(cutoffMs).toISOString().slice(0, 10);
 
-    // 1. Prune in-memory and IDB orderHistory
+    // 1. Prune in-memory and IDB orderHistory (preserving highest billNo & explicitly loaded cloud archive pages)
     let initialCount = Array.isArray(window.orderHistory) ? window.orderHistory.length : 0;
     if (initialCount > 0) {
+        recordHighestBillNumber(window.orderHistory);
         window.orderHistory = window.orderHistory.filter(order => {
+            if (order && order._isCloudArchive === true) return true;
             const rawDate = order.filterDate || order.created_at || (order.date ? order.date.split(',')[0].trim() : null) || order.id;
             const itemTime = typeof rawDate === 'number' ? rawDate : new Date(rawDate).getTime();
             return !isNaN(itemTime) && itemTime >= cutoffMs;
@@ -3174,6 +3247,7 @@ function handleRemoteFirestoreUpdate(data) {
         });
         orderHistory = Array.from(orderMap.values()).sort((a,b) => (Number(b.id || b.billNo || 0) - Number(a.id || a.billNo || 0)));
         window.orderHistory = orderHistory;
+        if (typeof recordHighestBillNumber === 'function') recordHighestBillNumber(orderHistory);
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_history', orderHistory);
         }
@@ -4263,8 +4337,15 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
         storeBucket.ownerEmail = activeOwnerEmail.trim().toLowerCase();
     }
     pendingBackendSyncByStore[activeStoreCode] = storeBucket;
+    if (typeof window !== 'undefined') {
+        window._syncQueueGenByStore = window._syncQueueGenByStore || {};
+        window._syncQueueGenByStore[activeStoreCode] = (window._syncQueueGenByStore[activeStoreCode] || 0) + 1;
+    }
 
     const doSync = async (targetStoreCode = activeStoreCode) => {
+        const dispatchGen = (typeof window !== 'undefined' && window._syncQueueGenByStore)
+            ? (window._syncQueueGenByStore[targetStoreCode] || 0)
+            : 0;
         const payloadToSend = { ...(pendingBackendSyncByStore[targetStoreCode] || {}) };
         delete pendingBackendSyncByStore[targetStoreCode];
         if (backendSyncTimers[targetStoreCode]) {
@@ -4370,13 +4451,28 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                 }
                 lastCloudSyncTime = Date.now();
                 setCloudSyncStatus('synced', 'Real-Time Synced');
-                const qMapAfter = readOfflineSyncQueueMap();
-                Object.keys(qMapAfter).forEach(k => {
-                    if (String(qMapAfter[k]?.storeCode || k).trim().toUpperCase() === String(targetStoreCode).trim().toUpperCase()) {
-                        delete qMapAfter[k];
+                // Adopt strictly monotonic menuVersion returned by server so all devices converge cleanly
+                if (respJson && Number.isFinite(Number(respJson.menuVersion)) && Number(respJson.menuVersion) > 0) {
+                    const serverMenuVer = Number(respJson.menuVersion);
+                    const currentLocalVer = Number((typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_menu_version') : 0) || (shopProfile && shopProfile.menuVersion) || 0) || 0;
+                    if (serverMenuVer > currentLocalVer) {
+                        try { localStorage.setItem('billnaw_menu_version', String(serverMenuVer)); } catch (_) {}
+                        if (typeof shopProfile !== 'undefined' && shopProfile) shopProfile.menuVersion = serverMenuVer;
+                        if (typeof window !== 'undefined') window.currentMenuVersion = serverMenuVer;
                     }
-                });
-                writeOfflineSyncQueueMap(qMapAfter);
+                }
+                const latestGen = (typeof window !== 'undefined' && window._syncQueueGenByStore)
+                    ? (window._syncQueueGenByStore[targetStoreCode] || 0)
+                    : dispatchGen;
+                if (latestGen === dispatchGen) {
+                    const qMapAfter = readOfflineSyncQueueMap();
+                    Object.keys(qMapAfter).forEach(k => {
+                        if (String(qMapAfter[k]?.storeCode || k).trim().toUpperCase() === String(targetStoreCode).trim().toUpperCase()) {
+                            delete qMapAfter[k];
+                        }
+                    });
+                    writeOfflineSyncQueueMap(qMapAfter);
+                }
                 return true;
             } else if (res && (res.status === 401 || res.status === 403)) {
                 console.warn(`[BACKEND SYNC] RBAC/Auth rejected (${res.status}) - handling queue safely`);
@@ -4542,6 +4638,9 @@ async function reconcileExistingShopCloudSync() {
     const safeMenuToSend = (Array.isArray(menuItems) && menuItems.length > 0 && (!isAuth || !isTemplateMenu)) ? menuItems : undefined;
 
     if (hasData && typeof dispatchBackendStoreSync === 'function') {
+        const currentMenuVer = Number(localStorage.getItem('billnaw_menu_version') || (typeof shopProfile !== 'undefined' && shopProfile && shopProfile.menuVersion) || 0) || undefined;
+        const delMenuIds = (typeof getDeletedMenuItemIds === 'function') ? getDeletedMenuItemIds() : undefined;
+        const delMenuNames = (typeof getDeletedMenuItemNames === 'function') ? getDeletedMenuItemNames() : undefined;
         console.log(`[EXISTING SHOP SYNC] Reconciling shop data for ${storeCode}: ${sList.length} staff, ${Object.keys(tInfo).length} tables`);
         await dispatchBackendStoreSync({
             storeCode,
@@ -4549,6 +4648,9 @@ async function reconcileExistingShopCloudSync() {
             staff: sList.length > 0 ? sList : undefined,
             tables: Object.keys(tInfo).length > 0 ? tInfo : undefined,
             menu: safeMenuToSend,
+            menuVersion: safeMenuToSend ? currentMenuVer : undefined,
+            deletedMenuIds: safeMenuToSend && Array.isArray(delMenuIds) && delMenuIds.length > 0 ? delMenuIds : undefined,
+            deletedMenuNames: safeMenuToSend && Array.isArray(delMenuNames) && delMenuNames.length > 0 ? delMenuNames : undefined,
             categories: (typeof menuCategories !== 'undefined' && Array.isArray(menuCategories) && menuCategories.length > 0) ? menuCategories : undefined
         }, true);
     }
@@ -5113,6 +5215,9 @@ function persistCustomersFirebase(newCust = null) {
 window.persistCustomersFirebase = persistCustomersFirebase;
 
 function persistHistoryFirebase(newOrder = null) { 
+    if (newOrder && typeof recordHighestBillNumber === 'function') {
+        recordHighestBillNumber(newOrder);
+    }
     if (typeof pruneClientTransactionalCache === 'function') {
         pruneClientTransactionalCache(10).catch(() => {});
     }
@@ -5128,10 +5233,10 @@ function persistHistoryFirebase(newOrder = null) {
         if (storeDocRef) {
             window.firestoreSetDoc(storeDocRef, { history: cappedHistory, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
         }
-        // Subcollection archive for decoupled individual invoice scalability
+        // Subcollection archive for decoupled individual invoice scalability (canonical docId matching server/sync-service.js: id || billNo)
         if (newOrder) {
             try {
-                const rawId = String(newOrder.billNo || newOrder.id || '').trim();
+                const rawId = String(newOrder.id || newOrder.billNo || '').trim();
                 if (rawId && typeof getStoreSubdocRef === 'function') {
                     const invId = rawId.replace(/[\/\s#?]/g, '_');
                     const invDocRef = getStoreSubdocRef('invoices', invId);
@@ -6443,7 +6548,9 @@ async function handleDeviceRevocation(deviceRecord) {
 
     localStorage.setItem('billnaw_device_status', 'REVOKED');
 
-    if (typeof clearAllTenantLocalData === 'function') {
+    if (typeof window !== 'undefined' && typeof window.clearAllTenantLocalData === 'function') {
+        await window.clearAllTenantLocalData();
+    } else if (typeof clearAllTenantLocalData === 'function') {
         await clearAllTenantLocalData();
     }
 
@@ -6780,7 +6887,9 @@ async function runPendingCleanUpgradeResync() {
             // Session expired or revoked on backend: wipe ALL stale tenant caches & prompt secure Login (not Signup)
             try {
                 localStorage.removeItem('billnaw_pending_clean_resync');
-                if (typeof clearAllTenantLocalData === 'function') {
+                if (typeof window !== 'undefined' && typeof window.clearAllTenantLocalData === 'function') {
+                    await window.clearAllTenantLocalData();
+                } else if (typeof clearAllTenantLocalData === 'function') {
                     await clearAllTenantLocalData();
                 }
                 if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('billnaw_auth_token');
@@ -6862,7 +6971,7 @@ async function initDatabase() {
             console.warn('[v3CleanResync] initDatabase notice:', resyncErr);
         }
     }
-    if (typeof checkAndApplySessionEpoch === 'function') {
+    if (typeof checkAndApplySessionEpoch === 'function' && !(typeof window !== 'undefined' && window._v3ResyncFailed)) {
         try {
             await checkAndApplySessionEpoch();
         } catch (epochErr) {

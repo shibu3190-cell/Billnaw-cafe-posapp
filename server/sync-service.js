@@ -499,17 +499,25 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   const needsProfileMerge = Boolean(payload.profile && typeof payload.profile === 'object') ||
                             Boolean(payload.logo || payload.upiId || payload.showQr !== undefined);
 
-  // Single optional GET rootUrl fetch for concurrent staff/tables/deletedStaffIds/profile merge
+  // Single optional GET rootUrl fetch for concurrent staff/tables/deletedStaffIds/profile/menuVersion merge
+  const needsMenuVersionCheck = Array.isArray(payload.menu) || Array.isArray(payload.categories) || payload.menuVersion !== undefined;
   let existingRootFields = null;
-  if (needsStaffMerge || hasTablesPayload || needsDeletedStaffMerge || needsProfileMerge) {
+  let rootReadSucceeded = false;
+  if (needsStaffMerge || hasTablesPayload || needsDeletedStaffMerge || needsProfileMerge || needsMenuVersionCheck) {
     try {
       const rootCheck = await fetch(rootUrl);
       if (rootCheck && rootCheck.ok && typeof rootCheck.json === 'function') {
         const rootData = await rootCheck.json();
         existingRootFields = (rootData && rootData.fields && typeof rootData.fields === 'object') ? rootData.fields : null;
+        rootReadSucceeded = true;
+      } else if (rootCheck && rootCheck.status === 404) {
+        // Document does not exist yet — safe to create fresh without merge conflict
+        existingRootFields = null;
+        rootReadSucceeded = true;
       }
     } catch (e) {
       existingRootFields = null;
+      rootReadSucceeded = false;
     }
   }
 
@@ -591,14 +599,38 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     fieldsToPatch.deletedStaffIds = Array.from(combinedDeleted);
   }
 
-  let resolvedMenuVersion = null;
+  const existingCloudMenuVer = Math.max(
+    Number(cachedStore?.menuVersion || 0) || 0,
+    Number(existingRootFields?.menuVersion ? firestoreValueToJson(existingRootFields.menuVersion) : 0) || 0
+  );
+
+  let incomingMenuVer = null;
   if (typeof payload.menuVersion === 'number' || typeof payload.menuVersion === 'string') {
     const v = Number(payload.menuVersion);
     if (Number.isFinite(v) && v >= 0 && String(payload.menuVersion).trim() !== '') {
-      resolvedMenuVersion = v;
-      fieldsToPatch.menuVersion = v;
+      incomingMenuVer = v;
     }
   }
+
+  let resolvedMenuVersion = null;
+  const isMenuCatalogWrite = Array.isArray(payload.menu) || Array.isArray(payload.categories);
+  if (isMenuCatalogWrite) {
+    // Strictly monotonic server menuVersion: NEVER downgrade existing cloud version (e.g. 1.795e12 -> 6)
+    // and prevent same-version (v+1 vs v+1) concurrent admin collisions across devices.
+    const fallbackVer = existingCloudMenuVer > 0
+      ? (existingCloudMenuVer + 1)
+      : ((incomingMenuVer !== null && incomingMenuVer > 0) ? incomingMenuVer : 1);
+    if (incomingMenuVer !== null && incomingMenuVer > existingCloudMenuVer) {
+      resolvedMenuVersion = incomingMenuVer;
+    } else {
+      resolvedMenuVersion = fallbackVer;
+    }
+    fieldsToPatch.menuVersion = resolvedMenuVersion;
+  } else if (incomingMenuVer !== null) {
+    resolvedMenuVersion = Math.max(existingCloudMenuVer, incomingMenuVer);
+    fieldsToPatch.menuVersion = resolvedMenuVersion;
+  }
+
   if (Array.isArray(payload.menu)) {
     fieldsToPatch.menu = payload.menu;
   }
@@ -620,25 +652,38 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
   if (Array.isArray(payload.categories)) fieldsToPatch.categories = payload.categories;
 
-  if (payload.menuVersion === undefined && (Array.isArray(payload.menu) || Array.isArray(payload.categories)) && resolvedMenuVersion === null) {
-    resolvedMenuVersion = Date.now();
-    fieldsToPatch.menuVersion = resolvedMenuVersion;
-  }
-
   let mergedTables = null;
+  let usePerTableDotMask = false;
+  let perTableMaskKeys = [];
   if (hasTablesPayload) {
-    const existingTablesRaw = (cachedStore?._quotaFallbackActive && cachedStore.tables)
-      ? cachedStore.tables
-      : (existingRootFields?.tables ? firestoreValueToJson(existingRootFields.tables) : {});
-    mergedTables = (existingTablesRaw && typeof existingTablesRaw === 'object' && !Array.isArray(existingTablesRaw))
-      ? { ...existingTablesRaw }
-      : {};
-    for (const [tId, tData] of Object.entries(payload.tables)) {
-      if (tData !== undefined && tData !== null) {
-        mergedTables[tId] = mergeTableEntry(mergedTables[tId], tData);
+    const hasAuthoritativeExistingTables = rootReadSucceeded || Boolean(cachedStore?.tables && typeof cachedStore.tables === 'object' && Object.keys(cachedStore.tables).length > 0);
+    const incomingTableKeys = Object.keys(payload.tables).filter(k => payload.tables[k] !== undefined && payload.tables[k] !== null);
+    const allKeysDotSafe = incomingTableKeys.length > 0 && incomingTableKeys.every(k => /^[A-Za-z0-9_]+$/.test(k));
+
+    if (!payload.replaceTables && !hasAuthoritativeExistingTables && allKeysDotSafe) {
+      // Cold-container safety: GET rootUrl failed & no warm cache exists.
+      // Use Firestore per-table dot-path field masks (tables.<tId>) so we NEVER wipe other occupied tables!
+      mergedTables = {};
+      for (const tId of incomingTableKeys) {
+        mergedTables[tId] = { ...payload.tables[tId] };
       }
+      usePerTableDotMask = true;
+      perTableMaskKeys = incomingTableKeys;
+      fieldsToPatch.tables = mergedTables;
+    } else {
+      const existingTablesRaw = (cachedStore?._quotaFallbackActive && cachedStore.tables)
+        ? cachedStore.tables
+        : (existingRootFields?.tables ? firestoreValueToJson(existingRootFields.tables) : (cachedStore?.tables || {}));
+      mergedTables = (existingTablesRaw && typeof existingTablesRaw === 'object' && !Array.isArray(existingTablesRaw))
+        ? { ...existingTablesRaw }
+        : {};
+      for (const [tId, tData] of Object.entries(payload.tables)) {
+        if (tData !== undefined && tData !== null) {
+          mergedTables[tId] = mergeTableEntry(mergedTables[tId], tData);
+        }
+      }
+      fieldsToPatch.tables = mergedTables;
     }
-    fieldsToPatch.tables = mergedTables;
   } else if (payload.tables && typeof payload.tables === 'object' && !Array.isArray(payload.tables) && payload.replaceTables) {
     fieldsToPatch.tables = {};
   }
@@ -672,8 +717,18 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     }
   }
 
-  // Build field paths for updateMask
-  const updateMaskParams = Object.keys(fieldsToPatch)
+  // Build field paths for updateMask (using per-table dot paths when cold-container GET failed so other tables are never wiped)
+  const updateMaskFieldList = [];
+  for (const fieldKey of Object.keys(fieldsToPatch)) {
+    if (fieldKey === 'tables' && usePerTableDotMask && perTableMaskKeys.length > 0) {
+      for (const tKey of perTableMaskKeys) {
+        updateMaskFieldList.push(`tables.${tKey}`);
+      }
+    } else {
+      updateMaskFieldList.push(fieldKey);
+    }
+  }
+  const updateMaskParams = updateMaskFieldList
     .map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`)
     .join('&');
   const patchUrl = `${rootUrl}?${updateMaskParams}`;
@@ -974,6 +1029,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     success: true,
     storeCode: code,
     syncedFields: Object.keys(fieldsToPatch),
+    menuVersion: resolvedMenuVersion !== null ? resolvedMenuVersion : undefined,
     staffCount: staffToSubdoc.length,
     deletedStaffId: deletedIdStr || undefined,
     deletedStaffIds: deletedStaffIdSet.size > 0 ? Array.from(deletedStaffIdSet) : undefined,

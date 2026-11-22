@@ -2516,12 +2516,20 @@
                 ]);
             }
 
-            // Double-check localStorage offline queue before wiping anything
+            // Double-check localStorage offline queue strictly for the active storeCode before wiping anything
             try {
                 const rawQueue = localStorage.getItem('billnaw_offline_sync_queue');
                 if (rawQueue) {
                     const parsedQ = JSON.parse(rawQueue);
-                    if (parsedQ && typeof parsedQ === 'object' && Object.keys(parsedQ).length > 0) {
+                    const activeCode = String((typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || localStorage.getItem('billnaw_store_code') || '').trim().toUpperCase();
+                    const hasActiveStorePending = parsedQ && typeof parsedQ === 'object' && Object.keys(parsedQ).some(k => {
+                        const entry = parsedQ[k];
+                        if (!entry || typeof entry !== 'object') return false;
+                        const entryCode = String(entry.storeCode || k).trim().toUpperCase();
+                        if (activeCode && entryCode && entryCode !== activeCode) return false;
+                        return Boolean(entry.tables || entry.history || entry.kots || entry.expenses || entry.customers || entry.menu);
+                    });
+                    if (hasActiveStorePending) {
                         queueDrained = false;
                     }
                 }
@@ -2548,14 +2556,32 @@
                 'billnaw_station_profile', 'billnaw_station_name',
                 'billnaw_printers_config', 'pos_dual_printers',
                 'billnaw_single_printer_mode', 'billnaw_master_print_hub', 'billnaw_kot_relay_mode',
-                'billnaw_data_epoch', 'billnaw_app_data_epoch'
+                'billnaw_data_epoch', 'billnaw_app_data_epoch', 'billnaw_last_bill_no'
             ];
             const preservedSnapshot = {};
             const sessionAuthToken = (typeof sessionStorage !== 'undefined') ? sessionStorage.getItem('billnaw_auth_token') : null;
             try {
                 PRESERVE_KEYS.forEach(k => {
                     const v = localStorage.getItem(k);
-                    if (v !== null) preservedSnapshot[k] = v;
+                    if (v !== null) {
+                        if (k === 'billnaw_shop_session') {
+                            // Strip stale embedded business collections (menu/staff/tables/history) from preserved session
+                            // so v3.0.0 boot never briefly hydrates pre-update items before clean cloud resync completes.
+                            try {
+                                const sessParsed = JSON.parse(v);
+                                if (sessParsed && sessParsed.shop && typeof sessParsed.shop === 'object') {
+                                    const { menu, staff, tables, history, categories, expenses, customers, ...cleanShopMeta } = sessParsed.shop;
+                                    preservedSnapshot[k] = JSON.stringify({ ...sessParsed, shop: cleanShopMeta });
+                                } else {
+                                    preservedSnapshot[k] = v;
+                                }
+                            } catch (_) {
+                                preservedSnapshot[k] = v;
+                            }
+                        } else {
+                            preservedSnapshot[k] = v;
+                        }
+                    }
                 });
                 if (!preservedSnapshot.billnaw_auth_token && sessionAuthToken) {
                     preservedSnapshot.billnaw_auth_token = sessionAuthToken;

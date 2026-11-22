@@ -32,13 +32,30 @@ export function initMigratedDb() {
         db.createObjectStore('store');
       }
 
-      // Version 2: Specialized stores for high-throughput offline access
+      // Version 2: Unified high-performance object stores (identical across js/core.js & db-migrator.js)
+      if (!db.objectStoreNames.contains('orders')) {
+        const orderStore = db.createObjectStore('orders', { keyPath: 'id' });
+        orderStore.createIndex('by_date', 'createdAt', { unique: false });
+        orderStore.createIndex('by_status', 'status', { unique: false });
+        orderStore.createIndex('by_customer', 'customerPhone', { unique: false });
+        orderStore.createIndex('by_staff', 'staffId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('kot_records')) {
+        const kotStore = db.createObjectStore('kot_records', { keyPath: 'id' });
+        kotStore.createIndex('by_table', 'tableNumber', { unique: false });
+        kotStore.createIndex('by_date', 'createdAt', { unique: false });
+        kotStore.createIndex('by_status', 'status', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('menu_items')) {
+        const menuStore = db.createObjectStore('menu_items', { keyPath: 'id' });
+        menuStore.createIndex('by_category', 'category', { unique: false });
+        menuStore.createIndex('by_name', 'name', { unique: false });
+      }
       if (!db.objectStoreNames.contains('offline_sync_queue')) {
         const queueStore = db.createObjectStore('offline_sync_queue', { keyPath: 'id', autoIncrement: true });
         queueStore.createIndex('timestamp', 'timestamp', { unique: false });
         queueStore.createIndex('status', 'status', { unique: false });
       }
-
       if (!db.objectStoreNames.contains('local_settings')) {
         db.createObjectStore('local_settings', { keyPath: 'key' });
       }
@@ -46,6 +63,10 @@ export function initMigratedDb() {
 
     req.onsuccess = (e) => {
       dbInstance = e.target.result;
+      dbInstance.onversionchange = () => {
+        try { dbInstance.close(); } catch (_) {}
+        dbInstance = null;
+      };
       console.log('[DBMigrator] Connected to CafePOS_DB v' + dbInstance.version);
       resolve(dbInstance);
     };

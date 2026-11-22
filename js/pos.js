@@ -2310,7 +2310,17 @@ async function confirmCheckout() {
                 return (Number.isFinite(parsed) && parsed > maxNo) ? parsed : maxNo;
             }, 0)
             : 0;
-        const generatedBillNo = Math.max(currentStartNo, highestExistingBill + 1);
+        const persistedLastBillNo = Math.max(
+            Number((typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_last_bill_no') : 0) || 0) || 0,
+            Number((shopProfile && shopProfile.lastBillNo) || 0) || 0
+        );
+        const generatedBillNo = Math.max(currentStartNo, highestExistingBill + 1, persistedLastBillNo + 1);
+        if (typeof recordHighestBillNumber === 'function') {
+            recordHighestBillNumber(generatedBillNo);
+        } else {
+            try { localStorage.setItem('billnaw_last_bill_no', String(generatedBillNo)); } catch (_) {}
+            if (shopProfile) shopProfile.lastBillNo = generatedBillNo;
+        }
 
         const newOrder = { 
             id: Date.now(), 
