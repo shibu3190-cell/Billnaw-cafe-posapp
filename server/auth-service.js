@@ -651,6 +651,8 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid,
   const shopTitle = name || 'Billnaw Cafe';
   const effectivePin = (adminPin && /^\d{4}$/.test(String(adminPin).trim())) ? String(adminPin).trim() : '1234';
   const pinHash = hashStringServer(effectivePin);
+  const pinSalt = crypto.randomBytes(16).toString('hex');
+  const saltedPinHash = crypto.createHash('sha256').update(`${effectivePin}:${pinSalt}:billnaw_pin_v2`).digest('hex');
   const seedStarterMenu = !(options && options.isExistingLogin === true);
   return {
     storeCode,
@@ -662,23 +664,35 @@ export function createDefaultShopDocument(storeCode, name, ownerEmail, ownerUid,
     menuVersion: seedStarterMenu ? 1 : 0,
     profile: {
       name: shopTitle,
-      address: '12 Park Street, Kolkata',
-      phone: '+91 98765 43210',
-      fssai: '12345678901234',
-      gstin: '19AAAAA0000A1Z5',
+      address: '',
+      phone: '',
+      fssai: '',
+      gstin: '',
       tableCount: 5,
       floors: ['Ground Floor', '1st Floor', 'Outdoor'],
       tableNamingPrefix: 'Table ',
       startInvoiceNo: 1001,
       adminPinHash: pinHash,
-      upiId: 'billnaw@upi',
-      showQr: true,
+      adminPinSalt: pinSalt,
+      adminSaltedPinHash: saltedPinHash,
+      upiId: '',
+      showQr: false,
       gstMode: 'inclusive',
       defaultGstRate: 5,
       discountsEnabled: true
     },
     staff: [
-      { id: 1, name: 'Store Owner', role: 'Admin', pin: effectivePin, phone: '+91 98765 43210', status: 'Active' }
+      {
+        id: 1,
+        name: 'Store Owner',
+        role: 'Admin',
+        pinSalt,
+        pin_salt: pinSalt,
+        pinHash: saltedPinHash,
+        pin_hash: saltedPinHash,
+        phone: '',
+        status: 'Active'
+      }
     ],
     categories: seedStarterMenu ? ['All', 'Snacks', 'Beverages', 'Main Course'] : [],
     menu: seedStarterMenu ? [

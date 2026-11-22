@@ -303,6 +303,7 @@ async function loadLogo(event) {
             const compressed = await resizeAndCompressLogo(file, 154, 35840);
             if (compressed) {
                 shopProfile.logo = compressed;
+                delete shopProfile.clearLogo;
                 updateProfileVisuals();
                 persistProfile();
                 showToast("Logo updated & compressed (< 35 KB).");
@@ -331,7 +332,8 @@ async function loadLogo(event) {
                 q -= 0.12;
                 dataUrl = canvas.toDataURL('image/jpeg', q);
             }
-            shopProfile.logo = dataUrl; 
+            shopProfile.logo = dataUrl;
+            delete shopProfile.clearLogo;
             updateProfileVisuals(); persistProfile(); showToast("Logo Updated.");
         };
         img.src = e.target.result;
@@ -339,6 +341,16 @@ async function loadLogo(event) {
     reader.readAsDataURL(file); 
 }
 window.loadLogo = loadLogo;
+
+function clearShopLogo() {
+    if (!shopProfile) shopProfile = {};
+    shopProfile.logo = '';
+    shopProfile.clearLogo = true;
+    updateProfileVisuals();
+    persistProfile();
+    showToast("Shop logo cleared.");
+}
+window.clearShopLogo = clearShopLogo;
 
 function generateSettingsQRPreview() {
     const previewContainer = document.getElementById('settingsQrPreview');
@@ -488,21 +500,33 @@ function saveSettings() {
     
     const shopUpiIdInput = document.getElementById('shopUpiIdInput');
     const upiIdInput = document.getElementById('upiIdInput');
+    const prevUpiBeforeSave = String(shopProfile.upiId || '').trim();
+    let upiExplicitlyCleared = false;
     if (storeOpen && !payOpen && shopUpiIdInput) {
         shopProfile.upiId = shopUpiIdInput.value.trim();
+        upiExplicitlyCleared = Boolean(prevUpiBeforeSave && !shopProfile.upiId);
     } else if (payOpen && !storeOpen && upiIdInput) {
         shopProfile.upiId = upiIdInput.value.trim();
+        upiExplicitlyCleared = Boolean(prevUpiBeforeSave && !shopProfile.upiId);
     } else {
         const sVal = shopUpiIdInput && shopUpiIdInput.value ? shopUpiIdInput.value.trim() : '';
         const pVal = upiIdInput && upiIdInput.value ? upiIdInput.value.trim() : '';
-        const prevUpi = shopProfile.upiId || '';
+        const prevUpi = prevUpiBeforeSave;
         if (sVal && sVal !== prevUpi) {
             shopProfile.upiId = sVal;
         } else if (pVal && pVal !== prevUpi) {
             shopProfile.upiId = pVal;
         } else if (sVal || pVal) {
             shopProfile.upiId = sVal || pVal;
+        } else if ((shopUpiIdInput || upiIdInput) && prevUpi && !anyModalOpen) {
+            shopProfile.upiId = '';
+            upiExplicitlyCleared = true;
         }
+    }
+    if (shopProfile.upiId) {
+        delete shopProfile.clearUpiId;
+    } else if (upiExplicitlyCleared) {
+        shopProfile.clearUpiId = true;
     }
     if (shopUpiIdInput) shopUpiIdInput.value = shopProfile.upiId || '';
     if (upiIdInput) upiIdInput.value = shopProfile.upiId || '';

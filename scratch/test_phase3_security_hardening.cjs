@@ -314,6 +314,86 @@ async function main() {
         assert.ok(Array.isArray(bapi.staff) && bapi.staff.length >= 8, 'SHOP_BAPI92HALDER staff must remain intact');
     });
 
+    // =========================================================================
+    // P3-06: Operational Polish (Clean new-shop defaults, salted signup PIN, explicit clearUpiId/clearLogo)
+    // =========================================================================
+    await runTest('P3-06', 'New-shop clean defaults, salted signup admin PIN (no plaintext pin) & explicit clearUpiId/clearLogo sync', async () => {
+        const { createDefaultShopDocument } = await import('../server/auth-service.js');
+        const { syncStoreToFirestoreREST } = await import('../server/sync-service.js');
+
+        // 1. Clean new-shop defaults & zero plaintext PIN on staff[0]
+        const newShop = createDefaultShopDocument('SHOP_CLEAN_NEW', 'Fresh Roast', 'owner@freshroast.in', 'uid_fr', '7890', { isExistingLogin: false });
+        assert.strictEqual(newShop.profile.address, '', 'New shop address must default empty (no dummy Kolkata address)');
+        assert.strictEqual(newShop.profile.phone, '', 'New shop phone must default empty');
+        assert.strictEqual(newShop.profile.fssai, '', 'New shop fssai must default empty');
+        assert.strictEqual(newShop.profile.gstin, '', 'New shop gstin must default empty');
+        assert.strictEqual(newShop.profile.upiId, '', 'New shop upiId must default empty');
+        assert.strictEqual(newShop.profile.showQr, false, 'New shop showQr must default false until UPI is configured');
+        assert.strictEqual(newShop.profile.gstMode, 'inclusive');
+        assert.strictEqual(newShop.profile.defaultGstRate, 5);
+        assert.strictEqual(newShop.staff[0].pin, undefined, 'Signup staff[0] MUST NOT store plaintext pin');
+        assert.ok(newShop.staff[0].pinSalt && newShop.staff[0].pinSalt.length === 32, 'Signup staff[0] must store 32-char hex pinSalt');
+        assert.ok(newShop.staff[0].pinHash && newShop.staff[0].pinHash.length === 64, 'Signup staff[0] must store SHA-256 pinHash');
+        assert.strictEqual(newShop.staff[0].pinHash, newShop.staff[0].pin_hash, 'pinHash and pin_hash must match');
+
+        // 2. Explicit clearUpiId / clearLogo vs partial-update preservation on server sync
+        const origFetch = global.fetch;
+        let storedProfile = { name: 'Demo Cafe', upiId: 'old@upi', logo: 'data:image/jpeg;base64,OLD', showQr: true };
+        global.fetch = async (url, opts = {}) => {
+            if (opts.method === 'PATCH') {
+                const body = JSON.parse(opts.body);
+                const pf = body.fields?.profile?.mapValue?.fields || {};
+                storedProfile = {
+                    name: pf.name?.stringValue ?? storedProfile.name,
+                    upiId: pf.upiId?.stringValue ?? '',
+                    logo: pf.logo?.stringValue ?? '',
+                    clearUpiId: pf.clearUpiId?.booleanValue ?? false,
+                    clearLogo: pf.clearLogo?.booleanValue ?? false
+                };
+                return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+            }
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    fields: {
+                        storeCode: { stringValue: 'SHOP_CLEAR_TEST' },
+                        profile: {
+                            mapValue: {
+                                fields: {
+                                    name: { stringValue: storedProfile.name },
+                                    upiId: { stringValue: storedProfile.upiId },
+                                    logo: { stringValue: storedProfile.logo }
+                                }
+                            }
+                        }
+                    }
+                }),
+                text: async () => '{}'
+            };
+        };
+        try {
+            // Partial update omitting upiId/logo MUST preserve existing values
+            await syncStoreToFirestoreREST('SHOP_CLEAR_TEST', { profile: { name: 'Demo Cafe Renamed' } });
+            assert.strictEqual(storedProfile.upiId, 'old@upi', 'Partial update without clearUpiId must preserve upiId');
+            assert.strictEqual(storedProfile.logo, 'data:image/jpeg;base64,OLD', 'Partial update without clearLogo must preserve logo');
+
+            // Explicit clearUpiId + clearLogo MUST clear both to empty string
+            await syncStoreToFirestoreREST('SHOP_CLEAR_TEST', { profile: { name: 'Demo Cafe Renamed', upiId: '', clearUpiId: true, logo: '', clearLogo: true } });
+            assert.strictEqual(storedProfile.upiId, '', 'Explicit clearUpiId:true must clear upiId to empty string');
+            assert.strictEqual(storedProfile.logo, '', 'Explicit clearLogo:true must clear logo to empty string');
+
+            // Setting new upiId & logo afterward must reset clear flags and persist new values
+            await syncStoreToFirestoreREST('SHOP_CLEAR_TEST', { profile: { name: 'Demo Cafe Renamed', upiId: 'fresh@upi', logo: 'data:image/jpeg;base64,NEW' } });
+            assert.strictEqual(storedProfile.upiId, 'fresh@upi', 'Setting new upiId after clear must persist cleanly');
+            assert.strictEqual(storedProfile.logo, 'data:image/jpeg;base64,NEW', 'Setting new logo after clear must persist cleanly');
+            assert.strictEqual(storedProfile.clearUpiId, false, 'clearUpiId must reset to false once a new upiId is saved');
+            assert.strictEqual(storedProfile.clearLogo, false, 'clearLogo must reset to false once a new logo is saved');
+        } finally {
+            global.fetch = origFetch;
+        }
+    });
+
     console.log('\n====================================================================');
     console.log(`Phase 3 Summary: ${passed} passed, ${failed} failed`);
     console.log('====================================================================');

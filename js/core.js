@@ -2682,13 +2682,25 @@ function handleRemoteFirestoreUpdate(data) {
         }
 
         shopProfile = { ...shopProfile, ...incomingProfile };
-        if (data.logo && !shopProfile.logo) shopProfile.logo = data.logo;
-        if (data.upiId && !shopProfile.upiId) shopProfile.upiId = data.upiId;
+        if (incomingProfile.clearLogo === true) {
+            shopProfile.logo = '';
+            try { localStorage.removeItem('billnaw_shop_logo'); } catch (_) {}
+            try { if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_logo', ''); } catch (_) {}
+        } else if (data.logo && !shopProfile.logo) {
+            shopProfile.logo = data.logo;
+        }
+        if (incomingProfile.clearUpiId === true) {
+            shopProfile.upiId = '';
+            try { localStorage.removeItem('billnaw_shop_upi_id'); } catch (_) {}
+            try { if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_upi_id', ''); } catch (_) {}
+        } else if (data.upiId && !shopProfile.upiId) {
+            shopProfile.upiId = data.upiId;
+        }
         if (data.showQr !== undefined && shopProfile.showQr === undefined) shopProfile.showQr = Boolean(data.showQr);
         const resolvedTableCount = incomingTableCount > 0 ? incomingTableCount : (existingTableCount > 0 ? existingTableCount : 5);
         shopProfile.tableCount = Math.max(resolvedTableCount, highestOccupiedTable);
-        if (!shopProfile.logo && existingLogo) shopProfile.logo = existingLogo;
-        if (!shopProfile.upiId && existingUpi) shopProfile.upiId = existingUpi;
+        if (!shopProfile.logo && existingLogo && incomingProfile.clearLogo !== true) shopProfile.logo = existingLogo;
+        if (!shopProfile.upiId && existingUpi && incomingProfile.clearUpiId !== true) shopProfile.upiId = existingUpi;
         if (shopProfile.showQr === undefined && existingShowQr !== undefined) shopProfile.showQr = existingShowQr;
         if (existingName && (!shopProfile.name || shopProfile.name === 'My Cafe' || shopProfile.name === 'billnaw')) {
             shopProfile.name = existingName;
@@ -5257,9 +5269,13 @@ function persistProfile() {
     window.shopProfile = shopProfile;
     idb.set('cafe_profile', shopProfile); 
     if (shopProfile.upiId) {
+        delete shopProfile.clearUpiId;
         idb.set('cafe_upi_id', shopProfile.upiId);
+    } else if (shopProfile.clearUpiId === true) {
+        idb.set('cafe_upi_id', '');
     }
     if (shopProfile.logo) {
+        delete shopProfile.clearLogo;
         idb.set('cafe_logo', shopProfile.logo);
         if (shopProfile.logo.length * 0.75 > 35840 && typeof resizeAndCompressLogo === 'function') {
             resizeAndCompressLogo(shopProfile.logo, 154, 35840).then(compact => {
@@ -5270,6 +5286,8 @@ function persistProfile() {
                 }
             }).catch(() => {});
         }
+    } else if (shopProfile.clearLogo === true) {
+        idb.set('cafe_logo', '');
     }
 
     // Quad-Tier Local Persistence: Save JSON + discrete keys to prevent wipe on cache clear
@@ -5292,6 +5310,8 @@ function persistProfile() {
     try {
         if (shopProfile.logo && shopProfile.logo.length < 2000000) {
             localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
+        } else if (shopProfile.clearLogo === true) {
+            localStorage.removeItem('billnaw_shop_logo');
         }
     } catch(e) {}
 
@@ -5304,8 +5324,11 @@ function persistProfile() {
                 if (!sess.shop) sess.shop = {};
                 if (shopProfile.name) sess.shop.name = shopProfile.name;
                 if (shopProfile.logo) sess.shop.logo = shopProfile.logo;
-                if (shopProfile.address) sess.shop.address = shopProfile.address;
-                if (shopProfile.phone) sess.shop.phone = shopProfile.phone;
+                else if (shopProfile.clearLogo === true) sess.shop.logo = '';
+                if (shopProfile.upiId) sess.shop.upiId = shopProfile.upiId;
+                else if (shopProfile.clearUpiId === true) sess.shop.upiId = '';
+                if (shopProfile.address !== undefined) sess.shop.address = shopProfile.address;
+                if (shopProfile.phone !== undefined) sess.shop.phone = shopProfile.phone;
                 sess.shop.profile = { ...(sess.shop.profile || {}), ...shopProfile };
                 localStorage.setItem('billnaw_shop_session', JSON.stringify(sess));
             }

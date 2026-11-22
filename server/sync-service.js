@@ -101,11 +101,15 @@ export async function saveStoreStateToPersistentCache(code, state) {
     for (const [k, v] of Object.entries(state)) {
       if (v !== undefined) {
         if (k === 'profile' && v && typeof v === 'object' && existing.profile && typeof existing.profile === 'object') {
+          const resolvedLogo = v.clearLogo === true ? '' : (v.logo || existing.profile.logo);
+          const resolvedUpi = v.clearUpiId === true ? '' : (v.upiId || existing.profile.upiId);
           mergedState.profile = {
             ...existing.profile,
             ...v,
-            logo: v.logo || existing.profile.logo,
-            upiId: v.upiId || existing.profile.upiId,
+            logo: resolvedLogo,
+            upiId: resolvedUpi,
+            clearLogo: v.clearLogo === true ? true : (v.logo ? false : existing.profile.clearLogo),
+            clearUpiId: v.clearUpiId === true ? true : (v.upiId ? false : existing.profile.clearUpiId),
             showQr: v.showQr !== undefined ? v.showQr : existing.profile.showQr,
             name: v.name || existing.profile.name
           };
@@ -117,8 +121,10 @@ export async function saveStoreStateToPersistentCache(code, state) {
   }
   // Guarantee top-level logo & upiId aliases if present in profile for resilient cross-device reads
   if (mergedState.profile) {
-    if (mergedState.profile.logo) mergedState.logo = mergedState.profile.logo;
-    if (mergedState.profile.upiId) mergedState.upiId = mergedState.profile.upiId;
+    if (mergedState.profile.clearLogo === true) mergedState.logo = '';
+    else if (mergedState.profile.logo) mergedState.logo = mergedState.profile.logo;
+    if (mergedState.profile.clearUpiId === true) mergedState.upiId = '';
+    else if (mergedState.profile.upiId) mergedState.upiId = mergedState.profile.upiId;
     if (mergedState.profile.showQr !== undefined) mergedState.showQr = mergedState.profile.showQr;
   }
   if (state && state.staff === undefined && existing.staff !== undefined) {
@@ -512,11 +518,22 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
                             (cachedStore?.profile && typeof cachedStore.profile === 'object' ? cachedStore.profile : null) ||
                             {};
     const mergedProfile = { ...existingProfile, ...payload.profile };
-    // Defensively preserve logo and upiId if omitted or blank in incoming partial profile
-    if (!payload.profile.logo && existingProfile.logo) {
+    // Defensively preserve logo and upiId if omitted or blank in incoming partial profile,
+    // unless caller explicitly sends clearLogo: true or clearUpiId: true.
+    if (payload.profile.clearLogo === true) {
+      mergedProfile.logo = '';
+      mergedProfile.clearLogo = true;
+    } else if (payload.profile.logo) {
+      mergedProfile.clearLogo = false;
+    } else if (existingProfile.logo) {
       mergedProfile.logo = existingProfile.logo;
     }
-    if (!payload.profile.upiId && existingProfile.upiId) {
+    if (payload.profile.clearUpiId === true) {
+      mergedProfile.upiId = '';
+      mergedProfile.clearUpiId = true;
+    } else if (payload.profile.upiId) {
+      mergedProfile.clearUpiId = false;
+    } else if (existingProfile.upiId) {
       mergedProfile.upiId = existingProfile.upiId;
     }
     if (payload.profile.showQr === undefined && existingProfile.showQr !== undefined) {
