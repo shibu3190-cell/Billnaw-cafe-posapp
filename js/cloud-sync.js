@@ -87,12 +87,18 @@ window.setCloudSyncProgress = setCloudSyncProgress;
 
 let _pendingSelectedStaff = null;
 
-function showStaffProfileSelector(shopName = '') {
+function showStaffProfileSelector(shopName = '', options = {}) {
     const overlay = document.getElementById('staffProfileSelector');
     if (!overlay) return;
 
-    // Never flicker under/over higher-priority shop login, sync, pairing, or v3 update overlays
-    const activeOv = (typeof window.getActiveAuthOverlay === 'function') ? window.getActiveAuthOverlay() : null;
+    // Never flicker under/over higher-priority shop login, pairing, or v3 update overlays.
+    // If cloudSyncOverlay is currently finishing/hiding (or caller explicitly transitions from Cloud Sync after login),
+    // dismiss cloudSyncOverlay immediately so the post-login Profile & PIN screen is NEVER silently aborted!
+    let activeOv = (typeof window.getActiveAuthOverlay === 'function') ? window.getActiveAuthOverlay() : null;
+    if (activeOv === 'cloudSyncOverlay' && (_cloudSyncHideTimer !== null || (options && options.fromCloudSync === true))) {
+        hideCloudSyncOverlay(true);
+        activeOv = (typeof window.getActiveAuthOverlay === 'function') ? window.getActiveAuthOverlay() : null;
+    }
     if (activeOv === 'shopAuthModal' || activeOv === 'appUpdateInstallOverlay' || activeOv === 'cloudSyncOverlay' || activeOv === 'devicePairingOverlay') {
         return;
     }
@@ -101,7 +107,10 @@ function showStaffProfileSelector(shopName = '') {
     const titleEl = document.getElementById('staffSelectorShopName');
     if (titleEl) titleEl.innerText = sName;
 
-    // Hide the "Skip" link whenever terminal is locked / requires fresh PIN verification (prevents post-upgrade PIN bypass)
+    // Reset any stale inline PIN prompt so user picks a profile cleanly
+    _cancelStaffPinEntry();
+
+    // Hide the "Skip" link whenever terminal is locked / requires fresh PIN verification (prevents post-login / post-upgrade PIN bypass)
     const skipBtn = overlay.querySelector('button[onclick*="hideStaffProfileSelector"]');
     const mustVerifyPin = (typeof localStorage !== 'undefined') && (
         localStorage.getItem('billnaw_terminal_locked') === 'true' ||

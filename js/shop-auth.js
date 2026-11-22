@@ -732,6 +732,12 @@
                         }
                     }
 
+                    // Enforce mandatory Staff Profile + 4-digit PIN selection after every shop login
+                    try {
+                        localStorage.setItem('billnaw_terminal_locked', 'true');
+                        localStorage.removeItem('billnaw_pin_verified_at');
+                    } catch (_) {}
+
                     updateShopAuthUI();
                     if (typeof updateCloudStoreTopbar === 'function') {
                         updateCloudStoreTopbar(data.user?.email || data.shop?.name || email, true);
@@ -780,38 +786,47 @@
                                 : undefined;
                             const incomingMenu = Array.isArray(sourceShop.menu) ? sourceShop.menu : undefined;
                             const isStaleTemplate = incomingMenu && typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(incomingMenu) && Number(sourceShop.menuVersion || 0) === 0;
-                            handleRemoteFirestoreUpdate({
-                                profile: sourceShop.profile,
-                                menu: isStaleTemplate ? undefined : incomingMenu,
-                                menuVersion: Number(sourceShop.menuVersion || 0),
-                                deletedMenuIds: sourceShop.deletedMenuIds,
-                                deletedMenuNames: sourceShop.deletedMenuNames,
-                                categories: sourceShop.categories,
-                                tables: remoteTables,
-                                staff: sourceShop.staff,
-                                history: sourceShop.history,
-                                customers: sourceShop.customers,
-                                expenses: sourceShop.expenses,
-                                khata: sourceShop.khata
-                            });
+                            try {
+                                handleRemoteFirestoreUpdate({
+                                    profile: sourceShop.profile,
+                                    menu: isStaleTemplate ? undefined : incomingMenu,
+                                    menuVersion: Number(sourceShop.menuVersion || 0),
+                                    deletedMenuIds: sourceShop.deletedMenuIds,
+                                    deletedMenuNames: sourceShop.deletedMenuNames,
+                                    categories: sourceShop.categories,
+                                    tables: remoteTables,
+                                    staff: sourceShop.staff,
+                                    history: sourceShop.history,
+                                    customers: sourceShop.customers,
+                                    expenses: sourceShop.expenses,
+                                    khata: sourceShop.khata
+                                });
+                            } catch (hydrateErr) {
+                                console.warn("Post-login cloud hydrate warning:", hydrateErr);
+                            }
                         }
                     }
 
                     // Attach real-time Firestore listener for /shops/{storeCode} AFTER database is initialized
-                    if (typeof attachFirestoreListener === 'function') {
-                        attachFirestoreListener(data.storeCode);
+                    try {
+                        if (typeof attachFirestoreListener === 'function') {
+                            attachFirestoreListener(data.storeCode);
+                        }
+                        if (typeof updateAllUI === 'function') updateAllUI();
+                        if (typeof renderTables === 'function') renderTables();
+                        if (typeof syncTableUI === 'function') syncTableUI();
+                    } catch (uiErr) {
+                        console.warn("Post-login UI sync warning:", uiErr);
                     }
 
-                    if (typeof updateAllUI === 'function') updateAllUI();
-                    if (typeof renderTables === 'function') renderTables();
-                    if (typeof syncTableUI === 'function') syncTableUI();
-
                     setTimeout(() => {
-                        if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay();
+                        if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay(true);
                         if (typeof showStaffProfileSelector === 'function') {
-                            showStaffProfileSelector(data.shop?.name || email);
+                            showStaffProfileSelector(data.shop?.name || email, { fromCloudSync: true });
+                        } else if (typeof lockTerminal === 'function') {
+                            lockTerminal(false);
                         }
-                    }, 500);
+                    }, 350);
                 } else {
                     const errMsg = (data && data.error) ? data.error : (res.status === 401 ? 'Incorrect or expired verification code. Use the auto-filled code or click Resend.' : 'Invalid verification code');
                     showValidationMsg('loginEmailValidationFeedback', errMsg, 'error');
@@ -1036,6 +1051,12 @@
                         }
                     }
 
+                    // Enforce mandatory Staff Profile + 4-digit PIN selection after every shop login
+                    try {
+                        localStorage.setItem('billnaw_terminal_locked', 'true');
+                        localStorage.removeItem('billnaw_pin_verified_at');
+                    } catch (_) {}
+
                     updateShopAuthUI();
                     if (typeof updateCloudStoreTopbar === 'function') {
                         updateCloudStoreTopbar(data.user?.email || data.shop?.name || email, true);
@@ -1084,38 +1105,47 @@
                                 : undefined;
                             const incomingMenu = Array.isArray(sourceShop.menu) ? sourceShop.menu : undefined;
                             const isStaleTemplate = incomingMenu && typeof isDefaultTemplateMenu === 'function' && isDefaultTemplateMenu(incomingMenu) && Number(sourceShop.menuVersion || 0) === 0;
-                            handleRemoteFirestoreUpdate({
-                                profile: sourceShop.profile,
-                                menu: isStaleTemplate ? undefined : incomingMenu,
-                                menuVersion: Number(sourceShop.menuVersion || 0),
-                                deletedMenuIds: sourceShop.deletedMenuIds,
-                                deletedMenuNames: sourceShop.deletedMenuNames,
-                                categories: sourceShop.categories,
-                                tables: remoteTables,
-                                staff: sourceShop.staff,
-                                history: sourceShop.history,
-                                customers: sourceShop.customers,
-                                expenses: sourceShop.expenses,
-                                khata: sourceShop.khata
-                            });
+                            try {
+                                handleRemoteFirestoreUpdate({
+                                    profile: sourceShop.profile,
+                                    menu: isStaleTemplate ? undefined : incomingMenu,
+                                    menuVersion: Number(sourceShop.menuVersion || 0),
+                                    deletedMenuIds: sourceShop.deletedMenuIds,
+                                    deletedMenuNames: sourceShop.deletedMenuNames,
+                                    categories: sourceShop.categories,
+                                    tables: remoteTables,
+                                    staff: sourceShop.staff,
+                                    history: sourceShop.history,
+                                    customers: sourceShop.customers,
+                                    expenses: sourceShop.expenses,
+                                    khata: sourceShop.khata
+                                });
+                            } catch (hydrateErr) {
+                                console.warn("Post-login cloud hydrate warning:", hydrateErr);
+                            }
                         }
                     }
 
                     // Attach real-time Firestore listener for /shops/{storeCode} AFTER database is initialized
-                    if (typeof attachFirestoreListener === 'function') {
-                        attachFirestoreListener(data.storeCode);
+                    try {
+                        if (typeof attachFirestoreListener === 'function') {
+                            attachFirestoreListener(data.storeCode);
+                        }
+                        if (typeof updateAllUI === 'function') updateAllUI();
+                        if (typeof renderTables === 'function') renderTables();
+                        if (typeof syncTableUI === 'function') syncTableUI();
+                    } catch (uiErr) {
+                        console.warn("Post-login UI sync warning:", uiErr);
                     }
 
-                    if (typeof updateAllUI === 'function') updateAllUI();
-                    if (typeof renderTables === 'function') renderTables();
-                    if (typeof syncTableUI === 'function') syncTableUI();
-
                     setTimeout(() => {
-                        if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay();
+                        if (typeof hideCloudSyncOverlay === 'function') hideCloudSyncOverlay(true);
                         if (typeof showStaffProfileSelector === 'function') {
-                            showStaffProfileSelector(data.shop?.name || email);
+                            showStaffProfileSelector(data.shop?.name || email, { fromCloudSync: true });
+                        } else if (typeof lockTerminal === 'function') {
+                            lockTerminal(false);
                         }
-                    }, 500);
+                    }, 350);
                 } else {
                     const errMsg = (data && data.error) ? data.error : 'Invalid email or password';
                     alert(errMsg + '\n\nIf you have not registered your shop account yet, click "Sign Up" above to create your profile.');
@@ -1537,7 +1567,14 @@
                         updateCloudStoreTopbar(email, true);
                     }
                     if (typeof showToast === 'function') showToast('Shop Account Created & Verified! Welcome, ' + fn, 'success');
+                    try {
+                        localStorage.setItem('billnaw_terminal_locked', 'true');
+                        localStorage.removeItem('billnaw_pin_verified_at');
+                    } catch (_) {}
                     closeShopAuthModal();
+                    if (typeof showStaffProfileSelector === 'function') {
+                        showStaffProfileSelector(shop || email);
+                    }
                 } else {
                     const errMsg = (data && data.error) ? data.error : 'Failed to verify OTP & create account';
                     showValidationMsg('signupOtpValidationFeedback', errMsg, 'error');

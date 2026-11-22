@@ -7728,10 +7728,13 @@ function initStaffSystem() {
         const lastPinVerification = localStorage.getItem('billnaw_pin_verified_at');
         const is24hShiftValid = Boolean(lastPinVerification && (Date.now() - Number(lastPinVerification)) < (24 * 60 * 60 * 1000));
 
+        const isRealAuthMode = localStorage.getItem('billnaw_auth_mode') === 'authenticated';
         if (!skipLockOverlay && !isExpired && isAuthorized && currentStaff) {
             if (isLocked || !is24hShiftValid) {
-                // Multi-device or single-device: lock terminal ONLY if manually locked OR if 24 hours have elapsed
-                if (typeof lockTerminal === 'function' && typeof document !== 'undefined' && document.getElementById('loginOverlay')) {
+                // Multi-device or single-device: require profile & PIN selection if locked or 24h shift expired
+                if (typeof showStaffProfileSelector === 'function' && isRealAuthMode) {
+                    showStaffProfileSelector((shopProfile && shopProfile.name) || '');
+                } else if (typeof lockTerminal === 'function' && typeof document !== 'undefined' && document.getElementById('loginOverlay')) {
                     lockTerminal(false);
                 }
             } else {
@@ -7739,6 +7742,12 @@ function initStaffSystem() {
                 if (typeof unlockTerminal === 'function') {
                     unlockTerminal(currentStaff, false);
                 }
+            }
+        } else if (!skipLockOverlay && !isExpired && isRealAuthMode && (isLocked || !is24hShiftValid || !currentStaff)) {
+            if (typeof showStaffProfileSelector === 'function') {
+                showStaffProfileSelector((shopProfile && shopProfile.name) || '');
+            } else if (typeof lockTerminal === 'function') {
+                lockTerminal(false);
             }
         } else if (!skipLockOverlay && isLocked && typeof lockTerminal === 'function') {
             lockTerminal(false);
