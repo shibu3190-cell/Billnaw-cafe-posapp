@@ -499,11 +499,12 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   const needsProfileMerge = Boolean(payload.profile && typeof payload.profile === 'object') ||
                             Boolean(payload.logo || payload.upiId || payload.showQr !== undefined);
 
-  // Single optional GET rootUrl fetch for concurrent staff/tables/deletedStaffIds/profile/menuVersion merge
+  // Single optional GET rootUrl fetch for concurrent staff/tables/deletedStaffIds/profile/menuVersion/khata merge
   const needsMenuVersionCheck = Array.isArray(payload.menu) || Array.isArray(payload.categories) || payload.menuVersion !== undefined;
+  const needsKhataMerge = Array.isArray(payload.khata);
   let existingRootFields = null;
   let rootReadSucceeded = false;
-  if (needsStaffMerge || hasTablesPayload || needsDeletedStaffMerge || needsProfileMerge || needsMenuVersionCheck) {
+  if (needsStaffMerge || hasTablesPayload || needsDeletedStaffMerge || needsProfileMerge || needsMenuVersionCheck || needsKhataMerge) {
     try {
       const rootCheck = await fetch(rootUrl);
       if (rootCheck && rootCheck.ok && typeof rootCheck.json === 'function') {
@@ -699,6 +700,40 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
   if (Array.isArray(payload.expenses)) fieldsToPatch.expenses = payload.expenses;
   if (Array.isArray(payload.customers)) fieldsToPatch.customers = payload.customers;
+  if (Array.isArray(payload.khata)) {
+    const existingCloudKhata = existingRootFields?.khata ? firestoreValueToJson(existingRootFields.khata) : [];
+    const existingCachedKhata = Array.isArray(cachedStore?.khata) ? cachedStore.khata : [];
+    const khataMap = new Map();
+    const getKhataRecency = (entry) => {
+      if (!entry || typeof entry !== 'object') return 0;
+      const ts = Number(entry.updatedAt || entry.deletedAt || 0);
+      if (Number.isFinite(ts) && ts > 0) return ts;
+      const rawDate = entry.updatedAt || entry.deletedAt || entry.createdDate;
+      const parsed = rawDate ? Date.parse(rawDate) : 0;
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const mergeKhataEntry = (prev, next) => {
+      if (!prev) return next;
+      if (!next) return prev;
+      const tPrev = getKhataRecency(prev);
+      const tNext = getKhataRecency(next);
+      if (tNext > tPrev) return next;
+      if (tPrev > tNext) return prev;
+      if (next.isDeleted && !prev.isDeleted) return next;
+      if (prev.isDeleted && !next.isDeleted) return prev;
+      const pPrev = Array.isArray(prev.paymentsHistory) ? prev.paymentsHistory.length : 0;
+      const pNext = Array.isArray(next.paymentsHistory) ? next.paymentsHistory.length : 0;
+      if (pNext > pPrev) return next;
+      if (pPrev > pNext) return prev;
+      return Number(next.balanceDue || 0) <= Number(prev.balanceDue || 0) ? next : prev;
+    };
+    [...(Array.isArray(existingCloudKhata) ? existingCloudKhata : []), ...existingCachedKhata, ...payload.khata].forEach((entry) => {
+      if (!entry || !entry.id) return;
+      const key = String(entry.id);
+      khataMap.set(key, mergeKhataEntry(khataMap.get(key), entry));
+    });
+    fieldsToPatch.khata = Array.from(khataMap.values()).sort((a, b) => getKhataRecency(b) - getKhataRecency(a));
+  }
   if (Array.isArray(payload.kots)) fieldsToPatch.kots = payload.kots;
   if (payload.subscription) fieldsToPatch.subscription = payload.subscription;
   fieldsToPatch.updatedAt = timestamp;
@@ -707,7 +742,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   // If store had pending unsynced fields from a previous Firestore 429 quota fallback, include them so recovery flushes 100% of cached state
   const currentFieldsKeys = Object.keys(fieldsToPatch);
   if (cachedStore?._quotaFallbackActive) {
-    const dirtyKeys = ['ownerEmail', 'profile', 'name', 'staff', 'deletedStaffIds', 'menu', 'deletedMenuIds', 'deletedMenuNames', 'menuVersion', 'categories', 'tables', 'history', 'expenses', 'customers', 'kots', 'subscription'];
+    const dirtyKeys = ['ownerEmail', 'profile', 'name', 'staff', 'deletedStaffIds', 'menu', 'deletedMenuIds', 'deletedMenuNames', 'menuVersion', 'categories', 'tables', 'history', 'expenses', 'customers', 'khata', 'kots', 'subscription'];
     for (const dk of dirtyKeys) {
       if (fieldsToPatch[dk] === undefined && cachedStore[dk] !== undefined) {
         fieldsToPatch[dk] = (dk === 'history' && Array.isArray(cachedStore[dk]))
@@ -1104,6 +1139,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
           history: fullHistory ? (cached.history || []) : (cached.history || []).slice(0, MAX_ROOT_HISTORY_COUNT),
           expenses: cached.expenses || [],
           customers: cached.customers || [],
+          khata: cached.khata || [],
           kots: cached.kots || [],
           subscription: cached.subscription || null,
           updatedAt: cached.updatedAt || new Date().toISOString()
@@ -1135,6 +1171,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
       history: fullHistory ? parsedHistory : (Array.isArray(parsedHistory) ? parsedHistory.slice(0, MAX_ROOT_HISTORY_COUNT) : []),
       expenses: fields.expenses ? firestoreValueToJson(fields.expenses) : [],
       customers: fields.customers ? firestoreValueToJson(fields.customers) : [],
+      khata: fields.khata ? firestoreValueToJson(fields.khata) : [],
       kots: fields.kots ? firestoreValueToJson(fields.kots) : [],
       subscription: fields.subscription ? firestoreValueToJson(fields.subscription) : null,
       updatedAt: fields.updatedAt ? firestoreValueToJson(fields.updatedAt) : rawDoc.updateTime
@@ -1179,6 +1216,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
         history: resolvedHistory,
         expenses: (Array.isArray(cached.expenses) && cTime > fTime) ? cached.expenses : baseResult.expenses,
         customers: (Array.isArray(cached.customers) && cTime > fTime) ? cached.customers : baseResult.customers,
+        khata: (Array.isArray(cached.khata) && cTime > fTime) ? cached.khata : baseResult.khata,
         kots: (Array.isArray(cached.kots) && cTime > fTime) ? cached.kots : baseResult.kots,
         subscription: (cached.subscription && cTime > fTime) ? cached.subscription : baseResult.subscription,
         updatedAt: (cTime > fTime ? cached.updatedAt : undefined) || baseResult.updatedAt
@@ -1213,6 +1251,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
         history: fullHistory ? (cached.history || []) : (cached.history || []).slice(0, MAX_ROOT_HISTORY_COUNT),
         expenses: cached.expenses || [],
         customers: cached.customers || [],
+        khata: cached.khata || [],
         kots: cached.kots || [],
         subscription: cached.subscription || null,
         updatedAt: cached.updatedAt || new Date().toISOString()

@@ -791,7 +791,8 @@
                                 staff: sourceShop.staff,
                                 history: sourceShop.history,
                                 customers: sourceShop.customers,
-                                expenses: sourceShop.expenses
+                                expenses: sourceShop.expenses,
+                                khata: sourceShop.khata
                             });
                         }
                     }
@@ -1094,7 +1095,8 @@
                                 staff: sourceShop.staff,
                                 history: sourceShop.history,
                                 customers: sourceShop.customers,
-                                expenses: sourceShop.expenses
+                                expenses: sourceShop.expenses,
+                                khata: sourceShop.khata
                             });
                         }
                     }
@@ -1651,6 +1653,7 @@
             window.dailyExpenses = [];
             if (typeof customersList !== 'undefined') { customersList = []; }
             window.customersList = [];
+            if (typeof window.resetKhataState === 'function') { try { window.resetKhataState(); } catch (e) {} } else { window.khataList = []; }
             if (typeof staffList !== 'undefined') { staffList = []; }
             window.staffList = [];
             if (typeof currentCart !== 'undefined') { currentCart = []; }
@@ -1855,6 +1858,7 @@
         window.cart = [];
         if (typeof orderHistory !== 'undefined') orderHistory = [];
         if (typeof customersList !== 'undefined') customersList = [];
+        if (typeof window.resetKhataState === 'function') { try { window.resetKhataState(); } catch (e) {} } else { window.khataList = []; }
         if (typeof dailyExpenses !== 'undefined') dailyExpenses = [];
         if (typeof inventoryRawMaterials !== 'undefined') inventoryRawMaterials = [];
         if (typeof culinaryBatches !== 'undefined') culinaryBatches = [];

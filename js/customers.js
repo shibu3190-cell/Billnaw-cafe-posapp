@@ -1595,6 +1595,14 @@ function sendKhataWhatsAppReminder(entryId) {
 window.sendKhataWhatsAppReminder = sendKhataWhatsAppReminder;
 
 async function initKhataEngine() {
+    const isAuthenticatedShop = Boolean(
+        (typeof isStoreAuthenticated === 'function' && isStoreAuthenticated()) ||
+        (typeof localStorage !== 'undefined' && (
+            localStorage.getItem('billnaw_shop_session') ||
+            localStorage.getItem('billnaw_auth_token') ||
+            localStorage.getItem('billnaw_store_code')
+        ))
+    );
     try {
         let stored = null;
         if (typeof idb !== 'undefined' && idb.get) {
@@ -1608,12 +1616,19 @@ async function initKhataEngine() {
         }
         if (Array.isArray(stored) && stored.length > 0) {
             khataList = stored;
+        } else if (isAuthenticatedShop) {
+            // Never inject hardcoded demo credit entries (Rajesh Kumar / Metro Cash & Carry) into authenticated live shops
+            khataList = [];
         } else {
             seedInitialKhata();
         }
     } catch (err) {
         console.warn("Khata IDB load fallback:", err);
-        seedInitialKhata();
+        if (isAuthenticatedShop) {
+            khataList = [];
+        } else {
+            seedInitialKhata();
+        }
     }
     window.khataList = khataList;
     renderKhataUI();
@@ -1683,10 +1698,13 @@ function seedInitialKhata() {
             notes: "Fresh whole milk 20L delivery"
         }
     ];
-    persistKhata();
+    persistKhata(khataList, { skipCloud: true });
 }
 
-function persistKhata() {
+function persistKhata(explicitList = null, options = {}) {
+    if (Array.isArray(explicitList)) {
+        khataList = explicitList;
+    }
     window.khataList = khataList;
     try {
         localStorage.setItem('cafe_khata', JSON.stringify(khataList));
@@ -1696,8 +1714,80 @@ function persistKhata() {
             idb.set('cafe_khata', khataList);
         } catch(e) {}
     }
+    if (!options || !options.skipCloud) {
+        const isAuthenticatedShop = Boolean(
+            (typeof isStoreAuthenticated === 'function' && isStoreAuthenticated()) ||
+            (typeof localStorage !== 'undefined' && (
+                localStorage.getItem('billnaw_shop_session') ||
+                localStorage.getItem('billnaw_auth_token') ||
+                localStorage.getItem('billnaw_store_code')
+            ))
+        );
+        if (isAuthenticatedShop) {
+            if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc && typeof getStoreDocRef === 'function') {
+                const storeDocRef = getStoreDocRef();
+                if (storeDocRef) {
+                    window.firestoreSetDoc(storeDocRef, { khata: khataList, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+                }
+            }
+            if (typeof dispatchBackendStoreSync === 'function') {
+                dispatchBackendStoreSync({ khata: khataList });
+            }
+        }
+    }
 }
 window.persistKhata = persistKhata;
+
+function resetKhataState() {
+    khataList = [];
+    window.khataList = khataList;
+    try {
+        if (typeof renderKhataUI === 'function') renderKhataUI();
+    } catch (_) {}
+}
+window.resetKhataState = resetKhataState;
+
+function applyRemoteKhataSync(remoteKhata) {
+    if (!Array.isArray(remoteKhata)) return;
+    const mergedMap = new Map();
+    const getRecency = (entry) => {
+        if (!entry || typeof entry !== 'object') return 0;
+        const ts = Number(entry.updatedAt || entry.deletedAt || 0);
+        if (Number.isFinite(ts) && ts > 0) return ts;
+        const rawDate = entry.updatedAt || entry.deletedAt || entry.createdDate;
+        const parsed = rawDate ? Date.parse(rawDate) : 0;
+        return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const pickBetter = (a, b) => {
+        if (!a) return b;
+        if (!b) return a;
+        const tA = getRecency(a);
+        const tB = getRecency(b);
+        if (tB > tA) return b;
+        if (tA > tB) return a;
+        if (b.isDeleted && !a.isDeleted) return b;
+        if (a.isDeleted && !b.isDeleted) return a;
+        const pA = Array.isArray(a.paymentsHistory) ? a.paymentsHistory.length : 0;
+        const pB = Array.isArray(b.paymentsHistory) ? b.paymentsHistory.length : 0;
+        if (pB > pA) return b;
+        if (pA > pB) return a;
+        return Number(b.balanceDue || 0) < Number(a.balanceDue || 0) ? b : a;
+    };
+    (Array.isArray(khataList) ? khataList : []).forEach((item) => {
+        if (item && item.id) mergedMap.set(String(item.id), item);
+    });
+    remoteKhata.forEach((item) => {
+        if (!item || !item.id) return;
+        const key = String(item.id);
+        mergedMap.set(key, pickBetter(mergedMap.get(key), item));
+    });
+    const mergedList = Array.from(mergedMap.values()).sort((a, b) => getRecency(b) - getRecency(a));
+    persistKhata(mergedList, { skipCloud: true });
+    if (typeof renderKhataUI === 'function') {
+        try { renderKhataUI(); } catch (_) {}
+    }
+}
+window.applyRemoteKhataSync = applyRemoteKhataSync;
 
 function switchKhataType(type) {
     currentKhataType = type || 'customer';
@@ -1750,8 +1840,9 @@ function renderKhataUI() {
     const tbody = document.getElementById('khataTableBody');
     if (!tbody) return;
 
-    // Filter by current party type (customer or supplier)
-    const typeEntries = khataList.filter(k => k.type === currentKhataType);
+    // Filter by current party type (customer or supplier), excluding soft-deleted tombstones
+    const activeKhataEntries = khataList.filter(k => k && !k.isDeleted);
+    const typeEntries = activeKhataEntries.filter(k => k.type === currentKhataType);
 
     // Compute telemetry metrics
     const totalDue = typeEntries.reduce((sum, item) => sum + (Number(item.balanceDue) || 0), 0);
@@ -1766,7 +1857,7 @@ function renderKhataUI() {
     if (statCleared) statCleared.innerText = clearedCount;
 
     // Overdue badge on main tab button
-    const totalOverdueAll = khataList.filter(k => getKhataStatus(k) === 'Overdue').length;
+    const totalOverdueAll = activeKhataEntries.filter(k => getKhataStatus(k) === 'Overdue').length;
     const overdueBadge = document.getElementById('khataOverdueBadge');
     if (overdueBadge) {
         if (totalOverdueAll > 0) {
@@ -1921,6 +2012,7 @@ function recordKhataPayment(entryId, amount, mode = 'Cash', notes = '') {
 
     entry.balanceDue = Math.max(0, (Number(entry.balanceDue) || 0) - payVal);
     entry.status = getKhataStatus(entry);
+    entry.updatedAt = Date.now();
 
     entry.paymentsHistory = entry.paymentsHistory || [];
     const paymentRec = {
@@ -1934,11 +2026,15 @@ function recordKhataPayment(entryId, amount, mode = 'Cash', notes = '') {
     };
     entry.paymentsHistory.push(paymentRec);
 
-    // If entry is linked to customer, sync customer balanceDue
+    // If entry is linked to customer, sync customer balanceDue to local & cloud
     if (entry.type === 'customer' && entry.entityId) {
         const cust = customersList.find(c => c.id === entry.entityId || String(c.id) === String(entry.entityId));
         if (cust && cust.balanceDue !== undefined) {
             cust.balanceDue = Math.max(0, (Number(cust.balanceDue) || 0) - payVal);
+            cust.updatedAt = Date.now();
+            if (typeof persistCustomersFirebase === 'function') {
+                persistCustomersFirebase(cust);
+            }
         }
     }
 
@@ -2045,20 +2141,25 @@ function saveNewKhataEntry() {
         dueDate,
         status: evaluateKhataStatus(dueDate, amount),
         createdDate: new Date().toISOString(),
+        updatedAt: Date.now(),
         notes
     };
 
     khataList.unshift(newEntry);
 
-    // If linked customer, update customer balance
+    // If linked customer, update and persist customer balance
     if (type === 'customer' && entityId) {
         const cust = customersList.find(c => c.id === Number(entityId) || String(c.id) === String(entityId));
         if (cust) {
             cust.balanceDue = (Number(cust.balanceDue) || 0) + amount;
+            cust.updatedAt = Date.now();
+            if (typeof persistCustomersFirebase === 'function') {
+                persistCustomersFirebase(cust);
+            }
         }
     }
 
-    persistKhata();
+    persistKhata(khataList);
     closeAddKhataModal();
     if (currentKhataType !== type) {
         switchKhataType(type);
@@ -2071,8 +2172,18 @@ window.saveNewKhataEntry = saveNewKhataEntry;
 
 function deleteKhataEntry(entryId) {
     if (!confirm("Are you sure you want to delete this Khata record?")) return;
-    khataList = khataList.filter(k => k.id !== entryId && String(k.id) !== String(entryId));
-    persistKhata();
+    const now = Date.now();
+    let found = false;
+    khataList = khataList.map(k => {
+        if (k && (k.id === entryId || String(k.id) === String(entryId))) {
+            found = true;
+            return { ...k, isDeleted: true, deletedAt: now, updatedAt: now };
+        }
+        return k;
+    });
+    if (found) {
+        persistKhata(khataList);
+    }
     renderKhataUI();
     showToast("🗑️ Khata record removed.");
 }

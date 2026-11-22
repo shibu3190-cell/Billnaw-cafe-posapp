@@ -1144,7 +1144,7 @@ export async function handler(event, context) {
     }
     const extraHeaders = auth.refreshedToken ? { 'x-refreshed-token': auth.refreshedToken } : {};
 
-    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots, dailyReport } = body || {};
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, khata, kots, dailyReport } = body || {};
 
     if (staff !== undefined || replaceStaff !== undefined || deletedStaffId !== undefined || deletedStaffIds !== undefined) {
       const staffRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'manage_staff' });
@@ -1164,6 +1164,12 @@ export async function handler(event, context) {
         return jsonResponse(opsRbac.status || 403, { success: false, error: opsRbac.error });
       }
     }
+    if (khata !== undefined) {
+      const khataRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'settle_bills' });
+      if (!khataRbac.allowed) {
+        return jsonResponse(khataRbac.status || 403, { success: false, error: khataRbac.error });
+      }
+    }
 
     const settingsRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: event, requiredPermission: 'change_settings' });
     const hasOperationalPayload = (
@@ -1172,6 +1178,7 @@ export async function handler(event, context) {
       history !== undefined ||
       customers !== undefined ||
       expenses !== undefined ||
+      khata !== undefined ||
       dailyReport !== undefined
     );
     if (!settingsRbac.allowed && !hasOperationalPayload && (ownerEmail !== undefined || profile !== undefined)) {
@@ -1189,7 +1196,7 @@ export async function handler(event, context) {
       const result = await syncStoreToFirestoreREST(storeCode, {
         ownerEmail: normalizedEmail || undefined,
         profile: safeProfile,
-        staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots, dailyReport
+        staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, khata, kots, dailyReport
       });
       return jsonResponse(result.success ? 200 : (result.status >= 400 ? result.status : 500), result, extraHeaders);
     } catch (err) {

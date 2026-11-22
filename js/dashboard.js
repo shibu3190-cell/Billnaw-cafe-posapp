@@ -1171,8 +1171,11 @@ let lastDonutExpenses = [];
 
 function getCategoryForDishName(dishName) {
     if (!dishName) return 'General';
-    if (typeof menu !== 'undefined' && Array.isArray(menu)) {
-        const found = menu.find(m => m.name && m.name.toLowerCase() === dishName.toLowerCase());
+    const liveMenu = (typeof menuItems !== 'undefined' && Array.isArray(menuItems))
+        ? menuItems
+        : ((typeof window !== 'undefined' && Array.isArray(window.menuItems)) ? window.menuItems : null);
+    if (liveMenu) {
+        const found = liveMenu.find(m => m && m.name && m.name.toLowerCase() === dishName.toLowerCase());
         if (found && found.category) return found.category;
     }
     const lower = dishName.toLowerCase();
@@ -1400,13 +1403,32 @@ function exportFilteredSalesCSV() {
     const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
     const weekAgoISO = getLocalISODate(weekAgo);
     const selectedMonth = document.getElementById('reportDateSelect')?.value || getLocalISOMonth();
+    const customStart = document.getElementById('reportCustomStartDate')?.value || '';
+    const customEnd = document.getElementById('reportCustomEndDate')?.value || '';
+    const payFilter = (document.getElementById('dashPayModeFilter')?.value || 'All').trim();
+    const typeFilter = (document.getElementById('dashOrderTypeFilter')?.value || 'All').trim();
+    const searchQ = (document.getElementById('dashSearchInput')?.value || '').trim().toLowerCase();
+
+    const _isVoided = (o) => Boolean(o && (String(o.status || '').toUpperCase() === 'VOID' || o.isVoided === true || o.voided === true || (o.void_audit && typeof o.void_audit === 'object') || (typeof isOrderVoided === 'function' && isOrderVoided(o))));
 
     let exportSet = orderHistory.filter(o => {
+        if (_isVoided(o)) return false;
         const fDate = getOrderFilterDate(o);
-        if (currentDashboardRange === 'today') return fDate === todayISO;
-        if (currentDashboardRange === 'yesterday') return fDate === yesterdayISO;
-        if (currentDashboardRange === 'week') return fDate >= weekAgoISO && fDate <= todayISO;
-        if (currentDashboardRange === 'month') return fDate.startsWith(selectedMonth);
+        if (currentDashboardRange === 'today' && fDate !== todayISO) return false;
+        if (currentDashboardRange === 'yesterday' && fDate !== yesterdayISO) return false;
+        if (currentDashboardRange === 'week' && !(fDate >= weekAgoISO && fDate <= todayISO)) return false;
+        if (currentDashboardRange === 'month' && !fDate.startsWith(selectedMonth)) return false;
+        if (currentDashboardRange === 'custom') {
+            if (customStart && customEnd && !(fDate >= customStart && fDate <= customEnd)) return false;
+            else if (customStart && !customEnd && fDate < customStart) return false;
+            else if (!customStart && customEnd && fDate > customEnd) return false;
+        }
+        if (payFilter && payFilter.toLowerCase() !== 'all' && String(o.paymentMode || 'Cash').toLowerCase() !== payFilter.toLowerCase()) return false;
+        if (typeFilter && typeFilter.toLowerCase() !== 'all' && String(o.orderType || 'Dine-In').toLowerCase() !== typeFilter.toLowerCase()) return false;
+        if (searchQ) {
+            const hay = `${o.billNo || ''} ${o.customer || ''} ${o.items || ''} ${o.table || ''} ${o.biller || ''}`.toLowerCase();
+            if (!hay.includes(searchQ)) return false;
+        }
         return true;
     });
 
@@ -1415,12 +1437,15 @@ function exportFilteredSalesCSV() {
     let csv = "Invoice No,Date & Time,Table / Type,Order Type,Payment Mode,Customer Name,Biller / Staff,Subtotal (INR),GST Tax (INR),Total Amount (INR),Items Summary\n";
 
     exportSet.forEach(o => {
-        const itemsClean = `"${(o.items || '').replace(/"/g, '""')}"`;
-        const custClean = `"${(o.customer || 'Walk-in').replace(/"/g, '""')}"`;
-        const billerClean = `"${(o.biller || 'Staff').replace(/"/g, '""')}"`;
-        const tableClean = `"${(o.table || 'Takeaway').replace(/"/g, '""')}"`;
+        const itemsClean = `"${String(o.items || '').replace(/"/g, '""')}"`;
+        const custClean = `"${String(o.customer || 'Walk-in').replace(/"/g, '""')}"`;
+        const billerClean = `"${String(o.biller || 'Staff').replace(/"/g, '""')}"`;
+        const tableClean = `"${String(o.table || 'Takeaway').replace(/"/g, '""')}"`;
+        const amtNum = Number(o.amount || 0);
+        const subNum = (o.subtotal !== undefined && o.subtotal !== null && !isNaN(Number(o.subtotal))) ? Number(o.subtotal) : amtNum;
+        const taxNum = Number(o.tax || 0);
 
-        csv += `"${o.billNo || ''}","${o.date}","${tableClean}","${o.orderType || 'Dine-In'}","${o.paymentMode || 'Cash'}",${custClean},${billerClean},${(o.subtotal || o.amount).toFixed(2)},${(o.tax || 0).toFixed(2)},${o.amount.toFixed(2)},${itemsClean}\n`;
+        csv += `"${o.billNo || ''}","${o.date || ''}","${tableClean}","${o.orderType || 'Dine-In'}","${o.paymentMode || 'Cash'}",${custClean},${billerClean},${subNum.toFixed(2)},${taxNum.toFixed(2)},${amtNum.toFixed(2)},${itemsClean}\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1573,16 +1598,18 @@ function printDailyZReport() {
     saveDailyClosingSummary(todayISO).catch((err) => {
         console.warn('[REPORT] Auto-persist daily closing summary notice:', err?.message || err);
     });
-    const todayOrders = orderHistory.filter(o => (getOrderFilterDate(o) === todayISO || o.filterDate === todayISO || (o.date && o.date.startsWith(new Date().toLocaleDateString()))));
+    const _isVoidZ = (o) => Boolean(o && (String(o.status || '').toUpperCase() === 'VOID' || o.isVoided === true || o.voided === true || (o.void_audit && typeof o.void_audit === 'object') || (typeof isOrderVoided === 'function' && isOrderVoided(o))));
+    const todayOrders = orderHistory.filter(o => !_isVoidZ(o) && (getOrderFilterDate(o) === todayISO || o.filterDate === todayISO || (o.date && o.date.startsWith(new Date().toLocaleDateString()))));
     const todayExpenses = dailyExpenses.filter(e => (getExpenseFilterDate(e) === todayISO || e.filterDate === todayISO || (e.date && e.date.startsWith(new Date().toLocaleDateString()))));
 
-    const totalGross = todayOrders.reduce((sum, o) => sum + o.amount, 0);
-    const totalExp = todayExpenses.reduce((sum, e) => sum + e.cost, 0);
-    const totalTax = todayOrders.reduce((sum, o) => sum + (o.tax || 0), 0);
+    const totalGross = todayOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const totalExp = todayExpenses.reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
+    const totalTax = todayOrders.reduce((sum, o) => sum + (Number(o.tax) || 0), 0);
 
-    const cashSales = todayOrders.filter(o => (o.paymentMode || 'Cash').toLowerCase() === 'cash').reduce((sum, o) => sum + o.amount, 0);
-    const upiSales = todayOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'upi').reduce((sum, o) => sum + o.amount, 0);
-    const cardSales = todayOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'card').reduce((sum, o) => sum + o.amount, 0);
+    const cashSales = todayOrders.filter(o => (o.paymentMode || 'Cash').toLowerCase() === 'cash').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const upiSales = todayOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'upi').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const cardSales = todayOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'card').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const khataSales = todayOrders.filter(o => (o.paymentMode || '').toLowerCase() === 'khata').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
 
     const dineInCount = todayOrders.filter(o => (o.orderType || 'Dine-In') === 'Dine-In').length;
     const takeawayCount = todayOrders.filter(o => (o.orderType || '') === 'Takeaway').length;
@@ -1606,9 +1633,10 @@ function printDailyZReport() {
             <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
 
             <div style="font-weight: bold; text-align: left; margin-bottom: 4px;">PAYMENT BREAKDOWN:</div>
-            <div style="display: flex; justify-content: space-between;"><span>💵 Cash:</span><span>₹ ${cashSales.toFixed(2)}</span></div>
-            <div style="display: flex; justify-content: space-between;"><span>📱 UPI / QR:</span><span>₹ ${upiSales.toFixed(2)}</span></div>
-            <div style="display: flex; justify-content: space-between;"><span>💳 Card:</span><span>₹ ${cardSales.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>Cash:</span><span>₹ ${cashSales.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>UPI / QR:</span><span>₹ ${upiSales.toFixed(2)}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>Card:</span><span>₹ ${cardSales.toFixed(2)}</span></div>
+            ${khataSales > 0 ? `<div style="display: flex; justify-content: space-between;"><span>Khata (Credit):</span><span>₹ ${khataSales.toFixed(2)}</span></div>` : ''}
             <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
 
             <div style="display: flex; justify-content: space-between; color: #B53B3B;"><span>Total Expenses:</span><span>-₹ ${totalExp.toFixed(2)}</span></div>
@@ -1740,10 +1768,29 @@ function saveEditedOrder() {
         if(order.orderType === 'Takeaway') order.table = 'Takeaway'; 
         if (Array.isArray(currentEditingOrderItems) && currentEditingOrderItems.length > 0) {
             const validItems = currentEditingOrderItems.filter(i => (Number(i.qty || i.quantity || 0)) > 0);
-            order.rawItems = JSON.parse(JSON.stringify(validItems));
-            order.items = validItems.map(i => `${i.name} (x${i.qty || i.quantity || 1})`).join(', ');
-            order.amount = Math.max(0, validItems.reduce((sum, i) => sum + ((Number(i.price || 0)) * (Number(i.qty || i.quantity || 1))), 0));
+            const normalizedItems = validItems.map(i => ({
+                ...i,
+                name: i.name || i.item_name || i.menuItemName || 'Item',
+                qty: Number(i.qty || i.quantity || 1),
+                price: Number(i.price ?? i.rate ?? i.unitPrice ?? 0)
+            }));
+            order.rawItems = JSON.parse(JSON.stringify(normalizedItems));
+            order.items = normalizedItems.map(i => `${i.name} (x${i.qty})`).join(', ');
+            if (typeof calculateOrderTotals === 'function') {
+                const effectiveDiscount = order.discount || (Number(order.discountAmount || 0) > 0 ? { type: 'fixed', value: Number(order.discountAmount) } : null);
+                const recalculated = calculateOrderTotals(normalizedItems, effectiveDiscount);
+                order.grossSubtotal = recalculated.grossSubtotal;
+                order.discountAmount = recalculated.discountAmount;
+                order.subtotal = recalculated.subtotal;
+                order.tax = recalculated.totalTax;
+                order.gstMode = recalculated.gstMode;
+                order.amount = recalculated.finalTotal;
+            } else {
+                order.amount = Math.max(0, normalizedItems.reduce((sum, i) => sum + (i.price * i.qty), 0));
+            }
         }
+        order.updatedAt = Date.now();
+        order.editedAt = Date.now();
         persistHistoryFirebase(order); 
         renderDashboardAnalytics(); 
         showToast("Bill updated."); 

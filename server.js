@@ -1649,7 +1649,7 @@ app.post('/api/sync/store-data', async (req, res) => {
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
-    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots, dailyReport } = req.body || {};
+    const { ownerEmail, profile, staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, khata, kots, dailyReport } = req.body || {};
 
     if (staff !== undefined || replaceStaff !== undefined || deletedStaffId !== undefined || deletedStaffIds !== undefined) {
       const staffRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'manage_staff' });
@@ -1663,10 +1663,16 @@ app.post('/api/sync/store-data', async (req, res) => {
         return res.status(menuRbac.status || 403).json({ success: false, error: menuRbac.error });
       }
     }
-    if (tables !== undefined || history !== undefined || expenses !== undefined || customers !== undefined) {
+    if (tables !== undefined || history !== undefined || expenses !== undefined || customers !== undefined || dailyReport !== undefined) {
       const opsRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'take_orders' });
       if (!opsRbac.allowed) {
         return res.status(opsRbac.status || 403).json({ success: false, error: opsRbac.error });
+      }
+    }
+    if (khata !== undefined) {
+      const khataRbac = verifyEndpointAccess({ authResult: auth, eventOrReq: req, requiredPermission: 'settle_bills' });
+      if (!khataRbac.allowed) {
+        return res.status(khataRbac.status || 403).json({ success: false, error: khataRbac.error });
       }
     }
 
@@ -1676,7 +1682,9 @@ app.post('/api/sync/store-data', async (req, res) => {
       kots !== undefined ||
       history !== undefined ||
       customers !== undefined ||
-      expenses !== undefined
+      expenses !== undefined ||
+      khata !== undefined ||
+      dailyReport !== undefined
     );
     if (!settingsRbac.allowed && !hasOperationalPayload && (ownerEmail !== undefined || profile !== undefined)) {
       return res.status(settingsRbac.status || 403).json({ success: false, error: settingsRbac.error });
@@ -1693,7 +1701,7 @@ app.post('/api/sync/store-data', async (req, res) => {
     const result = await syncStoreToFirestoreREST(code, {
       ownerEmail: normalizedEmail || undefined,
       profile: safeProfile,
-      staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, kots, dailyReport
+      staff, replaceStaff, deletedStaffId, deletedStaffIds, tables, menu, deletedMenuIds, deletedMenuNames, menuVersion, categories, history, expenses, customers, khata, kots, dailyReport
     });
     res.status(result.success ? 200 : (result.status >= 400 ? result.status : 500)).json(result);
   } catch (err) {

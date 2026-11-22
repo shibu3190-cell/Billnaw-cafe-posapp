@@ -3282,6 +3282,45 @@ function handleRemoteFirestoreUpdate(data) {
         }
     }
 
+    if (Array.isArray(data.khata)) {
+        try {
+            if (typeof window !== 'undefined' && typeof window.applyRemoteKhataSync === 'function') {
+                window.applyRemoteKhataSync(data.khata);
+            } else {
+                const existingRaw = localStorage.getItem('cafe_khata');
+                let localKhata = [];
+                try { localKhata = existingRaw ? JSON.parse(existingRaw) : []; } catch (_) {}
+                const khataMap = new Map();
+                const getRecency = (entry) => {
+                    const ts = Number(entry?.updatedAt || entry?.deletedAt || 0);
+                    if (Number.isFinite(ts) && ts > 0) return ts;
+                    const rawDate = entry?.updatedAt || entry?.deletedAt || entry?.createdDate;
+                    const parsed = rawDate ? Date.parse(rawDate) : 0;
+                    return Number.isFinite(parsed) ? parsed : 0;
+                };
+                (Array.isArray(localKhata) ? localKhata : []).forEach((k) => {
+                    if (k && k.id) khataMap.set(String(k.id), k);
+                });
+                data.khata.forEach((k) => {
+                    if (!k || !k.id) return;
+                    const key = String(k.id);
+                    const prev = khataMap.get(key);
+                    if (!prev || getRecency(k) >= getRecency(prev)) {
+                        khataMap.set(key, k);
+                    }
+                });
+                const mergedKhata = Array.from(khataMap.values()).sort((a, b) => getRecency(b) - getRecency(a));
+                if (typeof window !== 'undefined') window.khataList = mergedKhata;
+                localStorage.setItem('cafe_khata', JSON.stringify(mergedKhata));
+                if (typeof idb !== 'undefined' && idb.set) {
+                    idb.set('cafe_khata', mergedKhata);
+                }
+            }
+        } catch (khataErr) {
+            console.warn('[Khata Sync] Remote khata merge notice:', khataErr);
+        }
+    }
+
     if (Array.isArray(data.kots)) {
         try {
             const rawPrev = localStorage.getItem('billnaw_active_kots');
@@ -4062,6 +4101,8 @@ function attachFirestoreListener(targetStoreCode = null) {
         customersList = [];
         dailyExpenses = [];
         tablesInfo = {};
+        if (typeof window !== 'undefined' && typeof window.resetKhataState === 'function') window.resetKhataState();
+        else if (typeof window !== 'undefined') window.khataList = [];
         // Secondary terminal MUST still listen to devices collection to receive pairing approval
         subscribeDevicesCloudListener(targetStoreCode);
         setCloudSyncStatus('offline', 'Awaiting Pairing Approval');
@@ -4383,7 +4424,7 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
             const activeStaffObj = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
             const normStaffRole = activeStaffObj && activeStaffObj.role ? String(activeStaffObj.role).trim().toLowerCase() : 'admin';
             const isAdminStaff = normStaffRole === 'admin' || normStaffRole === 'owner';
-            const hasOperationalFields = finalPayload.tables !== undefined || finalPayload.menu !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined || finalPayload.expenses !== undefined || finalPayload.dailyReport !== undefined;
+            const hasOperationalFields = finalPayload.tables !== undefined || finalPayload.menu !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined || finalPayload.expenses !== undefined || finalPayload.dailyReport !== undefined || finalPayload.khata !== undefined;
             if (!isAdminStaff && hasOperationalFields) {
                 delete finalPayload.staff;
                 delete finalPayload.replaceStaff;
@@ -4398,7 +4439,7 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                 delete finalPayload.deletedMenuIds;
                 delete finalPayload.deletedMenuNames;
                 delete finalPayload.categories;
-                const hasRemainingFields = finalPayload.tables !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined || finalPayload.expenses !== undefined || finalPayload.dailyReport !== undefined;
+                const hasRemainingFields = finalPayload.tables !== undefined || finalPayload.history !== undefined || finalPayload.kots !== undefined || finalPayload.customers !== undefined || finalPayload.expenses !== undefined || finalPayload.dailyReport !== undefined || finalPayload.khata !== undefined;
                 if (!hasRemainingFields) {
                     return false;
                 }
@@ -5757,7 +5798,7 @@ function applyStationProfileRestrictions() {
     const _syncTableBarAfterRole = () => {
         try {
             if (typeof updateTableOrderFloatingBar === 'function') {
-                const bar = document.getElementById('tablesOrderFloatingBar');
+                const bar = document.getElementById('tableOrderFloatingBar');
                 if (bar && bar.style.display && bar.style.display !== 'none') {
                     updateTableOrderFloatingBar();
                 }
@@ -6147,6 +6188,8 @@ function clearAllTenantLocalData() {
         if (typeof window !== 'undefined') window.dailyExpenses = [];
         if (typeof customersList !== 'undefined') customersList = [];
         if (typeof window !== 'undefined') window.customersList = [];
+        if (typeof window !== 'undefined' && typeof window.resetKhataState === 'function') window.resetKhataState();
+        else if (typeof window !== 'undefined') window.khataList = [];
         if (typeof staffList !== 'undefined') staffList = [];
         if (typeof window !== 'undefined') window.staffList = [];
         if (typeof currentCart !== 'undefined') currentCart = [];
@@ -7049,6 +7092,8 @@ async function initDatabase() {
             window.dailyExpenses = dailyExpenses;
             customersList = [];
             window.customersList = customersList;
+            if (typeof window !== 'undefined' && typeof window.resetKhataState === 'function') window.resetKhataState();
+            else if (typeof window !== 'undefined') window.khataList = [];
             staffList = [];
             window.staffList = staffList;
             tablesInfo = {};

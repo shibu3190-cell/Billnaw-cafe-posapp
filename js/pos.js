@@ -2367,6 +2367,8 @@ async function confirmCheckout() {
             matchedCustomer.totalSpend = (matchedCustomer.totalSpend || 0) + total;
             matchedCustomer.loyaltyPoints = (matchedCustomer.loyaltyPoints || 0) + ptsEarned;
             matchedCustomer.lastVisitDate = new Date().toLocaleDateString();
+            matchedCustomer.lastVisit = Date.now();
+            matchedCustomer.updatedAt = Date.now();
             if (!matchedCustomer.history) matchedCustomer.history = [];
             matchedCustomer.history.unshift({
                 orderId: newOrder.id,
@@ -2383,8 +2385,9 @@ async function confirmCheckout() {
         } else if (cName) {
             const digits = (cName.match(/\d{10}/) || [''])[0];
             const cleanName = cName.replace(/\(\d+\)/g, '').trim();
+            const nowMs = Date.now();
             newCust = {
-                id: Date.now(),
+                id: nowMs,
                 name: cleanName || cName,
                 phone: digits || '',
                 notes: 'Registered from checkout',
@@ -2394,6 +2397,8 @@ async function confirmCheckout() {
                 balanceDue: 0,
                 createdDate: new Date().toISOString().split('T')[0],
                 lastVisitDate: new Date().toLocaleDateString(),
+                lastVisit: nowMs,
+                updatedAt: nowMs,
                 history: [{
                     orderId: newOrder.id,
                     billNo: generatedBillNo,
@@ -2431,11 +2436,13 @@ async function confirmCheckout() {
                 dueDate: dueDateVal,
                 status: 'Pending',
                 createdDate: new Date().toISOString(),
+                updatedAt: Date.now(),
                 notes: khataNotesVal
             };
 
             if (effectiveCust) {
                 effectiveCust.balanceDue = (Number(effectiveCust.balanceDue) || 0) + total;
+                effectiveCust.updatedAt = Date.now();
                 if (!effectiveCust.dues) effectiveCust.dues = [];
                 effectiveCust.dues.unshift(khataDueEntry);
                 persistCustomersFirebase(effectiveCust);
@@ -2473,7 +2480,7 @@ async function confirmCheckout() {
                 }
             }
             if (typeof persistKhata === 'function') {
-                persistKhata();
+                persistKhata(currentKhata);
             }
             if (typeof renderKhataUI === 'function') {
                 renderKhataUI();
@@ -3674,7 +3681,12 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
     }
     if (window.ThermalPrinterBridge && typeof window.ThermalPrinterBridge.routePrintJob === 'function') {
         try {
-            const routeResult = await window.ThermalPrinterBridge.routePrintJob(kotJobPayload, { role: 'KOT' });
+            const relayModePref = (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_kot_relay_mode') : null) || 'ASK_ON_FAILURE';
+            const canUseCloudRelay = Boolean(
+                relayModePref !== 'LOCAL_ONLY' &&
+                (typeof promptKotRelayFallback === 'function' || typeof window.enqueueCloudKotPrintJob === 'function' || typeof window.ThermalPrinterBridge.enqueueCloudKotPrintJob === 'function')
+            );
+            const routeResult = await window.ThermalPrinterBridge.routePrintJob(kotJobPayload, { role: 'KOT', skipBrowserFallback: canUseCloudRelay });
             if (routeResult && (routeResult.data?.printed || routeResult.data?.cancelled)) {
                 if (routeResult.data?.method === 'BROWSER_DIALOG') {
                     await executeHtmlPrint('print-kot');
@@ -3689,6 +3701,7 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
             if (routeResult && !routeResult.success) {
                 const relayMode = localStorage.getItem('billnaw_kot_relay_mode') || 'ASK_ON_FAILURE';
                 if (relayMode === 'ASK_ON_FAILURE' && typeof promptKotRelayFallback === 'function') {
+                    if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('printing-kot');
                     promptKotRelayFallback(kotJobPayload);
                     return { success: true, queuedToCloud: false, prompted: true };
                 }
@@ -3698,12 +3711,19 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
                     try {
                         const shopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || shopProfile?.id || 'default_shop';
                         const enqueueRes = await cloudEnqueue(kotJobPayload, { shopId });
+                        if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('printing-kot');
                         if (typeof showToast === 'function') {
                             showToast("Kitchen printer out of range. KOT queued to Cloud Print Relay!", 'success');
                         }
                         return { success: true, queuedToCloud: true, jobId: enqueueRes.jobId };
                     } catch (cloudErr) {
                         console.error("Cloud print relay enqueue fallback failed:", cloudErr);
+                        // Fall through cleanly to browser print dialog if Cloud Relay enqueue also fails
+                        await executeHtmlPrint('print-kot');
+                        if (typeof document !== 'undefined' && document.body && document.body.classList) {
+                            document.body.classList.remove('printing-kot');
+                        }
+                        return { success: true, method: 'BROWSER_DIALOG' };
                     }
                 }
             }
@@ -3722,6 +3742,7 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
     if (!targetKotChar) {
         const relayMode = localStorage.getItem('billnaw_kot_relay_mode') || 'ASK_ON_FAILURE';
         if (relayMode === 'ASK_ON_FAILURE' && typeof promptKotRelayFallback === 'function') {
+            if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('printing-kot');
             promptKotRelayFallback(kotJobPayload);
             return { success: true, queuedToCloud: false, prompted: true };
         }
@@ -3732,6 +3753,7 @@ async function sendKotToPrinter(tableNo, items, options = {}) {
             try {
                 const shopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || shopProfile?.id || 'default_shop';
                 const enqueueRes = await cloudEnqueue(kotJobPayload, { shopId });
+                if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.remove('printing-kot');
                 if (typeof showToast === 'function') {
                     showToast("Kitchen printer out of range. KOT queued to Cloud Print Relay!", 'success');
                 }

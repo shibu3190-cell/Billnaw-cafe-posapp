@@ -404,9 +404,18 @@ export const ThermalPrinterBridge = {
           const parsed = JSON.parse(saved);
           if (parsed.printer1 && this.printers?.printer1) {
             Object.assign(this.printers.printer1, parsed.printer1);
+            // Reset volatile hardware statuses (BLE/USB/Serial) on page reload when live handle is absent
+            const p1 = this.printers.printer1;
+            if (p1.transport === 'BLUETOOTH' && !p1.characteristic && !p1.device?.gatt?.connected) p1.status = 'DISCONNECTED';
+            else if (p1.transport === 'USB' && !p1.device) p1.status = 'DISCONNECTED';
+            else if (p1.transport === 'SERIAL' && !p1.serialPort) p1.status = 'DISCONNECTED';
           }
           if (parsed.printer2 && this.printers?.printer2) {
             Object.assign(this.printers.printer2, parsed.printer2);
+            const p2 = this.printers.printer2;
+            if (p2.transport === 'BLUETOOTH' && !p2.characteristic && !p2.device?.gatt?.connected) p2.status = 'DISCONNECTED';
+            else if (p2.transport === 'USB' && !p2.device) p2.status = 'DISCONNECTED';
+            else if (p2.transport === 'SERIAL' && !p2.serialPort) p2.status = 'DISCONNECTED';
           }
           if (parsed.routing && this.routing) {
             Object.assign(this.routing, parsed.routing);
@@ -1138,9 +1147,9 @@ export const ThermalPrinterBridge = {
       for (const item of items) {
         const qty = item.quantity || item.qty || item.count || 1;
         const name = item.name || item.item_name || item.menuItemName || item.title || 'Item';
-        // Double size item line wrapped at cols (32 for 58mm)
+        // Double size item line wrapped cleanly at dCols (16 for 58mm, 24 for 80mm) so text never overflows thermal paper
         parts.push(new Uint8Array([0x1D, 0x21, 0x11]));
-        const itemLines = wrapText(`${qty}x ${name}`, cols, '  ');
+        const itemLines = wrapText(`${qty}x ${name}`, dCols, '  ');
         for (const il of itemLines) {
           parts.push(encodeClean(`${il}\n`));
         }
@@ -1572,7 +1581,8 @@ export const ThermalPrinterBridge = {
    * @param {Uint8Array} bytes
    * @returns {Promise<ServiceResult<Object>>}
    */
-  async dispatchToPrinterSlot(printerSlot = 'printer1', bytes) {
+  async dispatchToPrinterSlot(printerSlot = 'printer1', bytes, dispatchOpts = {}) {
+    const skipBrowserFallback = Boolean(dispatchOpts && dispatchOpts.skipBrowserFallback);
     if (printerSlot === 'SYSTEM_DIALOG') {
       if (typeof window !== 'undefined' && typeof window.executeHtmlPrint !== 'function' && typeof window.print === 'function') {
         window.print();
@@ -1672,8 +1682,8 @@ export const ThermalPrinterBridge = {
         return successResult({ printed: true, method: 'WEBUSB_ESC_POS', slot: slotKey });
       }
 
-      // 8. Browser Dialog Fallback
-      if (typeof window !== 'undefined' && (typeof window.print === 'function' || typeof window.executeHtmlPrint === 'function')) {
+      // 8. Browser Dialog Fallback (skipped when caller explicitly requests Cloud Print Relay first on KOT failure)
+      if (!skipBrowserFallback && typeof window !== 'undefined' && (typeof window.print === 'function' || typeof window.executeHtmlPrint === 'function')) {
         if (typeof window.executeHtmlPrint !== 'function' && typeof window.print === 'function') {
           window.print();
         }
@@ -1683,8 +1693,8 @@ export const ThermalPrinterBridge = {
       return errorResult('PRINTER_UNAVAILABLE', `Printer slot '${slotKey}' has no active connection or fallback.`);
     } catch (hwErr) {
       console.warn(`[PrinterBridge] Hardware transmission to '${slotKey}' failed:`, hwErr.message);
-      // Fall back to browser dialog if available
-      if (typeof window !== 'undefined' && (typeof window.print === 'function' || typeof window.executeHtmlPrint === 'function')) {
+      // Fall back to browser dialog if available (unless caller wants Cloud Print Relay first)
+      if (!skipBrowserFallback && typeof window !== 'undefined' && (typeof window.print === 'function' || typeof window.executeHtmlPrint === 'function')) {
         if (typeof window.executeHtmlPrint !== 'function' && typeof window.print === 'function') {
           window.print();
         }
@@ -1799,16 +1809,24 @@ export const ThermalPrinterBridge = {
         : (this.routing?.defaultKotPrinter || 'printer2');
 
       // Auto-fallback: If KOT is assigned to printer2, but printer2 has no active connection
-      // while printer1 IS connected (or active characteristic exists), fallback directly to printer1!
+      // (checking Bluetooth, USB, Serial, AND Network transports) while printer1 IS connected, fallback directly to printer1!
       if (role === 'KOT' && targetSlot === 'printer2') {
+        const p2 = this.printers?.printer2;
+        const p1 = this.printers?.printer1;
         const isPrinter2Connected = Boolean(
-          this.printers?.printer2?.characteristic ||
-          this.printers?.printer2?.device?.gatt?.connected ||
+          p2?.characteristic ||
+          p2?.device?.gatt?.connected ||
+          (p2?.transport === 'USB' && p2?.device) ||
+          (p2?.transport === 'SERIAL' && p2?.serialPort) ||
+          (p2?.transport === 'NETWORK' && p2?.host) ||
           (typeof window !== 'undefined' && window.posPrinters?.printer2?.characteristic)
         );
         const isPrinter1Connected = Boolean(
-          this.printers?.printer1?.characteristic ||
-          this.printers?.printer1?.device?.gatt?.connected ||
+          p1?.characteristic ||
+          p1?.device?.gatt?.connected ||
+          (p1?.transport === 'USB' && p1?.device) ||
+          (p1?.transport === 'SERIAL' && p1?.serialPort) ||
+          (p1?.transport === 'NETWORK' && p1?.host) ||
           this.activeCharacteristic ||
           (typeof window !== 'undefined' && (window.posPrinters?.printer1?.characteristic || window.printCharacteristic))
         );
@@ -1867,7 +1885,7 @@ export const ThermalPrinterBridge = {
     });
 
     // 6. Dispatch to chosen slot
-    const result = await this.dispatchToPrinterSlot(targetSlot, bytes);
+    const result = await this.dispatchToPrinterSlot(targetSlot, bytes, { skipBrowserFallback: Boolean(options.skipBrowserFallback) });
     if (result && result.data) {
       result.data.role = role;
       result.data.slot = targetSlot;
