@@ -3669,17 +3669,28 @@ function subscribeStaffCloudListener(targetStoreCode = null) {
             const BAPI_LEAKED_IDS = new Set(['1793965135000', '1793965355981', '1794229462515', '1794307359978', '1794308489640', '1794308708078', '1794308990021', '1794309081290', '1794310972228']);
 
             // Authoritative Roster Invariant:
-            // The root store document (via remote snapshot or boot hydration) is the SOLE authoritative roster.
-            // A subcollection document must NEVER inject phantom/orphaned profiles that do not exist in the store's verified roster.
+            // The root store document (via remote snapshot or boot hydration) is the primary roster.
+            // Unscoped legacy subcollection documents must NEVER inject phantom/orphaned profiles.
+            // Freshly-created tenant-scoped non-Admin subdocs explicitly tagged with matching storeCode and active status may hydrate immediately;
+            // Admin/Owner additions or elevations MUST come exclusively from the authoritative root store document.
+            const normActiveStore = String(activeStoreCode || '').trim().toUpperCase();
+            const isPrivilegedRole = (r) => ['admin', 'owner', 'superadmin'].includes(String(r || '').trim().toLowerCase());
             const validSubDocs = rawSubDocs.filter(d => {
                 const sId = String(d.id || d.staffId || '').trim();
                 if (!sId || deletedSet.has(sId)) return false;
                 if (isAbhijitShop && BAPI_LEAKED_IDS.has(sId)) return false;
-                // If authoritative staffList exists, only permit documents matching existing roster
+                const docStore = String(d.storeCode || '').trim().toUpperCase();
+                if (docStore && normActiveStore && docStore !== normActiveStore) return false;
+                // If authoritative staffList exists, permit matching roster docs OR explicitly tenant-scoped active non-privileged staff docs
                 if (Array.isArray(staffList) && staffList.length > 0) {
-                    return staffList.some(s => String(s?.id || s?.staffId) === sId);
+                    if (staffList.some(s => String(s?.id || s?.staffId) === sId)) return true;
+                    const isActiveSubDoc = d.status !== 'REVOKED' && d.status !== 'Inactive' && d.isLocked !== true;
+                    if (normActiveStore && docStore === normActiveStore && d.name && isActiveSubDoc && !isPrivilegedRole(d.role)) {
+                        return true;
+                    }
+                    return false;
                 }
-                return true;
+                return Boolean(normActiveStore && docStore === normActiveStore && d.status !== 'REVOKED' && d.status !== 'Inactive' && d.isLocked !== true);
             });
 
             const activeStaff = (typeof window !== 'undefined' && window.currentStaff) || (typeof currentStaff !== 'undefined' ? currentStaff : null);
@@ -3690,7 +3701,7 @@ function subscribeStaffCloudListener(targetStoreCode = null) {
                     (Array.isArray(staffList) && staffList.length > 0 && !staffList.some(s => String(s?.id || s?.staffId) === activeIdStr));
 
                 const matchingSubDoc = validSubDocs.find(s => String(s.id || s.staffId) === activeIdStr);
-                const isExplicitlyRevokedInSubDoc = Boolean(matchingSubDoc && (matchingSubDoc.status === 'REVOKED' || matchingSubDoc.isLocked === true));
+                const isExplicitlyRevokedInSubDoc = Boolean(matchingSubDoc && (matchingSubDoc.status === 'REVOKED' || matchingSubDoc.status === 'Inactive' || matchingSubDoc.isLocked === true));
 
                 if (isExplicitlyRevoked || isExplicitlyRevokedInSubDoc) {
                     try { localStorage.setItem('billnaw_session_revoked', 'true'); } catch (e) {}
@@ -3705,29 +3716,96 @@ function subscribeStaffCloudListener(targetStoreCode = null) {
                 }
             }
 
-            // Merge PIN hash, salt, or status updates from subcollection into authoritative staffList
+            // Merge allowlisted fields (role, name, PIN hash/salt, status) & tenant-scoped new non-Admin staff from subcollection
             if (Array.isArray(staffList) && staffList.length > 0) {
                 const subMap = new Map(validSubDocs.map(d => [String(d.id || d.staffId), d]));
+                const existingIds = new Set();
                 let updated = false;
+                const normalizeStaffMember = (rawMember) => {
+                    if (typeof buildStaffAccessProfile === 'function') {
+                        const access = buildStaffAccessProfile(rawMember);
+                        return { ...rawMember, role: access.role, permissions: access.permissions, allowedTabs: access.allowedTabs };
+                    }
+                    return rawMember;
+                };
                 const reconciled = staffList.map(member => {
-                    const subDoc = subMap.get(String(member.id));
+                    const mId = String(member.id || member.staffId || '');
+                    if (mId) existingIds.add(mId);
+                    const subDoc = subMap.get(mId);
                     if (subDoc) {
                         const newHash = subDoc.pin_hash || subDoc.pinHash;
                         const oldHash = member.pin_hash || member.pinHash;
+                        const newSalt = subDoc.pin_salt || subDoc.pinSalt;
+                        const oldSalt = member.pin_salt || member.pinSalt;
                         const newStatus = subDoc.status;
                         const oldStatus = member.status;
-                        if ((newHash && newHash !== oldHash) || (newStatus && newStatus !== oldStatus)) {
+                        // Prevent subcollection self-escalation of non-Admin staff to Admin/Owner/SuperAdmin
+                        const proposedRole = subDoc.role;
+                        const safeRole = (proposedRole && (!isPrivilegedRole(proposedRole) || isPrivilegedRole(member.role)))
+                            ? proposedRole
+                            : member.role;
+                        const oldRole = member.role;
+                        const newName = subDoc.name;
+                        const oldName = member.name;
+                        const newLocked = Boolean(subDoc.isLocked);
+                        const oldLocked = Boolean(member.isLocked);
+                        if (
+                            (newHash && newHash !== oldHash) ||
+                            (newSalt && newSalt !== oldSalt) ||
+                            (newStatus && newStatus !== oldStatus) ||
+                            (safeRole && safeRole !== oldRole) ||
+                            (newName && newName !== oldName) ||
+                            (newLocked !== oldLocked)
+                        ) {
                             updated = true;
-                            return { ...member, ...subDoc };
+                            const mergedMember = {
+                                ...member,
+                                name: newName || member.name,
+                                role: safeRole || member.role,
+                                status: newStatus || member.status,
+                                isLocked: newLocked
+                            };
+                            if (newHash) { mergedMember.pinHash = newHash; mergedMember.pin_hash = newHash; }
+                            if (newSalt) { mergedMember.pinSalt = newSalt; mergedMember.pin_salt = newSalt; }
+                            if (subDoc.updatedAt) mergedMember.updatedAt = subDoc.updatedAt;
+                            return normalizeStaffMember(mergedMember);
                         }
                     }
                     return member;
                 });
+
+                // Append newly-created tenant-scoped active non-privileged staff subdocs not yet present in local staffList
+                validSubDocs.forEach(subDoc => {
+                    const sId = String(subDoc.id || subDoc.staffId || '').trim();
+                    const docStore = String(subDoc.storeCode || '').trim().toUpperCase();
+                    const isActiveSubDoc = subDoc.status !== 'REVOKED' && subDoc.status !== 'Inactive' && subDoc.isLocked !== true;
+                    if (sId && !existingIds.has(sId) && normActiveStore && docStore === normActiveStore && subDoc.name && isActiveSubDoc && !isPrivilegedRole(subDoc.role)) {
+                        updated = true;
+                        reconciled.push(normalizeStaffMember(subDoc));
+                    }
+                });
+
                 if (updated) {
                     staffList = reconciled;
                     window.staffList = staffList;
                     if (typeof idb !== 'undefined' && idb.set) { idb.set('cafe_staff', staffList); }
                     try { localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList)); } catch(e) {}
+                    // Live RBAC refresh if active staff member's own role/permissions/tabs changed in subcollection
+                    if (activeStaff && activeStaff.id !== undefined) {
+                        const latestSelf = staffList.find(s => String(s.id || s.staffId) === String(activeStaff.id));
+                        if (latestSelf && typeof cacheStaffAccessProfile === 'function') {
+                            const prevRoleStr = String(activeStaff.role || '');
+                            const prevPermsJson = JSON.stringify(activeStaff.permissions || null);
+                            const prevTabsJson = JSON.stringify(activeStaff.allowedTabs || null);
+                            const nextAccess = cacheStaffAccessProfile(latestSelf);
+                            const nextPermsJson = JSON.stringify(nextAccess?.permissions || latestSelf.permissions || null);
+                            const nextTabsJson = JSON.stringify(nextAccess?.allowedTabs || latestSelf.allowedTabs || null);
+                            if (prevRoleStr !== String(nextAccess?.role || '') || prevPermsJson !== nextPermsJson || prevTabsJson !== nextTabsJson) {
+                                if (typeof applyStationProfileRestrictions === 'function') applyStationProfileRestrictions();
+                                if (typeof enforcePermissions === 'function') enforcePermissions();
+                            }
+                        }
+                    }
                     if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
                     if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
                     if (typeof renderStaffList === 'function') renderStaffList();
@@ -4041,6 +4119,7 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
             if (subdocRef) {
                 await window.firestoreSetDoc(subdocRef, {
                     ...safeStaffRecord,
+                    storeCode,
                     updatedAt: new Date().toISOString()
                 }, { merge: true });
             }
@@ -4051,10 +4130,20 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
 
     // High-Reliability Dual Layer: Server REST Sync
     try {
+        let activeToken = '';
+        try {
+            activeToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_auth_token') : '') ||
+                          (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('billnaw_auth_token') : '') || '';
+        } catch (_) {}
+        const syncHeaders = { 'Content-Type': 'application/json', 'x-shop-id': storeCode, 'x-store-code': storeCode };
+        if (activeToken) {
+            syncHeaders['Authorization'] = 'Bearer ' + activeToken;
+            syncHeaders['x-auth-token'] = activeToken;
+        }
         await fetch('/api/sync/staff', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-shop-id': storeCode },
-            body: JSON.stringify({ storeCode, staff: [safeStaffRecord] })
+            headers: syncHeaders,
+            body: JSON.stringify({ storeCode, staff: [{ ...safeStaffRecord, storeCode }] })
         }).catch(() => {});
     } catch (e) {}
 }

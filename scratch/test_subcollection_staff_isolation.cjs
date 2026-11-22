@@ -147,10 +147,15 @@ async function runTests() {
   // -------------------------------------------------------------------------
   console.log('\n📍 TEST 7: Netlify POST /api/sync/store-data quarantine merge');
   const { handler } = await import('../netlify/functions/api.js');
+  const { createSignedAuthToken } = await import('../server/auth-service.js');
+  const abhiOwnerToken = createSignedAuthToken({ storeCode: 'SHOP_ABHIJITMODAK', email: 'abhijitmodak098@gmail.com', role: 'Owner' });
   const syncEvent = {
     httpMethod: 'POST',
     path: '/api/sync/store-data',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${abhiOwnerToken}`
+    },
     body: JSON.stringify({
       storeCode: 'SHOP_ABHIJITMODAK',
       tables: { 'T1': { status: 'occupied', updatedAt: new Date().toISOString() } }

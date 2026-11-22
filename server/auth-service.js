@@ -346,6 +346,7 @@ export function generateStoreCode(shopName, email) {
  * Securely prioritizes environment secrets, generating an unguessable 256-bit ephemeral secret if unset.
  */
 let _ephemeralServerSecret = null;
+let _warnedMissingJwtSecret = false;
 
 export function getAuthTokenSecret() {
   const envSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET || process.env.OTP_TICKET_SECRET || process.env.AUTH_TOKEN_SECRET;
@@ -354,6 +355,10 @@ export function getAuthTokenSecret() {
   }
   if (CONFIG?.jwtSecret && typeof CONFIG.jwtSecret === 'string' && CONFIG.jwtSecret.trim().length >= 16) {
     return CONFIG.jwtSecret.trim();
+  }
+  if (!_warnedMissingJwtSecret && (process.env.NETLIFY || process.env.NODE_ENV === 'production') && process.env.NODE_ENV !== 'test') {
+    _warnedMissingJwtSecret = true;
+    console.error('[SECURITY WARNING] JWT_SECRET environment variable is not configured! Using ephemeral per-instance secret — set JWT_SECRET in Netlify/production environment variables for cross-container session continuity.');
   }
   if (!_ephemeralServerSecret) {
     _ephemeralServerSecret = crypto.randomBytes(32).toString('hex');
@@ -525,7 +530,7 @@ export function verifyOtpTicket(email, submittedOtp, purpose, ticket) {
  * Enforces cryptographic validation and matches token claims to target tenant storeCode.
  * Supports graceful migration for active pre-rollout sessions.
  */
-export function verifyTenantAuthorization({ token, targetStoreCode, allowGracefulMigration = true }) {
+export function verifyTenantAuthorization({ token, targetStoreCode, allowGracefulMigration = false }) {
   const normTargetStore = targetStoreCode ? String(targetStoreCode).trim().toUpperCase() : '';
 
   // Case A: No token provided

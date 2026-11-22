@@ -23,15 +23,6 @@ export const BAPI_QUARANTINE_STAFF_IDS = Object.freeze([
 ]);
 const BAPI_QUARANTINE_STAFF_SET = new Set(BAPI_QUARANTINE_STAFF_IDS);
 
-export const GENUINE_ABHIJIT_STAFF = Object.freeze([
-  { id: 1, name: 'Admin', role: 'Admin', status: 'Active', pinSalt: '0123456789abcdef0123456789abcdef', pinHash: '8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742', pin_hash: '8c0a1dd483dbd4deda3d166eda111798c0c306fe281f07bd7468751b04afb742' },
-  { id: '1793949208017', name: 'Dk', role: 'Floor Server', status: 'Active', pinSalt: '32edba4af5791625032ac6c1715f0e45', pinHash: 'ded7ae61ba95942b4dca71e8dcdd4a3ff96b5388624d807281c1844b2ec9859f', pin_hash: 'ded7ae61ba95942b4dca71e8dcdd4a3ff96b5388624d807281c1844b2ec9859f' },
-  { id: '1793955645287', name: 'om', role: 'Kitchen Chef', status: 'Active', pinSalt: 'fcafc1a5e05e1fbdb25ff9eabbbaddbe', pinHash: 'cce637732dd4df0713edb116e02492f820c38d032d7276c1a6ef8ab3bff7b59a', pin_hash: 'cce637732dd4df0713edb116e02492f820c38d032d7276c1a6ef8ab3bff7b59a' },
-  { id: '1793983984851', name: 'a', role: 'Cashier', status: 'Active', pinSalt: '77c15fa7dfd4a1d70cdef1172d613edf', pinHash: '458b920a342ec718be789834bb9938a6d155bc25a85338b4857124f6d2f319a3', pin_hash: '458b920a342ec718be789834bb9938a6d155bc25a85338b4857124f6d2f319a3' },
-  { id: '1793991820055', name: 'Am', role: 'Cashier', status: 'Active' },
-  { id: '1794326251473', name: 'abhi', role: 'Floor Server', status: 'Active' }
-]);
-
 export function isAbhijitTenant(storeCode, ownerEmail, profile) {
   const code = String(storeCode || '').trim();
   const email = String(ownerEmail || profile?.ownerEmail || profile?.email || '').toLowerCase().trim();
@@ -95,12 +86,6 @@ export async function getStoreStateFromPersistentCache(code) {
   } catch (e) {
     console.warn('[SYNC BLOB] Blob read error:', e.message);
   }
-  if (isAbhijitTenant(cleanCode) && cached && (!Array.isArray(cached.staff) || cached.staff.length === 0)) {
-    cached = {
-      ...cached,
-      staff: GENUINE_ABHIJIT_STAFF
-    };
-  }
   return sanitizeStaffForTenant(cleanCode, cached);
 }
 
@@ -138,9 +123,6 @@ export async function saveStoreStateToPersistentCache(code, state) {
   }
   if (state && state.staff === undefined && existing.staff !== undefined) {
     mergedState.staff = existing.staff;
-  }
-  if (isAbhijitTenant(cleanCode) && (!Array.isArray(mergedState.staff) || mergedState.staff.length === 0)) {
-    mergedState.staff = GENUINE_ABHIJIT_STAFF;
   }
   const cleanState = sanitizeStaffForTenant(cleanCode, mergedState);
   serverStoreMemoryCache.set(cleanCode, cleanState);
@@ -824,7 +806,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
       }
       const effectiveStaff = (fieldsToPatch.staff !== undefined)
         ? fieldsToPatch.staff
-        : (cachedStore?.staff || (isAbhijitTenant(code) ? GENUINE_ABHIJIT_STAFF : undefined));
+        : cachedStore?.staff;
       const updatedState = {
         ...(cachedStore || {}),
         ...fieldsToPatch,
@@ -866,7 +848,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
   const effectiveStaff = (fieldsToPatch.staff !== undefined)
     ? fieldsToPatch.staff
-    : (cachedStore?.staff || (isAbhijitTenant(code) ? GENUINE_ABHIJIT_STAFF : undefined));
+    : cachedStore?.staff;
   const updatedState = {
     ...(cachedStore || {}),
     ...fieldsToPatch,
@@ -928,7 +910,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
         await fetch(subdocUrl, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: jsonToFirestoreFields({ ...s, updatedAt: timestamp }) })
+          body: JSON.stringify({ fields: jsonToFirestoreFields({ ...s, storeCode: code, updatedAt: timestamp }) })
         }).catch(() => null);
       } catch (e) {}
     }
@@ -1126,9 +1108,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
           logo: cached.profile?.logo || cached.logo || null,
           upiId: cached.profile?.upiId || cached.upiId || null,
           showQr: cached.profile?.showQr !== undefined ? cached.profile.showQr : (cached.showQr !== undefined ? cached.showQr : null),
-          staff: (Array.isArray(cached.staff) && cached.staff.length > 0)
-            ? cached.staff
-            : (isAbhijitTenant(code) ? GENUINE_ABHIJIT_STAFF : (cached.staff || [])),
+          staff: Array.isArray(cached.staff) ? cached.staff : [],
           deletedStaffIds: cached.deletedStaffIds || [],
           menu: cached.menu || [],
           deletedMenuIds: cached.deletedMenuIds || [],
@@ -1238,9 +1218,7 @@ export async function getStoreFromFirestoreREST(storeCode, options = {}) {
         logo: cached.profile?.logo || cached.logo || null,
         upiId: cached.profile?.upiId || cached.upiId || null,
         showQr: cached.profile?.showQr !== undefined ? cached.profile.showQr : (cached.showQr !== undefined ? cached.showQr : null),
-        staff: (Array.isArray(cached.staff) && cached.staff.length > 0)
-          ? cached.staff
-          : (isAbhijitTenant(code) ? GENUINE_ABHIJIT_STAFF : (cached.staff || [])),
+        staff: Array.isArray(cached.staff) ? cached.staff : [],
         deletedStaffIds: cached.deletedStaffIds || [],
         menu: cached.menu || [],
         deletedMenuIds: cached.deletedMenuIds || [],

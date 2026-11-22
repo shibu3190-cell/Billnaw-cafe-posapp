@@ -1533,8 +1533,10 @@ function verifyAdminSecret(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// Authoritative Tenant Auth Gate Middleware / Helper
-function checkTenantAuth(req, res, targetStoreCode, allowGracefulMigration = true, options = {}) {
+// Authoritative Tenant Auth Gate Middleware / Helper (strict fail-closed by default)
+const ALLOW_GRACEFUL_SYNC_MIGRATION = () => process.env.ALLOW_GRACEFUL_AUTH_MIGRATION === 'true';
+
+function checkTenantAuth(req, res, targetStoreCode, allowGracefulMigration = false, options = {}) {
   const { allowBodyToken = true, allowQueryToken = true } = options;
   const authHeader = req.headers['authorization'] || '';
   let token = '';
@@ -1588,7 +1590,7 @@ app.get('/api/sync/store-data', async (req, res) => {
     if (!storeCode) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
-    const auth = checkTenantAuth(req, res, storeCode, true);
+    const auth = checkTenantAuth(req, res, storeCode, ALLOW_GRACEFUL_SYNC_MIGRATION());
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
@@ -1606,7 +1608,7 @@ app.get('/api/sync/invoices', async (req, res) => {
     if (!code) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
-    const auth = checkTenantAuth(req, res, code, true);
+    const auth = checkTenantAuth(req, res, code, ALLOW_GRACEFUL_SYNC_MIGRATION());
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
@@ -1625,7 +1627,7 @@ app.get('/api/sync/reports', async (req, res) => {
     if (!code) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
-    const auth = checkTenantAuth(req, res, code, true);
+    const auth = checkTenantAuth(req, res, code, ALLOW_GRACEFUL_SYNC_MIGRATION());
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
@@ -1645,7 +1647,7 @@ app.post('/api/sync/store-data', async (req, res) => {
     if (!code) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Cross-tenant data injection prevented.' });
     }
-    const auth = checkTenantAuth(req, res, code, true);
+    const auth = checkTenantAuth(req, res, code, ALLOW_GRACEFUL_SYNC_MIGRATION());
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
@@ -1715,7 +1717,7 @@ app.post('/api/sync/staff', async (req, res) => {
     if (!code) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
-    const auth = checkTenantAuth(req, res, code, true);
+    const auth = checkTenantAuth(req, res, code, ALLOW_GRACEFUL_SYNC_MIGRATION());
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }
@@ -1737,7 +1739,7 @@ app.post('/api/sync/staff/delete', async (req, res) => {
     if (!code) {
       return res.status(400).json({ success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
-    const auth = checkTenantAuth(req, res, code, true);
+    const auth = checkTenantAuth(req, res, code, ALLOW_GRACEFUL_SYNC_MIGRATION());
     if (!auth.authorized) {
       return res.status(auth.status || 401).json({ success: false, error: auth.error });
     }

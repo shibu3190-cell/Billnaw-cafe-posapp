@@ -14,7 +14,9 @@ try {
 export const CONFIG = {
   port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
   host: process.env.HOST || '0.0.0.0',
-  jwtSecret: process.env.JWT_SECRET || process.env.AUTH_TOKEN_SECRET || process.env.SESSION_SECRET || '0d39e4a18c195441866480868bada4fabf0f44e5e71f1057f3a6a2700e5def26',
+  get jwtSecret() {
+    return (process.env.JWT_SECRET || process.env.AUTH_TOKEN_SECRET || process.env.SESSION_SECRET || '').trim();
+  },
   gemini: {
     // Check all standard Gemini API key environment variables dynamically
     get apiKey() {

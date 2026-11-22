@@ -1068,7 +1068,7 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
     const token = extractAuthToken(event, body);
-    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: process.env.ALLOW_GRACEFUL_AUTH_MIGRATION === 'true' });
     if (!auth.authorized) {
       return jsonResponse(auth.status || 401, { success: false, error: auth.error });
     }
@@ -1089,7 +1089,7 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
     const token = extractAuthToken(event, body);
-    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: process.env.ALLOW_GRACEFUL_AUTH_MIGRATION === 'true' });
     if (!auth.authorized) {
       return jsonResponse(auth.status || 401, { success: false, error: auth.error });
     }
@@ -1113,7 +1113,7 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
     const token = extractAuthToken(event, body);
-    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: process.env.ALLOW_GRACEFUL_AUTH_MIGRATION === 'true' });
     if (!auth.authorized) {
       return jsonResponse(auth.status || 401, { success: false, error: auth.error });
     }
@@ -1138,7 +1138,7 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Cross-tenant data injection prevented.' });
     }
     const token = extractAuthToken(event, body);
-    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: process.env.ALLOW_GRACEFUL_AUTH_MIGRATION === 'true' });
     if (!auth.authorized) {
       return jsonResponse(auth.status || 401, { success: false, error: auth.error });
     }
@@ -1211,7 +1211,7 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
     const token = extractAuthToken(event, body);
-    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: process.env.ALLOW_GRACEFUL_AUTH_MIGRATION === 'true' });
     if (!auth.authorized) {
       return jsonResponse(auth.status || 401, { success: false, error: auth.error });
     }
@@ -1237,7 +1237,7 @@ export async function handler(event, context) {
       return jsonResponse(400, { success: false, error: 'A valid storeCode is required. Tenant separation enforced.' });
     }
     const token = extractAuthToken(event, body);
-    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: true });
+    const auth = verifyTenantAuthorization({ token, targetStoreCode: storeCode, allowGracefulMigration: process.env.ALLOW_GRACEFUL_AUTH_MIGRATION === 'true' });
     if (!auth.authorized) {
       return jsonResponse(auth.status || 401, { success: false, error: auth.error });
     }
