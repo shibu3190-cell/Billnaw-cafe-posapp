@@ -4936,6 +4936,13 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                         if (typeof shopProfile !== 'undefined' && shopProfile) shopProfile.menuVersion = serverMenuVer;
                         if (typeof window !== 'undefined') window.currentMenuVersion = serverMenuVer;
                     }
+                } else if (respJson && respJson.staleMenuRejected === true) {
+                    // Stale offline device menu write was rejected by server. Reset local version so remote snapshot immediately triggers full cloud adoption (CASE 2).
+                    console.warn('[BACKEND SYNC] Local menu was rejected as stale by server. Resetting local version to trigger cloud adoption.');
+                    try { localStorage.removeItem('billnaw_menu_version'); } catch (_) {}
+                    if (typeof shopProfile !== 'undefined' && shopProfile) shopProfile.menuVersion = 0;
+                    if (typeof window !== 'undefined') window.currentMenuVersion = 0;
+                    if (typeof pollCloudSync === 'function') pollCloudSync();
                 }
                 const latestGen = (typeof window !== 'undefined' && window._syncQueueGenByStore)
                     ? (window._syncQueueGenByStore[targetStoreCode] || 0)

@@ -69,14 +69,15 @@ async function run() {
             menuVersion: 6
         });
         assert.strictEqual(res1.success, true, 'Sync must succeed');
-        assert.strictEqual(res1.menuVersion, 1795339806974, 'Stale device v6 MUST NOT downgrade cloud 1795339806973 — must advance monotonically to 1795339806974');
+        assert.strictEqual(res1.staleMenuRejected, true, 'Stale device v6 MUST NOT overwrite cloud menu');
+        assert.strictEqual(res1.cloudMenuVersion, 1795339806973, 'Cloud version 1795339806973 must be preserved');
 
-        // 1b. Concurrent admin sends same version 1795339806974 -> must advance to 1795339806975
+        // 1b. Concurrent admin sends same version 1795339806973 -> must advance to 1795339806974
         const res2 = await syncService.syncStoreToFirestoreREST(mockCode, {
             menu: [{ id: 'm1', name: 'Espresso', price: 130 }],
-            menuVersion: 1795339806974
+            menuVersion: 1795339806973
         });
-        assert.strictEqual(res2.menuVersion, 1795339806975, 'Same-version concurrent edit must advance monotonically to 1795339806975');
+        assert.strictEqual(res2.menuVersion, 1795339806974, 'Same-version concurrent edit must advance monotonically to 1795339806974');
 
         // 1c. Client adopts server-returned menuVersion & reconcileExistingShopCloudSync sends menuVersion
         assert(coreJs.includes('if (respJson && Number.isFinite(Number(respJson.menuVersion)) && Number(respJson.menuVersion) > 0)'), 'dispatchBackendStoreSync must adopt server-returned menuVersion');

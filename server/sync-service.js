@@ -615,14 +615,27 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   let incomingMenuVer = null;
   if (typeof payload.menuVersion === 'number' || typeof payload.menuVersion === 'string') {
     const v = Number(payload.menuVersion);
-    if (Number.isFinite(v) && v >= 0 && String(payload.menuVersion).trim() !== '') {
+    if (Number.isSafeInteger(v) && v >= 0 && String(payload.menuVersion).trim() !== '') {
       incomingMenuVer = v;
     }
   }
 
   let resolvedMenuVersion = null;
-  const isMenuCatalogWrite = Array.isArray(payload.menu) || Array.isArray(payload.categories);
-  if (isMenuCatalogWrite) {
+  let staleMenuRejected = false;
+  const isMenuCatalogWrite = Array.isArray(payload.menu) ||
+                             Array.isArray(payload.categories) ||
+                             Array.isArray(payload.deletedMenuIds) ||
+                             Array.isArray(payload.deletedMenuNames);
+  const isStaleIncomingMenu = (existingCloudMenuVer > 0 && incomingMenuVer !== null && incomingMenuVer < existingCloudMenuVer);
+  const isUnversionedOverwritingVersioned = (existingCloudMenuVer > 0 && incomingMenuVer === null && isMenuCatalogWrite);
+
+  if (isStaleIncomingMenu || isUnversionedOverwritingVersioned) {
+    // REJECT STALE MENU REGRESSION: An offline device or outdated client attempted to overwrite
+    // a newer cloud menu catalog (e.g. v99 or v0 attempting to overwrite v105).
+    // Preserve existing cloud version and do NOT patch fieldsToPatch.menu or fieldsToPatch.categories.
+    staleMenuRejected = true;
+    resolvedMenuVersion = null; // Do NOT return cloud version as if client's write was applied
+  } else if (isMenuCatalogWrite) {
     // Strictly monotonic server menuVersion: NEVER downgrade existing cloud version (e.g. 1.795e12 -> 6)
     // and prevent same-version (v+1 vs v+1) concurrent admin collisions across devices.
     const fallbackVer = existingCloudMenuVer > 0
@@ -634,31 +647,31 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
       resolvedMenuVersion = fallbackVer;
     }
     fieldsToPatch.menuVersion = resolvedMenuVersion;
+
+    if (Array.isArray(payload.menu)) {
+      fieldsToPatch.menu = payload.menu;
+    }
+    if (Array.isArray(payload.deletedMenuIds)) {
+      const activeMenuIds = new Set(
+        (Array.isArray(payload.menu) ? payload.menu : [])
+          .filter(m => m && !m.isDeleted && m.isAvailable !== false && m.id !== undefined)
+          .map(m => String(m.id).trim())
+      );
+      fieldsToPatch.deletedMenuIds = payload.deletedMenuIds.filter(id => !activeMenuIds.has(String(id).trim()));
+    }
+    if (Array.isArray(payload.deletedMenuNames)) {
+      const activeMenuNames = new Set(
+        (Array.isArray(payload.menu) ? payload.menu : [])
+          .filter(m => m && !m.isDeleted && m.isAvailable !== false && m.name)
+          .map(m => String(m.name).trim().toLowerCase())
+      );
+      fieldsToPatch.deletedMenuNames = payload.deletedMenuNames.filter(n => !activeMenuNames.has(String(n).trim().toLowerCase()));
+    }
+    if (Array.isArray(payload.categories)) fieldsToPatch.categories = payload.categories;
   } else if (incomingMenuVer !== null) {
     resolvedMenuVersion = Math.max(existingCloudMenuVer, incomingMenuVer);
     fieldsToPatch.menuVersion = resolvedMenuVersion;
   }
-
-  if (Array.isArray(payload.menu)) {
-    fieldsToPatch.menu = payload.menu;
-  }
-  if (Array.isArray(payload.deletedMenuIds)) {
-    const activeMenuIds = new Set(
-      (Array.isArray(payload.menu) ? payload.menu : [])
-        .filter(m => m && !m.isDeleted && m.isAvailable !== false && m.id !== undefined)
-        .map(m => String(m.id).trim())
-    );
-    fieldsToPatch.deletedMenuIds = payload.deletedMenuIds.filter(id => !activeMenuIds.has(String(id).trim()));
-  }
-  if (Array.isArray(payload.deletedMenuNames)) {
-    const activeMenuNames = new Set(
-      (Array.isArray(payload.menu) ? payload.menu : [])
-        .filter(m => m && !m.isDeleted && m.isAvailable !== false && m.name)
-        .map(m => String(m.name).trim().toLowerCase())
-    );
-    fieldsToPatch.deletedMenuNames = payload.deletedMenuNames.filter(n => !activeMenuNames.has(String(n).trim().toLowerCase()));
-  }
-  if (Array.isArray(payload.categories)) fieldsToPatch.categories = payload.categories;
 
   let mergedTables = null;
   let usePerTableDotMask = false;
@@ -970,7 +983,7 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
   }
 
   // 4. Sync Menu Metadata Subcollection (/{collection}/{storeCode}/menu_meta/version)
-  if (resolvedMenuVersion !== null || Array.isArray(payload.menu) || Array.isArray(payload.categories)) {
+  if (fieldsToPatch.menuVersion !== undefined || Array.isArray(fieldsToPatch.menu) || Array.isArray(fieldsToPatch.categories)) {
     const metaDocUrl = `${base}/${collection}/${encodeURIComponent(code)}/menu_meta/version`;
     const finalVer = resolvedMenuVersion !== null ? resolvedMenuVersion : Date.now();
     const metaFields = {
@@ -979,8 +992,8 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
       updatedAt: timestamp,
       updatedBy: payload.profile?.name || payload.updatedBy || 'Admin'
     };
-    if (Array.isArray(fieldsToPatch.menu) || Array.isArray(payload.menu)) {
-      metaFields.itemCount = Array.isArray(fieldsToPatch.menu) ? fieldsToPatch.menu.length : payload.menu.length;
+    if (Array.isArray(fieldsToPatch.menu)) {
+      metaFields.itemCount = fieldsToPatch.menu.length;
     }
     postRootTasks.push(
       fetch(metaDocUrl, {
@@ -1075,7 +1088,9 @@ export async function syncStoreToFirestoreREST(storeCode, payload = {}) {
     success: true,
     storeCode: code,
     syncedFields: Object.keys(fieldsToPatch),
-    menuVersion: resolvedMenuVersion !== null ? resolvedMenuVersion : undefined,
+    menuVersion: fieldsToPatch.menuVersion !== undefined ? fieldsToPatch.menuVersion : undefined,
+    staleMenuRejected: staleMenuRejected || undefined,
+    cloudMenuVersion: staleMenuRejected ? existingCloudMenuVer : undefined,
     staffCount: staffToSubdoc.length,
     deletedStaffId: deletedIdStr || undefined,
     deletedStaffIds: deletedStaffIdSet.size > 0 ? Array.from(deletedStaffIdSet) : undefined,
