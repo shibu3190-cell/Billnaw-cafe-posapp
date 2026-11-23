@@ -1345,7 +1345,9 @@ export async function getInvoicesFromFirestoreREST(storeCode, { pageSize = 50, p
 
 export async function getReportsFromFirestoreREST(storeCode, { date = null, pageSize = 30, pageToken = null } = {}) {
   const code = (typeof storeCode === 'string') ? storeCode.trim() : '';
-  if (!code) return { success: false, error: 'Store code is required' };
+  if (!code || !/^[A-Za-z0-9_-]{3,64}$/.test(code)) {
+    return { success: false, error: 'Tenant isolation error: valid storeCode required.' };
+  }
   if (!CONFIG.firebase.projectId || !CONFIG.firebase.firestoreDatabaseId) {
     return { success: false, error: 'Firebase configuration missing on server' };
   }
