@@ -2098,15 +2098,32 @@ if (posMeshChannel) {
             if (isBillingAlertEligibleRole()) {
                 triggerBillingReadyAlert(data.tableNumber, data.tableName, data.staffName);
             }
-        } else if (data.type === 'TABLES_UPDATED' && data.tables) {
-            tablesInfo = data.tables;
+        } else if (data.type === 'TABLES_UPDATED' && data.tables && typeof data.tables === 'object') {
+            // Merge per-table key so partial delta broadcasts never overwrite untouched sibling tables in peer tabs
+            if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
+            for (const [tId, tVal] of Object.entries(data.tables)) {
+                if (tVal && typeof tVal === 'object') {
+                    tablesInfo[tId] = tVal;
+                    if (typeof _lastPersistedTableState === 'object' && typeof _computeTableSyncHash === 'function') {
+                        _lastPersistedTableState[tId] = {
+                            hasItems: Array.isArray(tVal.items) && tVal.items.length > 0,
+                            status: tVal.status || '',
+                            hash: _computeTableSyncHash(tVal)
+                        };
+                    }
+                }
+            }
             window.tablesInfo = tablesInfo;
             if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_tables', tablesInfo);
-            if (typeof renderTables === 'function') renderTables();
-            if (typeof syncTableUI === 'function') syncTableUI();
-            if (typeof updateCartUI === 'function') updateCartUI();
+            if (typeof scheduleUIUpdate === 'function') {
+                scheduleUIUpdate({ tables: true });
+            } else {
+                if (typeof renderTables === 'function') renderTables();
+                if (typeof syncTableUI === 'function') syncTableUI();
+                if (typeof updateCartUI === 'function') updateCartUI();
+                if (typeof renderTablesView === 'function') renderTablesView();
+            }
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
-            if (typeof renderTablesView === 'function') renderTablesView();
         } else if (data.type === 'TABLE_DELTA' && data.tableId !== undefined) {
             const tId = String(data.tableId);
             if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
@@ -3222,7 +3239,8 @@ function handleRemoteFirestoreUpdate(data) {
             tablesInfo[tId] = mergedTable;
             _lastPersistedTableState[tId] = {
                 hasItems: Array.isArray(mergedTable.items) && mergedTable.items.length > 0,
-                hash: JSON.stringify(mergedTable.items || []) + '|' + (mergedTable.status || '')
+                status: mergedTable.status || '',
+                hash: _computeTableSyncHash(mergedTable)
             };
         }
 
@@ -4001,10 +4019,16 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
 
         firestoreInvoicesUnsubscribe = window.firestoreOnSnapshot(queryTarget, handleInvoiceSnap, (err) => {
             console.warn('[Firestore] invoices listener warning:', err ? err.message : err);
-            // Resilient fallback: if composite query stream has issues, listen to direct collection
+            // Resilient bounded fallback: order newest-first so >50-invoice cafes always stream latest bills
             if (queryTarget !== invoicesColRef) {
                 try {
-                    firestoreInvoicesUnsubscribe = window.firestoreOnSnapshot(invoicesColRef, handleInvoiceSnap, (fallbackErr) => {
+                    let boundedFallback = invoicesColRef;
+                    if (typeof window.firestoreQuery === 'function' && typeof window.firestoreLimit === 'function') {
+                        boundedFallback = (typeof window.firestoreOrderBy === 'function')
+                            ? window.firestoreQuery(invoicesColRef, window.firestoreOrderBy('created_at', 'desc'), window.firestoreLimit(50))
+                            : window.firestoreQuery(invoicesColRef, window.firestoreLimit(50));
+                    }
+                    firestoreInvoicesUnsubscribe = window.firestoreOnSnapshot(boundedFallback, handleInvoiceSnap, (fallbackErr) => {
                         console.warn('[Firestore] invoices fallback warning:', fallbackErr ? fallbackErr.message : fallbackErr);
                     });
                 } catch (fallbackEx) {}
@@ -4017,6 +4041,247 @@ function subscribeInvoicesCloudListener(targetStoreCode = null) {
     }
 }
 window.subscribeInvoicesCloudListener = subscribeInvoicesCloudListener;
+
+let firestoreTablesUnsubscribe = null;
+
+// Per-tab writer identity used to suppress redundant server self-echoes on root/subcollection snapshots
+const _syncClientInstanceId = 'tab_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
+let _lastSelfWriteUpdatedAt = '';
+
+function _syncTablesSubcollectionDocs(tablesDelta, targetStoreCode = null) {
+    if (!tablesDelta || typeof tablesDelta !== 'object') return;
+    if (!window.firestoreDB || !window.firestoreDoc || !window.firestoreSetDoc) return;
+    const storeCode = targetStoreCode || getActiveStoreIdentifier();
+    if (!storeCode) return;
+    const rootCol = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
+    const tsIso = new Date().toISOString();
+    for (const [tId, tData] of Object.entries(tablesDelta)) {
+        if (!tData || typeof tData !== 'object') continue;
+        try {
+            const tableDocRef = window.firestoreDoc(window.firestoreDB, rootCol, storeCode, 'tables', String(tId));
+            if (tableDocRef) {
+                window.firestoreSetDoc(tableDocRef, {
+                    id: String(tId),
+                    ...tData,
+                    _writerId: _syncClientInstanceId,
+                    _syncedAt: tsIso
+                }, { merge: true }).catch(() => {});
+            }
+        } catch (_) {}
+    }
+}
+
+function subscribeTablesCloudListener(targetStoreCode = null) {
+    if (!window.firestoreDB || !window.firestoreCollection || !window.firestoreOnSnapshot) return null;
+    if (firestoreTablesUnsubscribe) {
+        try { firestoreTablesUnsubscribe(); } catch(e) {}
+        firestoreTablesUnsubscribe = null;
+    }
+    try {
+        const storeCode = targetStoreCode || getActiveStoreIdentifier();
+        if (!storeCode) return null;
+
+        const rootCol = (typeof getStoreCollectionName === 'function') ? getStoreCollectionName(storeCode) : 'shops';
+        const tablesColRef = window.firestoreCollection(window.firestoreDB, rootCol, storeCode, 'tables');
+        if (!tablesColRef) return null;
+
+        const parseTs = (val) => {
+            if (typeof val === 'number' && Number.isFinite(val)) return val;
+            if (typeof val === 'string' && val.trim() !== '') {
+                const asNum = Number(val);
+                if (Number.isFinite(asNum) && asNum > 0) return asNum;
+                const parsed = Date.parse(val);
+                if (!Number.isNaN(parsed)) return parsed;
+            }
+            return 0;
+        };
+
+        firestoreTablesUnsubscribe = window.firestoreOnSnapshot(tablesColRef, (snap) => {
+            if (!snap) return;
+            // Filter per-document (never collection-wide hasPendingWrites) so pending writes on Table 1
+            // never cause remote docChanges() for Table 4 to be permanently dropped.
+            const changes = typeof snap.docChanges === 'function' ? snap.docChanges() : null;
+            const entries = [];
+            if (Array.isArray(changes)) {
+                changes.forEach((ch) => {
+                    if (ch && ch.type !== 'removed' && ch.doc && typeof ch.doc.data === 'function') {
+                        if (ch.doc.metadata && ch.doc.metadata.hasPendingWrites) return;
+                        entries.push({ id: ch.doc.id, data: ch.doc.data() });
+                    }
+                });
+            } else if (typeof snap.forEach === 'function') {
+                snap.forEach((d) => {
+                    if (d && typeof d.data === 'function') {
+                        if (d.metadata && d.metadata.hasPendingWrites) return;
+                        entries.push({ id: d.id, data: d.data() });
+                    }
+                });
+            }
+            if (entries.length === 0) return;
+
+            if (!tablesInfo || typeof tablesInfo !== 'object') tablesInfo = {};
+            let anyApplied = false;
+            const newlyReadyTables = [];
+            const isAdminOrCashier = typeof isBillingAlertEligibleRole === 'function' ? isBillingAlertEligibleRole() : false;
+
+            for (const { id: docId, data: tData } of entries) {
+                if (!tData || typeof tData !== 'object') continue;
+                if (tData._writerId === _syncClientInstanceId) continue;
+
+                const tId = String(tData.id || docId || '').trim();
+                if (!tId) continue;
+
+                const prevTable = tablesInfo[tId];
+                const prevItems = Array.isArray(prevTable?.items) ? prevTable.items : [];
+                const remoteItems = Array.isArray(tData.items) ? tData.items : [];
+                const newStatus = tData.status || '';
+                const rTime = Math.max(parseTs(tData.updatedAt), parseTs(tData.savedTime), parseTs(tData.clearedAt));
+                const lTime = Math.max(parseTs(prevTable?.updatedAt), parseTs(prevTable?.savedTime), parseTs(prevTable?.clearedAt));
+                const isRemoteClear = remoteItems.length === 0 && (newStatus === 'empty' || newStatus === 'vacant' || newStatus === 'billed' || !newStatus);
+
+                // Guard against untimestamped/stale empty subdoc overwriting a locally active table
+                if (prevTable && prevItems.length > 0 && isRemoteClear) {
+                    const remoteClearedTs = Math.max(parseTs(tData.clearedAt), parseTs(tData.updatedAt));
+                    const localActiveTs = Math.max(parseTs(prevTable.updatedAt), parseTs(prevTable.savedTime));
+                    if (!(newStatus === 'billed' || (remoteClearedTs > 0 && remoteClearedTs >= localActiveTs))) {
+                        continue;
+                    }
+                }
+
+                // Skip stale table subdoc updates when local state is strictly newer
+                if (prevTable && lTime > 0 && rTime > 0 && rTime < lTime) continue;
+
+                // Protect recently cleared local table from stale active snapshot
+                const localClearedTs = parseTs(prevTable?.clearedAt);
+                if (prevTable && prevItems.length === 0 && localClearedTs > 0 && remoteItems.length > 0 && (rTime === 0 || rTime <= localClearedTs)) {
+                    continue;
+                }
+
+                const cleanRemote = { ...tData };
+                delete cleanRemote._writerId;
+                delete cleanRemote._syncedAt;
+
+                if (newStatus === 'ready_for_billing' && prevTable?.status !== 'ready_for_billing') {
+                    newlyReadyTables.push({
+                        tableId: tId,
+                        tableName: cleanRemote.name || (typeof getTableName === 'function' ? getTableName(tId) : `Table ${tId}`),
+                        staffName: cleanRemote.readyForBillingBy || 'Floor Server'
+                    });
+                }
+
+                let mergedTable;
+                if (isRemoteClear) {
+                    // Clean reset on empty/cleared/billed transition: never carry over stale kotPrintedMap, notes, discount, or readyForBillingBy
+                    mergedTable = {
+                        items: [],
+                        status: newStatus || 'empty',
+                        savedTime: null,
+                        lastReminder: null,
+                        kotPrintedMap: {},
+                        clearedAt: cleanRemote.clearedAt || cleanRemote.updatedAt || Date.now(),
+                        updatedAt: cleanRemote.updatedAt || Date.now()
+                    };
+                    if (cleanRemote.name || prevTable?.name) mergedTable.name = cleanRemote.name || prevTable.name;
+                } else {
+                    mergedTable = prevTable ? { ...prevTable, ...cleanRemote } : { ...cleanRemote };
+                    const mergedMap = { ...(prevTable?.kotPrintedMap || {}), ...(cleanRemote.kotPrintedMap || {}) };
+                    mergedTable.items = remoteItems.map((rItem) => {
+                        if (!rItem || typeof rItem !== 'object') return rItem;
+                        const lItem = prevItems.find((li) => li && ((li.id !== undefined && String(li.id) === String(rItem.id)) || li.name === rItem.name));
+                        const mapQty = Number(mergedMap[String(rItem.id)] ?? mergedMap[rItem.name] ?? 0);
+                        const maxPrinted = Math.max(Number(lItem?.qtyKotPrinted || 0), Number(rItem.qtyKotPrinted || 0), mapQty);
+                        const orderedQty = Number(rItem.qty || rItem.quantity || 1);
+                        const clampedPrinted = maxPrinted > 0 ? Math.min(orderedQty, maxPrinted) : Number(rItem.qtyKotPrinted || 0);
+                        if (clampedPrinted > 0) {
+                            if (rItem.id !== undefined) mergedMap[String(rItem.id)] = clampedPrinted;
+                            if (rItem.name) mergedMap[rItem.name] = clampedPrinted;
+                        }
+                        let frozenPrice = rItem.price;
+                        let frozenRate = rItem.rate !== undefined ? rItem.rate : rItem.price;
+                        let frozenSnapAt = rItem.priceSnapshotAt;
+                        if (lItem && lItem.priceSnapshotAt !== undefined && lItem.priceSnapshotAt !== null) {
+                            if (rItem.priceSnapshotAt === undefined || rItem.priceSnapshotAt === null || Number(lItem.priceSnapshotAt) <= Number(rItem.priceSnapshotAt)) {
+                                frozenPrice = lItem.price;
+                                frozenRate = lItem.rate !== undefined ? lItem.rate : lItem.price;
+                                frozenSnapAt = lItem.priceSnapshotAt;
+                            }
+                        }
+                        const nextItem = { ...rItem, price: frozenPrice, rate: frozenRate };
+                        if (frozenSnapAt !== undefined) nextItem.priceSnapshotAt = frozenSnapAt;
+                        if (clampedPrinted > 0) nextItem.qtyKotPrinted = clampedPrinted;
+                        return nextItem;
+                    });
+                    mergedTable.kotPrintedMap = mergedMap;
+                }
+
+                const nextHash = _computeTableSyncHash(mergedTable);
+                if (_lastPersistedTableState[tId]?.hash === nextHash) continue;
+
+                tablesInfo[tId] = mergedTable;
+                _lastPersistedTableState[tId] = {
+                    hasItems: mergedTable.items.length > 0,
+                    status: mergedTable.status || '',
+                    hash: nextHash
+                };
+                anyApplied = true;
+            }
+
+            if (anyApplied) {
+                window.tablesInfo = tablesInfo;
+                if (typeof idb !== 'undefined' && idb.set) {
+                    idb.set('cafe_tables', tablesInfo);
+                }
+                if (typeof scheduleUIUpdate === 'function') {
+                    scheduleUIUpdate({ tables: true });
+                } else if (typeof updateAllUI === 'function') {
+                    updateAllUI({ tables: true });
+                }
+                if (isAdminOrCashier && newlyReadyTables.length > 0) {
+                    newlyReadyTables.forEach((t) => {
+                        if (typeof triggerBillingReadyAlert === 'function') {
+                            triggerBillingReadyAlert(t.tableId, t.tableName, t.staffName);
+                        } else if (typeof showToast === 'function') {
+                            showToast(`🔔 ${t.tableName} is Ready for Billing! (${t.staffName})`, 'info');
+                        }
+                    });
+                }
+            }
+        }, (err) => {
+            const code = err && err.code ? String(err.code) : '';
+            if (code === 'permission-denied' || code === 'resource-exhausted') {
+                if (firestoreTablesUnsubscribe) {
+                    try { firestoreTablesUnsubscribe(); } catch (_) {}
+                    firestoreTablesUnsubscribe = null;
+                }
+            }
+            console.debug('[Firestore] tables subcollection listener fallback to root doc:', err?.message || err);
+        });
+        return firestoreTablesUnsubscribe;
+    } catch (err) {
+        console.debug('Error attaching tables subcollection listener:', err);
+        return null;
+    }
+}
+window.subscribeTablesCloudListener = subscribeTablesCloudListener;
+
+function _computeTableSyncHash(tbl) {
+    if (!tbl || typeof tbl !== 'object') return '';
+    return JSON.stringify({
+        items: tbl.items || [],
+        status: tbl.status || '',
+        clearedAt: tbl.clearedAt || 0,
+        readyForBillingBy: tbl.readyForBillingBy || '',
+        readyForBillingTime: tbl.readyForBillingTime || 0,
+        customer: tbl.customer || '',
+        customerPhone: tbl.customerPhone || '',
+        discount: tbl.discount || null,
+        cartDiscount: tbl.cartDiscount || 0,
+        notes: tbl.notes || '',
+        name: tbl.name || '',
+        guestCount: tbl.guestCount || 0,
+        kotPrintedMap: tbl.kotPrintedMap || null
+    });
+}
 
 let firestoreMenuMetaUnsubscribe = null;
 
@@ -4262,16 +4527,26 @@ function attachFirestoreListener(targetStoreCode = null) {
             return;
         }
 
-        // Attach subcollection listeners for devices, sessions, staff, decoupled 10-day invoices, and lightweight menu version meta
+        // Attach subcollection listeners for devices, sessions, staff, decoupled 10-day invoices, lightweight delta tables, and menu version meta
         subscribeDevicesCloudListener(targetStoreCode);
         subscribeSessionsCloudListener(targetStoreCode);
         subscribeStaffCloudListener(targetStoreCode);
         subscribeInvoicesCloudListener(targetStoreCode);
+        subscribeTablesCloudListener(targetStoreCode);
         subscribeMenuMetaCloudListener(targetStoreCode);
 
         firestoreUnsubscribe = window.firestoreOnSnapshot(storeDocRef, (snap) => {
             if (snap.exists()) {
+                // Skip local optimistic write echoes & confirmed self-writes to avoid redundant full-store re-renders
+                if (snap.metadata && snap.metadata.hasPendingWrites) {
+                    return;
+                }
                 const data = snap.data();
+                if (data && data._writerId === _syncClientInstanceId && data.updatedAt && data.updatedAt === _lastSelfWriteUpdatedAt) {
+                    lastCloudSyncTime = Date.now();
+                    setCloudSyncStatus('synced', 'Real-Time Synced');
+                    return;
+                }
                 handleRemoteFirestoreUpdate(data);
                 lastCloudSyncTime = Date.now();
                 setCloudSyncStatus('synced', 'Real-Time Synced');
@@ -4321,6 +4596,10 @@ function detachFirestoreListener() {
     if (firestoreInvoicesUnsubscribe) {
         try { firestoreInvoicesUnsubscribe(); } catch(e) {}
         firestoreInvoicesUnsubscribe = null;
+    }
+    if (firestoreTablesUnsubscribe) {
+        try { firestoreTablesUnsubscribe(); } catch(e) {}
+        firestoreTablesUnsubscribe = null;
     }
     if (firestoreMenuMetaUnsubscribe) {
         try { firestoreMenuMetaUnsubscribe(); } catch(e) {}
@@ -4514,7 +4793,18 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
         sanitizedPartial.staff = sanitizedPartial.staff.map(sanitizeStaffRecordForCloud);
     }
 
-    const storeBucket = { ...(pendingBackendSyncByStore[activeStoreCode] || {}), ...sanitizedPartial, storeCode: activeStoreCode };
+    const _mergePendingPayloads = (baseObj, incomingObj, targetCode) => {
+        const prev = (baseObj && typeof baseObj === 'object') ? baseObj : {};
+        const next = (incomingObj && typeof incomingObj === 'object') ? incomingObj : {};
+        const merged = { ...prev, ...next, storeCode: targetCode };
+        // Deep-merge partial table deltas so coalescing Table 2 never drops Table 1's queued edits
+        if (prev.tables && typeof prev.tables === 'object' && next.tables && typeof next.tables === 'object') {
+            merged.tables = { ...prev.tables, ...next.tables };
+        }
+        return merged;
+    };
+
+    const storeBucket = _mergePendingPayloads(pendingBackendSyncByStore[activeStoreCode], sanitizedPartial, activeStoreCode);
     const activeOwnerEmail = (typeof shopProfile !== 'undefined' && (shopProfile?.ownerEmail || shopProfile?.email)) ||
                              localStorage.getItem('billnaw_auth_email') ||
                              localStorage.getItem('billnaw_owner_email') ||
@@ -4548,7 +4838,7 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
         if (!currentActiveCode || String(currentActiveCode).trim().toUpperCase() !== String(targetStoreCode).trim().toUpperCase()) {
             const qMap = readOfflineSyncQueueMap();
             if (Object.keys(payloadToSend).length > 0) {
-                qMap[targetStoreCode] = { ...(qMap[targetStoreCode] || {}), ...payloadToSend, storeCode: targetStoreCode };
+                qMap[targetStoreCode] = _mergePendingPayloads(qMap[targetStoreCode], payloadToSend, targetStoreCode);
                 writeOfflineSyncQueueMap(qMap);
             }
             console.warn(`[BACKEND SYNC] Active store changed during sync (${targetStoreCode} -> ${currentActiveCode}). Preserving queued payload under original storeCode.`);
@@ -4560,7 +4850,7 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
             String(qMapBefore[k]?.storeCode || k).trim().toUpperCase() === String(targetStoreCode).trim().toUpperCase()
         );
         const queuedForStore = existingQueueKey ? qMapBefore[existingQueueKey] : null;
-        const finalPayload = { ...(queuedForStore || {}), ...payloadToSend, storeCode: targetStoreCode };
+        const finalPayload = _mergePendingPayloads(queuedForStore, payloadToSend, targetStoreCode);
 
         // Role-aware payload sanitization: prevent queued Admin-only fields (like staff/profile) from causing 403 on Cashier/Server table/menu/expense syncs
         try {
@@ -4665,7 +4955,7 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
                 if (res.status === 401) {
                     const qMapErr = readOfflineSyncQueueMap();
                     const qKey = existingQueueKey || targetStoreCode;
-                    qMapErr[qKey] = { ...(qMapErr[qKey] || {}), ...finalPayload, storeCode: targetStoreCode };
+                    qMapErr[qKey] = _mergePendingPayloads(qMapErr[qKey], finalPayload, targetStoreCode);
                     writeOfflineSyncQueueMap(qMapErr);
                     setCloudSyncStatus('offline', 'Auth Required (Saved Locally)');
                     try {
@@ -4695,7 +4985,7 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
             console.warn('[BACKEND SYNC] Network defer / offline:', err.message);
             const qMapErr = readOfflineSyncQueueMap();
             const qKey = existingQueueKey || targetStoreCode;
-            qMapErr[qKey] = { ...(qMapErr[qKey] || {}), ...finalPayload, storeCode: targetStoreCode };
+            qMapErr[qKey] = _mergePendingPayloads(qMapErr[qKey], finalPayload, targetStoreCode);
             writeOfflineSyncQueueMap(qMapErr);
             setCloudSyncStatus('offline', 'Offline (Saved Locally)');
         }
@@ -4706,7 +4996,9 @@ async function dispatchBackendStoreSync(partialPayload = {}, immediate = false) 
         return await doSync(activeStoreCode);
     } else {
         if (backendSyncTimers[activeStoreCode]) clearTimeout(backendSyncTimers[activeStoreCode]);
-        backendSyncTimers[activeStoreCode] = setTimeout(() => doSync(activeStoreCode), 350);
+        // Coalesce rapid non-critical taps longer (1200ms) when real-time Firestore SDK is active to eliminate double-write storms
+        const debounceMs = (typeof window !== 'undefined' && window.firestoreDB) ? 1200 : 350;
+        backendSyncTimers[activeStoreCode] = setTimeout(() => doSync(activeStoreCode), debounceMs);
         return true;
     }
 }
@@ -4920,35 +5212,71 @@ async function persistAllToFirestore() {
 }
 window.persistAllToFirestore = persistAllToFirestore;
 
-function persistTables() { 
+function persistTables() {
+    const changedTables = {};
+    let hasClearedOrStatusChange = false;
+    const hadPrevCache = Object.keys(_lastPersistedTableState || {}).length > 0;
+
     if (tablesInfo && typeof tablesInfo === 'object') {
         const nowTs = Date.now();
         for (const [tId, tbl] of Object.entries(tablesInfo)) {
             if (!tbl || typeof tbl !== 'object') continue;
             const hasItems = Array.isArray(tbl.items) && tbl.items.length > 0;
             const prevState = _lastPersistedTableState[tId];
-            const curHash = JSON.stringify(tbl.items || []) + '|' + (tbl.status || '');
+            const prevStatus = prevState?.status || '';
+            const curHash = _computeTableSyncHash(tbl);
+
             if (!hasItems && prevState && prevState.hasItems) {
                 tbl.clearedAt = nowTs;
                 tbl.updatedAt = nowTs;
+                hasClearedOrStatusChange = true;
             } else if (hasItems && (!prevState || prevState.hash !== curHash)) {
                 tbl.updatedAt = nowTs;
             }
-            _lastPersistedTableState[tId] = { hasItems, hash: curHash };
+
+            const finalHash = _computeTableSyncHash(tbl);
+            if (!prevState || prevState.hash !== finalHash) {
+                changedTables[tId] = tbl;
+                if (prevStatus !== (tbl.status || '')) {
+                    hasClearedOrStatusChange = true;
+                }
+            }
+            _lastPersistedTableState[tId] = { hasItems, status: tbl.status || '', hash: finalHash };
         }
     }
-    idb.set('cafe_tables', tablesInfo); 
-    if(window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+
+    idb.set('cafe_tables', tablesInfo);
+
+    const changedKeys = Object.keys(changedTables);
+    // Skip redundant cloud traffic if nothing actually changed since the last persisted table snapshot
+    if (changedKeys.length === 0 && hadPrevCache) {
+        return;
+    }
+    const deltaPayload = changedKeys.length > 0 ? changedTables : tablesInfo;
+    const syncIso = new Date().toISOString();
+    _lastSelfWriteUpdatedAt = syncIso;
+
+    // 1. Lightweight per-table subcollection docs (~1KB each) + delta merge on root doc
+    if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+        _syncTablesSubcollectionDocs(deltaPayload);
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
-            window.firestoreSetDoc(storeDocRef, { tables: tablesInfo, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            window.firestoreSetDoc(storeDocRef, {
+                tables: deltaPayload,
+                updatedAt: syncIso,
+                _writerId: _syncClientInstanceId
+            }, { merge: true }).catch(() => {});
         }
     }
+
+    // 2. Backend REST delta sync (NEVER re-upload shopProfile/logo on table taps; coalesce rapid item taps)
     if (typeof dispatchBackendStoreSync === 'function') {
-        dispatchBackendStoreSync({ tables: tablesInfo, profile: shopProfile }, true);
+        const sendImmediate = hasClearedOrStatusChange || !(typeof window !== 'undefined' && window.firestoreDB);
+        dispatchBackendStoreSync({ tables: deltaPayload }, sendImmediate);
     }
+
     if (typeof posMeshChannel !== 'undefined' && posMeshChannel && typeof posMeshChannel.postMessage === 'function') {
-        try { posMeshChannel.postMessage({ type: 'TABLES_UPDATED', tables: tablesInfo }); } catch(e) {}
+        try { posMeshChannel.postMessage({ type: 'TABLES_UPDATED', tables: deltaPayload }); } catch(e) {}
     }
 }
 window.persistTables = persistTables;
@@ -4982,20 +5310,29 @@ function broadcastTableDelta(tableId, tableData) {
     tablesInfo[tId] = { ...(tablesInfo[tId] || {}), ...tableData, updatedAt: nowTs };
     window.tablesInfo = tablesInfo;
 
-    // 1. Local IndexedDB
+    // 1. Local IndexedDB & delta hash tracking
+    _lastPersistedTableState[tId] = {
+        hasItems: Array.isArray(tablesInfo[tId].items) && tablesInfo[tId].items.length > 0,
+        status: tablesInfo[tId].status || '',
+        hash: _computeTableSyncHash(tablesInfo[tId])
+    };
     if (typeof idb !== 'undefined' && idb.set) {
         idb.set('cafe_tables', tablesInfo);
     }
 
-    // 2. Direct Firestore Delta
+    // 2. Direct Firestore Delta (subcollection doc + root merge with self-echo writerId)
+    const deltaIso = new Date().toISOString();
+    _lastSelfWriteUpdatedAt = deltaIso;
     if (window.firestoreDB && window.firestoreDoc && window.firestoreSetDoc) {
+        _syncTablesSubcollectionDocs({ [tId]: tablesInfo[tId] });
         const storeDocRef = getStoreDocRef();
         if (storeDocRef) {
             window.firestoreSetDoc(storeDocRef, {
                 tables: {
                     [tId]: tablesInfo[tId]
                 },
-                updatedAt: new Date().toISOString()
+                updatedAt: deltaIso,
+                _writerId: _syncClientInstanceId
             }, { merge: true }).catch((err) => {
                 console.warn('[TABLE DELTA] Firestore write notice:', err?.message || err);
             });
@@ -5018,9 +5355,9 @@ function broadcastTableDelta(tableId, tableData) {
         } catch(e) {}
     }
 
-    // 5. Local UI Sync
+    // 5. Local UI Sync (skip hidden #tables render when on another view)
     if (typeof syncTableUI === 'function') syncTableUI();
-    if (typeof renderTablesView === 'function') renderTablesView();
+    if (_isViewActive('tables') && typeof renderTablesView === 'function') renderTablesView();
     window.dispatchEvent(new CustomEvent('billnaw:table-status-changed', {
         detail: { tableId: tId, status: tablesInfo[tId]?.status, tableData: tablesInfo[tId] }
     }));
