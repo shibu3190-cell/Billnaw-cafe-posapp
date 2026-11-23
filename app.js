@@ -410,8 +410,8 @@ async function initApp() {
     }
 }
 
-// Kick off initialization on DOM ready
-if (document.readyState === 'loading') {
+// Kick off initialization on DOM ready (defer-safe: waits for all deferred scripts before running)
+if (!window._domContentLoadedFired && document.readyState !== 'complete') {
     document.addEventListener('DOMContentLoaded', initApp);
 } else {
     initApp();

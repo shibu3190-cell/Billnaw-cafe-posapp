@@ -2031,3 +2031,103 @@ body.printing { background: #fff !important; }
     }
 }
 
+/* ==========================================================================
+   12. PHASE 1 PERFORMANCE: MOBILE/LOW-POWER GPU & LAYOUT CONTAINMENT
+   ========================================================================== */
+
+/* Eliminate 300ms mobile tap delay on POS interactive controls */
+button,
+a,
+.menu-card,
+.table-card,
+.nav-btn,
+.tab-btn,
+.category-pill,
+.clean-item-card {
+    touch-action: manipulation;
+}
+
+/* Skip layout & paint work for hidden views and off-screen list items */
+.view:not(.active) {
+    content-visibility: hidden;
+}
+
+/* Preserve cart drawer opened from Fullscreen Tables view (#cartDrawer lives inside #pos) */
+body.cart-drawer-from-tables #pos {
+    content-visibility: visible !important;
+}
+
+#menu .clean-item-card,
+#dashboard .order-history-card,
+#customers .customer-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 96px;
+}
+
+/* Allow 3-dot action dropdowns to overflow cleanly outside card bounds */
+#menu .clean-item-card.dropdown-open {
+    content-visibility: visible;
+}
+
+/* Scope Khata row containment strictly to mobile card layout (<=640px) so desktop table-row alignment stays intact */
+@media screen and (max-width: 640px) {
+    #khata #khataTableBody tr {
+        content-visibility: auto;
+        contain-intrinsic-size: auto 96px;
+    }
+}
+
+/* Mobile & Touch GPU Acceleration Relief:
+   Replace expensive compositor backdrop-filter: blur() passes with crisp translucent surfaces
+   on phones/tablets so old Android GPUs stay smooth at 60fps during scroll and modal open. */
+@media screen and (max-width: 1024px), (hover: none) and (pointer: coarse) {
+    .modal-overlay,
+    .shop-auth-overlay,
+    .topbar,
+    #menuItemModal,
+    #printerSettingsModal,
+    #staffProfileSelector,
+    #cloudSyncOverlay,
+    #cartDrawerOverlay,
+    .mobile-bottom-nav,
+    .header-actions-dropdown,
+    .glass-card,
+    .toast-notification {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    .modal-overlay,
+    .shop-auth-overlay,
+    #staffProfileSelector {
+        background: rgba(15, 23, 42, 0.76) !important;
+    }
+
+    .topbar {
+        background: rgba(247, 248, 247, 0.98) !important;
+    }
+
+    /* Reduce expensive multi-layer drop shadows on repeating cards */
+    .menu-card,
+    .table-card,
+    .clean-item-card,
+    #dashboard .kpi-card,
+    #dashboard .order-history-card,
+    #kds .kot-card,
+    #kds .kds-card {
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+    }
+}
+
+/* Honor OS reduced-motion preference on older/accessibility devices */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+

@@ -9,7 +9,34 @@
  * 4. All API mutations (/api/*) and Firebase/Firestore requests bypass CacheStorage completely.
  */
 
-const CACHE_VERSION = 'billnaw-pos-shell-v4.0.0';
+const CACHE_VERSION = 'billnaw-pos-shell-v4.1.0';
+const ASSET_VER = '3001';
+
+// Core boot shell cached eagerly in small batches matching index.html ?v= query strings
+// so even the very first warm reload hits CacheStorage in 0ms without 304 round-trips
+const CRITICAL_BOOT_ASSETS = [
+  './',
+  './index.html',
+  `./style.css?v=${ASSET_VER}`,
+  './manifest.json',
+  `./js/defensive-stubs.js?v=${ASSET_VER}`,
+  `./js/firebase-init.js?v=${ASSET_VER}`,
+  `./js/sw-register.js?v=${ASSET_VER}`,
+  `./js/device-identity.js?v=${ASSET_VER}`,
+  `./js/core.js?v=${ASSET_VER}`,
+  `./js/staff.js?v=${ASSET_VER}`,
+  `./js/pos.js?v=${ASSET_VER}`,
+  `./js/menu.js?v=${ASSET_VER}`,
+  `./js/customers.js?v=${ASSET_VER}`,
+  `./js/dashboard.js?v=${ASSET_VER}`,
+  `./js/marketing_inventory.js?v=${ASSET_VER}`,
+  `./js/culinary_inventory.js?v=${ASSET_VER}`,
+  `./js/settings.js?v=${ASSET_VER}`,
+  `./app.js?v=${ASSET_VER}`,
+  `./js/shop-auth.js?v=${ASSET_VER}`,
+  `./js/cloud-sync.js?v=${ASSET_VER}`,
+  `./js/feature-controllers.js?v=${ASSET_VER}`
+];
 
 const STATIC_SHELL_ASSETS = [
   './',
@@ -58,6 +85,7 @@ const STATIC_SHELL_ASSETS = [
   './js/defensive-stubs.js',
   './js/firebase-init.js',
   './js/sw-register.js',
+  './js/device-identity.js',
   './js/shop-auth.js',
   './js/feature-controllers.js',
 
@@ -74,19 +102,39 @@ const STATIC_SHELL_ASSETS = [
   './js/cloud-sync.js'
 ];
 
-// Install Phase: Pre-cache static shell and activate immediately
+// Helper: Pre-cache in small concurrent batches using cache:'no-cache' for unversioned paths
+// so stale HTTP disk cache never poisons a brand-new SW deployment
+async function precacheInBatches(cache, urls, batchSize = 4) {
+  for (let i = 0; i < urls.length; i += batchSize) {
+    const slice = urls.slice(i, i + batchSize);
+    await Promise.allSettled(
+      slice.map(async (url) => {
+        try {
+          const hasVer = url.includes('?v=');
+          const req = hasVer ? new Request(url) : new Request(url, { cache: 'no-cache' });
+          const res = await fetch(req);
+          if (res && res.status === 200) {
+            await cache.put(url, res);
+          }
+        } catch (err) {
+          console.warn(`[SW] Pre-cache skipped for optional asset: ${url}`, err.message);
+        }
+      })
+    );
+  }
+}
+
+// Install Phase: Pre-cache critical boot shell + deduplicated /src/* modules in gentle batches
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => {
-      console.log(`[SW] Pre-caching static application shell (${CACHE_VERSION})...`);
-      return Promise.allSettled(
-        STATIC_SHELL_ASSETS.map((url) =>
-          cache.add(url).catch((err) => {
-            console.warn(`[SW] Pre-cache skipped for optional asset: ${url}`, err.message);
-          })
-        )
-      );
+    caches.open(CACHE_VERSION).then(async (cache) => {
+      console.log(`[SW] Pre-caching application shell (${CACHE_VERSION})...`);
+      await precacheInBatches(cache, CRITICAL_BOOT_ASSETS, 4);
+      // Deduplicate by base path (strip ?v=...) so we never double-download versioned JS/CSS files
+      const criticalBasePaths = new Set(CRITICAL_BOOT_ASSETS.map((u) => u.split('?')[0]));
+      const secondaryAssets = STATIC_SHELL_ASSETS.filter((u) => !criticalBasePaths.has(u.split('?')[0]));
+      await precacheInBatches(cache, secondaryAssets, 4);
     })
   );
 });
@@ -160,11 +208,38 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4. Stale-While-Revalidate for static assets
+  // 4. Smart caching for static assets:
+  //    - HTML documents: Network-First with fast 1200ms cache fallback (fresh deploys on WiFi, instant boot on slow 3G)
+  //    - Versioned/static JS & CSS: True Stale-While-Revalidate (0ms cache hit + background refresh; exact ?v= query match)
+  const isHtmlDocument =
+    req.mode === 'navigate' ||
+    url.pathname === '/' ||
+    url.pathname.endsWith('.html');
+  const isVersionedScriptOrStyle =
+    Boolean(url.search) &&
+    (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'));
+  const isCodeAsset =
+    isHtmlDocument ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css');
+
   event.respondWith(
     caches.open(CACHE_VERSION).then((cache) => {
-      return cache.match(req, { ignoreSearch: true }).then((cachedResponse) => {
-        const fetchPromise = fetch(req)
+      // Exact query match for versioned ?v= assets so v3001 never serves stale v3000
+      const matchOpts = isVersionedScriptOrStyle ? { ignoreSearch: false } : { ignoreSearch: true };
+      return cache.match(req, matchOpts).then((cachedResponse) => {
+        // Fast path: versioned ?v= JS/CSS already cached in this shell version is immutable -> 0ms hit, zero network waste
+        if (isCodeAsset && isVersionedScriptOrStyle && cachedResponse) {
+          return cachedResponse;
+        }
+
+        // For unversioned code assets (HTML & /src/* modules), bypass HTTP disk cache on network fetch
+        // so SWR revalidation always pulls fresh deploys from origin.
+        const networkReq = (isCodeAsset && !isVersionedScriptOrStyle)
+          ? new Request(req, { cache: 'no-cache' })
+          : req;
+
+        const fetchPromise = fetch(networkReq)
           .then((networkResponse) => {
             if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
               cache.put(req, networkResponse.clone());
@@ -174,6 +249,10 @@ self.addEventListener('fetch', (event) => {
           .catch(async (networkErr) => {
             if (cachedResponse) return cachedResponse;
 
+            // Offline fallback: match ignoring query string if exact versioned entry wasn't cached yet
+            const looseMatch = await cache.match(req, { ignoreSearch: true });
+            if (looseMatch) return looseMatch;
+
             if (req.headers.get('accept')?.includes('text/html')) {
               const fallbackHtml = (await cache.match('./index.html', { ignoreSearch: true })) || (await cache.match('/index.html', { ignoreSearch: true }));
               if (fallbackHtml) return fallbackHtml;
@@ -182,16 +261,30 @@ self.addEventListener('fetch', (event) => {
             throw networkErr;
           });
 
-        const isCodeAsset =
-          url.pathname === '/' ||
-          url.pathname.endsWith('.html') ||
-          url.pathname.endsWith('.js') ||
-          url.pathname.endsWith('.css');
-
         if (isCodeAsset) {
+          if (isHtmlDocument) {
+            // Network-First with fast 1200ms fallback to cached HTML so slow 3G never stalls
+            if (cachedResponse) {
+              const timeoutFallback = new Promise((resolve) => {
+                setTimeout(() => resolve(cachedResponse), 1200);
+              });
+              event.waitUntil(fetchPromise.catch(() => {}));
+              return Promise.race([fetchPromise, timeoutFallback]);
+            }
+            return fetchPromise;
+          }
+          // True Stale-While-Revalidate for unversioned JS & CSS: serve cached immediately, update in background
+          if (cachedResponse) {
+            event.waitUntil(fetchPromise.catch(() => {}));
+            return cachedResponse;
+          }
           return fetchPromise;
         }
-        return cachedResponse || fetchPromise;
+        if (cachedResponse) {
+          event.waitUntil(fetchPromise.catch(() => {}));
+          return cachedResponse;
+        }
+        return fetchPromise;
       });
     })
   );

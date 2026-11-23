@@ -21,6 +21,19 @@ const CSS_MODULES = [
   'responsive.css'
 ];
 
+function minifyCssSegment(css) {
+  return css
+    // Strip block comments safely
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // Strip leading/trailing whitespace per line and drop empty lines
+    // (preserves spaces inside rgb()/linear-gradient()/calc() expressions)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
 function bundleStylesheets() {
   // Ensure css directory exists
   if (!fs.existsSync(cssDir)) {
@@ -42,20 +55,20 @@ function bundleStylesheets() {
  * - css/food-images.css   (Food Image Manager modal, preview container, dock)
  * - css/responsive.css    (Consolidated tablet, mobile <640px, print media queries)
  * ==============================================================================
- */\n\n`;
+ */\n`;
 
   for (const file of CSS_MODULES) {
     const filePath = path.join(cssDir, file);
     if (!fs.existsSync(filePath)) {
       throw new Error(`Missing CSS module: ${filePath}`);
     }
-    const moduleContent = fs.readFileSync(filePath, 'utf8').trim();
-    bundledContent += `/* ==========================================================================\n   MODULE: css/${file}\n   ========================================================================== */\n\n`;
-    bundledContent += moduleContent + '\n\n';
+    const moduleContent = minifyCssSegment(fs.readFileSync(filePath, 'utf8'));
+    bundledContent += `/* MODULE: css/${file} */\n${moduleContent}\n`;
   }
 
   fs.writeFileSync(distPath, bundledContent.trim() + '\n', 'utf8');
-  console.log(`✅ [bundle-css] Compiled ${CSS_MODULES.length} modules into style.css (${bundledContent.split('\n').length} lines).`);
+  const kb = (Buffer.byteLength(bundledContent, 'utf8') / 1024).toFixed(1);
+  console.log(`✅ [bundle-css] Compiled & minified ${CSS_MODULES.length} modules into style.css (${kb} KB).`);
   return distPath;
 }
 

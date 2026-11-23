@@ -1,10 +1,15 @@
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
+        // Track whether a SW was already controlling this page before registration.
+        // Prevents first-time visitors from suffering a redundant full-page reload when SW claims the tab,
+        // then flips to true once controlled so future deployments still auto-reload long-running POS tabs.
+        let hadController = Boolean(navigator.serviceWorker.controller);
+
         navigator.serviceWorker.register('./service-worker.js')
             .then(reg => {
                 console.log('[SW] ServiceWorker registered with scope:', reg.scope);
                 reg.update().catch(() => {});
-                if (reg.waiting) {
+                if (reg.waiting && hadController) {
                     reg.waiting.postMessage({ type: 'SKIP_WAITING' });
                 }
                 // Check for SW updates periodically
@@ -16,9 +21,13 @@ if ('serviceWorker' in navigator) {
                 console.warn('[SW] Registration failed:', err);
             });
 
-        // Auto-refresh when new deployment service worker takes control (skip mid-upgrade while applyAppUpdate manages reload)
+        // Auto-refresh ONLY when upgrading from an existing SW controller (skip first install & mid-upgrade)
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!hadController) {
+                hadController = Boolean(navigator.serviceWorker.controller);
+                return;
+            }
             if (window._isApplyingAppUpdate) return;
             if (!refreshing) {
                 refreshing = true;

@@ -209,6 +209,7 @@ function _renderStaffProfileCards() {
         `;
     }).join('');
 }
+window._renderStaffProfileCards = _renderStaffProfileCards;
 
 function onStaffProfileSelected(staffId, encodedName, encodedRole) {
     const staffName = decodeURIComponent(encodedName);

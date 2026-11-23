@@ -2417,7 +2417,7 @@
         }
     }
 
-    if (document.readyState === 'loading') {
+    if (!window._domContentLoadedFired && document.readyState !== 'complete') {
         document.addEventListener('DOMContentLoaded', checkStrictRootAuth);
     } else {
         checkStrictRootAuth();

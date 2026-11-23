@@ -12,15 +12,16 @@
     <meta property="og:description" content="billnaw point-of-sale terminal with billing, customer loyalty directory, AI-driven WhatsApp marketing, table management, KOT, expense tracking, and reporting.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0F3D33">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
-    <script src="js/defensive-stubs.js?v=2922"></script>
-    <link rel="stylesheet" href="style.css?v=3000">
+    <script src="js/defensive-stubs.js?v=3001"></script>
+    <link rel="stylesheet" href="style.css?v=3001">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display: none;" aria-hidden="true">
@@ -6296,22 +6297,22 @@
         </div>
     </div>
 
-    <script type="module" src="js/firebase-init.js?v=2922"></script>
+    <script type="module" src="js/firebase-init.js?v=3001"></script>
     
-    <script src="js/sw-register.js?v=2922"></script>
-    <script src="js/device-identity.js?v=2922"></script>
-    <script src="js/core.js?v=3000"></script>
-    <script src="js/staff.js?v=3000"></script>
-    <script src="js/pos.js?v=3000"></script>
-    <script src="js/menu.js?v=3000"></script>
-    <script src="js/customers.js?v=3000"></script>
-    <script src="js/dashboard.js?v=3000"></script>
-    <script src="js/marketing_inventory.js?v=3000"></script>
-    <script src="js/culinary_inventory.js?v=3000"></script>
-    <script src="js/settings.js?v=3000"></script>
-    <script src="app.js?v=3000"></script>
+    <script src="js/sw-register.js?v=3001" defer></script>
+    <script src="js/device-identity.js?v=3001" defer></script>
+    <script src="js/core.js?v=3001" defer></script>
+    <script src="js/staff.js?v=3001" defer></script>
+    <script src="js/pos.js?v=3001" defer></script>
+    <script src="js/menu.js?v=3001" defer></script>
+    <script src="js/customers.js?v=3001" defer></script>
+    <script src="js/dashboard.js?v=3001" defer></script>
+    <script src="js/marketing_inventory.js?v=3001" defer></script>
+    <script src="js/culinary_inventory.js?v=3001" defer></script>
+    <script src="js/settings.js?v=3001" defer></script>
+    <script src="app.js?v=3001" defer></script>
 
-    <script src="js/shop-auth.js?v=3000"></script>
+    <script src="js/shop-auth.js?v=3001" defer></script>
 
     <div id="appUpdatePopup" class="app-update-popup" style="display: none; position: fixed; bottom: 20px; right: 20px; z-index: 10000000; background: #0F3D33; color: #FFFFFF; padding: 14px 16px; border-radius: 16px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.24); border: 1px solid rgba(255, 255, 255, 0.14); max-width: 340px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
@@ -6430,10 +6431,10 @@
         </div>
     </div>
 
-    <script src="js/cloud-sync.js?v=3000"></script>
-    <script type="module" src="js/feature-controllers.js?v=3000"></script>
+    <script src="js/cloud-sync.js?v=3001" defer></script>
+    <script type="module" src="js/feature-controllers.js?v=3001"></script>
     <script type="module">
-        import { ThermalPrinterBridge } from './src/core/platform-bridge.js?v=3000';
+        import { ThermalPrinterBridge } from './src/core/platform-bridge.js?v=3001';
         window.ThermalPrinterBridge = ThermalPrinterBridge;
         if (typeof ThermalPrinterBridge.init === 'function') {
             ThermalPrinterBridge.init();

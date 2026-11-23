@@ -1,5 +1,11 @@
 // 🛡️ Global Defensive Stubs & Fallback Handlers
 // Prevents ReferenceError exceptions during offline cache transitions or before modular scripts finish loading
+if (typeof document !== 'undefined') {
+    window._domContentLoadedFired = document.readyState === 'complete';
+    document.addEventListener('DOMContentLoaded', function() {
+        window._domContentLoadedFired = true;
+    }, { once: true });
+}
 window.openAuthorizedDevicesModal = function() {
     if (typeof hasPermission === 'function' && typeof currentStaff !== 'undefined' && currentStaff) {
         if (!hasPermission(currentStaff, 'can_manage_devices') && (!currentStaff.role || currentStaff.role.toLowerCase() !== 'admin')) {

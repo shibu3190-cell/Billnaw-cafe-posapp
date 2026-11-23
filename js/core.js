@@ -2649,9 +2649,36 @@ if (typeof document !== 'undefined') {
 // Firestore Sync Integration
 let _lastPersistedTableState = {};
 
+function _setLocalStorageIfChanged(key, value) {
+    if (typeof localStorage === 'undefined') return true;
+    const strVal = String(value);
+    try {
+        if (localStorage.getItem(key) === strVal) return false;
+        localStorage.setItem(key, strVal);
+        return true;
+    } catch (e) {
+        // On QuotaExceededError or restricted storage, return true so IndexedDB fallback still persists
+        return true;
+    }
+}
+
 function handleRemoteFirestoreUpdate(data) {
     if (!data || typeof data !== 'object') return;
     console.log("⚡ Received Firestore live store snapshot for:", myClientID);
+
+    // Track which store domains actually arrived/changed so UI only re-renders affected active views once
+    const _changed = {
+        profile: false,
+        staff: false,
+        menu: false,
+        categories: false,
+        customers: false,
+        tables: false,
+        history: false,
+        expenses: false,
+        khata: false,
+        kots: false
+    };
 
     // 💎 Handle Subscription State Transitions (Milestone 1)
     if (data.subscription && typeof data.subscription === 'object') {
@@ -2712,24 +2739,26 @@ function handleRemoteFirestoreUpdate(data) {
         }
         if (!shopProfile.startInvoiceNo) shopProfile.startInvoiceNo = 1001;
         window.shopProfile = shopProfile;
+        _changed.profile = true;
         try {
-            idb.set('cafe_profile', shopProfile);
-            if (shopProfile.logo) idb.set('cafe_logo', shopProfile.logo);
-            if (shopProfile.upiId) idb.set('cafe_upi_id', shopProfile.upiId);
-            localStorage.setItem('billnaw_store_profile', JSON.stringify(shopProfile));
-            if (shopProfile.name) localStorage.setItem('billnaw_shop_name', shopProfile.name);
-            if (shopProfile.phone) localStorage.setItem('billnaw_shop_phone', shopProfile.phone);
-            if (shopProfile.address) localStorage.setItem('billnaw_shop_address', shopProfile.address);
-            if (shopProfile.fssai) localStorage.setItem('billnaw_shop_fssai', shopProfile.fssai);
-            if (shopProfile.gstin) localStorage.setItem('billnaw_shop_gstin', shopProfile.gstin);
-            if (shopProfile.upiId) localStorage.setItem('billnaw_shop_upi_id', shopProfile.upiId);
-            if (shopProfile.logo && shopProfile.logo.length < 2000000) localStorage.setItem('billnaw_shop_logo', shopProfile.logo);
-            if (shopProfile.adminPinHash) localStorage.setItem('billnaw_admin_pin_hash', shopProfile.adminPinHash);
-            localStorage.setItem('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false');
-            localStorage.setItem('billnaw_gst_mode', shopProfile.gstMode || 'inclusive');
-            localStorage.setItem('billnaw_default_gst_rate', String(shopProfile.defaultGstRate || 5));
+            const profileJson = JSON.stringify(shopProfile);
+            if (_setLocalStorageIfChanged('billnaw_store_profile', profileJson)) {
+                idb.set('cafe_profile', shopProfile);
+                if (shopProfile.logo) idb.set('cafe_logo', shopProfile.logo);
+                if (shopProfile.upiId) idb.set('cafe_upi_id', shopProfile.upiId);
+            }
+            if (shopProfile.name) _setLocalStorageIfChanged('billnaw_shop_name', shopProfile.name);
+            if (shopProfile.phone) _setLocalStorageIfChanged('billnaw_shop_phone', shopProfile.phone);
+            if (shopProfile.address) _setLocalStorageIfChanged('billnaw_shop_address', shopProfile.address);
+            if (shopProfile.fssai) _setLocalStorageIfChanged('billnaw_shop_fssai', shopProfile.fssai);
+            if (shopProfile.gstin) _setLocalStorageIfChanged('billnaw_shop_gstin', shopProfile.gstin);
+            if (shopProfile.upiId) _setLocalStorageIfChanged('billnaw_shop_upi_id', shopProfile.upiId);
+            if (shopProfile.logo && shopProfile.logo.length < 2000000) _setLocalStorageIfChanged('billnaw_shop_logo', shopProfile.logo);
+            if (shopProfile.adminPinHash) _setLocalStorageIfChanged('billnaw_admin_pin_hash', shopProfile.adminPinHash);
+            _setLocalStorageIfChanged('billnaw_shop_show_qr', shopProfile.showQr ? 'true' : 'false');
+            _setLocalStorageIfChanged('billnaw_gst_mode', shopProfile.gstMode || 'inclusive');
+            _setLocalStorageIfChanged('billnaw_default_gst_rate', String(shopProfile.defaultGstRate || 5));
         } catch(e) {}
-        if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
     }
     if (Array.isArray(data.staff) && data.staff.length > 0) {
         const deletedStaffSet = new Set([
@@ -2765,15 +2794,18 @@ function handleRemoteFirestoreUpdate(data) {
             return s;
         });
         window.staffList = staffList;
+        _changed.staff = true;
         try {
-            idb.set('cafe_staff', staffList);
-            localStorage.setItem('billnaw_store_staff', JSON.stringify(staffList));
+            if (_setLocalStorageIfChanged('billnaw_store_staff', JSON.stringify(staffList))) {
+                idb.set('cafe_staff', staffList);
+            }
             const adminMember = staffList.find(s => s.role === 'Admin');
             if (adminMember && (adminMember.pin_hash || adminMember.pinHash)) {
                 const aHash = adminMember.pin_hash || adminMember.pinHash;
                 if (!shopProfile.adminPinHash) {
                     shopProfile.adminPinHash = aHash;
-                    localStorage.setItem('billnaw_admin_pin_hash', aHash);
+                    _setLocalStorageIfChanged('billnaw_admin_pin_hash', aHash);
+                    if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_profile', shopProfile);
                 }
             }
             // Live Firebase Role/Permission Refresh: if active staff's role or permissions changed in Firebase, update local cache & UI immediately
@@ -2795,8 +2827,6 @@ function handleRemoteFirestoreUpdate(data) {
                 }
             }
         } catch(e) {}
-        if (typeof renderLoginStaffPicker === 'function') renderLoginStaffPicker();
-        if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
     }
     if (Array.isArray(data.menu)) {
         const incomingMenuVersion = Number(data.menuVersion || (data.menuMeta && data.menuMeta.version) || 0);
@@ -2891,8 +2921,11 @@ function handleRemoteFirestoreUpdate(data) {
         }
         // CASE 2: Remote has a strictly newer version bumped by another device/admin (including full menu clear [])
         else if (incomingMenuVersion > localMenuVersion) {
-            localStorage.setItem('billnaw_menu_version', String(incomingMenuVersion));
-            if (shopProfile) shopProfile.menuVersion = incomingMenuVersion;
+            _setLocalStorageIfChanged('billnaw_menu_version', String(incomingMenuVersion));
+            if (shopProfile) {
+                shopProfile.menuVersion = incomingMenuVersion;
+                if (typeof idb !== 'undefined' && idb.set) idb.set('cafe_profile', shopProfile);
+            }
             window.currentMenuVersion = incomingMenuVersion;
 
             // Per-item Last-Edit-Wins (LWW): if local item has a strictly newer updatedAt timestamp than remote item, preserve newer edit
@@ -2927,21 +2960,18 @@ function handleRemoteFirestoreUpdate(data) {
                 return rm;
             });
             window.menuItems = menuItems;
+            _changed.menu = true;
             if (typeof idb !== 'undefined' && idb.set) {
                 idb.set('cafe_menu', menuItems);
             }
             if (Array.isArray(data.categories) && data.categories.length > 0) {
                 menuCategories = data.categories;
                 window.menuCategories = menuCategories;
+                _changed.categories = true;
                 if (typeof idb !== 'undefined' && idb.set) {
                     idb.set('cafe_categories', menuCategories);
                 }
-                if (typeof renderCategoryDropdown === 'function') renderCategoryDropdown();
-                if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
-                if (typeof renderCategoryListUI === 'function') renderCategoryListUI();
             }
-            if (typeof renderMenuUI === 'function') renderMenuUI();
-            if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
             if (window.culinaryInventory && typeof window.culinaryInventory.syncMenuItems === 'function') {
                 window.culinaryInventory.syncMenuItems();
@@ -2950,17 +2980,16 @@ function handleRemoteFirestoreUpdate(data) {
         // CASE 3: Local was only the pristine 4-item default template: adopt non-empty clean remote menu
         else if (isLocalTemplate && data.menu.length > 0) {
             const adoptedVer = incomingMenuVersion > 0 ? incomingMenuVersion : 1;
-            localStorage.setItem('billnaw_menu_version', String(adoptedVer));
+            _setLocalStorageIfChanged('billnaw_menu_version', String(adoptedVer));
             if (shopProfile) shopProfile.menuVersion = adoptedVer;
             window.currentMenuVersion = adoptedVer;
 
             menuItems = cleanRemoteMenu;
             window.menuItems = menuItems;
+            _changed.menu = true;
             if (typeof idb !== 'undefined' && idb.set) {
                 idb.set('cafe_menu', menuItems);
             }
-            if (typeof renderMenuUI === 'function') renderMenuUI();
-            if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
         }
         // CASE 4: Reconcile unversioned legacy catalog (incomingMenuVersion === 0 && localMenuVersion === 0)
@@ -2994,11 +3023,10 @@ function handleRemoteFirestoreUpdate(data) {
             }
             menuItems = Array.from(mergedMap.values());
             window.menuItems = menuItems;
+            _changed.menu = true;
             if (typeof idb !== 'undefined' && idb.set) {
                 idb.set('cafe_menu', menuItems);
             }
-            if (typeof renderMenuUI === 'function') renderMenuUI();
-            if (typeof renderMenuCatalogUI === 'function') renderMenuCatalogUI();
             if (typeof syncMenuUIQuantities === 'function') syncMenuUIQuantities();
         }
     } else {
@@ -3014,20 +3042,23 @@ function handleRemoteFirestoreUpdate(data) {
             ];
             menuItems = cleanDefaultMenu;
             window.menuItems = menuItems;
+            _changed.menu = true;
         }
     }
     if (Array.isArray(data.categories) && data.categories.length > 0) {
-        menuCategories = data.categories;
-        window.menuCategories = menuCategories;
-        if (typeof idb !== 'undefined' && idb.set) {
-            idb.set('cafe_categories', menuCategories);
+        const nextCatJson = JSON.stringify(data.categories);
+        if (nextCatJson !== JSON.stringify(menuCategories || [])) {
+            menuCategories = data.categories;
+            window.menuCategories = menuCategories;
+            _changed.categories = true;
+            if (typeof idb !== 'undefined' && idb.set) {
+                idb.set('cafe_categories', menuCategories);
+            }
         }
-        if (typeof renderCategoryDropdown === 'function') renderCategoryDropdown();
-        if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
-        if (typeof renderCategoryListUI === 'function') renderCategoryListUI();
     } else if (!Array.isArray(menuCategories) || menuCategories.length === 0) {
         menuCategories = ["All", "Snacks", "Beverages", "Main Course"];
         window.menuCategories = menuCategories;
+        _changed.categories = true;
     }
     if (Array.isArray(data.customers) && data.customers.length > 0) {
         const custMap = new Map();
@@ -3052,6 +3083,7 @@ function handleRemoteFirestoreUpdate(data) {
         });
         customersList = Array.from(custMap.values());
         window.customersList = customersList;
+        _changed.customers = true;
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_customers', customersList);
         }
@@ -3202,11 +3234,10 @@ function handleRemoteFirestoreUpdate(data) {
         }
 
         window.tablesInfo = tablesInfo;
+        _changed.tables = true;
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_tables', tablesInfo);
         }
-        if (typeof renderTables === 'function') renderTables();
-        if (typeof syncTableUI === 'function') syncTableUI();
 
         // Cross-device alert: sound chime and toast notification for Cashier/Admin
         if (isAdminOrCashier && newlyReadyTables.length > 0) {
@@ -3259,6 +3290,7 @@ function handleRemoteFirestoreUpdate(data) {
         });
         orderHistory = Array.from(orderMap.values()).sort((a,b) => (Number(b.id || b.billNo || 0) - Number(a.id || a.billNo || 0)));
         window.orderHistory = orderHistory;
+        _changed.history = true;
         if (typeof recordHighestBillNumber === 'function') recordHighestBillNumber(orderHistory);
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_history', orderHistory);
@@ -3289,12 +3321,14 @@ function handleRemoteFirestoreUpdate(data) {
         });
         dailyExpenses = Array.from(expMap.values()).sort((a,b) => (Number(b.id || 0) - Number(a.id || 0)));
         window.dailyExpenses = dailyExpenses;
+        _changed.expenses = true;
         if (typeof idb !== 'undefined' && idb.set) {
             idb.set('cafe_expenses', dailyExpenses);
         }
     }
 
     if (Array.isArray(data.khata)) {
+        _changed.khata = true;
         try {
             if (typeof window !== 'undefined' && typeof window.applyRemoteKhataSync === 'function') {
                 window.applyRemoteKhataSync(data.khata);
@@ -3323,9 +3357,10 @@ function handleRemoteFirestoreUpdate(data) {
                 });
                 const mergedKhata = Array.from(khataMap.values()).sort((a, b) => getRecency(b) - getRecency(a));
                 if (typeof window !== 'undefined') window.khataList = mergedKhata;
-                localStorage.setItem('cafe_khata', JSON.stringify(mergedKhata));
-                if (typeof idb !== 'undefined' && idb.set) {
-                    idb.set('cafe_khata', mergedKhata);
+                if (_setLocalStorageIfChanged('cafe_khata', JSON.stringify(mergedKhata))) {
+                    if (typeof idb !== 'undefined' && idb.set) {
+                        idb.set('cafe_khata', mergedKhata);
+                    }
                 }
             }
         } catch (khataErr) {
@@ -3334,16 +3369,20 @@ function handleRemoteFirestoreUpdate(data) {
     }
 
     if (Array.isArray(data.kots)) {
+        _changed.kots = true;
         try {
             const rawPrev = localStorage.getItem('billnaw_active_kots');
-            const prevList = rawPrev ? JSON.parse(rawPrev) : [];
-            const prevIds = new Set(prevList.map(k => k.kot_id || k.id));
-            const hasNewTicket = data.kots.some(k => !prevIds.has(k.kot_id || k.id) && k.status === 'PENDING');
+            const nextKotsJson = JSON.stringify(data.kots);
+            if (rawPrev !== nextKotsJson) {
+                const prevList = rawPrev ? JSON.parse(rawPrev) : [];
+                const prevIds = new Set(prevList.map(k => k.kot_id || k.id));
+                const hasNewTicket = data.kots.some(k => !prevIds.has(k.kot_id || k.id) && k.status === 'PENDING');
 
-            localStorage.setItem('billnaw_active_kots', JSON.stringify(data.kots));
+                localStorage.setItem('billnaw_active_kots', nextKotsJson);
 
-            if (hasNewTicket && typeof playKdsAudioChime === 'function') {
-                try { playKdsAudioChime(); } catch(chimeErr) {}
+                if (hasNewTicket && typeof playKdsAudioChime === 'function') {
+                    try { playKdsAudioChime(); } catch(chimeErr) {}
+                }
             }
         } catch (kotErr) {
             console.warn('[KDS Sync] KOT update notice:', kotErr);
@@ -3354,8 +3393,13 @@ function handleRemoteFirestoreUpdate(data) {
         pruneClientTransactionalCache(10).catch(() => {});
     }
 
-    saveToLocal();
-    updateAllUI();
+    // Only coalesce & render the active tab(s) for domains that actually arrived in this snapshot.
+    // (Individual sections above already persisted changed keys to idb without duplicating all 8 writes.)
+    if (typeof scheduleUIUpdate === 'function') {
+        scheduleUIUpdate(_changed);
+    } else {
+        updateAllUI(_changed);
+    }
 }
 window.handleRemoteFirestoreUpdate = handleRemoteFirestoreUpdate;
 
@@ -6950,52 +6994,175 @@ async function installApp() {
 }
 window.installApp = installApp;
 
-function saveToLocal() {
-    idb.set('cafe_profile', shopProfile); 
-    idb.set('cafe_menu', menuItems); 
-    idb.set('cafe_categories', menuCategories);
-    idb.set('cafe_history', orderHistory); 
-    idb.set('cafe_expenses', dailyExpenses); 
-    idb.set('cafe_tables', tablesInfo);
-    idb.set('cafe_customers', customersList); 
-    idb.set('cafe_staff', staffList);
+function saveToLocal(domains = null) {
+    if (!domains || typeof domains !== 'object') {
+        idb.set('cafe_profile', shopProfile);
+        idb.set('cafe_menu', menuItems);
+        idb.set('cafe_categories', menuCategories);
+        idb.set('cafe_history', orderHistory);
+        idb.set('cafe_expenses', dailyExpenses);
+        idb.set('cafe_tables', tablesInfo);
+        idb.set('cafe_customers', customersList);
+        idb.set('cafe_staff', staffList);
+        return;
+    }
+    if (domains.profile) idb.set('cafe_profile', shopProfile);
+    if (domains.menu) idb.set('cafe_menu', menuItems);
+    if (domains.categories) idb.set('cafe_categories', menuCategories);
+    if (domains.history) idb.set('cafe_history', orderHistory);
+    if (domains.expenses) idb.set('cafe_expenses', dailyExpenses);
+    if (domains.tables) idb.set('cafe_tables', tablesInfo);
+    if (domains.customers) idb.set('cafe_customers', customersList);
+    if (domains.staff) idb.set('cafe_staff', staffList);
 }
 window.saveToLocal = saveToLocal;
 
-function updateAllUI() {
-    const safe = (fn) => { try { if (typeof fn === 'function') fn(); } catch(e) { console.warn('Render error:', e); } };
-    if (typeof updateProfileVisuals === 'function') safe(updateProfileVisuals);
-    if (typeof renderCategoryDropdown === 'function') safe(renderCategoryDropdown);
-    if (typeof renderCategoryFilters === 'function') safe(renderCategoryFilters);
-    if (typeof renderCategoryListUI === 'function') safe(renderCategoryListUI);
-    if (typeof renderMenuCatalogUI === 'function') safe(renderMenuCatalogUI);
-    if (typeof renderMenuUI === 'function') safe(renderMenuUI);
-    if (typeof syncTableUI === 'function') safe(syncTableUI);
-    if (typeof updateCartUI === 'function') safe(updateCartUI);
-    if (typeof renderExpensesUI === 'function') safe(renderExpensesUI);
-    if (typeof renderCustomersUI === 'function') safe(renderCustomersUI);
-    if (typeof populateCheckoutCustomerDropdown === 'function') safe(populateCheckoutCustomerDropdown);
-    if (typeof renderStaffManagementUI === 'function') safe(renderStaffManagementUI);
-    if (typeof renderLoginStaffPicker === 'function') safe(renderLoginStaffPicker);
-    if (typeof generateSettingsQRPreview === 'function') safe(generateSettingsQRPreview);
-    if (typeof refreshAiQuotaDisplay === 'function') safe(refreshAiQuotaDisplay);
-    try {
-        if (typeof renderDashboardAnalytics === 'function') {
-            const dashboardTab = document.getElementById('dashboard');
-            if (dashboardTab && dashboardTab.classList.contains('active')) {
-                renderDashboardAnalytics();
-            }
-        }
-    } catch(e) {
-        console.warn('Dashboard render error:', e);
+// Active-tab visibility helpers so background syncs never rebuild hidden tab DOMs
+const _dirtyRenderTabs = new Set();
+window._dirtyRenderTabs = _dirtyRenderTabs;
+
+function _isViewActive(viewId) {
+    if (typeof document === 'undefined') return true;
+    const el = document.getElementById(viewId);
+    return Boolean(el && el.classList.contains('active'));
+}
+
+function _isOverlayVisible(elId) {
+    if (typeof document === 'undefined') return false;
+    const el = document.getElementById(elId);
+    if (!el) return false;
+    if (el.classList.contains('open') || el.classList.contains('show') || el.classList.contains('active')) return true;
+    return Boolean(el.style && el.style.display && el.style.display !== 'none');
+}
+
+let _rafUiUpdateId = null;
+let _pendingUiDomains = null;
+
+function scheduleUIUpdate(dirtyDomains = null) {
+    if (!dirtyDomains || typeof dirtyDomains !== 'object') {
+        _pendingUiDomains = null; // null = full refresh of active view
+    } else if (_pendingUiDomains === null && _rafUiUpdateId !== null) {
+        // Keep full refresh pending
+    } else {
+        _pendingUiDomains = _pendingUiDomains ? { ..._pendingUiDomains } : {};
+        Object.keys(dirtyDomains).forEach((k) => {
+            if (dirtyDomains[k]) _pendingUiDomains[k] = true;
+        });
     }
-    try {
-        const kdsTab = document.getElementById('kds');
-        if (kdsTab && kdsTab.classList.contains('active') && typeof renderKdsUI === 'function') {
-            renderKdsUI();
+
+    // In headless Node/test sandboxes without rAF, execute deterministically and synchronously
+    if (typeof requestAnimationFrame !== 'function') {
+        const snapshot = _pendingUiDomains;
+        _pendingUiDomains = null;
+        updateAllUI(snapshot);
+        return;
+    }
+
+    if (_rafUiUpdateId !== null) return;
+    _rafUiUpdateId = requestAnimationFrame(() => {
+        _rafUiUpdateId = null;
+        const snapshot = _pendingUiDomains;
+        _pendingUiDomains = null;
+        updateAllUI(snapshot);
+    });
+}
+window.scheduleUIUpdate = scheduleUIUpdate;
+
+function updateAllUI(dirtyDomains = null) {
+    const safe = (fn) => { try { if (typeof fn === 'function') fn(); } catch(e) { console.warn('Render error:', e); } };
+    const isFull = !dirtyDomains || typeof dirtyDomains !== 'object';
+    const want = (key) => isFull || Boolean(dirtyDomains[key]);
+
+    // 1. Always-visible topbar/chrome updates (lightweight)
+    if (want('profile') && typeof updateProfileVisuals === 'function') safe(updateProfileVisuals);
+    if ((want('tables') || want('profile')) && typeof syncTableUI === 'function') safe(syncTableUI);
+
+    // 2. Active POS view (#pos)
+    if (_isViewActive('pos')) {
+        if ((want('tables') || want('profile')) && typeof renderTables === 'function') safe(renderTables);
+        if ((want('categories') || want('menu')) && typeof renderCategoryFilters === 'function') safe(renderCategoryFilters);
+        if ((want('menu') || want('categories')) && typeof renderMenuUI === 'function') safe(renderMenuUI);
+        if ((want('tables') || want('menu') || want('profile')) && typeof updateCartUI === 'function') safe(updateCartUI);
+        if (want('customers') && typeof populateCheckoutCustomerDropdown === 'function') safe(populateCheckoutCustomerDropdown);
+        _dirtyRenderTabs.delete('pos');
+    } else if (want('tables') || want('menu') || want('categories') || want('customers')) {
+        _dirtyRenderTabs.add('pos');
+    }
+
+    // 3. Active Fullscreen Tables view (#tables)
+    if (_isViewActive('tables')) {
+        if ((want('tables') || want('profile')) && typeof renderTablesView === 'function') safe(renderTablesView);
+        if ((want('tables') || want('menu') || want('profile')) && _isOverlayVisible('cartDrawer') && typeof updateCartUI === 'function') safe(updateCartUI);
+        _dirtyRenderTabs.delete('tables');
+    } else if (want('tables')) {
+        _dirtyRenderTabs.add('tables');
+    }
+
+    // 4. Active Menu Catalog view (#menu) or open Menu Item modal
+    if (_isViewActive('menu') || _isOverlayVisible('menuItemModal')) {
+        if ((want('categories') || want('menu')) && typeof renderCategoryDropdown === 'function') safe(renderCategoryDropdown);
+        if ((want('categories') || want('menu')) && typeof renderCategoryListUI === 'function') safe(renderCategoryListUI);
+        if ((want('menu') || want('categories')) && typeof renderMenuCatalogUI === 'function') safe(renderMenuCatalogUI);
+        _dirtyRenderTabs.delete('menu');
+    } else if (want('menu') || want('categories')) {
+        _dirtyRenderTabs.add('menu');
+    }
+
+    // 5. Active Customers view (#customers)
+    if (_isViewActive('customers')) {
+        if (want('customers') && typeof renderCustomersUI === 'function') safe(renderCustomersUI);
+        _dirtyRenderTabs.delete('customers');
+    } else if (want('customers')) {
+        _dirtyRenderTabs.add('customers');
+    }
+
+    // 6. Active Khata view (#khata)
+    if (_isViewActive('khata')) {
+        if (want('khata') && typeof renderKhataUI === 'function') safe(renderKhataUI);
+        _dirtyRenderTabs.delete('khata');
+    } else if (want('khata')) {
+        _dirtyRenderTabs.add('khata');
+    }
+
+    // 7. Active Staff / Settings views (#staff / #settings)
+    if (_isViewActive('staff') || _isViewActive('settings')) {
+        if (want('staff') && typeof renderStaffManagementUI === 'function') safe(renderStaffManagementUI);
+        if (_isViewActive('settings')) {
+            if (want('profile') && typeof generateSettingsQRPreview === 'function') safe(generateSettingsQRPreview);
+            if (want('profile') && typeof refreshAiQuotaDisplay === 'function') safe(refreshAiQuotaDisplay);
+            _dirtyRenderTabs.delete('settings');
         }
-    } catch(kdsErr) {
-        console.warn('KDS auto-render notice:', kdsErr);
+        if (_isViewActive('staff')) _dirtyRenderTabs.delete('staff');
+    } else {
+        if (want('staff')) _dirtyRenderTabs.add('staff');
+        if (want('profile')) _dirtyRenderTabs.add('settings');
+    }
+
+    // 8. Staff Lock Screen & Profile Selector overlays: refresh live only when visible
+    if (want('staff')) {
+        if ((_isOverlayVisible('loginOverlay') || _isOverlayVisible('shopAuthModal')) && typeof renderLoginStaffPicker === 'function') {
+            safe(renderLoginStaffPicker);
+        }
+        if (_isOverlayVisible('staffProfileSelector') && typeof window !== 'undefined' && typeof window._renderStaffProfileCards === 'function') {
+            safe(window._renderStaffProfileCards);
+        }
+    }
+
+    // 9. Active Dashboard / Reports view (#dashboard)
+    if (_isViewActive('dashboard')) {
+        if ((want('expenses') || want('history')) && typeof renderExpensesUI === 'function') safe(renderExpensesUI);
+        if ((want('history') || want('expenses') || want('profile')) && typeof renderDashboardAnalytics === 'function') safe(renderDashboardAnalytics);
+        _dirtyRenderTabs.delete('dashboard');
+    } else if (want('history') || want('expenses')) {
+        _dirtyRenderTabs.add('dashboard');
+    }
+
+    // 10. Active KDS view (#kds)
+    if (_isViewActive('kds')) {
+        if ((want('kots') || want('tables')) && typeof renderKdsUI === 'function') safe(renderKdsUI);
+        _dirtyRenderTabs.delete('kds');
+    } else if (want('kots')) {
+        _dirtyRenderTabs.add('kds');
     }
 }
 window.updateAllUI = updateAllUI;

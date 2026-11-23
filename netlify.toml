@@ -49,6 +49,39 @@
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 
+# Never cache HTML entrypoint so versioned ?v= asset references always stay fresh
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+# Cache versioned JS/CSS/app modules aggressively with stale-while-revalidate (eliminates 304 storms on reload)
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
+
+# Unversioned ES modules in /src/* must revalidate with origin (SW serves them instantly via SWR)
+[[headers]]
+  for = "/src/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/style.css"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
+
+[[headers]]
+  for = "/app.js"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "public, max-age=3600, stale-while-revalidate=86400"
+
 # Cache static assets (fonts, icons, audio) for performance
 [[headers]]
   for = "/assets/*"

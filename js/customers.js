@@ -2237,8 +2237,8 @@ window.customers = {
 };
 window.customersHub = window.customers;
 
-// Initialize on script load
-if (document.readyState === 'loading') {
+// Initialize on script load (defer-safe)
+if (!window._domContentLoadedFired && document.readyState !== 'complete') {
     document.addEventListener('DOMContentLoaded', () => {
         initAiWhatsAppHub();
         initKhataEngine();

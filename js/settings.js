@@ -1855,10 +1855,16 @@ function switchTabDirect(tabId) {
     // Always keep topbar active table indicator synced across all tab views
     if (typeof syncTableUI === 'function') syncTableUI();
 
+    // Clear dirty tab marker on activation so deferred background syncs flush cleanly now
+    if (window._dirtyRenderTabs && typeof window._dirtyRenderTabs.delete === 'function') {
+        window._dirtyRenderTabs.delete(tabId);
+    }
+
     if (tabId === 'tables') {
         if (typeof renderTablesView === 'function') renderTablesView();
     }
     if (tabId === 'dashboard') {
+        if (typeof renderExpensesUI === 'function') renderExpensesUI();
         if (typeof renderDashboardAnalytics === 'function') renderDashboardAnalytics();
     }
     if (tabId === 'customers') {
@@ -1866,8 +1872,10 @@ function switchTabDirect(tabId) {
     }
     if (tabId === 'pos') {
         if (typeof renderTables === 'function') renderTables();
+        if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
         if (typeof renderMenuUI === 'function') renderMenuUI();
         if (typeof updateCartUI === 'function') updateCartUI();
+        if (typeof populateCheckoutCustomerDropdown === 'function') populateCheckoutCustomerDropdown();
     }
     if (tabId === 'menu' || tabId === 'menuManage') {
         if (typeof renderCategoryDropdown === 'function') renderCategoryDropdown();
@@ -1889,6 +1897,7 @@ function switchTabDirect(tabId) {
     }
     if (tabId === 'settings') {
         if (typeof applySettingsRoleRestrictions === 'function') applySettingsRoleRestrictions();
+        if (typeof renderStaffManagementUI === 'function') renderStaffManagementUI();
         if (typeof refreshAiQuotaDisplay === 'function') refreshAiQuotaDisplay();
         if (typeof generateSettingsQRPreview === 'function') generateSettingsQRPreview();
         if (typeof renderSettingsProfileHeader === 'function') renderSettingsProfileHeader();
