@@ -1276,7 +1276,6 @@ window.applyCustomerSuggestedDiscount = applyCustomerSuggestedDiscount;
 function updateCartUI() {
     const cartDiv = document.getElementById('cartUI');
     if (!cartDiv) return;
-    cartDiv.innerHTML = '';
     if (!tablesInfo[activeTable]) {
         tablesInfo[activeTable] = { items: [], status: 'empty', savedTime: null, lastReminder: null };
     }
@@ -1288,43 +1287,104 @@ function updateCartUI() {
         cartDiv.innerHTML = `<div style="text-align: center; color: var(--text-muted); margin-top: 40px; font-weight: 600;">Select items from the menu to start an order.</div>`;
     } else {
         const anyKotPrinted = currentCart.some(it => Number(it.qtyKotPrinted || 0) > 0);
-        currentCart.forEach((item) => {
-            let itemTotal = item.price * item.qty;
-            const menuItem = (Array.isArray(window.menuItems) ? window.menuItems : []).find(m => String(m.id) === String(item.id));
-            const itemImg = item.image || item.image_url || (menuItem && (menuItem.image || menuItem.image_url)) || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category || (menuItem && menuItem.category)) : '') || '';
-            const fallbackSrc = typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category || (menuItem && menuItem.category) || '') : 'assets/default-food.png';
-            const finalThumbSrc = itemImg || fallbackSrc;
-            const thumbHtml = `<img src="${finalThumbSrc}" alt="${escapeHtml(item.name)}" class="cart-item-thumb" loading="lazy" onerror="this.onerror=null; this.src='${fallbackSrc}';">`;
 
-            const printedQty = Number(item.qtyKotPrinted || 0);
-            const orderedQty = Number(item.qty || 0);
-            let kotBadgeHtml = '';
-            if (anyKotPrinted) {
-                if (orderedQty > printedQty && printedQty > 0) {
-                    kotBadgeHtml = ` <span class="cart-kot-badge addon" style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">+${orderedQty - printedQty} ADD-ON</span>`;
-                } else if (orderedQty > printedQty && printedQty === 0) {
-                    kotBadgeHtml = ` <span class="cart-kot-badge addon" style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">+${orderedQty} ADD-ON</span>`;
-                } else if (printedQty > 0 && orderedQty === printedQty) {
-                    kotBadgeHtml = ` <span class="cart-kot-badge sent" style="font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px; background:#DCFCE7; color:#15803D;">KOT Sent</span>`;
+        // ⚡ FLICKER-FREE TARGETED DOM DIFFING & IN-PLACE PATCHING (preserves <img> and DOM nodes on + / -)
+        const existingCartItems = (cartDiv.querySelectorAll && typeof cartDiv.querySelectorAll === 'function') 
+            ? cartDiv.querySelectorAll('.cart-item') 
+            : [];
+        const existingIds = Array.from(existingCartItems).map(el => el.getAttribute('data-cart-item-id'));
+        const targetIds = currentCart.map(it => String(it.id));
+
+        const canPatchInPlace = existingIds.length === targetIds.length &&
+                                existingIds.every((id, idx) => id === targetIds[idx]);
+
+        if (canPatchInPlace) {
+            currentCart.forEach((item, idx) => {
+                const itemEl = existingCartItems[idx];
+                if (!itemEl) return;
+                const itemTotal = item.price * item.qty;
+                const printedQty = Number(item.qtyKotPrinted || 0);
+                const orderedQty = Number(item.qty || 0);
+
+                let kotBadgeHtml = '';
+                if (anyKotPrinted) {
+                    if (orderedQty > printedQty && printedQty > 0) {
+                        kotBadgeHtml = ` <span class="cart-kot-badge addon" style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">+${orderedQty - printedQty} ADD-ON</span>`;
+                    } else if (orderedQty > printedQty && printedQty === 0) {
+                        kotBadgeHtml = ` <span class="cart-kot-badge addon" style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">+${orderedQty} ADD-ON</span>`;
+                    } else if (printedQty > 0 && orderedQty === printedQty) {
+                        kotBadgeHtml = ` <span class="cart-kot-badge sent" style="font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px; background:#DCFCE7; color:#15803D;">KOT Sent</span>`;
+                    }
                 }
-            }
 
-            cartDiv.innerHTML += `<div class="cart-item">
-                ${thumbHtml}
-                <div class="cart-item-info">
-                    <div class="cart-item-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}${kotBadgeHtml}</div>
-                    <div class="cart-item-math">₹ ${item.price.toFixed(2)} each</div>
-                </div>
-                <div class="cart-item-right">
-                    <span class="cart-item-price">₹ ${itemTotal.toFixed(2)}</span>
-                    <div class="qty-pill">
-                        <button type="button" onclick="modifyQty(${item.id}, -1, event)" aria-label="Decrease quantity">-</button>
-                        <span>${item.qty}</span>
-                        <button type="button" onclick="modifyQty(${item.id}, 1, event)" aria-label="Increase quantity">+</button>
+                const nameEl = itemEl.querySelector ? itemEl.querySelector('.cart-item-name') : null;
+                if (nameEl) {
+                    const expectedNameHtml = `${escapeHtml(item.name)}${kotBadgeHtml}`;
+                    if (nameEl.innerHTML !== expectedNameHtml) {
+                        nameEl.innerHTML = expectedNameHtml;
+                    }
+                }
+
+                const mathEl = itemEl.querySelector ? itemEl.querySelector('.cart-item-math') : null;
+                if (mathEl) {
+                    const expectedMath = `₹ ${item.price.toFixed(2)} each`;
+                    if (mathEl.textContent !== expectedMath) mathEl.textContent = expectedMath;
+                }
+
+                const lineTotalEl = itemEl.querySelector ? itemEl.querySelector('.cart-item-price') : null;
+                if (lineTotalEl) {
+                    const expectedTotal = `₹ ${itemTotal.toFixed(2)}`;
+                    if (lineTotalEl.textContent !== expectedTotal) lineTotalEl.textContent = expectedTotal;
+                }
+
+                const qtySpan = itemEl.querySelector ? itemEl.querySelector('.qty-pill span') : null;
+                if (qtySpan) {
+                    const expectedQty = String(item.qty);
+                    if (qtySpan.textContent !== expectedQty) qtySpan.textContent = expectedQty;
+                }
+            });
+        } else {
+            // Single-assignment DOM build (avoids O(N^2) innerHTML += layout destruction)
+            const itemsHtml = currentCart.map((item) => {
+                let itemTotal = item.price * item.qty;
+                const menuItem = (Array.isArray(window.menuItems) ? window.menuItems : []).find(m => String(m.id) === String(item.id));
+                const itemImg = item.image || item.image_url || (menuItem && (menuItem.image || menuItem.image_url)) || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category || (menuItem && menuItem.category)) : '') || '';
+                const fallbackSrc = typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category || (menuItem && menuItem.category) || '') : 'assets/default-food.png';
+                const finalThumbSrc = itemImg || fallbackSrc;
+                const thumbHtml = `<img src="${finalThumbSrc}" alt="${escapeHtml(item.name)}" class="cart-item-thumb" loading="lazy" data-fallback-src="${fallbackSrc}" onerror="this.onerror=null; this.src=this.dataset.fallbackSrc || 'assets/default-food.png';">`;
+
+                const printedQty = Number(item.qtyKotPrinted || 0);
+                const orderedQty = Number(item.qty || 0);
+                let kotBadgeHtml = '';
+                if (anyKotPrinted) {
+                    if (orderedQty > printedQty && printedQty > 0) {
+                        kotBadgeHtml = ` <span class="cart-kot-badge addon" style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">+${orderedQty - printedQty} ADD-ON</span>`;
+                    } else if (orderedQty > printedQty && printedQty === 0) {
+                        kotBadgeHtml = ` <span class="cart-kot-badge addon" style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; background:#FEF3C7; color:#B45309; border:1px solid #FDE68A;">+${orderedQty} ADD-ON</span>`;
+                    } else if (printedQty > 0 && orderedQty === printedQty) {
+                        kotBadgeHtml = ` <span class="cart-kot-badge sent" style="font-size:9px; font-weight:700; padding:1px 5px; border-radius:6px; background:#DCFCE7; color:#15803D;">KOT Sent</span>`;
+                    }
+                }
+
+                return `<div class="cart-item" data-cart-item-id="${item.id}">
+                    ${thumbHtml}
+                    <div class="cart-item-info">
+                        <div class="cart-item-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}${kotBadgeHtml}</div>
+                        <div class="cart-item-math">₹ ${item.price.toFixed(2)} each</div>
                     </div>
-                </div>
-            </div>`;
-        });
+                    <div class="cart-item-right">
+                        <span class="cart-item-price">₹ ${itemTotal.toFixed(2)}</span>
+                        <div class="qty-pill">
+                            <button type="button" onclick="modifyQty(${item.id}, -1, event)" aria-label="Decrease quantity">-</button>
+                            <span>${item.qty}</span>
+                            <button type="button" onclick="modifyQty(${item.id}, 1, event)" aria-label="Increase quantity">+</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            cartDiv.innerHTML = itemsHtml;
+        }
     }
     
     const totals = calculateOrderTotals(currentCart, currentDiscount);
@@ -1506,6 +1566,7 @@ function markServed() {
 window.markServed = markServed;
 
 setInterval(() => { 
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     if (shopProfile.unpaidTableAlert === false) return;
     const now = Date.now(); 
     let needsSync = false; 
@@ -1523,8 +1584,12 @@ setInterval(() => {
         } 
     } 
     if(needsSync) { 
-        persistTables(); 
         syncTableUI(); 
+        if (typeof idb !== 'undefined' && idb.set) {
+            try {
+                idb.set('cafe_tables', tablesInfo).catch(() => {});
+            } catch (_) {}
+        }
     } 
 }, 5000);
 
@@ -2223,11 +2288,31 @@ function executeHtmlPrint(divId) {
 }
 window.executeHtmlPrint = executeHtmlPrint;
 
+let _isCheckoutInFlight = false;
+if (typeof window !== 'undefined') window._isCheckoutInFlight = _isCheckoutInFlight;
+
 async function confirmCheckout() {
     if (typeof canAccessStoreData === 'function' && !canAccessStoreData()) {
+        _isCheckoutInFlight = false;
+        if (typeof window !== 'undefined') window._isCheckoutInFlight = false;
         if (typeof showToast === 'function') showToast("Transaction blocked: device revoked or pending authorization.");
         throw new Error('Device revoked; transaction aborted');
     }
+
+    if (_isCheckoutInFlight) {
+        console.warn('[POS Checkout] Blocked concurrent settlement execution');
+        return;
+    }
+    if (typeof window !== 'undefined' && window._isCheckoutInFlight) {
+        console.warn('[POS Checkout] Blocked concurrent settlement execution');
+        return;
+    }
+    if (typeof _isCheckoutInFlight !== 'undefined') _isCheckoutInFlight = true;
+    if (typeof window !== 'undefined') window._isCheckoutInFlight = true;
+
+    let payBtn = null;
+    let didAttemptExecution = false;
+    try {
     // Fail-closed settlement RBAC guard (strict Floor Server & unauthenticated protection)
     const activeStaffSettlement = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
     if (!activeStaffSettlement || !activeStaffSettlement.role) {
@@ -2278,7 +2363,8 @@ async function confirmCheckout() {
         }
     }
 
-    const payBtn = document.querySelector('#checkoutModal .btn-success');
+    didAttemptExecution = true;
+    payBtn = document.querySelector('#checkoutModal .btn-success');
     if (payBtn) {
         payBtn.disabled = true; 
         payBtn.innerHTML = printCharacteristic 
@@ -2288,8 +2374,7 @@ async function confirmCheckout() {
     const cModal = document.getElementById('checkoutModal');
     if (cModal) cModal.style.display = 'none';
     
-    try {
-        const itemNames = tInfo.items.map(i => `${i.name} (x${i.qty})`).join(', ');
+    const itemNames = tInfo.items.map(i => `${i.name} (x${i.qty})`).join(', ');
 
         const oType = document.getElementById('checkoutOrderType')?.value || 'Dine-In'; 
         const tenderVal = parseFloat(document.getElementById('checkoutCashTenderedInput')?.value);
@@ -2559,13 +2644,26 @@ async function confirmCheckout() {
         await sendEscPosToPrinter(newOrder);
 
     } catch (e) { 
+        if (e && e.message === 'Device revoked; transaction aborted') {
+            throw e;
+        }
         console.error(e); 
         showToast("❌ Error processing checkout."); 
     } 
     finally { 
-        if (payBtn) {
-            payBtn.disabled = false; 
-            payBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span class="btn-text">Pay &amp; Print</span>'; 
+        const btnToReset = payBtn || (typeof document !== 'undefined' ? document.querySelector('#checkoutModal .btn-success') : null);
+        if (btnToReset) {
+            btnToReset.disabled = false; 
+            btnToReset.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span class="btn-text">Pay &amp; Print</span>'; 
+        }
+        if (!didAttemptExecution) {
+            if (typeof _isCheckoutInFlight !== 'undefined') _isCheckoutInFlight = false;
+            if (typeof window !== 'undefined') window._isCheckoutInFlight = false;
+        } else {
+            setTimeout(() => {
+                if (typeof _isCheckoutInFlight !== 'undefined') _isCheckoutInFlight = false;
+                if (typeof window !== 'undefined') window._isCheckoutInFlight = false;
+            }, 800);
         }
     }
 }
@@ -4155,30 +4253,46 @@ if (typeof window !== 'undefined') {
 }
 
 
+let _isKotDispatchInFlight = false;
+if (typeof window !== 'undefined') window._isKotDispatchInFlight = _isKotDispatchInFlight;
+
 async function printKitchenTicket() {
-    const btn = document.querySelector('#kotModal .btn-warning'); 
-    let tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[activeTable] : null;
-    const currentTableName = (typeof getTableName === 'function') ? getTableName(activeTable) : String(activeTable || 1);
-
-    const delta = (typeof computeKotDelta === 'function')
-        ? computeKotDelta(activeTable)
-        : { deltaItems: tInfo?.items || [], isAddon: false, hasNewItems: Boolean(tInfo?.items?.length) };
-
-    if (!delta.hasNewItems) {
-        if (typeof showToast === 'function') showToast("KOT already sent for all items.", "info");
-        const kotModal = document.getElementById('kotModal');
-        if (kotModal) kotModal.style.display = 'none';
+    if (_isKotDispatchInFlight) {
+        console.warn('[POS KOT] Blocked concurrent KOT dispatch execution');
         return;
     }
-
-    if (btn) {
-        btn.disabled = true; 
-        btn.innerHTML = (window.posPrinters?.printer2?.characteristic || window.posPrinters?.printer1?.characteristic || printCharacteristic)
-            ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Printing KOT...</span>' 
-            : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Generating KOT...</span>';
+    if (typeof window !== 'undefined' && window._isKotDispatchInFlight) {
+        console.warn('[POS KOT] Blocked concurrent KOT dispatch execution');
+        return;
     }
+    if (typeof _isKotDispatchInFlight !== 'undefined') _isKotDispatchInFlight = true;
+    if (typeof window !== 'undefined') window._isKotDispatchInFlight = true;
 
-    try { 
+    const btn = document.querySelector('#kotModal .btn-warning'); 
+    let didAttemptExecution = false;
+    try {
+        let tInfo = (typeof tablesInfo !== 'undefined') ? tablesInfo[activeTable] : null;
+        const currentTableName = (typeof getTableName === 'function') ? getTableName(activeTable) : String(activeTable || 1);
+
+        const delta = (typeof computeKotDelta === 'function')
+            ? computeKotDelta(activeTable)
+            : { deltaItems: tInfo?.items || [], isAddon: false, hasNewItems: Boolean(tInfo?.items?.length) };
+
+        if (!delta.hasNewItems) {
+            if (typeof showToast === 'function') showToast("KOT already sent for all items.", "info");
+            const kotModal = document.getElementById('kotModal');
+            if (kotModal) kotModal.style.display = 'none';
+            return;
+        }
+
+        didAttemptExecution = true;
+        if (btn) {
+            btn.disabled = true; 
+            btn.innerHTML = (window.posPrinters?.printer2?.characteristic || window.posPrinters?.printer1?.characteristic || printCharacteristic)
+                ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Printing KOT...</span>' 
+                : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Generating KOT...</span>';
+        }
+
         const kotNo = (typeof getNextUnifiedKotNumber === 'function') ? getNextUnifiedKotNumber() : 1;
         const kotId = `KOT-${kotNo}`;
         const kotDisplayNo = `KOT #${kotNo}`;
@@ -4259,6 +4373,15 @@ async function printKitchenTicket() {
         if (btn) {
             btn.disabled = false; 
             btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg><span class="btn-text">Print KOT</span>'; 
+        }
+        if (!didAttemptExecution) {
+            if (typeof _isKotDispatchInFlight !== 'undefined') _isKotDispatchInFlight = false;
+            if (typeof window !== 'undefined') window._isKotDispatchInFlight = false;
+        } else {
+            setTimeout(() => {
+                if (typeof _isKotDispatchInFlight !== 'undefined') _isKotDispatchInFlight = false;
+                if (typeof window !== 'undefined') window._isKotDispatchInFlight = false;
+            }, 800);
         }
     }
 }
@@ -4732,7 +4855,7 @@ function renderCatalogTile(item) {
     return `
     <div class="menu-card clean-item-card" onclick="addToCart(${item.id}, event)">
         <div class="card-img-wrapper">
-            <img src="${thumbSrc}" class="card-img" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.onerror=null; this.src='${fallbackSrc}';">
+            <img src="${thumbSrc}" class="card-img" alt="${escapeHtml(item.name)}" loading="lazy" data-fallback-src="${fallbackSrc}" onerror="this.onerror=null; this.src=this.dataset.fallbackSrc || 'assets/default-food.png';">
             ${popularBadge}
             ${stockBadge}
         </div>
@@ -4788,7 +4911,7 @@ function renderPosSearchSuggestions(query, targetElementId = 'posSearchSuggestio
         const thumbSrc = item.image || item.image_url || (typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category) : 'assets/default-food.png');
         const fallbackSrc = typeof generateFallbackImage === 'function' ? generateFallbackImage(item.name, item.category || '') : 'assets/default-food.png';
         return `<div class="pos-search-suggestion-item" onclick="addToCart(${item.id}, event); if(document.getElementById('${targetElementId}')) document.getElementById('${targetElementId}').style.display='none';" style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-subtle);">
-            <img src="${thumbSrc}" class="suggestion-thumb" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.onerror=null; this.src='${fallbackSrc}';" style="width: 32px; height: 32px; border-radius: 6px; object-fit: cover; flex-shrink: 0;">
+            <img src="${thumbSrc}" class="suggestion-thumb" alt="${escapeHtml(item.name)}" loading="lazy" data-fallback-src="${fallbackSrc}" onerror="this.onerror=null; this.src=this.dataset.fallbackSrc || 'assets/default-food.png';" style="width: 32px; height: 32px; border-radius: 6px; object-fit: cover; flex-shrink: 0;">
             <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 13px; font-weight: 700; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(item.name)}</div>
                 <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(item.category || '')}</div>

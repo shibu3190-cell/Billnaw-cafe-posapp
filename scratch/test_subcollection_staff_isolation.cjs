@@ -23,7 +23,7 @@ async function runTests() {
   } = await import('../server/sync-service.js');
 
   const BAPI_NAMES = ['Bapi Halder', 'Gourab Majumder', 'Sourav', 'Sayan', 'Manik', 'Samrat', 'Gopal', 'Amit'];
-  const GENUINE_ABHIJIT_NAMES = ['Admin', 'Dk', 'om', 'a', 'Am', 'abhi'];
+  const GENUINE_ABHIJIT_NAMES = ['Admin', 'Dk', 'om', 'a', 'Am', 'abhi', 'B'];
 
   // -------------------------------------------------------------------------
   // TEST 1: isAbhijitTenant helper accuracy
@@ -75,7 +75,7 @@ async function runTests() {
   console.log('\n📍 TEST 4: getStoreFromFirestoreREST for SHOP_ABHIJITMODAK');
   const abhiResult = await getStoreFromFirestoreREST('SHOP_ABHIJITMODAK');
   assert.ok(abhiResult.success, 'Fetch SHOP_ABHIJITMODAK must succeed');
-  assert.strictEqual(abhiResult.staff.length, 6, `SHOP_ABHIJITMODAK must have strictly 6 staff, got ${abhiResult.staff.length}`);
+  assert.strictEqual(abhiResult.staff.length, 7, `SHOP_ABHIJITMODAK must have strictly 7 staff, got ${abhiResult.staff.length}`);
   
   const fetchedNames = abhiResult.staff.map(s => s.name);
   for (const genuineName of GENUINE_ABHIJIT_NAMES) {

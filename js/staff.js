@@ -689,6 +689,9 @@ function unlockTerminal(staff, showWelcomeToast = true) {
 
     enforcePermissions();
     updateStaffTopbarDisplay();
+    if (typeof attachFirestoreListener === 'function') {
+        try { attachFirestoreListener(); } catch(_) {}
+    }
     if (typeof ensureShopProfileHydrated === 'function') {
         Promise.resolve(ensureShopProfileHydrated()).then(() => {
             if (typeof updateProfileVisuals === 'function') updateProfileVisuals();
@@ -784,6 +787,7 @@ function startSessionHeartbeat(sessionRecord) {
     }
 
     sessionHeartbeatInterval = setInterval(async () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
         if (!currentSessionRecord || !currentSessionRecord.sessionId) return;
         if (isTerminalLocked) return;
 

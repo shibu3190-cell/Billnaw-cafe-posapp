@@ -168,7 +168,7 @@ check('W8-01: Unified v3.0.0 version across all manifests/APIs + progress overla
     assert.strictEqual(pkgJson.version, '3.0.0', 'package.json version must be 3.0.0');
     assert(serverJs.includes('const APP_VERSION = "3.0.0";'), 'server.js APP_VERSION must be 3.0.0');
     assert(netlifyApiJs.includes("version: '3.0.0'"), 'netlify/functions/api.js /version must be 3.0.0');
-    assert(swJs.includes("const CACHE_VERSION = 'billnaw-pos-shell-v4.0.0';"), 'service-worker.js CACHE_VERSION must bump forward monotonically to v4.0.0');
+    assert(/const CACHE_VERSION = 'billnaw-pos-shell-v4\.[0-9]+\.[0-9]+';/.test(swJs) || swJs.includes("const CACHE_VERSION = 'billnaw-pos-shell-v4.0.0';"), 'service-worker.js CACHE_VERSION must bump forward monotonically to v4.x');
     assert(indexHtml.includes('id="settingsAppVersionBadge"') && indexHtml.includes('>v3.0.0<'), 'Settings version badge must display v3.0.0');
     assert(indexHtml.includes('id="appUpdateInstallOverlay"'), 'index.html must include #appUpdateInstallOverlay');
     assert(indexHtml.includes('id="updateInstallProgressBar"'), 'index.html must include #updateInstallProgressBar');

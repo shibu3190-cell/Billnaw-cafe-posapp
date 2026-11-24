@@ -16,12 +16,13 @@
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0F3D33">
-    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
-    <script src="js/defensive-stubs.js?v=3001"></script>
-    <link rel="stylesheet" href="style.css?v=3001">
+    <script src="js/defensive-stubs.js?v=3002"></script>
+    <link rel="stylesheet" href="style.css?v=3002">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display: none;" aria-hidden="true">
@@ -4733,7 +4734,7 @@
 
                             <div class="search-container">
                                 <span class="search-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
-                                <input type="text" id="menuSearchInput" class="search-bar" placeholder="Search dishes & drinks..." onkeyup="renderMenuUI()">
+                                <input type="text" id="menuSearchInput" class="search-bar" placeholder="Search dishes & drinks..." oninput="debouncedMenuSearch()" onkeyup="if(event.key==='Enter') debouncedMenuSearch(true)">
                                 <span class="mic-icon icon-box" onclick="toggleVoiceBilling()" title="Voice-to-Billing (Speak diner order)" style="right: 8px; width: 28px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span>
                             </div>
                             
@@ -5284,7 +5285,7 @@
                         <span class="settings-search-icon" aria-hidden="true">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                         </span>
-                        <input type="text" id="settingsSearchInput" class="settings-search-input" placeholder="Search settings (Printer, Devices, GST, Staff)..." oninput="filterSettingsHub(this.value)">
+                        <input type="text" id="settingsSearchInput" class="settings-search-input" placeholder="Search settings (Printer, Devices, GST, Staff)..." oninput="debouncedFilterSettingsHub(this.value)">
                     </div>
 
                     <div class="subscription-crown-card" onclick="openSubscriptionModal()" title="View and manage subscription plan">
@@ -6297,22 +6298,22 @@
         </div>
     </div>
 
-    <script type="module" src="js/firebase-init.js?v=3001"></script>
+    <script type="module" src="js/firebase-init.js?v=3002"></script>
     
-    <script src="js/sw-register.js?v=3001" defer></script>
-    <script src="js/device-identity.js?v=3001" defer></script>
-    <script src="js/core.js?v=3001" defer></script>
-    <script src="js/staff.js?v=3001" defer></script>
-    <script src="js/pos.js?v=3001" defer></script>
-    <script src="js/menu.js?v=3001" defer></script>
-    <script src="js/customers.js?v=3001" defer></script>
-    <script src="js/dashboard.js?v=3001" defer></script>
-    <script src="js/marketing_inventory.js?v=3001" defer></script>
-    <script src="js/culinary_inventory.js?v=3001" defer></script>
-    <script src="js/settings.js?v=3001" defer></script>
-    <script src="app.js?v=3001" defer></script>
+    <script src="js/sw-register.js?v=3002" defer></script>
+    <script src="js/device-identity.js?v=3002" defer></script>
+    <script src="js/core.js?v=3002" defer></script>
+    <script src="js/staff.js?v=3002" defer></script>
+    <script src="js/pos.js?v=3002" defer></script>
+    <script src="js/menu.js?v=3002" defer></script>
+    <script src="js/customers.js?v=3002" defer></script>
+    <script src="js/dashboard.js?v=3002" defer></script>
+    <script src="js/marketing_inventory.js?v=3002" defer></script>
+    <script src="js/culinary_inventory.js?v=3002" defer></script>
+    <script src="js/settings.js?v=3002" defer></script>
+    <script src="app.js?v=3002" defer></script>
 
-    <script src="js/shop-auth.js?v=3001" defer></script>
+    <script src="js/shop-auth.js?v=3002" defer></script>
 
     <div id="appUpdatePopup" class="app-update-popup" style="display: none; position: fixed; bottom: 20px; right: 20px; z-index: 10000000; background: #0F3D33; color: #FFFFFF; padding: 14px 16px; border-radius: 16px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.24); border: 1px solid rgba(255, 255, 255, 0.14); max-width: 340px;">
         <div style="display: flex; align-items: flex-start; gap: 12px;">
@@ -6431,10 +6432,10 @@
         </div>
     </div>
 
-    <script src="js/cloud-sync.js?v=3001" defer></script>
-    <script type="module" src="js/feature-controllers.js?v=3001"></script>
+    <script src="js/cloud-sync.js?v=3002" defer></script>
+    <script type="module" src="js/feature-controllers.js?v=3002"></script>
     <script type="module">
-        import { ThermalPrinterBridge } from './src/core/platform-bridge.js?v=3001';
+        import { ThermalPrinterBridge } from './src/core/platform-bridge.js?v=3002';
         window.ThermalPrinterBridge = ThermalPrinterBridge;
         if (typeof ThermalPrinterBridge.init === 'function') {
             ThermalPrinterBridge.init();

@@ -2090,6 +2090,10 @@ body.cart-drawer-from-tables #pos {
     #cloudSyncOverlay,
     #cartDrawerOverlay,
     .mobile-bottom-nav,
+    .bottom-nav,
+    .stock-badge,
+    .card-img-price-pill,
+    .drawer-overlay,
     .header-actions-dropdown,
     .glass-card,
     .toast-notification {
@@ -2105,6 +2109,10 @@ body.cart-drawer-from-tables #pos {
 
     .topbar {
         background: rgba(247, 248, 247, 0.98) !important;
+    }
+
+    .bottom-nav {
+        background: rgba(248, 250, 252, 0.98) !important;
     }
 
     /* Reduce expensive multi-layer drop shadows on repeating cards */

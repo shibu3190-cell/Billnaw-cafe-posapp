@@ -2922,3 +2922,13 @@ function filterSettingsHub(rawQuery) {
     }
 }
 window.filterSettingsHub = filterSettingsHub;
+
+let _settingsSearchTimer = null;
+function debouncedFilterSettingsHub(val) {
+    if (_settingsSearchTimer) clearTimeout(_settingsSearchTimer);
+    _settingsSearchTimer = setTimeout(() => {
+        _settingsSearchTimer = null;
+        filterSettingsHub(val);
+    }, 150);
+}
+window.debouncedFilterSettingsHub = debouncedFilterSettingsHub;

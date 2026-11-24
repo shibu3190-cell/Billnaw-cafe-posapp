@@ -191,7 +191,10 @@ function deleteCategory(cat, bypassRoleCheck = false) {
     if (confirm(`Delete category "${cat}"?`)) {
         menuCategories = (Array.isArray(menuCategories) ? menuCategories : []).filter(c => c !== cat);
         window.menuCategories = menuCategories;
-        if (activeCategory === cat) activeCategory = "All";
+        if (activeCategory === cat) {
+            activeCategory = "All";
+            _menuRenderLimit = _MENU_PAGE_SIZE;
+        }
         persistCategories();
         renderCategoryDropdown();
         renderCategoryFilters();
@@ -207,13 +210,25 @@ function filterMenu(category) {
     if (typeof window !== 'undefined' && Array.isArray(window.menuItems) && window.menuItems.length > 0 && (!Array.isArray(menuItems) || menuItems.length === 0)) {
         menuItems = window.menuItems;
     }
+    _menuRenderLimit = _MENU_PAGE_SIZE;
     activeCategory = category; 
     renderCategoryFilters(); 
     renderMenuUI(); 
 }
 window.filterMenu = filterMenu;
 
+// ⚡ BOUNDED FIFO CACHE FOR FAILED IMAGES (Prevents RAM growth in long shifts on low-memory devices)
+const _MAX_FAILED_MENU_IMG_URLS = 100;
 const _failedMenuImageUrls = new Set();
+const _origFailedUrlsAdd = _failedMenuImageUrls.add.bind(_failedMenuImageUrls);
+_failedMenuImageUrls.add = function(url) {
+    if (!url || typeof url !== 'string' || url.startsWith('data:') || this.has(url)) return this;
+    if (this.size >= _MAX_FAILED_MENU_IMG_URLS) {
+        const oldest = this.keys().next().value;
+        if (oldest) this.delete(oldest);
+    }
+    return _origFailedUrlsAdd(url);
+};
 
 function _resolveStableMenuThumb(item) {
     const rawThumb = item.image || item.image_url || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(item.name, item.category) : generateFallbackImage(item.name, item.category));
@@ -227,12 +242,14 @@ function _resolveStableMenuThumb(item) {
 function _handleMenuImgError(imgEl) {
     if (!imgEl) return;
     imgEl.onerror = null;
-    const failedUrl = imgEl.dataset?.resolvedSrc || imgEl.getAttribute('src') || '';
+    const failedUrl = (imgEl.dataset && imgEl.dataset.resolvedSrc) || imgEl.getAttribute('src') || '';
     if (failedUrl && !failedUrl.startsWith('data:')) {
         _failedMenuImageUrls.add(failedUrl);
     }
-    const fallback = generateFallbackImage(imgEl.dataset?.itemName || '', imgEl.dataset?.itemCat || '');
-    imgEl.dataset.resolvedSrc = fallback;
+    const fallback = generateFallbackImage((imgEl.dataset && imgEl.dataset.itemName) || '', (imgEl.dataset && imgEl.dataset.itemCat) || '');
+    if (imgEl.dataset) {
+        imgEl.dataset.resolvedSrc = fallback;
+    }
     if (imgEl.src !== fallback) {
         imgEl.src = fallback;
     }
@@ -248,6 +265,69 @@ function _isMenuCatalogViewActive() {
     return Boolean(menuView && menuView.classList.contains('active'));
 }
 
+// ⚡ WINDOWED RENDERING & DEBOUNCE CONTROLLERS
+const _MENU_PAGE_SIZE = 36;
+let _menuRenderLimit = _MENU_PAGE_SIZE;
+let _menuInfiniteScrollObserver = null;
+
+function loadMoreMenuItems() {
+    _menuRenderLimit += _MENU_PAGE_SIZE;
+    renderMenuUI();
+}
+
+function _attachMenuInfiniteScrollObserver() {
+    if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
+    const loadMoreContainer = document.getElementById('menuLoadMoreContainer');
+    if (!loadMoreContainer) {
+        if (_menuInfiniteScrollObserver) {
+            _menuInfiniteScrollObserver.disconnect();
+            _menuInfiniteScrollObserver = null;
+        }
+        return;
+    }
+    if (_menuInfiniteScrollObserver) {
+        _menuInfiniteScrollObserver.disconnect();
+    }
+    _menuInfiniteScrollObserver = new IntersectionObserver((entries) => {
+        if (entries && entries[0] && entries[0].isIntersecting) {
+            loadMoreMenuItems();
+        }
+    }, { rootMargin: '250px' });
+    _menuInfiniteScrollObserver.observe(loadMoreContainer);
+}
+
+if (typeof window !== 'undefined') {
+    window.loadMoreMenuItems = loadMoreMenuItems;
+    window._MENU_PAGE_SIZE = _MENU_PAGE_SIZE;
+    Object.defineProperty(window, '_menuRenderLimit', {
+        get() { return _menuRenderLimit; },
+        set(val) { _menuRenderLimit = Number(val) || _MENU_PAGE_SIZE; },
+        configurable: true,
+        enumerable: true
+    });
+}
+
+let _menuSearchDebounceTimer = null;
+
+function debouncedMenuSearch(immediate = false) {
+    _menuRenderLimit = _MENU_PAGE_SIZE;
+    if (_menuSearchDebounceTimer) {
+        clearTimeout(_menuSearchDebounceTimer);
+        _menuSearchDebounceTimer = null;
+    }
+    if (immediate === true) {
+        renderMenuUI();
+        return;
+    }
+    _menuSearchDebounceTimer = setTimeout(() => {
+        _menuSearchDebounceTimer = null;
+        renderMenuUI();
+    }, 200);
+}
+if (typeof window !== 'undefined') {
+    window.debouncedMenuSearch = debouncedMenuSearch;
+}
+
 function renderMenuUI() {
     if (typeof window !== 'undefined' && Array.isArray(window.menuItems) && window.menuItems.length > 0 && (!Array.isArray(menuItems) || menuItems.length === 0)) {
         menuItems = window.menuItems;
@@ -260,6 +340,10 @@ function renderMenuUI() {
     // Zero phantom data: render welcoming empty slate if no active user-created menu items exist
     const activeItems = (Array.isArray(menuItems) ? menuItems : []).filter(i => !i.isDeleted && i.isAvailable !== false && !i.is_template && i.source !== 'template' && i.is_active !== false);
     if (activeItems.length === 0) {
+        if (_menuInfiniteScrollObserver) {
+            _menuInfiniteScrollObserver.disconnect();
+            _menuInfiniteScrollObserver = null;
+        }
         posGrid.innerHTML = `
             <div id="posMenuEmptyState" style="grid-column: 1 / -1; text-align: center; padding: 40px 16px; background: #FFFFFF; border: 1.5px dashed #CBD5E1; border-radius: 16px; margin: 10px 0;">
                 <div style="width: 52px; height: 52px; border-radius: 50%; background: #F0FDF4; color: #143832; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; border: 1px solid #BBF7D0;">
@@ -287,6 +371,7 @@ function renderMenuUI() {
     if (activeCategory !== "All" && !activeItems.some(i => i.category === activeCategory)) {
         activeCategory = "All";
         window.activeCategory = "All";
+        _menuRenderLimit = _MENU_PAGE_SIZE;
         if (typeof renderCategoryFilters === 'function') renderCategoryFilters();
     }
 
@@ -296,6 +381,10 @@ function renderMenuUI() {
     if (searchText) filteredMenu = filteredMenu.filter(i => i.name.toLowerCase().includes(searchText));
 
     if (filteredMenu.length === 0) {
+        if (_menuInfiniteScrollObserver) {
+            _menuInfiniteScrollObserver.disconnect();
+            _menuInfiniteScrollObserver = null;
+        }
         posGrid.innerHTML = `
             <div style="grid-column: 1 / -1; padding: 36px 16px; text-align: center; color: var(--text-muted); background: var(--bg-surface); border-radius: var(--radius-lg); border: 1.5px dashed var(--border); margin: 8px 0;">
                 <div style="width: 44px; height: 44px; border-radius: 50%; background: #F1F5F9; color: #64748B; display: inline-flex; align-items: center; justify-content: center; margin: 0 auto 8px auto;">
@@ -312,38 +401,49 @@ function renderMenuUI() {
         return;
     }
 
+    // ⚡ WINDOWED SLICING: Cap initial render of "All" category to _menuRenderLimit (36) to prevent low-RAM WebViews from freezing
+    const totalMatching = filteredMenu.length;
+    const isWindowed = activeCategory === "All" && (typeof window === 'undefined' || !window._disableMenuWindowing);
+    const shouldWindow = isWindowed && totalMatching > _menuRenderLimit;
+    const visibleMenu = shouldWindow ? filteredMenu.slice(0, _menuRenderLimit) : filteredMenu;
+
     // ⚡ FLICKER-FREE TARGETED DOM DIFFING & IN-PLACE PATCHING (preserves <img> nodes)
-    const existingCards = posGrid.querySelectorAll('.menu-card');
+    const existingCards = (posGrid.querySelectorAll && typeof posGrid.querySelectorAll === 'function') 
+        ? posGrid.querySelectorAll('.menu-card') 
+        : [];
     const existingCardIds = Array.from(existingCards).map(c => c.getAttribute('data-item-id'));
-    const targetCardIds = filteredMenu.map(i => String(i.id));
+    const targetCardIds = visibleMenu.map(i => String(i.id));
 
     const canPatchInPlace = existingCardIds.length === targetCardIds.length &&
                             existingCardIds.every((id, idx) => id === targetCardIds[idx]);
 
     if (canPatchInPlace) {
-        filteredMenu.forEach((item, idx) => {
+        visibleMenu.forEach((item, idx) => {
             const cardEl = existingCards[idx];
             if (!cardEl) return;
 
             // Patch name & category only when changed
-            const nameEl = cardEl.querySelector('.name');
+            const nameEl = cardEl.querySelector ? cardEl.querySelector('.name') : null;
             if (nameEl && nameEl.textContent !== item.name) {
                 nameEl.textContent = item.name;
             }
-            const catEl = cardEl.querySelector('.cat-label');
+            const catEl = cardEl.querySelector ? cardEl.querySelector('.cat-label') : null;
             const expectedCat = item.category || '';
             if (catEl && catEl.textContent !== expectedCat) {
                 catEl.textContent = expectedCat;
             }
 
             // Patch image ONLY if resolved source genuinely changed (zero flicker; re-arm onerror)
-            const imgEl = cardEl.querySelector('img.card-img');
+            const imgEl = cardEl.querySelector ? cardEl.querySelector('img.card-img') : null;
             if (imgEl) {
                 const expectedThumb = _resolveStableMenuThumb(item);
-                if (imgEl.dataset.resolvedSrc !== expectedThumb) {
-                    imgEl.dataset.resolvedSrc = expectedThumb;
-                    imgEl.dataset.itemName = item.name || '';
-                    imgEl.dataset.itemCat = item.category || '';
+                const currentResolved = (imgEl.dataset && imgEl.dataset.resolvedSrc) || imgEl.getAttribute('src');
+                if (imgEl.dataset ? (imgEl.dataset.resolvedSrc !== expectedThumb) : (currentResolved !== expectedThumb)) {
+                    if (imgEl.dataset) {
+                        imgEl.dataset.resolvedSrc = expectedThumb;
+                        imgEl.dataset.itemName = item.name || '';
+                        imgEl.dataset.itemCat = item.category || '';
+                    }
                     imgEl.onerror = function() { _handleMenuImgError(this); };
                     imgEl.src = expectedThumb;
                 }
@@ -351,29 +451,31 @@ function renderMenuUI() {
 
             // Patch sold-out state & overlay
             const isOut = Boolean(item.trackStock && item.stockQty <= 0);
-            cardEl.classList.toggle('is-out', isOut);
-            const imgWrap = cardEl.querySelector('.card-img-wrapper');
+            if (cardEl.classList && typeof cardEl.classList.toggle === 'function') {
+                cardEl.classList.toggle('is-out', isOut);
+            }
+            const imgWrap = cardEl.querySelector ? cardEl.querySelector('.card-img-wrapper') : null;
             if (imgWrap) {
-                let soldOverlay = imgWrap.querySelector('.sold-overlay');
+                let soldOverlay = imgWrap.querySelector ? imgWrap.querySelector('.sold-overlay') : null;
                 if (isOut && !soldOverlay) {
                     soldOverlay = document.createElement('div');
                     soldOverlay.className = 'sold-overlay';
                     soldOverlay.innerHTML = '<span class="sold-badge">Sold Out</span>';
                     imgWrap.appendChild(soldOverlay);
-                } else if (!isOut && soldOverlay) {
+                } else if (!isOut && soldOverlay && typeof soldOverlay.remove === 'function') {
                     soldOverlay.remove();
                 }
             }
 
             // Patch rate/price directly
-            const priceEl = cardEl.querySelector('.card-price-col .price');
+            const priceEl = cardEl.querySelector ? cardEl.querySelector('.card-price-col .price') : null;
             const expectedPrice = `₹ ${item.price}`;
             if (priceEl && priceEl.textContent !== expectedPrice) {
                 priceEl.textContent = expectedPrice;
             }
 
             // Patch stock badge without rebuilding card
-            const stockBadge = cardEl.querySelector('.stock-badge');
+            const stockBadge = cardEl.querySelector ? cardEl.querySelector('.stock-badge') : null;
             if (item.trackStock && item.stockQty <= 5 && item.stockQty > 0) {
                 if (stockBadge) {
                     stockBadge.className = 'stock-badge low';
@@ -390,13 +492,38 @@ function renderMenuUI() {
                 stockBadge.style.display = 'none';
             }
         });
+
+        // Manage Load More button when patching in place
+        const existingLoadMore = posGrid.querySelector ? posGrid.querySelector('#menuLoadMoreContainer') : document.getElementById('menuLoadMoreContainer');
+        if (shouldWindow) {
+            const remainingCount = totalMatching - visibleMenu.length;
+            if (existingLoadMore) {
+                const btnSpan = existingLoadMore.querySelector ? existingLoadMore.querySelector('button span') : null;
+                if (btnSpan) btnSpan.textContent = `Show More Dishes (${remainingCount} remaining)`;
+            } else if (typeof document !== 'undefined') {
+                const loadMoreDiv = document.createElement('div');
+                loadMoreDiv.id = 'menuLoadMoreContainer';
+                loadMoreDiv.style.cssText = 'grid-column: 1 / -1; text-align: center; padding: 20px 0 28px 0;';
+                loadMoreDiv.innerHTML = `
+                    <button type="button" class="btn btn-outline" id="menuLoadMoreBtn" onclick="loadMoreMenuItems()" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 24px; border-radius: 12px; font-weight: 700; font-size: 13px; background: #FFFFFF; border: 1.5px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); color: var(--text-dark); cursor: pointer;">
+                        <span>Show More Dishes (${remainingCount} remaining)</span>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                `;
+                posGrid.appendChild(loadMoreDiv);
+            }
+        } else if (existingLoadMore && typeof existingLoadMore.remove === 'function') {
+            existingLoadMore.remove();
+        }
+
         syncMenuUIQuantities();
+        _attachMenuInfiniteScrollObserver();
         if (_isMenuCatalogViewActive()) renderMenuCatalogUI();
         return;
     }
 
     // Single-assignment DOM build (avoids O(N^2) innerHTML += layout destruction)
-    const cardsHtml = filteredMenu.map(item => {
+    const cardsHtml = visibleMenu.map(item => {
         let popularBadge = item.badge ? `<div class="badge-popular">${escapeHtml(item.badge)}</div>` : '';
         let stockIndicator = '';
         if(item.trackStock) {
@@ -409,11 +536,11 @@ function renderMenuUI() {
         const imageHtml = `<img src="${_menuEsc(thumbSrc)}" data-resolved-src="${_menuEsc(thumbSrc)}" class="card-img" alt="${_menuEsc(item.name)}" loading="lazy" decoding="async" data-item-name="${_menuEsc(item.name || '')}" data-item-cat="${_menuEsc(item.category || '')}" onerror="_handleMenuImgError(this)">`;
 
         return `
-        <div class="menu-card${isOut ? ' is-out' : ''}" id="menu-card-${item.id}" data-item-id="${item.id}" onclick="addToCart(this.dataset.itemId, event)">
+        <div class="menu-card${isOut ? ' is-out' : ''}" id="menu-card-${safeItemId}" data-item-id="${safeItemId}" onclick="addToCart(this.dataset.itemId, event)">
             <div class="card-img-wrapper">
                 ${imageHtml}
                 ${popularBadge}
-                ${item.trackStock && item.stockQty <= 5 && item.stockQty > 0 ? `<div class="stock-badge low">${item.stockQty} left</div>` : (item.trackStock && item.stockQty > 5 ? `<div class="stock-badge">${item.stockQty} left</div>` : '')}
+                ${item.trackStock && item.stockQty <= 5 && item.stockQty > 0 ? `<div class="stock-badge low">${Number(item.stockQty)} left</div>` : (item.trackStock && item.stockQty > 5 ? `<div class="stock-badge">${Number(item.stockQty)} left</div>` : '')}
                 ${isOut ? '<div class="sold-overlay"><span class="sold-badge">Sold Out</span></div>' : ''}
                 <div class="card-img-price-pill" style="display: none !important;">₹ ${Number(item.price).toFixed(0)}</div>
             </div>
@@ -434,8 +561,22 @@ function renderMenuUI() {
         </div>`;
     });
 
-    posGrid.innerHTML = cardsHtml.join('');
+    let loadMoreHtml = '';
+    if (shouldWindow) {
+        const remainingCount = totalMatching - visibleMenu.length;
+        loadMoreHtml = `
+            <div id="menuLoadMoreContainer" style="grid-column: 1 / -1; text-align: center; padding: 20px 0 28px 0;">
+                <button type="button" class="btn btn-outline" id="menuLoadMoreBtn" onclick="loadMoreMenuItems()" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 24px; border-radius: 12px; font-weight: 700; font-size: 13px; background: #FFFFFF; border: 1.5px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); color: var(--text-dark); cursor: pointer;">
+                    <span>Show More Dishes (${remainingCount} remaining)</span>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+            </div>
+        `;
+    }
+
+    posGrid.innerHTML = cardsHtml.join('') + loadMoreHtml;
     syncMenuUIQuantities();
+    _attachMenuInfiniteScrollObserver();
     if (_isMenuCatalogViewActive()) renderMenuCatalogUI();
 }
 window.renderMenuUI = renderMenuUI;
@@ -505,7 +646,7 @@ function renderMenuCatalogUI() {
     if (chipsContainer) {
         const catsArr = Array.isArray(menuCategories) ? menuCategories : [];
         const chipsSig = `${catalogActiveCategoryFilter || 'All'}||${catsArr.join('|')}`;
-        if (chipsContainer.dataset.renderSig !== chipsSig) {
+        if (!chipsContainer.dataset || chipsContainer.dataset.renderSig !== chipsSig) {
             const chipsHtml = catsArr.map(cat => `
                 <button type="button" class="btn btn-outline" data-category="${_menuEsc(cat)}" onclick="filterCatalogByCategory(this.dataset.category)" style="font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; ${catalogActiveCategoryFilter === cat ? 'background: #143832; color: #FFFFFF; border-color: #143832;' : 'color: #4B5563; background: #FFFFFF;'}">
                     ${_menuEsc(cat)}
@@ -517,7 +658,7 @@ function renderMenuCatalogUI() {
                 </button>
             `;
             chipsContainer.innerHTML = chipsHtml + addBtnHtml;
-            chipsContainer.dataset.renderSig = chipsSig;
+            if (chipsContainer.dataset) chipsContainer.dataset.renderSig = chipsSig;
         }
     }
 
@@ -605,10 +746,13 @@ function renderMenuCatalogUI() {
                     const imgEl = cardEl.querySelector('img.clean-item-thumb');
                     if (imgEl) {
                         const expectedThumb = _resolveStableMenuThumb(item);
-                        if (imgEl.dataset.resolvedSrc !== expectedThumb) {
-                            imgEl.dataset.resolvedSrc = expectedThumb;
-                            imgEl.dataset.itemName = item.name || '';
-                            imgEl.dataset.itemCat = item.category || '';
+                        const currentResolved = (imgEl.dataset && imgEl.dataset.resolvedSrc) || imgEl.getAttribute('src');
+                        if (currentResolved !== expectedThumb) {
+                            if (imgEl.dataset) {
+                                imgEl.dataset.resolvedSrc = expectedThumb;
+                                imgEl.dataset.itemName = item.name || '';
+                                imgEl.dataset.itemCat = item.category || '';
+                            }
                             imgEl.onerror = function() { _handleMenuImgError(this); };
                             imgEl.src = expectedThumb;
                         }

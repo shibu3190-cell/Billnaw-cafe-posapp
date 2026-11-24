@@ -10,7 +10,7 @@
  */
 
 const CACHE_VERSION = 'billnaw-pos-shell-v4.1.0';
-const ASSET_VER = '3001';
+const ASSET_VER = '3002';
 
 // Core boot shell cached eagerly in small batches matching index.html ?v= query strings
 // so even the very first warm reload hits CacheStorage in 0ms without 304 round-trips
@@ -46,6 +46,8 @@ const STATIC_SHELL_ASSETS = [
   './app.js',
   './icon-192.png',
   './icon-512.png',
+  './apple-touch-icon.png',
+  './favicon.ico',
 
   // Core Infrastructure
   './src/core/config.js',

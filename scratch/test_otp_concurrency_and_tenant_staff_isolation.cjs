@@ -151,7 +151,7 @@ async function runTests() {
   console.log('\n📍 CHECK 5: Verifying Clean Staff Roster of SHOP_ABHIJITMODAK');
   const abhiShop = await getStoreFromFirestoreREST('SHOP_ABHIJITMODAK');
   assert.ok(abhiShop.success, 'SHOP_ABHIJITMODAK fetch must succeed');
-  assert.strictEqual(abhiShop.staff?.length, 6, 'SHOP_ABHIJITMODAK must have exactly 6 genuine staff members');
+  assert.strictEqual(abhiShop.staff?.length, 7, 'SHOP_ABHIJITMODAK must have exactly 7 genuine staff members');
 
   const staffNames = abhiShop.staff.map(s => s.name);
   assert.ok(staffNames.includes('Admin'), 'Must contain Admin');
@@ -160,6 +160,7 @@ async function runTests() {
   assert.ok(staffNames.includes('a'), 'Must contain a');
   assert.ok(staffNames.includes('Am'), 'Must contain Am');
   assert.ok(staffNames.includes('abhi'), 'Must contain abhi');
+  assert.ok(staffNames.includes('B'), 'Must contain B');
 
   // Ensure NONE of Bapi Halder's staff exist in SHOP_ABHIJITMODAK
   const bapiStaffNames = ['Bapi Halder', 'Gourab Majumder', 'Sourav', 'Sayan', 'Manik', 'Samrat', 'Gopal', 'Amit'];

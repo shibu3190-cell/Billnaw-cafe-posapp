@@ -1088,12 +1088,17 @@ function getCulinaryThemeMeta(name, category = '', variationIndex = 0) {
     return { icon: '🍽️', grad: ['#4A3B32', '#241B15'], badge: 'CAFE' };
 }
 
+const _svgFallbackCache = new Map();
+
 function generateFallbackImage(name, category = '', variationIndex = 0) {
     const dishTitle = (name || "Dish").trim();
-    const meta = getCulinaryThemeMeta(dishTitle, category, variationIndex);
     const vIdx = Math.max(0, parseInt(variationIndex, 10) || 0);
+    const cacheKey = `${dishTitle}::${category}::${vIdx}`;
+    if (_svgFallbackCache.has(cacheKey)) {
+        return _svgFallbackCache.get(cacheKey);
+    }
 
-    // Alternate color hues based on variation
+    const meta = getCulinaryThemeMeta(dishTitle, category, variationIndex);
     const extraGrads = [
         ['#5A3D31', '#24160E'],
         ['#691B14', '#2C0B08'],
@@ -1102,92 +1107,25 @@ function generateFallbackImage(name, category = '', variationIndex = 0) {
         ['#4A152D', '#240715']
     ];
     const activeGrad = vIdx > 0 ? (extraGrads[vIdx % extraGrads.length]) : (meta.grad || ['#5A3D31', '#24160E']);
-
-    // Browser Canvas Generation
-    if (typeof document !== 'undefined' && document.createElement) {
-        try {
-            const canvas = document.createElement('canvas');
-            canvas.width = 240;
-            canvas.height = 180;
-            const ctx = canvas.getContext('2d');
-            
-            // 1. Rich 2-point culinary gradient
-            const gradient = ctx.createLinearGradient(0, 0, 240, 180);
-            gradient.addColorStop(0, activeGrad[0]);
-            gradient.addColorStop(1, activeGrad[1]); 
-            ctx.fillStyle = gradient; 
-            ctx.fillRect(0, 0, 240, 180);
-            
-            // 2. Ceramic plate concentric rings
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(120, 75, 48, 0, Math.PI * 2);
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(120, 75, 40, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // 3. Central Food Icon / Emoji
-            ctx.font = '40px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-            ctx.textAlign = 'center'; 
-            ctx.textBaseline = 'middle';
-            ctx.fillText(meta.icon || '🍽️', 120, 75);
-            
-            // 4. Frosted Title Pill
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-            ctx.beginPath();
-            if (ctx.roundRect) {
-                ctx.roundRect(14, 138, 212, 28, 6);
-            } else {
-                ctx.rect(14, 138, 212, 28);
-            }
-            ctx.fill();
-
-            // 5. Dish Name Label
-            ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillStyle = '#FFFFFF';
-            const cleanLabel = dishTitle.length > 22 ? dishTitle.substring(0, 20) + '..' : dishTitle;
-            ctx.fillText(cleanLabel, 120, 154);
-
-            // 6. Top Badge Indicator
-            const badgeText = vIdx > 0 ? `${meta.badge || 'GOURMET'} #${vIdx + 1}` : (meta.badge || 'GOURMET');
-            ctx.font = '900 8.5px sans-serif';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-            ctx.textAlign = 'right';
-            ctx.fillText(badgeText, 226, 18);
-
-            try {
-                return canvas.toDataURL('image/webp', 0.85);
-            } catch(e) {
-                return canvas.toDataURL('image/jpeg', 0.8);
-            }
-        } catch(canvasErr) {
-            // Fall through to SVG data URI
-        }
-    }
-
-    // Universal SVG fallback for headless/Node contexts
     const icon = meta.icon || '🍽️';
     const c1 = activeGrad[0];
     const c2 = activeGrad[1];
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180">
-        <defs>
-            <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="${c1}"/>
-                <stop offset="100%" stop-color="${c2}"/>
-            </linearGradient>
-        </defs>
-        <rect width="240" height="180" fill="url(#g)"/>
-        <circle cx="120" cy="75" r="44" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
-        <text x="120" y="86" font-size="38" text-anchor="middle" font-family="sans-serif">${icon}</text>
-        <rect x="14" y="138" width="212" height="28" rx="6" fill="rgba(0,0,0,0.45)"/>
-        <text x="120" y="156" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle" font-family="sans-serif">${dishTitle.substring(0, 20)}</text>
-    </svg>`;
-    return `data:image/svg+xml;base64,${typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg).toString('base64')}`;
+    const cleanLabel = dishTitle.length > 22 ? dishTitle.substring(0, 20) + '..' : dishTitle;
+    const badgeText = vIdx > 0 ? `${meta.badge || 'GOURMET'} #${vIdx + 1}` : (meta.badge || 'GOURMET');
+
+    const safeTitle = cleanLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const safeBadge = badgeText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    // ⚡ Fast, vector-crisp SVG Data URI (Zero main-thread canvas allocation or bitmap encoding)
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs><rect width="240" height="180" fill="url(#g)"/><circle cx="120" cy="75" r="44" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/><text x="120" y="86" font-size="38" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">${icon}</text><rect x="14" y="138" width="212" height="28" rx="6" fill="rgba(0,0,0,0.45)"/><text x="120" y="156" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">${safeTitle}</text><text x="226" y="20" fill="rgba(255,255,255,0.7)" font-family="sans-serif" font-size="8.5" font-weight="900" text-anchor="end">${safeBadge}</text></svg>`;
+
+    const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg).replace(/'/g, '%27')}`;
+    if (_svgFallbackCache.size >= 500) {
+        const oldestKey = _svgFallbackCache.keys().next().value;
+        _svgFallbackCache.delete(oldestKey);
+    }
+    _svgFallbackCache.set(cacheKey, uri);
+    return uri;
 }
 window.generateFallbackImage = generateFallbackImage;
 
@@ -4471,6 +4409,8 @@ async function syncStaffRecordToCloud(staffRecord, targetStoreCode = null) {
 window.syncStaffRecordToCloud = syncStaffRecordToCloud;
 
 let lastSubscribedStoreCode = null;
+let lastSubscribedWasBillingRole = null;
+let lastSubscribedWasRootDoc = null;
 
 function attachFirestoreListener(targetStoreCode = null) {
     if (targetStoreCode && typeof targetStoreCode === 'string') {
@@ -4484,8 +4424,40 @@ function attachFirestoreListener(targetStoreCode = null) {
 
     const activeStoreCode = targetStoreCode || getActiveStoreIdentifier();
 
-    // Guard against rapid duplicate listener thrashing on the same store code
-    if (lastSubscribedStoreCode === activeStoreCode && firestoreUnsubscribe && firestoreDevicesUnsubscribe) {
+    // Determine station profile & role to prevent multi-device snapshot storms
+    const isMaster = (typeof isMasterTerminal === 'function') ? isMasterTerminal() : (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_is_master') === 'true');
+    const stationProfile = (typeof localStorage !== 'undefined') ? (localStorage.getItem('billnaw_station_profile') || '') : '';
+    const activeStaffObj = (typeof currentStaff !== 'undefined' && currentStaff) ? currentStaff : (typeof window !== 'undefined' ? window.currentStaff : null);
+    const isTerminalCurrentlyLocked = (typeof window !== 'undefined' && window.isTerminalLocked) ||
+        (typeof localStorage !== 'undefined' && localStorage.getItem('billnaw_terminal_locked') === 'true');
+
+    // Role-first precedence: unlocked staff takes precedence over cached station profile
+    let activeRoleNorm = '';
+    if (!isTerminalCurrentlyLocked && activeStaffObj && activeStaffObj.role) {
+        activeRoleNorm = (typeof normalizeRole === 'function' ? normalizeRole(activeStaffObj.role) : activeStaffObj.role);
+    } else if (stationProfile === 'KDS') {
+        activeRoleNorm = 'Kitchen Chef';
+    } else if (stationProfile === 'WAITER_MOBILE') {
+        activeRoleNorm = 'Floor Server';
+    } else {
+        // Fail-closed locked terminal: never default to Admin. Master defaults to Cashier, secondary defaults to Floor Server.
+        activeRoleNorm = isMaster ? 'Cashier' : 'Floor Server';
+    }
+
+    const isAdminOrManager = (activeRoleNorm === 'Admin' || activeRoleNorm === 'Manager' || activeRoleNorm === 'Owner');
+    const isKdsStation = (activeRoleNorm === 'Kitchen Chef' || activeRoleNorm === 'Chef' || (!activeRoleNorm && stationProfile === 'KDS'));
+    const isFloorServerStation = (activeRoleNorm === 'Floor Server' || activeRoleNorm === 'Server' || activeRoleNorm === 'Waiter' || (!activeRoleNorm && stationProfile === 'WAITER_MOBILE'));
+    const isBillingRole = isMaster || isAdminOrManager || (activeRoleNorm === 'Cashier');
+    const needsRootStoreDoc = isBillingRole || isKdsStation;
+
+    // Guard against rapid duplicate listener thrashing on the exact same store & role configuration
+    const roleStateUnchanged = (lastSubscribedStoreCode === activeStoreCode && 
+                                lastSubscribedWasBillingRole === isBillingRole && 
+                                lastSubscribedWasRootDoc === needsRootStoreDoc &&
+                                firestoreDevicesUnsubscribe &&
+                                (!needsRootStoreDoc || firestoreUnsubscribe));
+
+    if (roleStateUnchanged) {
         return;
     }
 
@@ -4495,6 +4467,8 @@ function attachFirestoreListener(targetStoreCode = null) {
     }
 
     lastSubscribedStoreCode = activeStoreCode;
+    lastSubscribedWasBillingRole = isBillingRole;
+    lastSubscribedWasRootDoc = needsRootStoreDoc;
 
     if (firestoreUnsubscribe) {
         try { firestoreUnsubscribe(); } catch(e) {}
@@ -4527,46 +4501,66 @@ function attachFirestoreListener(targetStoreCode = null) {
             return;
         }
 
-        // Attach subcollection listeners for devices, sessions, staff, decoupled 10-day invoices, lightweight delta tables, and menu version meta
+        // Universal subcollection listeners for ALL terminals (lightweight delta sync)
         subscribeDevicesCloudListener(targetStoreCode);
         subscribeSessionsCloudListener(targetStoreCode);
         subscribeStaffCloudListener(targetStoreCode);
-        subscribeInvoicesCloudListener(targetStoreCode);
         subscribeTablesCloudListener(targetStoreCode);
         subscribeMenuMetaCloudListener(targetStoreCode);
 
-        firestoreUnsubscribe = window.firestoreOnSnapshot(storeDocRef, (snap) => {
-            if (snap.exists()) {
-                // Skip local optimistic write echoes & confirmed self-writes to avoid redundant full-store re-renders
-                if (snap.metadata && snap.metadata.hasPendingWrites) {
-                    return;
-                }
-                const data = snap.data();
-                if (data && data._writerId === _syncClientInstanceId && data.updatedAt && data.updatedAt === _lastSelfWriteUpdatedAt) {
-                    lastCloudSyncTime = Date.now();
-                    setCloudSyncStatus('synced', 'Real-Time Synced');
-                    return;
-                }
-                handleRemoteFirestoreUpdate(data);
-                lastCloudSyncTime = Date.now();
-                setCloudSyncStatus('synced', 'Real-Time Synced');
-            } else {
-                persistAllToFirestore();
+        // Billing / Counter Cashier terminals: listen to decoupled 10-day invoices subcollection
+        if (isBillingRole) {
+            subscribeInvoicesCloudListener(targetStoreCode);
+        } else if (firestoreInvoicesUnsubscribe) {
+            try { firestoreInvoicesUnsubscribe(); } catch(_) {}
+            firestoreInvoicesUnsubscribe = null;
+        }
+
+        // Stations needing root storeDoc (Billing, Admin, Counter, and KDS for live kots: [] and audio chime)
+        if (needsRootStoreDoc) {
+            if (!firestoreUnsubscribe) {
+                firestoreUnsubscribe = window.firestoreOnSnapshot(storeDocRef, (snap) => {
+                    if (snap.exists()) {
+                        // Skip local optimistic write echoes & confirmed self-writes to avoid redundant full-store re-renders
+                        if (snap.metadata && snap.metadata.hasPendingWrites) {
+                            return;
+                        }
+                        const data = snap.data();
+                        if (data && data._writerId === _syncClientInstanceId && data.updatedAt && data.updatedAt === _lastSelfWriteUpdatedAt) {
+                            lastCloudSyncTime = Date.now();
+                            setCloudSyncStatus('synced', 'Real-Time Synced');
+                            return;
+                        }
+                        handleRemoteFirestoreUpdate(data);
+                        lastCloudSyncTime = Date.now();
+                        setCloudSyncStatus('synced', 'Real-Time Synced');
+                    } else {
+                        persistAllToFirestore();
+                    }
+                }, (err) => {
+                    const isQuotaError = err && (err.code === 'resource-exhausted' || (err.message && err.message.toLowerCase().includes('quota')));
+                    const isPermissionError = err && (err.code === 'permission-denied' || (err.message && err.message.toLowerCase().includes('permission')));
+                    if (isQuotaError || isPermissionError) {
+                        console.info("⚡ Firestore cloud quota exceeded or permission restricted. Running seamlessly in Local IndexedDB & REST sync mode.");
+                        if (firestoreUnsubscribe) {
+                            try { firestoreUnsubscribe(); } catch(e) {}
+                            firestoreUnsubscribe = null;
+                        }
+                    } else {
+                        console.warn("Firestore onSnapshot error:", err);
+                    }
+                    setCloudSyncStatus('offline', 'Offline (Local)');
+                });
             }
-        }, (err) => {
-            const isQuotaError = err && (err.code === 'resource-exhausted' || (err.message && err.message.toLowerCase().includes('quota')));
-            const isPermissionError = err && (err.code === 'permission-denied' || (err.message && err.message.toLowerCase().includes('permission')));
-            if (isQuotaError || isPermissionError) {
-                console.info("⚡ Firestore cloud quota exceeded or permission restricted. Running seamlessly in Local IndexedDB & REST sync mode.");
-                if (firestoreUnsubscribe) {
-                    try { firestoreUnsubscribe(); } catch(e) {}
-                    firestoreUnsubscribe = null;
-                }
-            } else {
-                console.warn("Firestore onSnapshot error:", err);
+        } else {
+            // Pure Floor Server / Waiter Station: prune heavy root listener
+            if (firestoreUnsubscribe) {
+                try { firestoreUnsubscribe(); } catch(_) {}
+                firestoreUnsubscribe = null;
             }
-            setCloudSyncStatus('offline', 'Offline (Local)');
-        });
+            console.info(`⚡ [Station Sync Optimization] Light delta sync active for ${activeRoleNorm}. Decoupled heavy root storeDoc & invoice snapshots.`);
+            setCloudSyncStatus('synced', 'Real-Time Synced');
+        }
     } catch (err) {
         console.warn("Error attaching Firestore listener:", err);
         setCloudSyncStatus('offline', 'Offline (Local)');
@@ -4577,6 +4571,8 @@ window.initFirestoreSync = attachFirestoreListener;
 
 function detachFirestoreListener() {
     lastSubscribedStoreCode = null;
+    lastSubscribedWasBillingRole = null;
+    lastSubscribedWasRootDoc = null;
     if (firestoreUnsubscribe) {
         try { firestoreUnsubscribe(); } catch(e) {}
         firestoreUnsubscribe = null;

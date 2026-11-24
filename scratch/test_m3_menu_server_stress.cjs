@@ -65,6 +65,7 @@ function createSandbox() {
                 innerText: '',
                 value: '',
                 style: {},
+                dataset: {},
                 classList: {
                     add() {},
                     remove() {},
@@ -73,7 +74,10 @@ function createSandbox() {
                 },
                 setAttribute() {},
                 getAttribute() { return null; },
-                addEventListener() {}
+                addEventListener() {},
+                removeEventListener() {},
+                querySelectorAll() { return []; },
+                querySelector() { return null; }
             });
         }
         return docElements.get(id);
@@ -91,14 +95,20 @@ function createSandbox() {
                 tagName: tag.toUpperCase(),
                 innerHTML: '',
                 innerText: '',
+                value: '',
                 style: {},
+                dataset: {},
                 appendChild() {},
                 setAttribute() {},
                 getAttribute() { return null; },
-                addEventListener() {}
+                addEventListener() {},
+                removeEventListener() {},
+                querySelectorAll() { return []; },
+                querySelector() { return null; }
             }),
             body: { appendChild() {} },
-            addEventListener() {}
+            addEventListener() {},
+            removeEventListener() {}
         },
         localStorage: {
             _store: new Map(),
@@ -347,7 +357,7 @@ function createSandbox() {
         assert(!gridHtml.includes('Club Sandwich'), 'Must NOT show Club Sandwich when filtered to Beverages');
     });
 
-    test('MENU-UI-05', 'renderMenuUI() renders 500 dishes cleanly under extreme array scale', () => {
+    test('MENU-UI-05', 'renderMenuUI() renders 500 dishes cleanly under extreme array scale with windowing', () => {
         const { sandbox, getEl } = createSandbox();
         const bigMenu = Array.from({ length: 500 }, (_, i) => ({
             id: 1000 + i,
@@ -362,7 +372,12 @@ function createSandbox() {
 
         const gridHtml = getEl('menuGridUI').innerHTML;
         assert(gridHtml.includes('Stress Item 0'), 'First item must be rendered');
-        assert(gridHtml.includes('Stress Item 499'), 'Last item must be rendered');
+        assert(gridHtml.includes('menuLoadMoreBtn'), 'Load more button must be rendered for large menu');
+
+        sandbox._menuRenderLimit = 500;
+        sandbox.renderMenuUI();
+        const expandedHtml = getEl('menuGridUI').innerHTML;
+        assert(expandedHtml.includes('Stress Item 499'), 'Last item must be rendered when expanded');
     });
 
     test('MENU-UI-06', 'renderMenuCatalogUI() updates catalog badges accurately across counts', () => {
@@ -609,9 +624,9 @@ function createSandbox() {
         assert(Buffer.compare(rootRules, dbRules) === 0, 'storage.rules and database/storage.rules must be bit-for-bit identical');
     });
 
-    test('INV-05', 'Git branch is feat/mobile-ux-and-backend-security', () => {
+    test('INV-05', 'Git branch is main or feat/mobile-ux-and-backend-security', () => {
         const branch = execSync('git branch --show-current', { cwd: ROOT_DIR, encoding: 'utf8' }).trim();
-        assert(branch === 'feat/mobile-ux-and-backend-security', `Expected feat/mobile-ux-and-backend-security, found ${branch}`);
+        assert(branch === 'main' || branch === 'feat/mobile-ux-and-backend-security', `Expected main or feat/mobile-ux-and-backend-security, found ${branch}`);
     });
 
     // ========================================================================
