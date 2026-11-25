@@ -1,11 +1,31 @@
 // server/gemini-service.js - Server-side Gemini AI operations
 // Keeps GEMINI_API_KEY secure in server environment memory. No API key is ever exposed to client.
 
+import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import { CONFIG } from './config.js';
 
 const clientsCache = new Map();
 const keyVerificationCache = new Map();
+const MAX_CLIENTS_CACHE_ENTRIES = 50;
+const MAX_VERIFICATION_CACHE_ENTRIES = 100;
+const MAX_BASE64_CHARS = 12 * 1024 * 1024;
+
+function hashCacheKey(apiKey) {
+  return crypto.createHash('sha256').update(String(apiKey || '')).digest('hex');
+}
+
+function setBoundedCacheEntry(cacheMap, cacheKey, value, maxSize) {
+  if (cacheMap.has(cacheKey)) {
+    cacheMap.delete(cacheKey);
+  }
+  while (cacheMap.size >= maxSize) {
+    const oldestKey = cacheMap.keys().next().value;
+    if (oldestKey === undefined) break;
+    cacheMap.delete(oldestKey);
+  }
+  cacheMap.set(cacheKey, value);
+}
 
 export function clearGeminiCaches() {
   clientsCache.clear();
@@ -18,7 +38,7 @@ export function invalidateGeminiKeyCache(apiKey = null) {
   const key = (apiKey || '').trim();
   if (key) {
     clientsCache.delete(key);
-    keyVerificationCache.delete(key);
+    keyVerificationCache.delete(hashCacheKey(key));
   } else {
     clientsCache.clear();
     keyVerificationCache.clear();
@@ -46,7 +66,7 @@ export function getGeminiClient(customKey = null) {
     const clientOpts = key.startsWith('AQ.')
       ? { apiKey: key, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }
       : { apiKey: key };
-    clientsCache.set(key, new GoogleGenAI(clientOpts));
+    setBoundedCacheEntry(clientsCache, key, new GoogleGenAI(clientOpts), MAX_CLIENTS_CACHE_ENTRIES);
   }
 
   return clientsCache.get(key);
@@ -62,9 +82,10 @@ export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false
   if (!key || key.length < 15) {
     return { operational: false, statusCode: 401, code: 'NO_API_KEY', reason: 'No valid Gemini API key configured.' };
   }
+  const cacheKey = hashCacheKey(key);
 
   if (!liveProbe) {
-    const cached = keyVerificationCache.get(key);
+    const cached = keyVerificationCache.get(cacheKey);
     if (cached) {
       const age = Date.now() - cached.timestamp;
       const maxAge = cached.operational ? 300000 : 30000;
@@ -77,6 +98,7 @@ export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false
           modelTested: cached.modelTested || null
         };
       }
+      keyVerificationCache.delete(cacheKey);
     }
   }
 
@@ -96,7 +118,7 @@ export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false
       }
       if (!liveProbe) {
         const entry = { operational: true, statusCode: 200, code: 'OK', reason: 'Operational', timestamp: Date.now() };
-        keyVerificationCache.set(key, entry);
+        setBoundedCacheEntry(keyVerificationCache, cacheKey, entry, MAX_VERIFICATION_CACHE_ENTRIES);
         return entry;
       }
     } else {
@@ -108,12 +130,12 @@ export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false
 
       if (res.status === 402 || /prepayment credits are depleted|billing/i.test(errMsg)) {
         const entry = { operational: false, statusCode: 402, code: 'BILLING_DEPLETED', reason: 'Gemini prepayment/billing credits are depleted (HTTP 402).', timestamp: Date.now() };
-        keyVerificationCache.set(key, entry);
+        setBoundedCacheEntry(keyVerificationCache, cacheKey, entry, MAX_VERIFICATION_CACHE_ENTRIES);
         return entry;
       }
       if (isDefiniteInvalidKey) {
         const entry = { operational: false, statusCode: res.status, code: 'INVALID_API_KEY', reason: sanitizeErrorForClient(errMsg, key), timestamp: Date.now() };
-        keyVerificationCache.set(key, entry);
+        setBoundedCacheEntry(keyVerificationCache, cacheKey, entry, MAX_VERIFICATION_CACHE_ENTRIES);
         return entry;
       }
     }
@@ -121,16 +143,14 @@ export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false
     if (!liveProbe) {
       const looksValid = Boolean(key && key.length >= 20);
       const entry = { operational: looksValid, statusCode: looksValid ? 200 : 401, code: looksValid ? 'OK' : 'INVALID_API_KEY', reason: looksValid ? 'Reachable (fallback)' : 'Invalid key length', timestamp: Date.now() };
-      keyVerificationCache.set(key, entry);
+      setBoundedCacheEntry(keyVerificationCache, cacheKey, entry, MAX_VERIFICATION_CACHE_ENTRIES);
       return entry;
     }
   }
 
   // Step 2 (liveProbe === true): Run a tiny 1-token generateContent check so 402 / 429 / model permissions are caught immediately!
   const ai = getGeminiClient(key);
-  const probeOrder = key.startsWith('AIza')
-    ? ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.0-flash', 'gemini-3.5-flash-lite']
-    : ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+  const probeOrder = buildRuntimeModelOrder(key);
   const preferredProbes = availableModels.length > 0
     ? [...probeOrder.filter(m => availableModels.includes(m)), ...probeOrder.filter(m => !availableModels.includes(m))]
     : probeOrder;
@@ -138,16 +158,17 @@ export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false
   let lastProbeErr = null;
   for (const modelName of Array.from(new Set(preferredProbes)).slice(0, 4)) {
     try {
-      const resp = await executeWithTimeout(async () => {
-        return await ai.models.generateContent({
-          model: modelName,
-          contents: [{ role: 'user', parts: [{ text: 'Reply with OK' }] }],
-          config: { maxOutputTokens: 4 }
-        });
-      }, 8000, `Probe timed out on ${modelName}`);
+      const resp = await generateWithThinkingFallback({
+        ai,
+        modelName,
+        contents: [{ role: 'user', parts: [{ text: 'Reply with OK' }] }],
+        baseConfig: { maxOutputTokens: 16 },
+        timeoutMs: 8000,
+        timeoutMsg: `Probe timed out on ${modelName}`
+      });
       if (resp) {
         const entry = { operational: true, statusCode: 200, code: 'OK', reason: `Verified operational (${modelName})`, modelTested: modelName, timestamp: Date.now() };
-        keyVerificationCache.set(key, entry);
+        setBoundedCacheEntry(keyVerificationCache, cacheKey, entry, MAX_VERIFICATION_CACHE_ENTRIES);
         return entry;
       }
     } catch (probeErr) {
@@ -155,17 +176,17 @@ export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false
       const msg = String(probeErr?.message || probeErr);
       if (probeErr?.status === 402 || /prepayment credits are depleted|code":402/i.test(msg)) {
         const entry = { operational: false, statusCode: 402, code: 'BILLING_DEPLETED', reason: 'Gemini prepayment/billing credits are depleted (HTTP 402). Top up in Google AI Studio or use another Gemini key.', timestamp: Date.now() };
-        keyVerificationCache.set(key, entry);
+        setBoundedCacheEntry(keyVerificationCache, cacheKey, entry, MAX_VERIFICATION_CACHE_ENTRIES);
         return entry;
       }
       if (probeErr?.status === 401 || /API_KEY_INVALID|API key not valid|UNAUTHENTICATED|ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(msg)) {
         const entry = { operational: false, statusCode: 401, code: 'INVALID_API_KEY', reason: 'Invalid or unauthorized Gemini API key.', timestamp: Date.now() };
-        keyVerificationCache.set(key, entry);
+        setBoundedCacheEntry(keyVerificationCache, cacheKey, entry, MAX_VERIFICATION_CACHE_ENTRIES);
         return entry;
       }
       if (probeErr?.status === 429 || /RESOURCE_EXHAUSTED|quota exceeded|rate.?limit/i.test(msg)) {
         const entry = { operational: false, statusCode: 429, code: 'GEMINI_RATE_LIMIT', reason: 'Gemini API rate limit or free-tier quota exceeded (HTTP 429). Wait a minute or enable billing in Google AI Studio.', timestamp: Date.now() };
-        keyVerificationCache.set(key, entry);
+        setBoundedCacheEntry(keyVerificationCache, cacheKey, entry, MAX_VERIFICATION_CACHE_ENTRIES);
         return entry;
       }
     }
@@ -173,7 +194,7 @@ export async function verifyGeminiKeyDetailed(apiKey = null, { liveProbe = false
 
   const fallbackReason = lastProbeErr ? sanitizeErrorForClient(String(lastProbeErr.message || lastProbeErr), key) : 'Unable to reach Gemini generateContent API.';
   const failEntry = { operational: false, statusCode: lastProbeErr?.status || 502, code: 'PROBE_FAILED', reason: fallbackReason, timestamp: Date.now() };
-  keyVerificationCache.set(key, failEntry);
+  setBoundedCacheEntry(keyVerificationCache, cacheKey, failEntry, MAX_VERIFICATION_CACHE_ENTRIES);
   return failEntry;
 }
 
@@ -195,6 +216,79 @@ export const CANDIDATE_MODELS = [
   'gemini-3.5-flash',
   CONFIG.gemini.model || 'gemini-3.5-flash-lite'
 ];
+
+const LEGACY_DEPRECATED_MODEL_RE = /^gemini-2\.[05]-flash(?:-lite)?$/i;
+
+/**
+ * Returns the compatible low-latency thinkingConfig for a given Gemini model
+ * so hidden reasoning tokens do not inflate Vision OCR timeouts.
+ */
+export function getThinkingConfigForModel(modelName) {
+  const normalized = String(modelName || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.startsWith('gemini-3.5-flash-lite') || normalized === 'gemini-flash-lite-latest') {
+    return { thinkingLevel: 'MINIMAL' };
+  }
+  if (
+    normalized === 'gemini-3.1-flash-lite' ||
+    normalized.includes('gemini-3') ||
+    normalized.includes('gemini-2.5') ||
+    normalized.includes('flash-latest')
+  ) {
+    return { thinkingBudget: 0 };
+  }
+  return null;
+}
+
+/**
+ * Builds the prioritized non-deprecated Vision OCR model cascade for any Gemini API key.
+ */
+export function buildRuntimeModelOrder(_apiKey = null) {
+  const configured = String(CONFIG.gemini.model || '').trim();
+  const preferred = configured && !LEGACY_DEPRECATED_MODEL_RE.test(configured) ? [configured] : [];
+  const ordered = [
+    ...preferred,
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
+    'gemini-3.8-flash',
+    ...CANDIDATE_MODELS
+  ];
+  return Array.from(new Set(ordered.filter(m => m && !LEGACY_DEPRECATED_MODEL_RE.test(m))));
+}
+
+/**
+ * Invokes ai.models.generateContent with per-model thinking minimization and a single
+ * automatic fallback without thinkingConfig if a model variant rejects it with HTTP 400.
+ */
+async function generateWithThinkingFallback({ ai, modelName, contents, baseConfig, timeoutMs, timeoutMsg }) {
+  const callModel = async (includeThinking) => {
+    const config = { ...baseConfig };
+    const thinkingCfg = includeThinking ? getThinkingConfigForModel(modelName) : null;
+    if (thinkingCfg) {
+      config.thinkingConfig = thinkingCfg;
+    }
+    return await executeWithTimeout(async () => {
+      return await ai.models.generateContent({
+        model: modelName,
+        contents,
+        config
+      });
+    }, timeoutMs, timeoutMsg);
+  };
+
+  try {
+    return await callModel(true);
+  } catch (firstErr) {
+    const firstMsg = String(firstErr?.message || firstErr);
+    if ((firstErr?.status === 400 || firstMsg.includes('INVALID_ARGUMENT')) && /thinking/i.test(firstMsg)) {
+      return await callModel(false);
+    }
+    throw firstErr;
+  }
+}
 
 /**
  * Execute an async operation with a strict millisecond timeout using Promise.race
@@ -408,7 +502,7 @@ export function parseMenuJsonSafely(rawText) {
 /**
  * Digitizes menu scan/photo/pdf into structured JSON menu
  */
-export async function extractMenuFromDocument({ base64Data, mimeType, apiKey }) {
+export async function extractMenuFromDocument({ base64Data, mimeType, apiKey, aiClient = null }) {
   if (!base64Data) {
     throw new Error('No image or PDF menu data provided.');
   }
@@ -421,15 +515,27 @@ export async function extractMenuFromDocument({ base64Data, mimeType, apiKey }) 
     throw err;
   }
 
-  const ai = getGeminiClient(resolvedKey);
+  const ai = aiClient || getGeminiClient(resolvedKey);
 
-  // Clean base64 extraction and MIME type detection
+  // Clean base64 extraction and upper size bound before regex work
   let cleanBase64 = '';
   let detectedMime = mimeType || 'image/jpeg';
 
   if (Buffer.isBuffer(base64Data)) {
+    if (base64Data.length > 9 * 1024 * 1024) {
+      const sizeErr = new Error('Menu payload exceeds 9MB maximum limit.');
+      sizeErr.status = 413;
+      sizeErr.code = 'PAYLOAD_TOO_LARGE';
+      throw sizeErr;
+    }
     cleanBase64 = base64Data.toString('base64');
   } else if (typeof base64Data === 'string') {
+    if (base64Data.length > MAX_BASE64_CHARS + 128) {
+      const sizeErr = new Error('Menu image/PDF payload is too large.');
+      sizeErr.status = 413;
+      sizeErr.code = 'PAYLOAD_TOO_LARGE';
+      throw sizeErr;
+    }
     if (base64Data.startsWith('data:')) {
       const match = base64Data.match(/^data:([^;]+);base64,(.+)$/s);
       if (match) {
@@ -448,6 +554,12 @@ export async function extractMenuFromDocument({ base64Data, mimeType, apiKey }) 
   if (!cleanBase64 || cleanBase64.length < 10) {
     throw new Error('Invalid or empty image payload.');
   }
+  if (cleanBase64.length > MAX_BASE64_CHARS) {
+    const sizeErr = new Error('Encoded menu payload exceeds maximum allowed size.');
+    sizeErr.status = 413;
+    sizeErr.code = 'PAYLOAD_TOO_LARGE';
+    throw sizeErr;
+  }
 
   const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
   if (!validMimes.includes(detectedMime.toLowerCase())) {
@@ -456,18 +568,18 @@ export async function extractMenuFromDocument({ base64Data, mimeType, apiKey }) 
 
   const promptParts = [
     {
-      text: `You are an advanced, specialized Restaurant & Cafe POS Data Entry Automation Engine. Your sole purpose is to analyze restaurant/cafe menu images or PDFs and convert them into a structured database-ready JSON format.
+      text: `You are an advanced, specialized Restaurant & Cafe POS Data Entry Automation Engine. Analyze the provided menu image or PDF and convert it into structured JSON.
 
-Analyze the provided menu image carefully and adhere to these strict rules:
-1. EXTRACTION ACCURACY: Extract every food item, beverage, variation, combo, and category visible in the image. Do not summarize, truncate, or omit anything. Do not invent items not present in the menu.
-2. PRICE CLEANING: Extract the exact price as a numerical float (e.g., 120.00). Strip away all currency symbols (e.g., ₹, Rs., INR, $, £, €, AED), trailing dots, dashes, and stray characters. If an item lists multiple sizes (e.g., Regular 120, Large 180 or Half 80, Full 150), create distinct item entries for each size (e.g., "Cappuccino (Regular)" and "Cappuccino (Large)") or use the base price. If a price is genuinely omitted or market price, use null.
-3. LAYOUT INTELLIGENCE: Accurately parse multi-column layouts, grids, parallel tables, and chalkboard sections. Do not cross-read columns horizontally. Align each item name with its true matching price.
-4. CATEGORIZATION: Group items under their logical menu headings (e.g., Coffee & Tea, Starters, Sandwiches & Wraps, Burgers, Pizzas, Desserts, Beverages) as displayed. If no category heading is present, categorize logically by food/beverage type.
+Strict rules:
+1. EXTRACTION ACCURACY: Extract every food item, beverage, variation, combo, and category visible in the menu. Do not summarize, truncate, or invent items.
+2. PRICE CLEANING: Extract the exact numeric float price (e.g., 120). Strip currency symbols (₹, Rs., INR, $, £, €, AED) and trailing punctuation. If multiple sizes exist (e.g., Regular 120, Large 180), create distinct items ("Cappuccino (Regular)", "Cappuccino (Large)"). If price is absent or market price, use null.
+3. LAYOUT INTELLIGENCE: Accurately parse multi-column layouts, grids, tables, and chalkboard sections without crossing columns horizontally.
+4. CATEGORIZATION: Group items under their printed menu category headings (e.g., Coffee & Tea, Starters, Mains, Desserts). Use logical culinary groupings if headings are omitted.
 5. DIETARY / VEG RECOGNITION:
-   - "isVeg": true if marked with a green veg indicator/dot, labeled Vegetarian/Veg, or inherently vegetarian (e.g., Paneer, Veg Sandwich, Chai).
-   - "isVeg": false if marked with a red/brown dot, contains meat/chicken/fish/egg/mutton/prawn, or labeled Non-Veg.
-   - "isVeg": null if ambiguous or not indicated.
-6. FORMAT INTEGRITY: Output ONLY a valid JSON object adhering strictly to the schema below. Do NOT include markdown code blocks, conversational text, notes, or explanations.
+   - "isVeg": true if marked with green veg dot or inherently vegetarian.
+   - "isVeg": false if marked with red/brown dot or contains meat/chicken/fish/egg/mutton/prawn.
+   - "isVeg": null if ambiguous.
+6. COMPACT OUTPUT: Output ONLY valid JSON matching the schema below. Keep JSON minimal and do not generate item descriptions.
 
 Schema:
 {
@@ -477,8 +589,7 @@ Schema:
       "items": [
         {
           "item_name": "Espresso",
-          "description": "Bold single shot espresso",
-          "price": 120.00,
+          "price": 120,
           "isVeg": true
         }
       ]
@@ -495,37 +606,19 @@ Schema:
     }
   ];
 
-  // Build smart runtime model cascade:
-  // - Standard Google AI Studio dedicated keys (AIza*) lead with universally available GA vision models (2.5-flash, 2.5-flash-lite, flash-latest, 2.0-flash)
-  // - AI Studio Build keys (AQ.*) lead with CANDIDATE_MODELS then fall back to GA vision models
-  const isStandardStudioKey = resolvedKey.startsWith('AIza');
-  const runtimeModelOrder = isStandardStudioKey
-    ? [
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-flash-latest',
-        'gemini-flash-lite-latest',
-        'gemini-2.0-flash',
-        ...CANDIDATE_MODELS
-      ]
-    : [
-        ...CANDIDATE_MODELS,
-        'gemini-flash-lite-latest',
-        'gemini-2.5-flash-lite',
-        'gemini-2.5-flash',
-        'gemini-2.0-flash'
-      ];
-  const candidateModels = Array.from(new Set(runtimeModelOrder.filter(Boolean)));
+  const candidateModels = buildRuntimeModelOrder(resolvedKey);
+  const cacheKey = hashCacheKey(resolvedKey);
 
-  let response = null;
+  let bestParsedResult = null;
+  let emptyParsedFallback = null;
+  let emptyModelResponses = 0;
   let successfulModel = null;
   let lastError = null;
   const startTime = Date.now();
   const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
-  // Real menu photos with 25-100 dishes take 8-22s on Vision OCR.
-  // Use generous timeouts on Express/Node (28s/model, 55s total) and safe Netlify bounds (12s/model, 23s total).
-  const PER_MODEL_CAP_MS = isServerless ? 12000 : 28000;
-  const MAX_TOTAL_CASCADE_MS = isServerless ? 23000 : 55000;
+  // Serverless functions have strict gateway limits (10s default / 26s raised); abort sluggish models early enough to fall back cleanly.
+  const PER_MODEL_CAP_MS = isServerless ? 9500 : 28000;
+  const MAX_TOTAL_CASCADE_MS = isServerless ? 22000 : 55000;
 
   for (const modelName of candidateModels) {
     const elapsed = Date.now() - startTime;
@@ -535,50 +628,57 @@ Schema:
     }
     const perModelTimeout = Math.min(PER_MODEL_CAP_MS, remainingBudget);
 
-    const invokeModel = async (includeThinkingZero) => {
-      const modelConfig = {
-        responseMimeType: 'application/json'
-      };
-      if (includeThinkingZero && (modelName === 'gemini-2.5-flash' || modelName === 'gemini-3.1-flash-lite')) {
-        modelConfig.thinkingConfig = { thinkingBudget: 0 };
-      }
-      return await executeWithTimeout(async () => {
-        return await ai.models.generateContent({
-          model: modelName,
-          contents: [{ role: 'user', parts: promptParts }],
-          config: modelConfig
-        });
-      }, perModelTimeout, `Model '${modelName}' request exceeded ${perModelTimeout}ms timeout`);
-    };
-
     try {
-      try {
-        response = await invokeModel(true);
-      } catch (firstErr) {
-        const firstMsg = String(firstErr?.message || firstErr);
-        // Retry once without thinkingConfig if model rejects thinkingBudget
-        if ((firstErr?.status === 400 || firstMsg.includes('INVALID_ARGUMENT')) && /thinking/i.test(firstMsg)) {
-          response = await invokeModel(false);
-        } else {
-          throw firstErr;
-        }
+      const response = await generateWithThinkingFallback({
+        ai,
+        modelName,
+        contents: [{ role: 'user', parts: promptParts }],
+        baseConfig: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: 16384
+        },
+        timeoutMs: perModelTimeout,
+        timeoutMsg: `Model '${modelName}' request exceeded ${perModelTimeout}ms timeout`
+      });
+
+      const candidateText = response?.text ? response.text.trim() : '';
+      if (!candidateText) {
+        lastError = new Error(`Model '${modelName}' returned an empty response.`);
+        continue;
       }
 
-      if (response && response.text) {
+      const parsed = parseMenuJsonSafely(candidateText);
+      if (parsed && Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+        bestParsedResult = parsed;
         successfulModel = modelName;
-        keyVerificationCache.set(resolvedKey, {
-          operational: true,
-          statusCode: 200,
-          code: 'OK',
-          reason: `Operational (${modelName})`,
-          modelTested: modelName,
-          timestamp: Date.now()
-        });
+        if (!aiClient) {
+          setBoundedCacheEntry(keyVerificationCache, cacheKey, {
+            operational: true,
+            statusCode: 200,
+            code: 'OK',
+            reason: `Operational (${modelName})`,
+            modelTested: modelName,
+            timestamp: Date.now()
+          }, MAX_VERIFICATION_CACHE_ENTRIES);
+        }
         break;
       }
+
+      // Lighter models can return {"categories":[]} on dense/low-contrast photos; retry up to 2 models before accepting empty
+      if (!emptyParsedFallback) {
+        emptyParsedFallback = {
+          ...parsed,
+          modelUsed: modelName
+        };
+      }
+      emptyModelResponses++;
+      lastError = new Error(`Model '${modelName}' detected 0 menu items.`);
+      if (emptyModelResponses >= 2) {
+        break;
+      }
+      continue;
     } catch (modelErr) {
-      lastError = modelErr;
-      const errMsg = String(modelErr?.message || modelErr);
+      const errMsg = sanitizeErrorForClient(String(modelErr?.message || modelErr), resolvedKey);
       const status = Number(modelErr?.status || 0);
 
       // 1. Billing / prepayment credits depleted -> fail fast & mark key cache
@@ -587,13 +687,15 @@ Schema:
         billingErr.status = 402;
         billingErr.code = 'BILLING_DEPLETED';
         lastError = billingErr;
-        keyVerificationCache.set(resolvedKey, {
-          operational: false,
-          statusCode: 402,
-          code: 'BILLING_DEPLETED',
-          reason: billingErr.message,
-          timestamp: Date.now()
-        });
+        if (!aiClient) {
+          setBoundedCacheEntry(keyVerificationCache, cacheKey, {
+            operational: false,
+            statusCode: 402,
+            code: 'BILLING_DEPLETED',
+            reason: billingErr.message,
+            timestamp: Date.now()
+          }, MAX_VERIFICATION_CACHE_ENTRIES);
+        }
         break;
       }
 
@@ -606,36 +708,51 @@ Schema:
         authErr.status = 401;
         authErr.code = 'INVALID_API_KEY';
         lastError = authErr;
-        keyVerificationCache.set(resolvedKey, {
-          operational: false,
-          statusCode: 401,
-          code: 'INVALID_API_KEY',
-          reason: authErr.message,
-          timestamp: Date.now()
-        });
+        if (!aiClient) {
+          setBoundedCacheEntry(keyVerificationCache, cacheKey, {
+            operational: false,
+            statusCode: 401,
+            code: 'INVALID_API_KEY',
+            reason: authErr.message,
+            timestamp: Date.now()
+          }, MAX_VERIFICATION_CACHE_ENTRIES);
+        }
         break;
       }
 
-      // 3. Rate limit (429) or model 403/404/timeout -> continue cascade to next model!
+      // 3. Rate limit (429) or model error/timeout -> wrap cleanly (never mutate caught error) & cascade
       if (status === 429 || /RESOURCE_EXHAUSTED|quota exceeded|rate.?limit/i.test(errMsg)) {
-        lastError.status = 429;
-        lastError.code = 'GEMINI_RATE_LIMIT';
+        const rateErr = new Error(errMsg || 'Gemini API rate limit exceeded.');
+        rateErr.status = 429;
+        rateErr.code = 'GEMINI_RATE_LIMIT';
+        lastError = rateErr;
+      } else {
+        const wrappedErr = new Error(errMsg || `Model '${modelName}' extraction failed.`);
+        if (status) wrappedErr.status = status;
+        if (modelErr?.code) wrappedErr.code = modelErr.code;
+        if (modelErr?.name === 'TimeoutError') wrappedErr.name = 'TimeoutError';
+        lastError = wrappedErr;
       }
       continue;
     }
   }
 
-  if (!response && lastError) {
+  if (bestParsedResult) {
+    return {
+      ...bestParsedResult,
+      modelUsed: successfulModel
+    };
+  }
+
+  if (emptyParsedFallback && (!lastError || /detected 0 menu items/i.test(String(lastError.message || '')))) {
+    return emptyParsedFallback;
+  }
+
+  if (lastError) {
     throw lastError;
   }
 
-  const responseText = response?.text ? response.text.trim() : '';
-  const parsed = parseMenuJsonSafely(responseText);
-
-  return {
-    ...parsed,
-    modelUsed: successfulModel
-  };
+  throw new Error('AI Vision could not extract menu items from this document.');
 }
 
 const SERVER_CULINARY_PHOTO_MAP = [

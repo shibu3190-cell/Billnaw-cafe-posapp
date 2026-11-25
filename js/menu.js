@@ -2122,16 +2122,427 @@ function parseLocalMenuFallback(payload) {
     };
 }
 
+const MAX_AI_PDF_PAGES = 10;
+const MAX_UPLOAD_DATAURL_CHARS = 3400000;
+const MAX_CLIENT_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_PAGE_EXTRACTED_TEXT_CHARS = 25000;
+const MAX_COMBINED_PDF_TEXT_CHARS = 100000;
+
+let _aiScanGeneration = 0;
+let _activeAiScanController = null;
+
+function _setAiUploadButtonsDisabled(disabled) {
+    ['aiMenuBtn', 'aiMenuCameraBtn', 'aiMenuPdfBtn', 'aiMenuExcelBtn', 'menuCatalogAutoDetectBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = Boolean(disabled);
+    });
+}
+
+function _resetAiScanUi(hideOverlay = true) {
+    if (hideOverlay) {
+        const scanOverlay = document.getElementById('aiScanningOverlay');
+        if (scanOverlay) scanOverlay.style.display = 'none';
+    }
+    _setAiUploadButtonsDisabled(false);
+    ['aiMenuFileInput', 'aiMenuCameraInput', 'aiMenuPdfInput', 'aiMenuUploader', 'aiMenuExcelInput'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+}
+
+function cancelAiMenuScan() {
+    _aiScanGeneration++;
+    if (_activeAiScanController) {
+        try { _activeAiScanController.abort('USER_CANCELLED'); } catch (_) {}
+        _activeAiScanController = null;
+    }
+    _resetAiScanUi(true);
+}
+window.cancelAiMenuScan = cancelAiMenuScan;
+
+async function _loadPdfJsWithFallback() {
+    if (window.pdfjsLib) return window.pdfjsLib;
+    if (typeof loadLazyScript !== 'function') {
+        throw new Error("PDF reader library failed to load.");
+    }
+    const cdnSources = [
+        {
+            lib: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+            worker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        },
+        {
+            lib: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+            worker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+        }
+    ];
+    for (const cdn of cdnSources) {
+        try {
+            await loadLazyScript(cdn.lib);
+            if (window.pdfjsLib) {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = cdn.worker;
+                return window.pdfjsLib;
+            }
+        } catch (cdnErr) {
+            // Remove failed <script> tag so loadLazyScript does not short-circuit subsequent retries
+            if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+                document.querySelectorAll(`script[src="${cdn.lib}"]`).forEach(el => {
+                    if (el && typeof el.remove === 'function') el.remove();
+                });
+            }
+            console.warn("PDF.js CDN load failed, trying fallback:", cdn.lib, cdnErr?.message || cdnErr);
+        }
+    }
+    throw new Error("PDF reader library failed to load.");
+}
+
+function _encodeCanvasForUpload(canvas, initialQuality = 0.82) {
+    let working = canvas;
+    const ownedTempCanvases = [];
+    try {
+        for (let pass = 0; pass < 3; pass++) {
+            const qualities = pass === 0 ? [initialQuality, 0.68, 0.55] : [0.68, 0.55];
+            for (const q of qualities) {
+                const candidate = working.toDataURL('image/jpeg', q);
+                if (candidate.length <= MAX_UPLOAD_DATAURL_CHARS) {
+                    return candidate;
+                }
+            }
+            if ((working.width || 0) <= 640 && (working.height || 0) <= 640) {
+                break;
+            }
+            const nextCanvas = document.createElement('canvas');
+            nextCanvas.width = Math.max(1, Math.round(working.width * 0.75));
+            nextCanvas.height = Math.max(1, Math.round(working.height * 0.75));
+            const nctx = nextCanvas.getContext('2d');
+            if (!nctx) {
+                nextCanvas.width = 0;
+                nextCanvas.height = 0;
+                break;
+            }
+            nctx.drawImage(working, 0, 0, nextCanvas.width, nextCanvas.height);
+            ownedTempCanvases.push(nextCanvas);
+            working = nextCanvas;
+        }
+        throw new Error("Menu image could not be compressed under upload size limit.");
+    } finally {
+        ownedTempCanvases.forEach(c => { c.width = 0; c.height = 0; });
+        canvas.width = 0;
+        canvas.height = 0;
+    }
+}
+
+async function _extractPdfPages(file, onProgress = null, scanGen = _aiScanGeneration) {
+    if (typeof file?.size === 'number' && file.size > MAX_CLIENT_FILE_BYTES) {
+        throw new Error("PDF file exceeds 25MB limit. Please split or compress it first.");
+    }
+    const pdfLib = await _loadPdfJsWithFallback();
+    const arrayBuffer = typeof file.arrayBuffer === 'function'
+        ? await file.arrayBuffer()
+        : await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onabort = () => reject(new Error("PDF reading aborted."));
+            reader.onerror = () => reject(new Error("PDF reading failed."));
+            reader.readAsArrayBuffer(file);
+        });
+
+    let pdf = null;
+    try {
+        pdf = await pdfLib.getDocument({
+            data: new Uint8Array(arrayBuffer),
+            isEvalSupported: false
+        }).promise;
+        const totalPages = pdf.numPages || 1;
+        const pagesToScan = Math.min(totalPages, MAX_AI_PDF_PAGES);
+        const pages = [];
+        const textChunks = [];
+        let combinedLen = 0;
+
+        for (let pageNum = 1; pageNum <= pagesToScan; pageNum++) {
+            if (scanGen !== _aiScanGeneration) {
+                throw new Error("Scan cancelled.");
+            }
+            if (typeof onProgress === 'function') {
+                onProgress(pageNum, pagesToScan, totalPages);
+            }
+            let page = null;
+            const canvas = document.createElement('canvas');
+            try {
+                page = await pdf.getPage(pageNum);
+                const baseViewport = page.getViewport({ scale: 1 });
+                const maxSide = Math.max(baseViewport.width || 800, baseViewport.height || 800, 1);
+                const safeScale = Math.min(1.5, 1400 / maxSide);
+                const viewport = page.getViewport({ scale: safeScale });
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error("Canvas context unavailable for PDF rendering.");
+                canvas.height = Math.round(viewport.height);
+                canvas.width = Math.round(viewport.width);
+                await page.render({ canvasContext: ctx, viewport }).promise;
+
+                let textStr = '';
+                try {
+                    const textContent = await page.getTextContent();
+                    textStr = textContent.items.map(i => i.str).join('\n').slice(0, MAX_PAGE_EXTRACTED_TEXT_CHARS);
+                } catch (te) {
+                    console.warn(`PDF page ${pageNum} text parse fallback:`, te);
+                }
+                if (textStr && combinedLen < MAX_COMBINED_PDF_TEXT_CHARS) {
+                    const slice = textStr.slice(0, MAX_COMBINED_PDF_TEXT_CHARS - combinedLen);
+                    textChunks.push(slice);
+                    combinedLen += slice.length;
+                }
+
+                const dataUrl = _encodeCanvasForUpload(canvas, 0.8);
+                pages.push({ pageNumber: pageNum, base64Data: dataUrl, mimeType: 'image/jpeg', extractedText: textStr });
+            } finally {
+                canvas.width = 0;
+                canvas.height = 0;
+                if (page && typeof page.cleanup === 'function') {
+                    try { page.cleanup(); } catch (_) {}
+                }
+            }
+        }
+
+        return { pages, totalPages, scannedPages: pagesToScan, combinedText: textChunks.join('\n') };
+    } finally {
+        if (pdf && typeof pdf.destroy === 'function') {
+            try { await pdf.destroy(); } catch (_) {}
+        }
+    }
+}
+
+async function _encodeImageFileForUpload(file) {
+    if (typeof file?.size === 'number' && file.size > MAX_CLIENT_FILE_BYTES) {
+        throw new Error("Image file exceeds 25MB limit. Please choose a smaller photo.");
+    }
+    return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const rawResult = e?.target?.result;
+                if (typeof rawResult !== 'string') {
+                    reject(new Error("Image reading produced invalid data."));
+                    return;
+                }
+                const img = new Image();
+                const cleanupImg = () => { img.onload = null; img.onerror = null; };
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    try {
+                        const MAX_DIM = 1600;
+                        let w = img.width || 1;
+                        let h = img.height || 1;
+                        if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
+                        canvas.width = Math.round(w);
+                        canvas.height = Math.round(h);
+                        const ctx = canvas.getContext('2d');
+                        if (!ctx) throw new Error("Canvas context unavailable for image processing.");
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve({ dataUrl: _encodeCanvasForUpload(canvas, 0.82), mimeType: 'image/jpeg' });
+                    } catch (encodeErr) {
+                        reject(encodeErr);
+                    } finally {
+                        canvas.width = 0;
+                        canvas.height = 0;
+                        cleanupImg();
+                    }
+                };
+                img.onerror = () => {
+                    cleanupImg();
+                    if (rawResult.startsWith('data:image') && rawResult.length <= MAX_UPLOAD_DATAURL_CHARS) {
+                        resolve({ dataUrl: rawResult, mimeType: file.type || 'image/jpeg' });
+                    } else {
+                        reject(new Error("Image load failed."));
+                    }
+                };
+                img.src = rawResult;
+            } catch (loadErr) {
+                reject(loadErr);
+            }
+        };
+        reader.onabort = () => reject(new Error("File reading aborted."));
+        reader.onerror = () => reject(new Error("File reading failed."));
+        reader.readAsDataURL(file);
+    });
+}
+
+function _buildAiScanContext() {
+    const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || '';
+    const activeShopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || null;
+    const activeShopEmail = (typeof shopProfile !== 'undefined' && shopProfile.email) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_shop_email') : null) || '';
+    return { customKey, activeShopId, activeShopEmail };
+}
+
+function _buildScanPayload(base64Data, mimeType, extractedText, ctx) {
+    return {
+        base64Data,
+        mimeType,
+        clientId: ctx?.activeShopId || null,
+        shopId: ctx?.activeShopId || null,
+        extractedText: String(extractedText || '').slice(0, MAX_COMBINED_PDF_TEXT_CHARS)
+    };
+}
+
+function _appendNormalizedCategories(categories, targetItems, seenKeys = null) {
+    if (!Array.isArray(categories)) return 0;
+    let addedCount = 0;
+    categories.forEach(cat => {
+        if (!cat || typeof cat !== 'object' || !Array.isArray(cat.items)) return;
+        const catName = String(cat.name || cat.category || "").trim() || "General";
+        cat.items.forEach(item => {
+            if (!item || typeof item !== 'object') return;
+            const rawName = String(item.name || item.title || item.ItemName || "New Item").trim() || "New Item";
+            const rawPrice = parseFloat(item.price !== undefined ? item.price : (item.Price !== undefined ? item.Price : 0)) || 0;
+            const dedupeKey = `${catName.toLowerCase()}::${rawName.toLowerCase()}::${rawPrice}`;
+            if (seenKeys) {
+                if (seenKeys.has(dedupeKey)) return;
+                seenKeys.add(dedupeKey);
+            }
+            const prompt = item.image_prompt || `${rawName} gourmet cafe food dish photography`;
+            const sanitizedItemUrl = item.image ? _sanitizeMenuImgUrl(item.image) : '';
+            const safeCustomUrl = sanitizedItemUrl && !/["'\r\n<>]/.test(sanitizedItemUrl) ? sanitizedItemUrl : '';
+            const hasImg = Boolean(safeCustomUrl);
+            const initialImg = hasImg ? safeCustomUrl : (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(rawName, catName) : generateFallbackImage(rawName, catName));
+
+            let isVeg = null;
+            if (typeof item.isVeg === 'boolean') isVeg = item.isVeg;
+            else if (typeof item.is_veg === 'boolean') isVeg = item.is_veg;
+            else if (typeof item.veg === 'boolean') isVeg = item.veg;
+
+            targetItems.push({
+                name: rawName,
+                price: rawPrice,
+                category: catName,
+                image: initialImg,
+                image_prompt: prompt,
+                hasCustomImage: hasImg,
+                isVeg: isVeg
+            });
+            addedCount++;
+        });
+    });
+    return addedCount;
+}
+
+async function _requestAiScanEndpoint(payload, customKey, activeShopId, activeShopEmail, { timeoutMs = 60000 } = {}) {
+    const requestHeaders = { 'Content-Type': 'application/json' };
+    const reqBody = { ...payload };
+    delete reqBody.apiKey;
+    if (customKey) {
+        requestHeaders['x-gemini-api-key'] = customKey;
+    }
+    if (activeShopId) {
+        requestHeaders['x-shop-id'] = activeShopId;
+        requestHeaders['x-store-code'] = activeShopId;
+        requestHeaders['x-client-id'] = activeShopId;
+        reqBody.shopId = activeShopId;
+        reqBody.storeCode = activeShopId;
+        reqBody.clientId = activeShopId;
+    }
+    if (activeShopEmail) {
+        requestHeaders['x-shop-email'] = activeShopEmail;
+        reqBody.shopEmail = activeShopEmail;
+    }
+
+    const scanController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    if (scanController) {
+        _activeAiScanController = scanController;
+    }
+    let timedOut = false;
+    const scanTimer = scanController ? setTimeout(() => {
+        timedOut = true;
+        scanController.abort('TIMEOUT');
+    }, timeoutMs) : null;
+
+    let serverRes = null;
+    try {
+        serverRes = await fetch('/api/ai/scan-menu', {
+            method: 'POST',
+            headers: requestHeaders,
+            body: JSON.stringify(reqBody),
+            signal: scanController ? scanController.signal : undefined
+        }).catch(() => null);
+
+        const isAborted = Boolean(scanController && scanController.signal && scanController.signal.aborted);
+        if (!isAborted && (!serverRes || serverRes.status === 404)) {
+            serverRes = await fetch('/api/extract-menu', {
+                method: 'POST',
+                headers: requestHeaders,
+                body: JSON.stringify(reqBody),
+                signal: scanController ? scanController.signal : undefined
+            }).catch(() => null);
+        }
+    } finally {
+        if (scanTimer) clearTimeout(scanTimer);
+        if (_activeAiScanController === scanController) {
+            _activeAiScanController = null;
+        }
+    }
+
+    const wasUserCancelled = Boolean(scanController && scanController.signal && scanController.signal.aborted && !timedOut);
+    if (wasUserCancelled) {
+        const cancelErr = new Error("Scan cancelled.");
+        cancelErr.cancelled = true;
+        throw cancelErr;
+    }
+    if (serverRes && serverRes.ok) {
+        try {
+            return { serverData: await serverRes.json(), httpDiagnosticWarning: null };
+        } catch (_) {
+            return { serverData: null, httpDiagnosticWarning: "AI server returned an unreadable response format." };
+        }
+    }
+    if (serverRes && serverRes.status === 429) {
+        const errData = await serverRes.json().catch(() => ({}));
+        const quotaErr = new Error(errData.error || "Monthly scan quota of 15 scans reached for this shop.");
+        quotaErr.status = 429;
+        throw quotaErr;
+    }
+    if (serverRes && (serverRes.status === 401 || serverRes.status === 403)) {
+        const errData = await serverRes.json().catch(() => ({}));
+        const keyErr = new Error(errData.error || "Invalid or unauthorized Gemini API key. Please check your key in Settings.");
+        keyErr.status = serverRes.status;
+        throw keyErr;
+    }
+    if (serverRes && serverRes.status === 413) {
+        return {
+            serverData: null,
+            httpDiagnosticWarning: "Menu file is too large for upload (HTTP 413). Please crop or upload a smaller image/PDF."
+        };
+    }
+    if (timedOut || (serverRes && (serverRes.status === 502 || serverRes.status === 504))) {
+        const codeLabel = timedOut ? 'client timeout' : `HTTP ${serverRes.status}`;
+        return {
+            serverData: null,
+            httpDiagnosticWarning: `AI menu scan timed out on the server (${codeLabel}). Try scanning one page or a closer crop of the menu.`
+        };
+    }
+    if (serverRes && serverRes.status >= 400) {
+        const errJson = await serverRes.json().catch(() => ({}));
+        const detail = errJson.error || errJson.warning || `HTTP ${serverRes.status}`;
+        return {
+            serverData: null,
+            httpDiagnosticWarning: `AI server scan failed (${detail}).`
+        };
+    }
+    return { serverData: null, httpDiagnosticWarning: null };
+}
+
 async function processAIMenu(event) {
     if (!canCurrentStaffManageMenu()) {
         _requireMenuPermission('import menu items', () => processAIMenu(event));
         return;
     }
-    const file = (event && event.target && event.target.files && event.target.files[0]) || 
+    const file = (event && event.target && event.target.files && event.target.files[0]) ||
                  (event && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]);
     if (!file) return;
-    const btn = document.getElementById('aiMenuBtn'); 
-    if (btn) { btn.disabled = true; }
+
+    const scanGen = ++_aiScanGeneration;
+    if (_activeAiScanController) {
+        try { _activeAiScanController.abort('SUPERSEDED'); } catch (_) {}
+        _activeAiScanController = null;
+    }
+    _setAiUploadButtonsDisabled(true);
 
     const scanOverlay = document.getElementById('aiScanningOverlay');
     const scanText = document.getElementById('aiScanningOverlayText');
@@ -2141,101 +2552,161 @@ async function processAIMenu(event) {
     }
 
     try {
-        let base64Data = ""; 
-        let mimeType = 'image/jpeg'; 
-        let extractedText = "";
-        
+        const ctx = _buildAiScanContext();
         if (file.type === "application/pdf") {
-            // Lazy-load pdf.js if not already present
-            if (!window.pdfjsLib && typeof loadLazyScript === 'function') {
-                await loadLazyScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-                if (window.pdfjsLib) {
-                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            const pdfResult = await _extractPdfPages(file, (pageNum, scannedPages) => {
+                if (scanText && scanGen === _aiScanGeneration) {
+                    scanText.innerText = scannedPages > 1
+                        ? `Preparing PDF page ${pageNum} of ${scannedPages}...`
+                        : "Preparing PDF menu page...";
                 }
+            }, scanGen);
+            if (scanGen !== _aiScanGeneration) return;
+
+            if (pdfResult.pages.length <= 1) {
+                const firstPage = pdfResult.pages[0] || { base64Data: '', mimeType: 'image/jpeg', extractedText: '' };
+                const payload = _buildScanPayload(firstPage.base64Data, firstPage.mimeType, firstPage.extractedText, ctx);
+                pendingUploadPayload = payload;
+                lastUploadedMenuPreviewUrl = (firstPage.base64Data && firstPage.base64Data.startsWith('data:image')) ? firstPage.base64Data : null;
+                if (scanText) {
+                    scanText.innerText = ctx.customKey ? "Scanning menu using Dedicated Gemini API Key..." : "Uploading & analyzing menu with Gemini AI Vision...";
+                }
+                await executeMenuExtraction(payload, false, scanGen);
+                return;
             }
-            if (!window.pdfjsLib) throw new Error("PDF reader library failed to load.");
-            
-            const fileReader = new FileReader();
-            const pdfResult = await new Promise((resolve, reject) => {
-                fileReader.onload = async function() {
-                    try {
-                        const typedarray = new Uint8Array(this.result); 
-                        const pdf = await pdfjsLib.getDocument(typedarray).promise; 
-                        const page = await pdf.getPage(1); 
-                        const viewport = page.getViewport({scale: 1.5}); 
-                        const canvas = document.createElement('canvas'); 
-                        const ctx = canvas.getContext('2d');
-                        canvas.height = viewport.height; 
-                        canvas.width = viewport.width; 
-                        await page.render({canvasContext: ctx, viewport: viewport}).promise;
-                        
-                        let textStr = "";
-                        try {
-                            const textContent = await page.getTextContent();
-                            textStr = textContent.items.map(i => i.str).join('\n');
-                        } catch (te) { console.warn("PDF text parse fallback:", te); }
-
-                        resolve({
-                            dataUrl: canvas.toDataURL('image/jpeg', 0.8),
-                            text: textStr
-                        });
-                    } catch(e) { reject(new Error("PDF parsing failed.")); }
-                }; 
-                fileReader.readAsArrayBuffer(file);
-            });
-            base64Data = pdfResult.dataUrl;
-            extractedText = pdfResult.text;
-        } else {
-            base64Data = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas'); const MAX_DIM = 1600; let w = img.width, h = img.height;
-                        if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
-                        canvas.width = Math.round(w); canvas.height = Math.round(h); const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        resolve(canvas.toDataURL('image/jpeg', 0.82));
-                    }; img.onerror = () => reject(new Error("Image load failed.")); img.src = e.target.result;
-                }; reader.onerror = () => reject(new Error("File reading failed.")); reader.readAsDataURL(file);
-            });
+            await executeMultiPagePdfExtraction(pdfResult, { customKey: ctx.customKey, activeShopId: ctx.activeShopId, scanText, scanGen });
+            return;
         }
 
-        const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || '';
-        const activeShopId = (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || null;
+        const encodedImage = await _encodeImageFileForUpload(file);
+        if (scanGen !== _aiScanGeneration) return;
 
-        const payload = { base64Data, mimeType, clientId: activeShopId, shopId: activeShopId, extractedText };
-        if (customKey) payload.apiKey = customKey;
+        const payload = _buildScanPayload(encodedImage.dataUrl, encodedImage.mimeType, '', ctx);
         pendingUploadPayload = payload;
-        lastUploadedMenuPreviewUrl = (base64Data && base64Data.startsWith('data:image')) ? base64Data : null;
-
-        if (customKey) {
-            if (scanText) scanText.innerText = "Scanning menu using Dedicated Gemini API Key...";
-        } else {
-            if (scanText) scanText.innerText = "Uploading & analyzing menu with Gemini AI Vision...";
+        lastUploadedMenuPreviewUrl = (encodedImage.dataUrl && encodedImage.dataUrl.startsWith('data:image')) ? encodedImage.dataUrl : null;
+        if (scanText) {
+            scanText.innerText = ctx.customKey ? "Scanning menu using Dedicated Gemini API Key..." : "Uploading & analyzing menu with Gemini AI Vision...";
         }
-        await executeMenuExtraction(payload, false);
-    } catch (error) { 
-        console.warn("AI Menu Processing:", error.message); 
-        showToast("⚠️ " + error.message); 
-    } finally { 
-        if (btn) { btn.disabled = false; }
-        if (scanOverlay) scanOverlay.style.display = 'none';
-        ['aiMenuFileInput', 'aiMenuCameraInput', 'aiMenuPdfInput', 'aiMenuUploader', 'aiMenuExcelInput'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
+        await executeMenuExtraction(payload, false, scanGen);
+    } catch (error) {
+        if (scanGen === _aiScanGeneration && !error?.cancelled) {
+            console.warn("AI Menu Processing:", error.message);
+            showToast((error.status === 401 || error.status === 403 ? "❌ " : "⚠️ ") + error.message, error.status ? "error" : undefined);
+        }
+    } finally {
+        if (scanGen === _aiScanGeneration) {
+            _resetAiScanUi(true);
+        }
     }
 }
 window.processAIMenu = processAIMenu;
 
-async function executeMenuExtraction(payload, isExplicitFallback = false) {
-    if (!payload) return;
-    const btn = document.getElementById('aiMenuBtn');
-    if (btn) { btn.disabled = true; }
+async function executeMultiPagePdfExtraction(pdfResult, { customKey, activeShopId, scanText, scanGen } = {}) {
+    const activeGen = scanGen !== undefined ? scanGen : ++_aiScanGeneration;
+    const ctx = _buildAiScanContext();
+    const resolvedKey = customKey !== undefined ? customKey : ctx.customKey;
+    const resolvedShopId = activeShopId !== undefined ? activeShopId : ctx.activeShopId;
 
-    const customKey = (typeof getCustomGeminiKey === 'function' ? getCustomGeminiKey() : (typeof localStorage !== 'undefined' ? (localStorage.getItem('gemini_api_key') || localStorage.getItem('billnaw_gemini_api_key')) : '')) || payload.apiKey || '';
-    const activeShopId = payload.shopId || (typeof getActiveStoreIdentifier === 'function' ? getActiveStoreIdentifier() : null) || (typeof shopProfile !== 'undefined' && shopProfile.storeCode) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_store_code') : null) || null;
-    const activeShopEmail = (typeof shopProfile !== 'undefined' && shopProfile.email) || (typeof localStorage !== 'undefined' ? localStorage.getItem('billnaw_shop_email') : null) || '';
+    pendingAiItems = [];
+    pendingAiFallbackNotice = null;
+    lastUploadedMenuPreviewUrl = pdfResult.pages[0]?.base64Data || null;
+
+    const seenKeys = new Set();
+    let lastQuota = null;
+    let lastDiagnosticWarning = null;
+    let firstSuccessfulPreviewUrl = null;
+    let pagesWithAiSuccess = 0;
+
+    if (pdfResult.totalPages > pdfResult.scannedPages) {
+        showToast(`PDF has ${pdfResult.totalPages} pages — scanning first ${pdfResult.scannedPages} pages.`);
+    }
+
+    for (const page of pdfResult.pages) {
+        if (activeGen !== _aiScanGeneration) return;
+        if (scanText) {
+            scanText.innerText = `Scanning PDF page ${page.pageNumber} of ${pdfResult.scannedPages}...`;
+        }
+        const pagePayload = _buildScanPayload(page.base64Data, page.mimeType, page.extractedText, { activeShopId: resolvedShopId });
+        pendingUploadPayload = pagePayload;
+
+        const scanOutcome = await _requestAiScanEndpoint(pagePayload, resolvedKey, resolvedShopId, ctx.activeShopEmail);
+        if (activeGen !== _aiScanGeneration) return;
+
+        const serverData = scanOutcome.serverData;
+        if (scanOutcome.httpDiagnosticWarning && !lastDiagnosticWarning) {
+            lastDiagnosticWarning = scanOutcome.httpDiagnosticWarning;
+        }
+        if (serverData && serverData.warning) {
+            lastDiagnosticWarning = serverData.warning;
+        }
+        if (serverData && serverData.quota) {
+            lastQuota = serverData.quota;
+        }
+
+        const isStarterTemplate = Boolean(serverData && serverData.fallbackSource === 'starter_template');
+        let pageAddedCount = 0;
+        if (serverData && Array.isArray(serverData.categories) && serverData.categories.length > 0 && !isStarterTemplate) {
+            pageAddedCount = _appendNormalizedCategories(serverData.categories, pendingAiItems, seenKeys);
+            if (pageAddedCount > 0 && !firstSuccessfulPreviewUrl && page.base64Data) {
+                firstSuccessfulPreviewUrl = page.base64Data;
+            }
+            if (!serverData.isFallback) pagesWithAiSuccess++;
+        } else if (page.extractedText) {
+            const localPage = parseLocalMenuFallback(pagePayload);
+            if (localPage.categories && localPage.categories.length > 0) {
+                _appendNormalizedCategories(localPage.categories, pendingAiItems, seenKeys);
+            }
+        }
+
+        const fatalServerAiCode = serverData && ['BILLING_DEPLETED', 'INVALID_API_KEY', 'GEMINI_RATE_LIMIT', 'VISION_FAILED'].includes(serverData.aiErrorCode);
+        if (fatalServerAiCode || scanOutcome.httpDiagnosticWarning) {
+            break;
+        }
+    }
+
+    if (activeGen !== _aiScanGeneration) return;
+    if (firstSuccessfulPreviewUrl) {
+        lastUploadedMenuPreviewUrl = firstSuccessfulPreviewUrl;
+    }
+
+    if (pendingAiItems.length === 0 && pdfResult.combinedText) {
+        const localAll = parseLocalMenuFallback({ extractedText: pdfResult.combinedText });
+        if (localAll.categories && localAll.categories.length > 0) {
+            _appendNormalizedCategories(localAll.categories, pendingAiItems, seenKeys);
+            pendingAiFallbackNotice = lastDiagnosticWarning || localAll.warning;
+        }
+    } else if (lastDiagnosticWarning && pagesWithAiSuccess === 0) {
+        pendingAiFallbackNotice = lastDiagnosticWarning;
+    }
+
+    _resetAiScanUi(true);
+    if (pendingAiItems.length > 0) {
+        const quotaNote = lastQuota ? ` (${lastQuota.remaining}/${lastQuota.limit} scans left)` : '';
+        showToast(`🤖 Scanned ${pdfResult.scannedPages} PDF pages: ${pendingAiItems.length} items ready${quotaNote}`);
+    } else if (lastDiagnosticWarning) {
+        pendingAiFallbackNotice = lastDiagnosticWarning;
+        showToast("⚠️ " + lastDiagnosticWarning, "error");
+    } else {
+        showToast("ℹ️ No clear dishes detected in PDF pages. Try uploading a sharper menu PDF or add items manually.");
+    }
+
+    renderAiPreviewModal();
+    const prevModal = document.getElementById('aiPreviewModal');
+    if (prevModal) prevModal.style.display = 'flex';
+    if (typeof refreshAiMenuQuotaPill === 'function') {
+        refreshAiMenuQuotaPill();
+    }
+}
+
+async function executeMenuExtraction(payload, isExplicitFallback = false, scanGen = undefined) {
+    if (!payload) return;
+    const activeGen = scanGen !== undefined ? scanGen : ++_aiScanGeneration;
+    _setAiUploadButtonsDisabled(true);
+
+    const ctx = _buildAiScanContext();
+    const customKey = ctx.customKey || payload.apiKey || '';
+    const activeShopId = payload.shopId || ctx.activeShopId || null;
+    const activeShopEmail = ctx.activeShopEmail || '';
     if (payload.base64Data && !lastUploadedMenuPreviewUrl) {
         lastUploadedMenuPreviewUrl = (payload.base64Data.startsWith('data:image')) ? payload.base64Data : null;
     }
@@ -2250,73 +2721,24 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
 
     try {
         let serverData = null;
-        try {
-            const requestHeaders = { 'Content-Type': 'application/json' };
-            if (customKey) {
-                requestHeaders['x-gemini-api-key'] = customKey;
-                payload.apiKey = customKey;
-            }
-            if (activeShopId) {
-                requestHeaders['x-shop-id'] = activeShopId;
-                requestHeaders['x-store-code'] = activeShopId;
-                requestHeaders['x-client-id'] = activeShopId;
-                payload.shopId = activeShopId;
-                payload.storeCode = activeShopId;
-                payload.clientId = activeShopId;
-            }
-            if (activeShopEmail) {
-                requestHeaders['x-shop-email'] = activeShopEmail;
-                payload.shopEmail = activeShopEmail;
-            }
-
-            const scanController = typeof AbortController !== 'undefined' ? new AbortController() : null;
-            const scanTimer = scanController ? setTimeout(() => scanController.abort(), 60000) : null;
-            let serverRes = null;
+        let httpDiagnosticWarning = null;
+        if (!isExplicitFallback) {
             try {
-                serverRes = await fetch('/api/ai/scan-menu', {
-                    method: 'POST',
-                    headers: requestHeaders,
-                    body: JSON.stringify(payload),
-                    signal: scanController ? scanController.signal : undefined
-                }).catch(() => null);
-
-                if (!serverRes || serverRes.status === 404) {
-                    serverRes = await fetch('/api/extract-menu', {
-                        method: 'POST',
-                        headers: requestHeaders,
-                        body: JSON.stringify(payload),
-                        signal: scanController ? scanController.signal : undefined
-                    });
+                const outcome = await _requestAiScanEndpoint(payload, customKey, activeShopId, activeShopEmail);
+                if (activeGen !== _aiScanGeneration) return;
+                serverData = outcome.serverData;
+                httpDiagnosticWarning = outcome.httpDiagnosticWarning;
+            } catch (fetchErr) {
+                if (fetchErr?.cancelled || activeGen !== _aiScanGeneration) return;
+                if (fetchErr.status === 401 || fetchErr.status === 403 || fetchErr.status === 429) {
+                    throw fetchErr;
                 }
-            } finally {
-                if (scanTimer) clearTimeout(scanTimer);
+                console.warn("Server connection failed or offline, switching to smart layout parser:", fetchErr);
             }
-
-            if (serverRes && serverRes.ok) {
-                serverData = await serverRes.json();
-            } else if (serverRes && serverRes.status === 429) {
-                const errData = await serverRes.json().catch(() => ({}));
-                const quotaMsg = errData.error || "Monthly scan quota of 15 scans reached for this shop.";
-                showToast("⚠️ " + quotaMsg, "error");
-                throw new Error(quotaMsg);
-            } else if (serverRes && (serverRes.status === 401 || serverRes.status === 403)) {
-                const errData = await serverRes.json().catch(() => ({}));
-                const keyMsg = errData.error || "Invalid or unauthorized Gemini API key. Please check your key in Settings.";
-                showToast("❌ " + keyMsg, "error");
-                throw new Error(keyMsg);
-            } else {
-                console.warn(`Server extraction status: ${serverRes ? serverRes.status : 'network error'}, applying smart layout parser.`);
-            }
-        } catch (fetchErr) {
-            if (fetchErr.message && (fetchErr.message.includes("quota") || fetchErr.message.includes("Gemini API key") || fetchErr.message.includes("unauthorized"))) {
-                throw fetchErr;
-            }
-            console.warn("Server connection failed or offline, switching to smart layout parser:", fetchErr);
         }
 
-        // Automatic smart layout fallback ONLY if server returned no categories — while PRESERVING any server AI diagnostic warning (e.g. HTTP 402 credits depleted / 429 rate limit)
-        const serverDiagnosticWarning = serverData && serverData.warning ? serverData.warning : null;
-        const serverAiErrorCode = serverData && serverData.aiErrorCode ? serverData.aiErrorCode : null;
+        const serverDiagnosticWarning = (serverData && serverData.warning) || httpDiagnosticWarning || null;
+        const serverAiErrorCode = (serverData && serverData.aiErrorCode) || (httpDiagnosticWarning ? 'SERVER_GATEWAY_ERROR' : null);
         if (!serverData || !serverData.categories || serverData.categories.length === 0) {
             const localFallback = parseLocalMenuFallback(payload);
             serverData = {
@@ -2328,8 +2750,8 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
 
         if (serverData.isFallback) {
             const fallbackMsg = serverData.warning || "Menu extracted using smart layout parser. Review items before import.";
-            const toastType = (serverData.aiErrorCode === 'BILLING_DEPLETED' || serverData.aiErrorCode === 'INVALID_API_KEY' || serverData.aiErrorCode === 'GEMINI_RATE_LIMIT') ? 'error' : 'info';
-            showToast((toastType === 'error' ? '⚠️ ' : 'ℹ️ ') + fallbackMsg, toastType);
+            const isErr = ['BILLING_DEPLETED', 'INVALID_API_KEY', 'GEMINI_RATE_LIMIT', 'SERVER_GATEWAY_ERROR', 'VISION_FAILED'].includes(serverData.aiErrorCode);
+            showToast((isErr ? '⚠️ ' : 'ℹ️ ') + fallbackMsg, isErr ? 'error' : 'info');
         } else if (serverData.quota) {
             showToast(`🤖 AI Scanned! Quota remaining this month: ${serverData.quota.remaining}/${serverData.quota.limit}`);
         } else if (customKey) {
@@ -2339,37 +2761,9 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
         pendingAiItems = [];
         pendingAiFallbackNotice = serverData.isFallback ? (serverData.warning || "Menu digitized using Smart Layout Parser.") : null;
 
-        // Never pollute the user's real menu scan with generic hardcoded starter template dishes when Vision OCR failed with an API/billing/key error
-        const isGenericStarterFallback = Boolean(serverData.isFallback && serverData.fallbackSource === 'starter_template' && serverData.aiErrorCode);
-
-        if (!isGenericStarterFallback && serverData.categories && Array.isArray(serverData.categories)) {
-            serverData.categories.forEach(cat => {
-                const catName = String(cat.name || cat.category || "General").trim();
-                if (cat.items && Array.isArray(cat.items)) {
-                    cat.items.forEach(item => {
-                        const rawName = String(item.name || item.title || item.ItemName || "New Item").trim();
-                        const rawPrice = parseFloat(item.price !== undefined ? item.price : (item.Price !== undefined ? item.Price : 0)) || 0;
-                        const prompt = item.image_prompt || `${rawName} gourmet cafe food dish photography`;
-                        const hasImg = Boolean(item.image && typeof item.image === 'string' && (item.image.startsWith('data:image') || item.image.startsWith('http')));
-                        const initialImg = hasImg ? item.image : (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(rawName, catName) : generateFallbackImage(rawName, catName));
-
-                        let isVeg = null;
-                        if (typeof item.isVeg === 'boolean') isVeg = item.isVeg;
-                        else if (typeof item.is_veg === 'boolean') isVeg = item.is_veg;
-                        else if (typeof item.veg === 'boolean') isVeg = item.veg;
-
-                        pendingAiItems.push({
-                            name: rawName,
-                            price: rawPrice,
-                            category: catName,
-                            image: initialImg,
-                            image_prompt: prompt,
-                            hasCustomImage: hasImg,
-                            isVeg: isVeg
-                        });
-                    });
-                }
-            });
+        const isStarterTemplate = Boolean(serverData.isFallback && serverData.fallbackSource === 'starter_template');
+        if (!isStarterTemplate && serverData.categories && Array.isArray(serverData.categories)) {
+            _appendNormalizedCategories(serverData.categories, pendingAiItems, new Set());
         }
 
         const scanOverlay = document.getElementById('aiScanningOverlay');
@@ -2380,7 +2774,6 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
                 showToast("ℹ️ No clear dishes detected. Please upload a high resolution photo or add items manually.");
             }
             if (serverAiErrorCode || serverDiagnosticWarning) {
-                // Open AI Preview modal with the diagnostic banner & quick "Configure Key" action so admin can fix in 1 click
                 renderAiPreviewModal();
                 const prevModal = document.getElementById('aiPreviewModal');
                 if (prevModal) prevModal.style.display = 'flex';
@@ -2392,18 +2785,16 @@ async function executeMenuExtraction(payload, isExplicitFallback = false) {
         const prevModal = document.getElementById('aiPreviewModal');
         if (prevModal) prevModal.style.display = 'flex';
     } catch (error) {
-        console.warn("Execute Menu Extraction Error:", error.message);
-        showToast("⚠️ " + error.message);
+        if (activeGen === _aiScanGeneration && !error?.cancelled) {
+            console.warn("Execute Menu Extraction Error:", error.message);
+            showToast((error.status === 401 || error.status === 403 ? "❌ " : "⚠️ ") + error.message, error.status ? "error" : undefined);
+        }
     } finally {
-        const scanOverlay = document.getElementById('aiScanningOverlay');
-        if (scanOverlay) scanOverlay.style.display = 'none';
-        if (btn) { btn.disabled = false; }
-        ['aiMenuFileInput', 'aiMenuCameraInput', 'aiMenuPdfInput', 'aiMenuUploader', 'aiMenuExcelInput'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        if (typeof refreshAiMenuQuotaPill === 'function') {
-            refreshAiMenuQuotaPill();
+        if (activeGen === _aiScanGeneration) {
+            _resetAiScanUi(true);
+            if (typeof refreshAiMenuQuotaPill === 'function') {
+                refreshAiMenuQuotaPill();
+            }
         }
     }
 }

@@ -2829,7 +2829,7 @@
 
     <div id="aiScanningOverlay" class="modal-overlay" style="display: none; z-index: 1000030; background: rgba(10, 25, 22, 0.88); backdrop-filter: blur(8px);">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #FFFFFF; max-width: 400px; padding: 32px 24px; position: relative;">
-            <button type="button" class="ai_scan_close_btn" onclick="document.getElementById('aiScanningOverlay').style.display='none'" style="position: absolute; top: 12px; right: 12px; background: rgba(255,255,255,0.15); border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; color: #FFFFFF; display: flex; align-items: center; justify-content: center;">
+            <button type="button" class="ai_scan_close_btn" onclick="if (typeof cancelAiMenuScan === 'function') cancelAiMenuScan(); else document.getElementById('aiScanningOverlay').style.display='none'" style="position: absolute; top: 12px; right: 12px; background: rgba(255,255,255,0.15); border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; color: #FFFFFF; display: flex; align-items: center; justify-content: center;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             <div style="position: relative; width: 72px; height: 72px; margin-bottom: 20px;">
