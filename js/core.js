@@ -4630,6 +4630,15 @@ function sanitizeMenuItemForStorage(item) {
             'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop';
         clone.image = fallbackUrl;
     }
+    if (clone.imageMetadata && typeof clone.imageMetadata === 'object') {
+        const metaUrl = clone.imageMetadata.url;
+        if (typeof metaUrl === 'string' && metaUrl.startsWith('data:image/') && metaUrl.length > 2048) {
+            clone.imageMetadata = {
+                ...clone.imageMetadata,
+                url: (typeof clone.image === 'string' && !clone.image.startsWith('data:image/')) ? clone.image : ''
+            };
+        }
+    }
     return clone;
 }
 

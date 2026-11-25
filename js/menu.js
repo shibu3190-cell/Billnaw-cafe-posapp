@@ -581,7 +581,26 @@ function renderMenuUI() {
 }
 window.renderMenuUI = renderMenuUI;
 
+const _CATALOG_PAGE_SIZE = 40;
+let _catalogRenderLimit = _CATALOG_PAGE_SIZE;
+
+function loadMoreCatalogItems() {
+    _catalogRenderLimit += _CATALOG_PAGE_SIZE;
+    renderMenuCatalogUI();
+}
+if (typeof window !== 'undefined') {
+    window.loadMoreCatalogItems = loadMoreCatalogItems;
+    window._CATALOG_PAGE_SIZE = _CATALOG_PAGE_SIZE;
+    Object.defineProperty(window, '_catalogRenderLimit', {
+        get() { return _catalogRenderLimit; },
+        set(val) { _catalogRenderLimit = Number(val) || _CATALOG_PAGE_SIZE; },
+        configurable: true,
+        enumerable: true
+    });
+}
+
 function filterCatalogTable() {
+    _catalogRenderLimit = _CATALOG_PAGE_SIZE;
     renderMenuCatalogUI();
 }
 window.filterCatalogTable = filterCatalogTable;
@@ -589,6 +608,7 @@ window.filterCatalogTable = filterCatalogTable;
 let catalogActiveCategoryFilter = 'All';
 
 function filterCatalogByCategory(cat) {
+    _catalogRenderLimit = _CATALOG_PAGE_SIZE;
     catalogActiveCategoryFilter = cat;
     renderMenuCatalogUI();
 }
@@ -713,14 +733,23 @@ function renderMenuCatalogUI() {
                 return { cls: 'out-stock', label: 'Out of stock' };
             };
 
-            const existingCatalogCards = cleanCardsContainer.querySelectorAll('.clean-item-card[data-catalog-item-id]');
+            const totalCatalogMatching = itemsToRender.length;
+            const isCatalogWindowed = (typeof window === 'undefined' || !window._disableMenuWindowing);
+            const shouldWindowCatalog = isCatalogWindowed && totalCatalogMatching > _catalogRenderLimit;
+            const visibleCatalogItems = shouldWindowCatalog ? itemsToRender.slice(0, _catalogRenderLimit) : itemsToRender;
+
+            const existingCatalogCards = (cleanCardsContainer.querySelectorAll && typeof cleanCardsContainer.querySelectorAll === 'function')
+                ? cleanCardsContainer.querySelectorAll('.clean-item-card[data-catalog-item-id]')
+                : [];
             const existingIds = Array.from(existingCatalogCards).map(el => el.getAttribute('data-catalog-item-id'));
-            const targetIds = itemsToRender.map(item => String(item.id));
+            const targetIds = visibleCatalogItems.map(item => String(item.id));
+            const hadLoadMoreBtn = Boolean(typeof document !== 'undefined' && document.getElementById('catalogLoadMoreContainer'));
             const canPatchCatalog = existingIds.length === targetIds.length &&
-                                    existingIds.every((id, idx) => id === targetIds[idx]);
+                                    existingIds.every((id, idx) => id === targetIds[idx]) &&
+                                    (shouldWindowCatalog === hadLoadMoreBtn);
 
             if (canPatchCatalog) {
-                itemsToRender.forEach((item, idx) => {
+                visibleCatalogItems.forEach((item, idx) => {
                     const cardEl = existingCatalogCards[idx];
                     if (!cardEl) return;
 
@@ -747,7 +776,7 @@ function renderMenuCatalogUI() {
                     if (imgEl) {
                         const expectedThumb = _resolveStableMenuThumb(item);
                         const currentResolved = (imgEl.dataset && imgEl.dataset.resolvedSrc) || imgEl.getAttribute('src');
-                        if (currentResolved !== expectedThumb) {
+                        if (imgEl.dataset ? (imgEl.dataset.resolvedSrc !== expectedThumb) : (currentResolved !== expectedThumb)) {
                             if (imgEl.dataset) {
                                 imgEl.dataset.resolvedSrc = expectedThumb;
                                 imgEl.dataset.itemName = item.name || '';
@@ -761,7 +790,7 @@ function renderMenuCatalogUI() {
                 return;
             }
 
-            cleanCardsContainer.innerHTML = itemsToRender.map(item => {
+            const catalogCardsHtml = visibleCatalogItems.map(item => {
                 const stockMeta = getCatalogStockMeta(item);
                 const thumbSrc = _resolveStableMenuThumb(item);
                 const safeItemId = _menuEsc(String(item.id));
@@ -807,6 +836,19 @@ function renderMenuCatalogUI() {
                     </div>
                 </div>`;
             }).join('');
+
+            let catalogLoadMoreHtml = '';
+            if (shouldWindowCatalog) {
+                const remainingCat = totalCatalogMatching - visibleCatalogItems.length;
+                catalogLoadMoreHtml = `
+                    <div id="catalogLoadMoreContainer" style="text-align: center; padding: 16px 0 24px 0;">
+                        <button type="button" class="btn btn-outline" id="catalogLoadMoreBtn" onclick="loadMoreCatalogItems()" style="display: inline-flex; align-items: center; gap: 8px; padding: 9px 22px; border-radius: 12px; font-weight: 700; font-size: 13px; background: #FFFFFF; border: 1.5px solid var(--border); color: var(--text-dark); cursor: pointer;">
+                            <span>Show More Items (${remainingCat} remaining)</span>
+                        </button>
+                    </div>
+                `;
+            }
+            cleanCardsContainer.innerHTML = catalogCardsHtml + catalogLoadMoreHtml;
         }
     }
 }
@@ -1625,7 +1667,7 @@ function discardFoodImage() {
         currentItemImageMetadata = null;
         window.currentItemImageMetadata = currentItemImageMetadata;
         if (preview) {
-            preview.src = "";
+            preview.removeAttribute('src');
             preview.style.display = 'none';
         }
         if (placeholder) placeholder.style.display = 'flex';
@@ -1686,7 +1728,7 @@ function openAddMenuItemModal() {
 
     const preview = document.getElementById('newItemImagePreview');
     if (preview) {
-        preview.src = "";
+        preview.removeAttribute('src');
         preview.style.display = "none";
     }
     const placeholder = document.getElementById('fimPlaceholder');
@@ -1768,7 +1810,10 @@ function editMenuItem(id) {
             updateFimStatusPill("Approved & Saved", "status-approved");
             setFimActionDockVisible(true);
         } else { 
-            if (preview) preview.style.display = "none"; 
+            if (preview) {
+                preview.removeAttribute('src');
+                preview.style.display = "none";
+            }
             if (placeholder) placeholder.style.display = "flex";
             updateFimStatusPill("No Image", "status-none");
             setFimActionDockVisible(false);
@@ -1809,7 +1854,8 @@ function addMenuItem(bypassRoleCheck = false) {
     if (name && Number.isFinite(price) && price >= 0) { 
         let savedDishId = null;
         const previewEl = document.getElementById('newItemImagePreview');
-        const previewSrc = (previewEl && previewEl.src && !previewEl.src.includes('placeholder') && !previewEl.src.startsWith('data:image/svg+xml')) ? previewEl.src : '';
+        const rawPreviewAttr = previewEl && typeof previewEl.getAttribute === 'function' ? (previewEl.getAttribute('src') || '').trim() : '';
+        const previewSrc = (previewEl && (!previewEl.style || previewEl.style.display !== 'none') && rawPreviewAttr && !rawPreviewAttr.includes('placeholder') && !rawPreviewAttr.startsWith('data:image/svg+xml')) ? (previewEl.src || rawPreviewAttr) : '';
         const dishPhoto = currentItemImageBase64 || previewSrc || (typeof getGourmetFoodImage === 'function' ? getGourmetFoodImage(name, category) : generateFallbackImage(name, category));
 
         const now = Date.now();

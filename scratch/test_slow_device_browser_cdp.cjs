@@ -158,16 +158,30 @@ async function run() {
       uploadThroughput: (400 * 1024) / 8
     });
 
-    // Wait for page load and deferred scripts
-    await new Promise(r => setTimeout(r, 3500));
-
-    // Check head icon links & asset status
-    const headCheck = await cdp.eval(`(() => {
-      const apple = document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href');
-      const fav = document.querySelector('link[rel="icon"][type="image/x-icon"]')?.getAttribute('href');
-      const png192 = document.querySelector('link[rel="icon"][sizes="192x192"]')?.getAttribute('href');
-      return { apple, fav, png192, hasRenderMenu: typeof renderMenuUI === 'function', hasUpdateCart: typeof updateCartUI === 'function' };
-    })()`);
+    // Wait for page load and deferred scripts under 400kbps Slow 3G + 4x CPU throttle
+    let headCheck = null;
+    for (let i = 0; i < 90; i++) {
+      try {
+        headCheck = await cdp.eval(`(() => {
+          const apple = document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href');
+          const fav = document.querySelector('link[rel="icon"][type="image/x-icon"]')?.getAttribute('href');
+          const png192 = document.querySelector('link[rel="icon"][sizes="192x192"]')?.getAttribute('href');
+          return {
+            readyState: document.readyState,
+            apple, fav, png192,
+            hasRenderMenu: typeof renderMenuUI === 'function',
+            hasUpdateCart: typeof updateCartUI === 'function'
+          };
+        })()`);
+        if (headCheck && headCheck.readyState === 'complete' && headCheck.hasRenderMenu && headCheck.hasUpdateCart) {
+          break;
+        }
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 500));
+    }
+    if (cdp.exceptions.length > 0) {
+      throw new Error('Browser runtime exceptions on boot: ' + cdp.exceptions.join('; '));
+    }
     assert.strictEqual(headCheck.apple, 'apple-touch-icon.png', 'apple-touch-icon link must match');
     assert.strictEqual(headCheck.fav, 'favicon.ico', 'favicon.ico link must match');
     assert.strictEqual(headCheck.png192, 'icon-192.png', 'icon-192.png link must match');
@@ -181,11 +195,12 @@ async function run() {
       if (typeof window.currentStaff === 'undefined' || !window.currentStaff) {
         window.currentStaff = { id: 1, name: 'Admin', role: 'Admin' };
       }
-      window.menuItems = Array.from({ length: 220 }, (_, i) => ({
+      window.menuItems = Array.from({ length: 260 }, (_, i) => ({
         id: 1000 + i,
         name: "Chef's Dish " + (i + 1),
         category: i % 2 === 0 ? 'Coffee' : 'Snacks',
         price: 50 + (i % 10) * 10,
+        image: i % 3 === 0 ? '/icon-192.png' : (i % 3 === 1 ? '' : 'https://broken.invalid.test/x_' + i + '.jpg'),
         isAvailable: true,
         isDeleted: false,
         is_active: true
@@ -198,6 +213,20 @@ async function run() {
       renderMenuUI();
       const menuRenderMs = performance.now() - t0;
       const renderedCards = document.querySelectorAll('#menuGridUI .menu-card').length;
+
+      // Test Menu Catalog 40-card slicing & total count badge on 260 mixed items
+      const ctMenu0 = performance.now();
+      renderMenuCatalogUI();
+      const catalogRenderMs = performance.now() - ctMenu0;
+      const renderedCatalogCards = document.querySelectorAll('#cleanItemCardsList .clean-item-card').length;
+      const catalogBadge = document.getElementById('menuInventoryCount')?.textContent;
+
+      // Trigger broken image fallback on menu card and verify SVG fallback + zero exception
+      const brokenCardImg = document.querySelectorAll('#menuGridUI .menu-card img.card-img')[2];
+      if (brokenCardImg && typeof window._handleMenuImgError === 'function') {
+        window._handleMenuImgError(brokenCardImg);
+      }
+      const menuImgFallbackOk = Boolean(brokenCardImg && brokenCardImg.src && brokenCardImg.src.startsWith('data:image/svg+xml'));
 
       // Seed active table cart and test in-place patching across 20 taps
       window.tablesInfo = window.tablesInfo || {};
@@ -224,14 +253,18 @@ async function run() {
       const sameDomNode = document.querySelector('#cartUI .cart-item') === firstCardEl;
       const finalQty = document.querySelector('#cartUI .cart-item .qty-pill span')?.textContent;
 
-      return { renderedCards, menuRenderMs, cart20TapsMs, sameDomNode, finalQty, fallbackWorked };
+      return { renderedCards, renderedCatalogCards, catalogBadge, menuRenderMs, catalogRenderMs, cart20TapsMs, sameDomNode, finalQty, fallbackWorked, menuImgFallbackOk };
     })()`);
 
-    assert.strictEqual(perfStats.renderedCards, 36, `Expected 36 sliced menu cards for 220 dishes, got ${perfStats.renderedCards}`);
+    assert.strictEqual(perfStats.renderedCards, 36, `Expected 36 sliced menu cards for 260 dishes, got ${perfStats.renderedCards}`);
+    assert.strictEqual(perfStats.renderedCatalogCards, 40, `Expected 40 sliced catalog cards for 260 dishes, got ${perfStats.renderedCatalogCards}`);
+    assert.strictEqual(perfStats.catalogBadge, '260', `Expected '260' inventory count, got ${perfStats.catalogBadge}`);
     assert.strictEqual(perfStats.sameDomNode, true, 'Cart DOM node must be preserved (zero node recreation on qty taps)');
     assert.strictEqual(perfStats.finalQty, '21', 'Final cart qty must equal 21');
-    assert.strictEqual(perfStats.fallbackWorked, true, 'Apostrophe SVG fallback must work cleanly without SyntaxError');
-    console.log(`  ⚡ 4x CPU Throttled 220-Dish Render (36 cards sliced): ${perfStats.menuRenderMs.toFixed(2)}ms`);
+    assert.strictEqual(perfStats.fallbackWorked, true, 'Cart apostrophe SVG fallback must work cleanly without SyntaxError');
+    assert.strictEqual(perfStats.menuImgFallbackOk, true, 'Menu broken image SVG fallback must work cleanly');
+    console.log(`  ⚡ 4x CPU Throttled 260-Dish POS Grid (36 sliced): ${perfStats.menuRenderMs.toFixed(2)}ms`);
+    console.log(`  ⚡ 4x CPU Throttled 260-Dish Catalog (40 sliced): ${perfStats.catalogRenderMs.toFixed(2)}ms`);
     console.log(`  ⚡ 4x CPU Throttled 20 Rapid Cart Taps (in-place): ${perfStats.cart20TapsMs.toFixed(2)}ms (${(perfStats.cart20TapsMs / 20).toFixed(2)}ms/tap)`);
     console.log('  ✅ PASS: Zero DOM thrashing & lag-free performance verified in real throttled Chromium');
 
